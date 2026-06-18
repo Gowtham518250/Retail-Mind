@@ -1,0 +1,22 @@
+{
+  "timestamp": "20260618_141820",
+  "api_url": "http://localhost:8000",
+  "summary": {
+    "total": 9,
+    "passed": 0,
+    "failed": 9,
+    "success_rate": "0.0%"
+  },
+  "errors": [
+    "Root Endpoint: Connection error",
+    "Health Check: Connection error",
+    "API Docs: Connection error",
+    "ReDoc: Connection error",
+    "Register User: Connection error",
+    "Login User: Connection error",
+    "Non-existent Endpoint (404): Connection error",
+    "Protected Endpoint without Auth (401): Connection error",
+    "Invalid Registration Data (422): Connection error"
+  ],
+  "details": []
+}

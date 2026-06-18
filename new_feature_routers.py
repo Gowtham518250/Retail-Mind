@@ -30,7 +30,7 @@ async def get_user_shop_id(user_id: int, db: Session) -> int:
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == user_id).first()
     if not profile:
         # Auto-create if missing (failsafe)
-        profile = ShopProfile(shop_id=user_id, shop_name="My Shop", shop_type="Retail", phone_number="")
+        profile = ShopProfile(shop_id=user_id, shop_name="My Shop", shop_type="Retail", phone="")
         db.add(profile)
         db.commit()
         db.refresh(profile)
@@ -762,3 +762,4 @@ def soft_delete_customer(customer_id: int, user_id: int = Depends(check_current_
     customer.is_active = False
     db.commit()
     return {"status": "success", "message": f"Customer '{customer.customer_name}' archived. All Khata and invoice history preserved."}
+

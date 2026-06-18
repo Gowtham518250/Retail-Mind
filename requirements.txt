@@ -1,6 +1,6 @@
 # ==========================================
 # RAG_APP Requirements
-# FastAPI + Ollama + LangChain + PostgreSQL
+# FastAPI + PostgreSQL + Redis + Enterprise Features
 # ==========================================
 
 # ====================
@@ -9,12 +9,14 @@
 fastapi==0.109.1
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
+starlette==0.35.0
 
 # ====================
 # Data Validation & Serialization
 # ====================
 pydantic==2.5.3
 pydantic[email]==2.5.3
+email-validator==2.1.0
 
 # ====================
 # Database & ORM
@@ -29,6 +31,7 @@ alembic==1.13.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
+cryptography==41.0.7
 
 # ====================
 # Environment Management
@@ -42,11 +45,53 @@ requests==2.31.0
 httpx==0.25.2
 
 # ====================
-# Redis Caching
+# Redis Caching & Rate Limiting
 # ====================
 redis==5.0.1
 
-# AI modules removed to reduce server size and cost
+# ====================
+# QR Code Generation
+# ====================
+qrcode==7.4.2
+python-qrcode==1.0
+Pillow==10.1.0
+
+# ====================
+# Scheduling & Background Tasks
+# ====================
+APScheduler==3.10.4
+python-cron==0.6.1
+
+# ====================
+# Email & Notifications
+# ====================
+python-multipart==0.0.6
+aiofiles==23.2.1
+
+# ====================
+# Data Processing & Export
+# ====================
+pandas==2.1.4
+openpyxl==3.1.2
+python-csv==0.0.13
+xlsxwriter==3.1.9
+
+# ====================
+# Logging & Monitoring
+# ====================
+python-json-logger==2.0.7
+
+# ====================
+# Development & Testing (optional)
+# ====================
+pytest==7.4.3
+pytest-asyncio==0.23.2
+httpx==0.25.2
+
+# AI/ML Features (minimal for cost)
+# langchain==0.0.330
+# langchain-community==0.0.8
+# langchain-core==0.0.8
 
 # ====================
 # Utilities

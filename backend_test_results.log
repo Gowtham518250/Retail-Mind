@@ -19,12 +19,12 @@ SUCCESS (Code 200): [GET] /api/inventory/products/1
 SUCCESS (Code 200): [PUT] /api/inventory/products/1 | Payload: {"product_name": "test_string", "description": "test_string", "min_stock": 1, "max_stock": 1, "reorder_level": 1, "unit_price": 1.0, "category": "test_string"} 
 SUCCESS (Code 200): [DELETE] /api/inventory/products/1 
 SUCCESS (Code 200): [POST] /api/inventory/stock-movement | Payload: {"product_id": 1, "movement_type": "test_string", "quantity": 1, "reason": "test_string", "reference_id": "test_string"} 
-CRASH: [GET] /api/inventory/stock-movements/1 -> 'test_string' is not among the defined enum values. Enum name: movement_type. Possible values: IN, OUT, ADJUSTMENT
+CRASH: [GET] /api/inventory/stock-movements/1 -> 'test_string' is not among the defined enum values. Enum name: None. Possible values: IN, OUT, ADJUSTMENT
 SUCCESS (Code 200): [GET] /api/inventory/low-stock 
 SUCCESS (Code 200): [GET] /api/inventory/stock-alerts 
 CRASH: [POST] /api/inventory/batches -> (builtins.TypeError) SQLite Date type only accepts Python date objects as input.
 [SQL: INSERT INTO product_batches (product_id, batch_number, manufacture_date, expiry_date, quantity) VALUES (?, ?, ?, ?, ?)]
-[parameters: [{'quantity': 1, 'manufacture_date': 'test_string', 'expiry_date': 'test_string', 'batch_number': 'test_string', 'product_id': 1}]]
+[parameters: [{'quantity': 1, 'batch_number': 'test_string', 'product_id': 1, 'expiry_date': 'test_string', 'manufacture_date': 'test_string'}]]
 SUCCESS (Code 200): [GET] /api/inventory/batches/1 
 SUCCESS (Code 422): [GET] /api/inventory/expiring-batches 
 SUCCESS (Code 422): [GET] /api/inventory/analytics/stock-value 
@@ -58,16 +58,16 @@ SUCCESS (Code 422): [GET] /api/customers/search/by-phone
 SUCCESS (Code 422): [GET] /api/customers/search/by-name 
 FAIL: [POST] /api/shop/create  -> 400
 SUCCESS (Code 404): [GET] /api/shop/profile 
-FAIL: [PUT] /api/shop/profile  -> 400
-FAIL: [DELETE] /api/shop/profile  -> 400
+SUCCESS (Code 200): [PUT] /api/shop/profile 
+SUCCESS (Code 200): [DELETE] /api/shop/profile 
 FAIL: [PUT] /api/shop/settings  -> 400
 SUCCESS (Code 422): [POST] /api/shop/upload-logo 
 SUCCESS (Code 404): [GET] /api/shop/business-hours 
 SUCCESS (Code 404): [GET] /api/shop/tax-config 
-SUCCESS (Code 200): [GET] /shop/profile 
+SUCCESS (Code 404): [GET] /shop/profile 
 SUCCESS (Code 422): [PUT] /shop/profile | Payload: {"shop_name": "test_string", "address": "test_string", "phone": "test_string", "upi_id": "test_string", "gst_number": "test_string", "logo_url": "test_string", "is_online_store_enabled": true} 
 SUCCESS (Code 422): [POST] /shop/profile | Payload: {"shop_name": "test_string", "address": "test_string", "phone": "test_string", "upi_id": "test_string", "gst_number": "test_string", "logo_url": "test_string"} 
-SUCCESS (Code 422): [GET] /shop/upi-qr 
+SUCCESS (Code 404): [GET] /shop/upi-qr 
 SUCCESS (Code 422): [POST] /shop/toggle-online-store 
 SUCCESS (Code 404): [GET] /shop/public/1 
 SUCCESS (Code 422): [POST] /khata/credit | Payload: {"customer_phone": "test_string", "customer_name": "test_string", "amount": 1.0, "description": "test_string"} 
@@ -101,7 +101,7 @@ SUCCESS (Code 200): [GET] /enterprise/transactions
 SUCCESS (Code 200): [GET] /retail/stock-analysis 
 SUCCESS (Code 200): [POST] /gift-cards | Payload: {"card_code": "test_string", "initial_balance": 1.0, "issued_to": "test_string", "expiry_date": "2026-06-18"} 
 SUCCESS (Code 200): [POST] /gift-cards/redeem | Payload: {"card_code": "test_string", "amount_to_deduct": 1.0} 
-CRASH: [POST] /api/counter/authenticate -> type object 'CounterService' has no attribute 'authenticate'
+SUCCESS (Code 200): [POST] /api/counter/authenticate | Payload: {"billing_pin": "test_string"} 
 CRASH: [POST] /api/delivery/create -> Invalid isoformat string: 'test_string'
 SUCCESS (Code 200): [GET] /api/delivery/today 
 SUCCESS (Code 422): [POST] /api/delivery/{delivery_id}/update-status | Payload: {"status": "test_string", "notes": "test_string"} 
@@ -127,10 +127,10 @@ SUCCESS (Code 200): [GET] /api/transactions/recent
 SUCCESS (Code 200): [GET] /api/transactions/online-payments 
 SUCCESS (Code 200): [GET] /api/data/integrity-check 
 SUCCESS (Code 200): [POST] /api/sync/sales 
-SUCCESS (Code 200): [POST] /api/sync/invoices 
-SUCCESS (Code 200): [POST] /api/sync/khata-balances 
+ERROR: [POST] /api/sync/invoices  -> 500
+ERROR: [POST] /api/sync/khata-balances  -> 500
 SUCCESS (Code 200): [POST] /api/sync/expenses 
-SUCCESS (Code 200): [POST] /api/sync/invoices/chunked 
+ERROR: [POST] /api/sync/invoices/chunked  -> 500
 SUCCESS (Code 200): [DELETE] /api/products/1 
 SUCCESS (Code 200): [GET] / 
 SUCCESS (Code 200): [GET] /health 

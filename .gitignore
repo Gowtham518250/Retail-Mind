@@ -6,20 +6,22 @@ __v0_jsx-dev-runtime.ts
 .v0-trash/
 .vercel/
 
-# Environment variables
-.env*.local
-
-# Common ignores
-node_modules
-.next/
-.DS_Store
-.vercel
-
-# Security & Secrets
+# Environment variables - NEVER COMMIT
 .env
-.env.*
+.env.local
+.env.production
+.env.development
+.env.test
+.env*.local
+.env*.production
+
+# Credentials & Secrets - NEVER COMMIT
 deployment_env_vars.txt
 secret*.txt
+secrets/
+credentials.json
+*credentials*.json
+*secrets*.txt
 
 # Python
 __pycache__/

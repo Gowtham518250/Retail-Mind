@@ -84,6 +84,119 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_logs(user_id);
 
 -- ==========================================
+-- Shop Profiles Table
+-- ==========================================
+CREATE TABLE IF NOT EXISTS shop_profiles (
+    id SERIAL PRIMARY KEY,
+    shop_id INTEGER NOT NULL UNIQUE REFERENCES user_details(id) ON DELETE CASCADE,
+    shop_name VARCHAR(200) NOT NULL,
+    shop_tagline VARCHAR(500),
+    shop_description TEXT,
+    shop_type VARCHAR(100) DEFAULT 'General',
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    website VARCHAR(200),
+    gst_number VARCHAR(50),
+    logo_url VARCHAR(500),
+    address TEXT,
+    location VARCHAR(300),
+    latitude FLOAT,
+    longitude FLOAT,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    postal_code VARCHAR(10),
+    upi_id VARCHAR(100),
+    is_online_store_enabled BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_shop_profiles_shop_id ON shop_profiles(shop_id);
+CREATE INDEX IF NOT EXISTS idx_shop_profiles_active ON shop_profiles(is_active);
+
+-- ==========================================
+-- Products Table
+-- ==========================================
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES user_details(id) ON DELETE CASCADE,
+    product_name VARCHAR(100) NOT NULL,
+    sku VARCHAR(50) NOT NULL,
+    description TEXT,
+    current_stock INTEGER DEFAULT 0,
+    min_stock INTEGER DEFAULT 10,
+    max_stock INTEGER DEFAULT 100,
+    reorder_level INTEGER DEFAULT 20,
+    unit_price NUMERIC(10, 2) NOT NULL,
+    purchase_price NUMERIC(10, 2) DEFAULT 0,
+    category VARCHAR(50),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, sku)
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+
+-- ==========================================
+-- Customers Table
+-- ==========================================
+CREATE TABLE IF NOT EXISTS customers (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES user_details(id) ON DELETE CASCADE,
+    customer_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100),
+    phone VARCHAR(20) NOT NULL,
+    whatsapp_number VARCHAR(20),
+    address TEXT,
+    city VARCHAR(50),
+    credit_limit NUMERIC(10, 2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+
+-- ==========================================
+-- Attendance Table
+-- ==========================================
+CREATE TABLE IF NOT EXISTS attendance (
+    id SERIAL PRIMARY KEY,
+    employee_id INTEGER NOT NULL REFERENCES user_details(id) ON DELETE CASCADE,
+    attendance_date DATE NOT NULL,
+    check_in_time TIMESTAMP,
+    check_out_time TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'ABSENT',
+    working_hours FLOAT DEFAULT 0.0,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_employee_id ON attendance(employee_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(attendance_date);
+
+-- ==========================================
+-- Online Orders Table
+-- ==========================================
+CREATE TABLE IF NOT EXISTS online_orders (
+    id SERIAL PRIMARY KEY,
+    shop_id INTEGER NOT NULL REFERENCES user_details(id) ON DELETE CASCADE,
+    customer_id INTEGER NOT NULL,
+    order_status VARCHAR(50) DEFAULT 'PENDING',
+    total_amount NUMERIC(10, 2) NOT NULL,
+    delivery_address TEXT,
+    items_json TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_online_orders_shop_id ON online_orders(shop_id);
+CREATE INDEX IF NOT EXISTS idx_online_orders_status ON online_orders(order_status);
+
+-- ==========================================
 -- Default Admin User
 -- ==========================================
 INSERT INTO user_details (user_name, email, password)

@@ -1,0 +1,103 @@
+{
+  "timestamp": "20260618_142000",
+  "api_url": "http://localhost:8000",
+  "summary": {
+    "total": 9,
+    "passed": 6,
+    "failed": 3,
+    "success_rate": "66.7%"
+  },
+  "errors": [],
+  "details": [
+    {
+      "method": "GET",
+      "endpoint": "/",
+      "name": "Root Endpoint",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2053.06,
+      "success": true,
+      "response": "{\"status\":\"operational\",\"app\":\"AI Shop Pro Enterprise Backend\",\"version\":\"3.0.0\",\"modules\":[\"Authentication (RBAC: OWNER/CUSTOMER/WORKER)\",\"Shop Settings & UPI QR\",\"Inventory Management\",\"Invoices & B"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/health",
+      "name": "Health Check",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 6174.85,
+      "success": true,
+      "response": "{\"status\":\"degraded\",\"database\":\"unreachable\",\"timestamp\":1781772586.0731635}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/docs",
+      "name": "API Docs",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2065.54,
+      "success": true,
+      "response": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"http"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/redoc",
+      "name": "ReDoc",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2057.2,
+      "success": true,
+      "response": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <title>AI Shop Pro Enterprise Backend - ReDoc</title>\n    <!-- needed for adaptive design -->\n    <meta charset=\"utf-8\"/>\n    <meta name=\"viewport\" conte"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "name": "Register User",
+      "status": 422,
+      "expected": 200,
+      "elapsed_ms": 2069.7,
+      "success": false,
+      "response": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":{\"user_name\":\"testuser_1781772590\",\"email\":\"test_1781772590@example.com\",\"password\":\"TestPass123!@\"},\"url\":\"https:"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/login",
+      "name": "Login User",
+      "status": 422,
+      "expected": 200,
+      "elapsed_ms": 2048.82,
+      "success": false,
+      "response": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":{\"email\":\"test_1781772590@example.com\",\"password\":\"TestPass123!@\"},\"url\":\"https://errors.pydantic.dev/2.5/v/missin"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/nonexistent-endpoint",
+      "name": "Non-existent Endpoint (404)",
+      "status": 404,
+      "expected": 404,
+      "elapsed_ms": 2072.55,
+      "success": true,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/protected-endpoint",
+      "name": "Protected Endpoint without Auth (401)",
+      "status": 404,
+      "expected": 401,
+      "elapsed_ms": 2069.86,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "name": "Invalid Registration Data (422)",
+      "status": 422,
+      "expected": 422,
+      "elapsed_ms": 2042.68,
+      "success": true,
+      "response": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":{\"invalid_field\":\"test\"},\"url\":\"https://errors.pydantic.dev/2.5/v/missing\"},{\"type\":\"missing\",\"loc\":[\"body\",\"passw"
+    }
+  ]
+}

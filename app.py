@@ -52,6 +52,11 @@ from gst_and_giftcards import router as gst_and_giftcards_router
 # Legacy extended features (non-chatbot)
 from new_feature_routers import router as new_features_router
 
+# Advanced system features
+from caching_system import router as caching_router
+from batch_operations import router as batch_operations_router
+from rate_limiting import router as rate_limiting_router
+
 # DB initialization
 from db import engine, get_db
 from models import Base
@@ -157,6 +162,11 @@ api.include_router(gst_and_giftcards_router)      # /gift-cards, /gst/*
 
 # Legacy extended features
 api.include_router(new_features_router, tags=["Legacy Features"])
+
+# Advanced System Features
+api.include_router(caching_router, prefix="/cache", tags=["Caching System"])
+api.include_router(batch_operations_router, prefix="/batch", tags=["Batch Operations"])
+api.include_router(rate_limiting_router, tags=["Rate Limiting"])
 
 # ========================
 # ROOT & HEALTH ENDPOINTS

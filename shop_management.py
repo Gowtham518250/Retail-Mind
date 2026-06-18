@@ -16,12 +16,12 @@ from security import get_current_user as check_current_user
 # ==================== SCHEMAS ====================
 
 class ShopProfileCreate:
-    def __init__(self, shop_name: str, shop_type: str, phone_number: str, location: str,
+    def __init__(self, shop_name: str, shop_type: str, phone: str, location: str,
                  email: Optional[str] = None, website: Optional[str] = None, 
                  gst_number: Optional[str] = None, primary_upi_id: Optional[str] = None):
         self.shop_name = shop_name
         self.shop_type = shop_type
-        self.phone_number = phone_number
+        self.phone = phone
         self.location = location
         self.email = email
         self.website = website
@@ -53,7 +53,7 @@ class ShopService:
             shop_id=user_id,
             shop_name=data.get("shop_name"),
             shop_type=data.get("shop_type"),
-            phone_number=data.get("phone_number") or data.get("shop_phone"),
+            phone=data.get("phone") or data.get("shop_phone"),
             location=data.get("location"),
             email=data.get("email") or data.get("shop_email"),
             website=data.get("website"),
@@ -109,7 +109,7 @@ class ShopService:
                 setattr(shop_profile, key, json.dumps(value))
             elif value is not None:
                 # Aliases for better compatibility with mobile client
-                if key == "shop_phone": key = "phone_number"
+                if key == "shop_phone": key = "phone"
                 if key == "shop_gst" or key == "gstin": key = "gst_number"
                 if key == "shop_email": key = "email"
                 if key == "upi_id": key = "primary_upi_id"
@@ -205,7 +205,7 @@ def create_shop_profile(data: dict, user_id: int = Depends(check_current_user), 
                 "id": profile.id,
                 "shop_name": profile.shop_name,
                 "shop_type": profile.shop_type,
-                "phone_number": profile.phone_number,
+                "phone": profile.phone,
                 "location": profile.location,
                 "email": profile.email,
                 "gst_number": profile.gst_number,
@@ -234,7 +234,7 @@ def get_profile(user_id: int = Depends(check_current_user), db: Session = Depend
                 "id": profile.id,
                 "shop_name": profile.shop_name,
                 "shop_type": profile.shop_type,
-                "phone_number": profile.phone_number,
+                "phone": profile.phone,
                 "location": profile.location,
                 "email": profile.email,
                 "website": profile.website,
@@ -412,3 +412,4 @@ def get_tax_config(user_id: int = Depends(check_current_user), db: Session = Dep
         }
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+

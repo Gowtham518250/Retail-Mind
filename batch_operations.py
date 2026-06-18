@@ -33,7 +33,7 @@ class BatchOperation(Base):
     errors = Column(JSON, nullable=True)
     started_at = Column(DateTime, server_default=func.now())
     completed_at = Column(DateTime, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    operation_metadata = Column(JSON, nullable=True)
     
     def to_dict(self):
         return {
