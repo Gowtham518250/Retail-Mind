@@ -1,0 +1,6267 @@
+{
+  "/auth/register": {
+    "post": {
+      "tags": [
+        "Authentication"
+      ],
+      "summary": "Register",
+      "operationId": "register_auth_register_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/auth/send-otp": {
+    "post": {
+      "tags": [
+        "Authentication"
+      ],
+      "summary": "Send Otp",
+      "operationId": "send_otp_auth_send_otp_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SendOTPRequest"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/auth/verify-otp": {
+    "post": {
+      "tags": [
+        "Authentication"
+      ],
+      "summary": "Verify Otp",
+      "operationId": "verify_otp_auth_verify_otp_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/VerifyOTPRequest"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/auth/login": {
+    "post": {
+      "tags": [
+        "Authentication"
+      ],
+      "summary": "Login",
+      "operationId": "login_auth_login_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserLogin"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/auth/health": {
+    "get": {
+      "tags": [
+        "Authentication"
+      ],
+      "summary": "Health Check",
+      "operationId": "health_check_auth_health_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/session/refresh": {
+    "post": {
+      "tags": [
+        "Session Management",
+        "Session Management"
+      ],
+      "summary": "Refresh Token",
+      "description": "Refreshes an access token using a valid refresh token (Auto-login for 7 days)",
+      "operationId": "refresh_token_api_session_refresh_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RefreshRequest"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/session/logout": {
+    "post": {
+      "tags": [
+        "Session Management",
+        "Session Management"
+      ],
+      "summary": "Logout",
+      "description": "Logs the user out of the current device",
+      "operationId": "logout_api_session_logout_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LogoutRequest"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/session/logout-all": {
+    "post": {
+      "tags": [
+        "Session Management",
+        "Session Management"
+      ],
+      "summary": "Logout All Devices",
+      "description": "Logs the user out of all devices for security",
+      "operationId": "logout_all_devices_api_session_logout_all_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_logout_all_devices_api_session_logout_all_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/session/active/{user_id}": {
+    "get": {
+      "tags": [
+        "Session Management",
+        "Session Management"
+      ],
+      "summary": "Get Active Sessions",
+      "description": "Returns a list of all active sessions for the user",
+      "operationId": "get_active_sessions_api_session_active__user_id__get",
+      "parameters": [
+        {
+          "name": "user_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "User Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/session/offline/queue": {
+    "post": {
+      "tags": [
+        "Session Management",
+        "Session Management"
+      ],
+      "summary": "Sync Offline Data",
+      "description": "Queues offline generated data into the DB for processing",
+      "operationId": "sync_offline_data_api_session_offline_queue_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OfflineData"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/session/offline/sync": {
+    "post": {
+      "tags": [
+        "Session Management",
+        "Session Management"
+      ],
+      "summary": "Sync All Offline Data",
+      "description": "Synchronizes all the offline data that was queued up for the user",
+      "operationId": "sync_all_offline_data_api_session_offline_sync_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_sync_all_offline_data_api_session_offline_sync_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/bill/Generate/Bill": {
+    "post": {
+      "tags": [
+        "Bill Generation"
+      ],
+      "summary": "Bill Generte",
+      "operationId": "bill_generte_bill_Generate_Bill_post",
+      "requestBody": {
+        "content": {
+          "application/x-www-form-urlencoded": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_bill_generte_bill_Generate_Bill_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/bill/scan/{bill_id}": {
+    "get": {
+      "tags": [
+        "Bill Generation"
+      ],
+      "summary": "Get Bill",
+      "operationId": "get_bill_bill_scan__bill_id__get",
+      "parameters": [
+        {
+          "name": "bill_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "title": "Bill Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/bill/qr/{bill_id}": {
+    "get": {
+      "tags": [
+        "Bill Generation"
+      ],
+      "summary": "Get Qr Image",
+      "operationId": "get_qr_image_bill_qr__bill_id__get",
+      "parameters": [
+        {
+          "name": "bill_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "title": "Bill Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/products": {
+    "post": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Create Product",
+      "description": "Create a new product",
+      "operationId": "create_product_api_inventory_products_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProductCreate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Products",
+      "description": "Get all products with optional filtering \u2014 only active (non-deleted) products",
+      "operationId": "get_products_api_inventory_products_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "category",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ProductResponse"
+                },
+                "title": "Response Get Products Api Inventory Products Get"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/products/{product_id}": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Product",
+      "description": "Get product details \u2014 account-scoped",
+      "operationId": "get_product_api_inventory_products__product_id__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "product_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Product Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "put": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Update Product",
+      "description": "Update product \u2014 account-scoped",
+      "operationId": "update_product_api_inventory_products__product_id__put",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "product_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Product Id"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProductUpdate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "delete": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Delete Product",
+      "description": "Soft-delete product \u2014 marks inactive, all historical invoices remain intact",
+      "operationId": "delete_product_api_inventory_products__product_id__delete",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "product_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Product Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/stock-movement": {
+    "post": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Create Stock Movement",
+      "description": "Record stock movement (IN/OUT/ADJUSTMENT)",
+      "operationId": "create_stock_movement_api_inventory_stock_movement_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StockMovementCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "title": "Response Create Stock Movement Api Inventory Stock Movement Post"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/stock-movements/{product_id}": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Stock Movements",
+      "description": "Get stock movement history",
+      "operationId": "get_stock_movements_api_inventory_stock_movements__product_id__get",
+      "parameters": [
+        {
+          "name": "product_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Product Id"
+          }
+        },
+        {
+          "name": "days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 30,
+            "title": "Days"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/low-stock": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Low Stock Products",
+      "description": "Get all products below minimum stock",
+      "operationId": "get_low_stock_products_api_inventory_low_stock_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/inventory/stock-alerts": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Stock Alerts",
+      "description": "Get detailed stock alerts and recommendations",
+      "operationId": "get_stock_alerts_api_inventory_stock_alerts_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/inventory/batches": {
+    "post": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Create Batch",
+      "description": "Create product batch (for expiry tracking)",
+      "operationId": "create_batch_api_inventory_batches_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProductBatchCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/batches/{product_id}": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Batches",
+      "description": "Get all batches for a product",
+      "operationId": "get_batches_api_inventory_batches__product_id__get",
+      "parameters": [
+        {
+          "name": "product_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Product Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/expiring-batches": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Expiring Batches",
+      "description": "Get batches expiring within specified days",
+      "operationId": "get_expiring_batches_api_inventory_expiring_batches_get",
+      "parameters": [
+        {
+          "name": "user_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "User Id"
+          }
+        },
+        {
+          "name": "days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 30,
+            "title": "Days"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/analytics/stock-value": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Stock Value",
+      "description": "Get total stock value",
+      "operationId": "get_stock_value_api_inventory_analytics_stock_value_get",
+      "parameters": [
+        {
+          "name": "user_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "User Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/analytics/inventory-status": {
+    "get": {
+      "tags": [
+        "Inventory Management",
+        "inventory"
+      ],
+      "summary": "Get Inventory Status",
+      "description": "Get complete inventory status summary",
+      "operationId": "get_inventory_status_api_inventory_analytics_inventory_status_get",
+      "parameters": [
+        {
+          "name": "user_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "User Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/workers": {
+    "post": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Create Worker",
+      "description": "Create a new worker for a shopkeeper",
+      "operationId": "create_worker_api_attendance_workers_post",
+      "parameters": [
+        {
+          "name": "user_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "User Id"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/attendance__WorkerCreate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "get": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Get Workers",
+      "description": "Get all workers for a shopkeeper",
+      "operationId": "get_workers_api_attendance_workers_get",
+      "parameters": [
+        {
+          "name": "user_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "User Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/workers/{worker_id}": {
+    "put": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Update Worker",
+      "description": "Update worker details",
+      "operationId": "update_worker_api_attendance_workers__worker_id__put",
+      "parameters": [
+        {
+          "name": "worker_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Worker Id"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/attendance__WorkerUpdate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "delete": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Delete Worker",
+      "description": "Delete a worker from the database",
+      "operationId": "delete_worker_api_attendance_workers__worker_id__delete",
+      "parameters": [
+        {
+          "name": "worker_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Worker Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/check-in": {
+    "post": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Employee Check In",
+      "description": "Employee check-in",
+      "operationId": "employee_check_in_api_attendance_check_in_post",
+      "parameters": [
+        {
+          "name": "employee_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Employee Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/check-out": {
+    "post": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Employee Check Out",
+      "description": "Employee check-out",
+      "operationId": "employee_check_out_api_attendance_check_out_post",
+      "parameters": [
+        {
+          "name": "employee_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Employee Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/record-manual": {
+    "post": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Record Manual Attendance",
+      "description": "Manually record attendance",
+      "operationId": "record_manual_attendance_api_attendance_record_manual_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AttendanceRecord"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/employee/{employee_id}": {
+    "get": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Get Employee Attendance",
+      "description": "Get attendance records for an employee",
+      "operationId": "get_employee_attendance_api_attendance_employee__employee_id__get",
+      "parameters": [
+        {
+          "name": "employee_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Employee Id"
+          }
+        },
+        {
+          "name": "from_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Date"
+          }
+        },
+        {
+          "name": "to_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Date"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/date/{date_str}": {
+    "get": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Get Attendance By Date",
+      "description": "Get all attendance records for a specific date",
+      "operationId": "get_attendance_by_date_api_attendance_date__date_str__get",
+      "parameters": [
+        {
+          "name": "date_str",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Date Str"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/leave-request": {
+    "post": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Request Leave",
+      "description": "Request leave",
+      "operationId": "request_leave_api_attendance_leave_request_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeaveRequestCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/leave-requests": {
+    "get": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Get Leave Requests",
+      "description": "Get leave requests",
+      "operationId": "get_leave_requests_api_attendance_leave_requests_get",
+      "parameters": [
+        {
+          "name": "employee_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Id"
+          }
+        },
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/leave-request/{leave_id}/approve": {
+    "put": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Approve Leave",
+      "description": "Approve leave request",
+      "operationId": "approve_leave_api_attendance_leave_request__leave_id__approve_put",
+      "parameters": [
+        {
+          "name": "leave_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Leave Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/leave-request/{leave_id}/reject": {
+    "put": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Reject Leave",
+      "description": "Reject leave request",
+      "operationId": "reject_leave_api_attendance_leave_request__leave_id__reject_put",
+      "parameters": [
+        {
+          "name": "leave_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Leave Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/analytics/summary": {
+    "get": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Get Attendance Summary",
+      "description": "Get attendance summary for past N days",
+      "operationId": "get_attendance_summary_api_attendance_analytics_summary_get",
+      "parameters": [
+        {
+          "name": "days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 30,
+            "title": "Days"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/attendance/analytics/employee/{employee_id}": {
+    "get": {
+      "tags": [
+        "Attendance Management",
+        "attendance"
+      ],
+      "summary": "Get Employee Analytics",
+      "description": "Get analytics for specific employee",
+      "operationId": "get_employee_analytics_api_attendance_analytics_employee__employee_id__get",
+      "parameters": [
+        {
+          "name": "employee_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Employee Id"
+          }
+        },
+        {
+          "name": "days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 30,
+            "title": "Days"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/invoices/sync": {
+    "post": {
+      "tags": [
+        "Invoices & Billing",
+        "invoices & billing"
+      ],
+      "summary": "Sync Offline Invoice",
+      "description": "Accept an invoice generated while the app was offline.\nThis creates the invoice, deducts inventory, and logs revenue.",
+      "operationId": "sync_offline_invoice_api_invoices_sync_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/InvoiceSyncCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/invoices/": {
+    "get": {
+      "tags": [
+        "Invoices & Billing",
+        "invoices & billing"
+      ],
+      "summary": "Get Invoices",
+      "description": "Get all invoices for the shop",
+      "operationId": "get_invoices_api_invoices__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        {
+          "name": "payment_status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Status"
+          }
+        },
+        {
+          "name": "source",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InvoiceResponse"
+                },
+                "title": "Response Get Invoices Api Invoices  Get"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/invoices/{invoice_id}": {
+    "get": {
+      "tags": [
+        "Invoices & Billing",
+        "invoices & billing"
+      ],
+      "summary": "Get Invoice",
+      "description": "Get specific invoice details",
+      "operationId": "get_invoice_api_invoices__invoice_id__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "invoice_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Invoice Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "delete": {
+      "tags": [
+        "Invoices & Billing",
+        "invoices & billing"
+      ],
+      "summary": "Delete Invoice",
+      "description": "Delete an invoice (Owner only)",
+      "operationId": "delete_invoice_api_invoices__invoice_id__delete",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "invoice_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Invoice Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/customers/": {
+    "post": {
+      "tags": [
+        "Customer Management",
+        "customers"
+      ],
+      "summary": "Create Customer",
+      "description": "Create a new customer",
+      "operationId": "create_customer_api_customers__post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomerCreate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "get": {
+      "tags": [
+        "Customer Management",
+        "customers"
+      ],
+      "summary": "Get Customers",
+      "description": "Get all customers \u2014 only active (non-deleted)",
+      "operationId": "get_customers_api_customers__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "city",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CustomerResponse"
+                },
+                "title": "Response Get Customers Api Customers  Get"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/customers/{customer_id}": {
+    "get": {
+      "tags": [
+        "Customer Management",
+        "customers"
+      ],
+      "summary": "Get Customer",
+      "description": "Get customer details",
+      "operationId": "get_customer_api_customers__customer_id__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Customer Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "put": {
+      "tags": [
+        "Customer Management",
+        "customers"
+      ],
+      "summary": "Update Customer",
+      "description": "Update customer \u2014 account-scoped",
+      "operationId": "update_customer_api_customers__customer_id__put",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Customer Id"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomerUpdate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "delete": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Soft Delete Customer",
+      "description": "Soft-delete a customer (archives them, preserves all their invoice history)",
+      "operationId": "soft_delete_customer_api_customers__customer_id__delete",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Customer Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/customers/{customer_id}/set-contact-preference": {
+    "post": {
+      "tags": [
+        "Customer Management",
+        "customers"
+      ],
+      "summary": "Set Contact Preference",
+      "description": "Set preferred contact method for customer",
+      "operationId": "set_contact_preference_api_customers__customer_id__set_contact_preference_post",
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Customer Id"
+          }
+        },
+        {
+          "name": "preference",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Preference"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/customers/search/by-phone": {
+    "get": {
+      "tags": [
+        "Customer Management",
+        "customers"
+      ],
+      "summary": "Search By Phone",
+      "description": "Search customer by phone number \u2014 active customers only",
+      "operationId": "search_by_phone_api_customers_search_by_phone_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "phone",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 10,
+            "pattern": "^\\d{10}$",
+            "title": "Phone"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/customers/search/by-name": {
+    "get": {
+      "tags": [
+        "Customer Management",
+        "customers"
+      ],
+      "summary": "Search By Name",
+      "description": "Search customers by name (partial match) \u2014 active customers only",
+      "operationId": "search_by_name_api_customers_search_by_name_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "name",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Name"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/shop/create": {
+    "post": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Create Shop Profile",
+      "description": "Create a new shop profile\n\nArgs:\n    user_id: ID of the shop owner\n    data: Shop profile data\n\nReturns:\n    New shop profile with settings",
+      "operationId": "create_shop_profile_api_shop_create_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Data"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/shop/profile": {
+    "get": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Get Profile",
+      "description": "Get shop profile with all settings",
+      "operationId": "get_profile_api_shop_profile_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    },
+    "put": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Update Profile",
+      "description": "Update shop profile",
+      "operationId": "update_profile_api_shop_profile_put",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Data"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    },
+    "delete": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Delete Profile",
+      "description": "Delete shop profile and all settings",
+      "operationId": "delete_profile_api_shop_profile_delete",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/shop/settings": {
+    "put": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Update Settings",
+      "description": "Update shop settings (business hours, tax, payment methods)",
+      "operationId": "update_settings_api_shop_settings_put",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Data"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/shop/upload-logo": {
+    "post": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Upload Logo",
+      "description": "Upload shop logo",
+      "operationId": "upload_logo_api_shop_upload_logo_post",
+      "requestBody": {
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_upload_logo_api_shop_upload_logo_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/shop/business-hours": {
+    "get": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Get Business Hours",
+      "description": "Get shop business hours for a specific day or all days",
+      "operationId": "get_business_hours_api_shop_business_hours_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/shop/tax-config": {
+    "get": {
+      "tags": [
+        "Shop Management",
+        "Shop Profile"
+      ],
+      "summary": "Get Tax Config",
+      "description": "Get tax configuration for calculating taxes on products",
+      "operationId": "get_tax_config_api_shop_tax_config_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/shop/profile": {
+    "get": {
+      "tags": [
+        "Shop Settings"
+      ],
+      "summary": "Get Shop Profile",
+      "description": "Get the current user's shop profile",
+      "operationId": "get_shop_profile_shop_profile_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopProfileResponse"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    },
+    "put": {
+      "tags": [
+        "Shop Settings"
+      ],
+      "summary": "Update Shop Profile",
+      "description": "Update shop profile (all fields optional)",
+      "operationId": "update_shop_profile_shop_profile_put",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ShopProfileUpdate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopProfileResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    },
+    "post": {
+      "tags": [
+        "Shop Settings"
+      ],
+      "summary": "Create Shop Profile",
+      "description": "Create the shop profile (one per owner)",
+      "operationId": "create_shop_profile_shop_profile_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ShopProfileCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopProfileResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/shop/upi-qr": {
+    "get": {
+      "tags": [
+        "Shop Settings"
+      ],
+      "summary": "Get Upi Qr",
+      "description": "Generate a UPI QR code for the shop.\nOptionally pass ?amount=250.00 to create a fixed-amount QR for an invoice.\nReturns a base64 PNG for embedding directly in the app.",
+      "operationId": "get_upi_qr_shop_upi_qr_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "amount",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/shop/toggle-online-store": {
+    "post": {
+      "tags": [
+        "Shop Settings"
+      ],
+      "summary": "Toggle Online Store",
+      "description": "Enable or disable the online store for this shop",
+      "operationId": "toggle_online_store_shop_toggle_online_store_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "enable",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "boolean",
+            "title": "Enable"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/shop/public/{shop_id}": {
+    "get": {
+      "tags": [
+        "Shop Settings"
+      ],
+      "summary": "Get Public Shop Info",
+      "description": "Public endpoint: Returns basic shop info for the Customer app (name, location)",
+      "operationId": "get_public_shop_info_shop_public__shop_id__get",
+      "parameters": [
+        {
+          "name": "shop_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Shop Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/khata/credit": {
+    "post": {
+      "tags": [
+        "Khata Ledger"
+      ],
+      "summary": "Add Khata Credit",
+      "description": "Record that a customer bought on credit (Udhar/Khata)",
+      "operationId": "add_khata_credit_khata_credit_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/KhataEntryCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/khata/repayment": {
+    "post": {
+      "tags": [
+        "Khata Ledger"
+      ],
+      "summary": "Record Repayment",
+      "description": "Record a customer's partial or full repayment",
+      "operationId": "record_repayment_khata_repayment_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/KhataRepayment"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/khata/customers": {
+    "get": {
+      "tags": [
+        "Khata Ledger"
+      ],
+      "summary": "List Khata Customers",
+      "description": "List all customers with outstanding Khata balances",
+      "operationId": "list_khata_customers_khata_customers_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 200,
+            "default": 50,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/khata/history/{customer_phone}": {
+    "get": {
+      "tags": [
+        "Khata Ledger"
+      ],
+      "summary": "Get Customer Khata History",
+      "description": "Full transaction history for a specific customer",
+      "operationId": "get_customer_khata_history_khata_history__customer_phone__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "customer_phone",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 10,
+            "pattern": "^\\d{10}$",
+            "title": "Customer Phone"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/KhataHistoryOut"
+                },
+                "title": "Response Get Customer Khata History Khata History  Customer Phone  Get"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/khata/whatsapp-reminder/{customer_phone}": {
+    "get": {
+      "tags": [
+        "Khata Ledger"
+      ],
+      "summary": "Get Whatsapp Reminder Url",
+      "description": "Generate a pre-filled WhatsApp reminder URL for a customer with outstanding Khata",
+      "operationId": "get_whatsapp_reminder_url_khata_whatsapp_reminder__customer_phone__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "customer_phone",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 10,
+            "pattern": "^\\d{10}$",
+            "title": "Customer Phone"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/purchase-orders/": {
+    "post": {
+      "tags": [
+        "Purchase Orders"
+      ],
+      "summary": "Create Purchase Order",
+      "description": "Create a new purchase order to a supplier",
+      "operationId": "create_purchase_order_purchase_orders__post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PurchaseOrderCreate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseOrderResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "get": {
+      "tags": [
+        "Purchase Orders"
+      ],
+      "summary": "List Purchase Orders",
+      "description": "List all purchase orders for this shop",
+      "operationId": "list_purchase_orders_purchase_orders__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 200,
+            "default": 50,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PurchaseOrderResponse"
+                },
+                "title": "Response List Purchase Orders Purchase Orders  Get"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/purchase-orders/{po_id}/mark-delivered": {
+    "post": {
+      "tags": [
+        "Purchase Orders"
+      ],
+      "summary": "Mark Po Delivered",
+      "description": "Mark a PO as delivered.\nThis AUTOMATICALLY adds received stock quantities to inventory.",
+      "operationId": "mark_po_delivered_purchase_orders__po_id__mark_delivered_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "po_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Po Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/purchase-orders/{po_id}/cancel": {
+    "post": {
+      "tags": [
+        "Purchase Orders"
+      ],
+      "summary": "Cancel Purchase Order",
+      "description": "Cancel a purchase order",
+      "operationId": "cancel_purchase_order_purchase_orders__po_id__cancel_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "po_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Po Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/store/customer/register": {
+    "post": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Register Customer",
+      "description": "Register a new customer account",
+      "operationId": "register_customer_store_customer_register_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomerRegister"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/store/customer/login": {
+    "post": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Customer Login",
+      "description": "Customer login \u2014 returns JWT with CUSTOMER role",
+      "operationId": "customer_login_store_customer_login_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomerLogin"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/store/shops/nearby": {
+    "get": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Find Nearby Shops",
+      "description": "Find shops near a location.\nSupports two modes:\n1. ?city=Mumbai \u2014 simple string matching\n2. ?lat=19.0&lng=72.8&radius_km=5 \u2014 GPS radius (Haversine formula)\nOnly returns shops with is_online_store_enabled=True",
+      "operationId": "find_nearby_shops_store_shops_nearby_get",
+      "parameters": [
+        {
+          "name": "city",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          }
+        },
+        {
+          "name": "lat",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          }
+        },
+        {
+          "name": "lng",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          }
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "number",
+            "default": 5.0,
+            "title": "Radius Km"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 100,
+            "default": 20,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/store/shops/{shop_id}/products": {
+    "get": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Browse Shop Products",
+      "description": "Browse a shop's available inventory (only active, in-stock products)",
+      "operationId": "browse_shop_products_store_shops__shop_id__products_get",
+      "parameters": [
+        {
+          "name": "shop_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Shop Id"
+          }
+        },
+        {
+          "name": "category",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 200,
+            "default": 50,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/store/order": {
+    "post": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Place Order",
+      "description": "Place an online order at a specific shop",
+      "operationId": "place_order_store_order_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PlaceOrder"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/store/my-orders": {
+    "get": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Get My Orders",
+      "description": "Customer: View all their orders",
+      "operationId": "get_my_orders_store_my_orders_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/store/order/{order_id}/track": {
+    "get": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Track Order",
+      "description": "Track a specific order by ID",
+      "operationId": "track_order_store_order__order_id__track_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "order_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Order Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/store/owner/orders": {
+    "get": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Get Incoming Orders",
+      "description": "Owner: View all incoming online orders for their shop",
+      "operationId": "get_incoming_orders_store_owner_orders_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 200,
+            "default": 50,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/store/owner/orders/{order_id}/action": {
+    "post": {
+      "tags": [
+        "Online Store"
+      ],
+      "summary": "Update Order Status",
+      "description": "Owner: Accept, Dispatch, Deliver, or Reject an order",
+      "operationId": "update_order_status_store_owner_orders__order_id__action_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "order_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Order Id"
+          }
+        },
+        {
+          "name": "action",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "ACCEPT, DISPATCH, DELIVER, REJECT",
+            "title": "Action"
+          },
+          "description": "ACCEPT, DISPATCH, DELIVER, REJECT"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/expenses": {
+    "post": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Expense Tracker"
+      ],
+      "summary": "Add Expense",
+      "description": "Log a shop expense (rent, salary, utilities, etc.)",
+      "operationId": "add_expense_expenses_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/retail_intelligence__ExpenseCreate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "get": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Expense Tracker"
+      ],
+      "summary": "List Expenses",
+      "description": "List shop expenses with optional date/category filters",
+      "operationId": "list_expenses_expenses_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "start_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        {
+          "name": "end_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        },
+        {
+          "name": "category",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 500,
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/workers": {
+    "get": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Worker Management"
+      ],
+      "summary": "List Workers",
+      "description": "List all workers for this shop",
+      "operationId": "list_workers_workers_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    },
+    "post": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Worker Management"
+      ],
+      "summary": "Add Worker",
+      "description": "Add a new worker/staff member",
+      "operationId": "add_worker_workers_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/retail_intelligence__WorkerCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/workers/{worker_id}": {
+    "put": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Worker Management"
+      ],
+      "summary": "Update Worker",
+      "description": "Update worker details (salary, position, status)",
+      "operationId": "update_worker_workers__worker_id__put",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "worker_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Worker Id"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/retail_intelligence__WorkerUpdate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/workers/{worker_id}/pay-salary": {
+    "post": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Worker Management"
+      ],
+      "summary": "Pay Worker Salary",
+      "description": "Mark salary as paid for a specific month and record in expenses",
+      "operationId": "pay_worker_salary_workers__worker_id__pay_salary_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "worker_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Worker Id"
+          }
+        },
+        {
+          "name": "month",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Format: YYYY-MM",
+            "title": "Month"
+          },
+          "description": "Format: YYYY-MM"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/bank-recon": {
+    "post": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Bank Reconciliation"
+      ],
+      "summary": "Add Reconciliation",
+      "description": "Record daily UPI vs bank deposit reconciliation",
+      "operationId": "add_reconciliation_bank_recon_post",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReconCreate"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    },
+    "get": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Bank Reconciliation"
+      ],
+      "summary": "List Reconciliations",
+      "description": "View bank reconciliation history",
+      "operationId": "list_reconciliations_bank_recon_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "start_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        {
+          "name": "end_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/enterprise/pnl": {
+    "get": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Enterprise Intelligence"
+      ],
+      "summary": "Get Profit And Loss",
+      "description": "Full Profit & Loss summary:\nRevenue (sales) - Expenses (all categories) = Net Profit",
+      "operationId": "get_profit_and_loss_enterprise_pnl_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "start_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        {
+          "name": "end_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/enterprise/transactions": {
+    "get": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Enterprise Intelligence"
+      ],
+      "summary": "Get All Transactions",
+      "description": "All Transactions view: every money movement (sales, expenses, khata, PO)",
+      "operationId": "get_all_transactions_enterprise_transactions_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "tx_type",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Type"
+          }
+        },
+        {
+          "name": "category",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        {
+          "name": "start_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        {
+          "name": "end_date",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "maximum": 500,
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/retail/stock-analysis": {
+    "get": {
+      "tags": [
+        "Enterprise Intelligence",
+        "Retail Intelligence"
+      ],
+      "summary": "Stock Analysis",
+      "description": "Identify fast-moving and dead-stock items",
+      "operationId": "stock_analysis_retail_stock_analysis_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/gift-cards": {
+    "post": {
+      "tags": [
+        "GST & Gift Cards",
+        "Gift Cards"
+      ],
+      "summary": "Issue Gift Card",
+      "description": "Issue a new digital gift card",
+      "operationId": "issue_gift_card_gift_cards_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GiftCardCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/gift-cards/redeem": {
+    "post": {
+      "tags": [
+        "GST & Gift Cards",
+        "Gift Cards"
+      ],
+      "summary": "Redeem Gift Card",
+      "description": "Redeem or validate a gift card during checkout",
+      "operationId": "redeem_gift_card_gift_cards_redeem_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GiftCardRedeem"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/gst/export-gstr1": {
+    "get": {
+      "tags": [
+        "GST & Gift Cards",
+        "GST"
+      ],
+      "summary": "Export Gstr1",
+      "description": "Aggregate all sales for a month and generate GSTR-1 JSON schema",
+      "operationId": "export_gstr1_gst_export_gstr1_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "month",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "maximum": 12,
+            "minimum": 1,
+            "title": "Month"
+          }
+        },
+        {
+          "name": "year",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 2000,
+            "title": "Year"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/counter/authenticate": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Authenticate Counter",
+      "operationId": "authenticate_counter_api_counter_authenticate_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CounterAuthRequest"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/delivery/create": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Create Delivery",
+      "operationId": "create_delivery_api_delivery_create_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DeliveryCreateReq"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/delivery/today": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Today Deliveries",
+      "operationId": "get_today_deliveries_api_delivery_today_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/delivery/{delivery_id}/update-status": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Update Delivery",
+      "operationId": "update_delivery_api_delivery__delivery_id__update_status_post",
+      "parameters": [
+        {
+          "name": "delivery_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Delivery Id"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_update_delivery_api_delivery__delivery_id__update_status_post"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/loyalty/earn": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Earn Points",
+      "operationId": "earn_points_api_loyalty_earn_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_earn_points_api_loyalty_earn_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/loyalty/redeem": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Redeem Points",
+      "operationId": "redeem_points_api_loyalty_redeem_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_redeem_points_api_loyalty_redeem_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/festivals/upcoming": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Upcoming Festivals",
+      "operationId": "get_upcoming_festivals_api_festivals_upcoming_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/occasions/today": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Today Occasions",
+      "operationId": "get_today_occasions_api_occasions_today_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/collections/today-summary": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Upi Summary",
+      "operationId": "get_upi_summary_api_collections_today_summary_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/templates": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Templates",
+      "operationId": "get_templates_api_templates_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/templates/save": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Save Template",
+      "operationId": "save_template_api_templates_save_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_save_template_api_templates_save_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/credit-score/{customer_id}": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Credit Score",
+      "operationId": "get_credit_score_api_credit_score__customer_id__get",
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Customer Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/reports/daily": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Generate Daily Report",
+      "operationId": "generate_daily_report_api_reports_daily_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/flash-sale/setup": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Setup Flash Sale",
+      "description": "Feature 17: Set up a timed flash sale across an entire category",
+      "operationId": "setup_flash_sale_api_flash_sale_setup_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_setup_flash_sale_api_flash_sale_setup_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/analytics/churn-risk": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Churn Risk",
+      "description": "Feature 18: Identify customers who haven't returned recently so you can send them WhatsApp coupons",
+      "operationId": "get_churn_risk_api_analytics_churn_risk_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 30,
+            "title": "Days"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/inventory/generate-purchase-orders": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Supplier Pos",
+      "description": "Feature 19: One-click auto-generation of Purchase Orders broken down by Supplier",
+      "operationId": "get_supplier_pos_api_inventory_generate_purchase_orders_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/khata/{customer_phone}": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Khata Balance",
+      "description": "Get customer's khata (credit) balance",
+      "operationId": "get_khata_balance_api_khata__customer_phone__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "customer_phone",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Customer Phone"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/khata/update": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Update Khata Balance",
+      "description": "Update customer khata balance when invoice is created or payment received - stores transaction history",
+      "operationId": "update_khata_balance_api_khata_update_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/KhataBalanceUpdate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/expenses/create": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Create Expense",
+      "description": "Create a shop expense record",
+      "operationId": "create_expense_api_expenses_create_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/new_feature_routers__ExpenseCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/expenses": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Expenses",
+      "description": "Get all shop expenses",
+      "operationId": "get_expenses_api_expenses_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/khata-history/{customer_phone}": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Khata Transaction History",
+      "description": "Get transaction history for a khata customer (invoices, payments, adjustments)",
+      "operationId": "get_khata_transaction_history_api_khata_history__customer_phone__get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "customer_phone",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Customer Phone"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/expenses/history": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Expense History",
+      "description": "Get expense transaction history with optional category filter",
+      "operationId": "get_expense_history_api_expenses_history_get",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "category",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        {
+          "name": "skip",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0,
+            "title": "Skip"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/transactions/recent": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Recent Transactions",
+      "description": "Get recent transactions across all types (invoices, payments, expenses) - for Recent Transactions screen",
+      "operationId": "get_recent_transactions_api_transactions_recent_get",
+      "parameters": [
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 50,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/transactions/online-payments": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Get Online Payments",
+      "description": "Fetch online (UPI/digital) payments only for last N days",
+      "operationId": "get_online_payments_api_transactions_online_payments_get",
+      "parameters": [
+        {
+          "name": "days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 30,
+            "title": "Days"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100,
+            "title": "Limit"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/data/backup/export": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Export Data Backup",
+      "description": "Export all shop data for backup (invoices, khata, expenses, inventory)",
+      "operationId": "export_data_backup_api_data_backup_export_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/data/integrity-check": {
+    "get": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Verify Data Integrity",
+      "description": "Verify data integrity across all critical tables",
+      "operationId": "verify_data_integrity_api_data_integrity_check_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/sync/sales": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Sync Sales Batch",
+      "description": "Bulk sync sales records from mobile app - PERSISTED TO DB",
+      "operationId": "sync_sales_batch_api_sync_sales_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Payload"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/sync/invoices": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Sync Invoices Batch",
+      "description": "Bulk sync invoices with line items from mobile app - PERSISTED TO DB",
+      "operationId": "sync_invoices_batch_api_sync_invoices_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Payload"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/sync/khata-balances": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Sync Khata Batch",
+      "description": "Bulk sync khata balances from mobile app - PERSISTED TO DB",
+      "operationId": "sync_khata_batch_api_sync_khata_balances_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Payload"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/sync/expenses": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Sync Expenses Batch",
+      "description": "Bulk sync expenses from mobile app - PERSISTED TO DB",
+      "operationId": "sync_expenses_batch_api_sync_expenses_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Payload"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/sync/invoices/chunked": {
+    "post": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Sync Invoices Chunked",
+      "description": "Chunked invoice sync - safe for large offline vaults. Send in batches of 100.",
+      "operationId": "sync_invoices_chunked_api_sync_invoices_chunked_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "title": "Payload"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ]
+    }
+  },
+  "/api/products/{product_id}": {
+    "delete": {
+      "tags": [
+        "Legacy Features",
+        "New Features"
+      ],
+      "summary": "Soft Delete Product",
+      "description": "Soft-delete a product (marks it inactive, preserves history on all old invoices)",
+      "operationId": "soft_delete_product_api_products__product_id__delete",
+      "security": [
+        {
+          "HTTPBearer": []
+        }
+      ],
+      "parameters": [
+        {
+          "name": "product_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "title": "Product Id"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/": {
+    "get": {
+      "tags": [
+        "System"
+      ],
+      "summary": "Root",
+      "operationId": "root__get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "/health": {
+    "get": {
+      "tags": [
+        "System"
+      ],
+      "summary": "Health Check",
+      "operationId": "health_check_health_get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

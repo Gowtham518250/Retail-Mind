@@ -1,0 +1,136 @@
+Total endpoints discovered: 134
+
+SUCCESS (Code 200): [POST] /auth/register | Payload: {"username": "test_string", "password": "test_string", "email": "test_string"} 
+SUCCESS (Code 200): [POST] /auth/send-otp | Payload: {"email": "test_string", "purpose": "test_string"} 
+FAIL: [POST] /auth/verify-otp | Payload: {"email": "test_string", "otp": "test_string"}  -> 400
+SUCCESS (Code 200): [POST] /auth/login | Payload: {"username": "test_string", "password": "test_string"} 
+SUCCESS (Code 401): [POST] /api/session/refresh | Payload: {"refresh_token": "test_string", "device_id": "test_string"} 
+SUCCESS (Code 200): [POST] /api/session/logout | Payload: {"access_token": "test_string"} 
+SUCCESS (Code 200): [POST] /api/session/logout-all | Payload: {"user_id": 1} 
+SUCCESS (Code 200): [GET] /api/session/active/1 
+SUCCESS (Code 200): [POST] /api/session/offline/queue | Payload: {"user_id": 1, "data_type": "test_string", "payload": {}} 
+SUCCESS (Code 200): [POST] /api/session/offline/sync | Payload: {"user_id": 1} 
+SUCCESS (Code 422): [POST] /bill/Generate/Bill 
+SUCCESS (Code 200): [GET] /bill/scan/{bill_id} 
+SUCCESS (Code 200): [GET] /bill/qr/{bill_id} 
+SUCCESS (Code 200): [POST] /api/inventory/products | Payload: {"product_name": "test_string", "sku": "test_string", "description": "test_string", "current_stock": 1, "min_stock": 1, "max_stock": 1, "reorder_level": 1, "unit_price": 1.0, "category": "test_string"} 
+SUCCESS (Code 200): [GET] /api/inventory/products 
+SUCCESS (Code 200): [GET] /api/inventory/products/1 
+SUCCESS (Code 200): [PUT] /api/inventory/products/1 | Payload: {"product_name": "test_string", "description": "test_string", "min_stock": 1, "max_stock": 1, "reorder_level": 1, "unit_price": 1.0, "category": "test_string"} 
+SUCCESS (Code 200): [DELETE] /api/inventory/products/1 
+SUCCESS (Code 200): [POST] /api/inventory/stock-movement | Payload: {"product_id": 1, "movement_type": "test_string", "quantity": 1, "reason": "test_string", "reference_id": "test_string"} 
+CRASH: [GET] /api/inventory/stock-movements/1 -> 'test_string' is not among the defined enum values. Enum name: movement_type. Possible values: IN, OUT, ADJUSTMENT
+SUCCESS (Code 200): [GET] /api/inventory/low-stock 
+SUCCESS (Code 200): [GET] /api/inventory/stock-alerts 
+CRASH: [POST] /api/inventory/batches -> (builtins.TypeError) SQLite Date type only accepts Python date objects as input.
+[SQL: INSERT INTO product_batches (product_id, batch_number, manufacture_date, expiry_date, quantity) VALUES (?, ?, ?, ?, ?)]
+[parameters: [{'quantity': 1, 'manufacture_date': 'test_string', 'expiry_date': 'test_string', 'batch_number': 'test_string', 'product_id': 1}]]
+SUCCESS (Code 200): [GET] /api/inventory/batches/1 
+SUCCESS (Code 422): [GET] /api/inventory/expiring-batches 
+SUCCESS (Code 422): [GET] /api/inventory/analytics/stock-value 
+SUCCESS (Code 422): [GET] /api/inventory/analytics/inventory-status 
+SUCCESS (Code 422): [POST] /api/attendance/workers | Payload: {"name": "test_string", "phone": "test_string", "address": "test_string", "salary": 1.0, "assigned_work": "test_string", "position": "test_string", "pin": "test_string"} 
+SUCCESS (Code 422): [GET] /api/attendance/workers 
+SUCCESS (Code 422): [PUT] /api/attendance/workers/1 | Payload: {"name": "test_string", "phone": "test_string", "address": "test_string", "salary": 1.0, "assigned_work": "test_string", "position": "test_string", "pin": "test_string"} 
+SUCCESS (Code 404): [DELETE] /api/attendance/workers/1 
+SUCCESS (Code 422): [POST] /api/attendance/check-in 
+SUCCESS (Code 422): [POST] /api/attendance/check-out 
+CRASH: [POST] /api/attendance/record-manual -> time data 'test_string' does not match format '%Y-%m-%d'
+SUCCESS (Code 422): [GET] /api/attendance/employee/{employee_id} 
+SUCCESS (Code 200): [GET] /api/attendance/date/2026-06-18 
+CRASH: [POST] /api/attendance/leave-request -> time data 'test_string' does not match format '%Y-%m-%d'
+SUCCESS (Code 200): [GET] /api/attendance/leave-requests 
+SUCCESS (Code 422): [PUT] /api/attendance/leave-request/{leave_id}/approve 
+SUCCESS (Code 422): [PUT] /api/attendance/leave-request/{leave_id}/reject 
+SUCCESS (Code 200): [GET] /api/attendance/analytics/summary 
+SUCCESS (Code 422): [GET] /api/attendance/analytics/employee/{employee_id} 
+SUCCESS (Code 422): [POST] /api/invoices/sync | Payload: {"invoice_number": "test_string", "customer_phone": "test_string", "customer_name": "test_string", "total_amount": 1.0, "paid_amount": 1.0, "tax": 1.0, "payment_status": "test_string", "line_items": [{"product_id": 1, "product_name": "test_string", "quantity": 1, "unit_price": 1.0}], "invoice_date": "test_string", "notes": "test_string"} 
+SUCCESS (Code 200): [GET] /api/invoices/ 
+SUCCESS (Code 404): [GET] /api/invoices/1 
+SUCCESS (Code 404): [DELETE] /api/invoices/1 
+SUCCESS (Code 422): [POST] /api/customers/ | Payload: {"customer_name": "test_string", "email": "test@example.com", "phone": "test_string", "whatsapp_number": "test_string", "address": "test_string", "city": "test_string", "state": "test_string", "postal_code": "test_string", "credit_limit": 1.0, "payment_terms": "test_string", "contact_preference": "test_string"} 
+SUCCESS (Code 200): [GET] /api/customers/ 
+SUCCESS (Code 404): [GET] /api/customers/1 
+SUCCESS (Code 422): [PUT] /api/customers/1 | Payload: {"customer_name": "test_string", "email": "test_string", "phone": "test_string", "whatsapp_number": "test_string", "address": "test_string", "city": "test_string", "state": "test_string", "postal_code": "test_string", "credit_limit": 1.0, "payment_terms": "test_string", "contact_preference": "test_string"} 
+SUCCESS (Code 404): [DELETE] /api/customers/1 
+SUCCESS (Code 422): [POST] /api/customers/1/set-contact-preference 
+SUCCESS (Code 422): [GET] /api/customers/search/by-phone 
+SUCCESS (Code 422): [GET] /api/customers/search/by-name 
+FAIL: [POST] /api/shop/create  -> 400
+SUCCESS (Code 404): [GET] /api/shop/profile 
+FAIL: [PUT] /api/shop/profile  -> 400
+FAIL: [DELETE] /api/shop/profile  -> 400
+FAIL: [PUT] /api/shop/settings  -> 400
+SUCCESS (Code 422): [POST] /api/shop/upload-logo 
+SUCCESS (Code 404): [GET] /api/shop/business-hours 
+SUCCESS (Code 404): [GET] /api/shop/tax-config 
+SUCCESS (Code 200): [GET] /shop/profile 
+SUCCESS (Code 422): [PUT] /shop/profile | Payload: {"shop_name": "test_string", "address": "test_string", "phone": "test_string", "upi_id": "test_string", "gst_number": "test_string", "logo_url": "test_string", "is_online_store_enabled": true} 
+SUCCESS (Code 422): [POST] /shop/profile | Payload: {"shop_name": "test_string", "address": "test_string", "phone": "test_string", "upi_id": "test_string", "gst_number": "test_string", "logo_url": "test_string"} 
+SUCCESS (Code 422): [GET] /shop/upi-qr 
+SUCCESS (Code 422): [POST] /shop/toggle-online-store 
+SUCCESS (Code 404): [GET] /shop/public/1 
+SUCCESS (Code 422): [POST] /khata/credit | Payload: {"customer_phone": "test_string", "customer_name": "test_string", "amount": 1.0, "description": "test_string"} 
+SUCCESS (Code 422): [POST] /khata/repayment | Payload: {"customer_phone": "test_string", "amount": 1.0, "description": "test_string"} 
+SUCCESS (Code 200): [GET] /khata/customers 
+SUCCESS (Code 404): [GET] /khata/history/9999999999 
+SUCCESS (Code 404): [GET] /khata/whatsapp-reminder/9999999999 
+SUCCESS (Code 200): [POST] /purchase-orders/ | Payload: {"supplier_name": "test_string", "expected_delivery": "2026-06-18", "items": [{"product_id": 1, "product_name": "test_string", "quantity": 1, "unit_cost": 1.0}], "notes": "test_string"} 
+SUCCESS (Code 200): [GET] /purchase-orders/ 
+SUCCESS (Code 422): [POST] /purchase-orders/{po_id}/mark-delivered 
+SUCCESS (Code 422): [POST] /purchase-orders/{po_id}/cancel 
+SUCCESS (Code 422): [POST] /store/customer/register | Payload: {"name": "test_string", "email": "test@example.com", "phone": "test_string", "password": "test_string", "city": "test_string", "address": "test_string"} 
+CRASH: [POST] /store/customer/login -> 'NoneType' object has no attribute 'host'
+SUCCESS (Code 200): [GET] /store/shops/nearby 
+SUCCESS (Code 404): [GET] /store/shops/1/products 
+SUCCESS (Code 403): [POST] /store/order | Payload: {"shop_id": 1, "items": [{"product_id": 1, "quantity": 1}], "delivery_address": "test_string"} 
+SUCCESS (Code 403): [GET] /store/my-orders 
+SUCCESS (Code 404): [GET] /store/order/1/track 
+SUCCESS (Code 200): [GET] /store/owner/orders 
+SUCCESS (Code 422): [POST] /store/owner/orders/1/action 
+SUCCESS (Code 200): [POST] /expenses | Payload: {"category": "test_string", "amount": 1.0, "description": "test_string", "expense_date": "2026-06-18", "payment_method": "test_string"} 
+SUCCESS (Code 200): [GET] /expenses 
+SUCCESS (Code 200): [GET] /workers 
+SUCCESS (Code 422): [POST] /workers | Payload: {"name": "test_string", "phone": "test_string", "address": "test_string", "salary": 1.0, "assigned_work": "test_string", "position": "test_string", "pin": "test_string"} 
+SUCCESS (Code 404): [PUT] /workers/1 | Payload: {"salary": 1.0, "assigned_work": "test_string", "position": "test_string", "status": "test_string", "pin": "test_string"} 
+SUCCESS (Code 422): [POST] /workers/1/pay-salary 
+SUCCESS (Code 200): [POST] /bank-recon | Payload: {"recon_date": "2026-06-18", "expected_upi_amount": 1.0, "actual_bank_deposit": 1.0, "notes": "test_string"} 
+SUCCESS (Code 200): [GET] /bank-recon 
+SUCCESS (Code 200): [GET] /enterprise/pnl 
+SUCCESS (Code 200): [GET] /enterprise/transactions 
+SUCCESS (Code 200): [GET] /retail/stock-analysis 
+SUCCESS (Code 200): [POST] /gift-cards | Payload: {"card_code": "test_string", "initial_balance": 1.0, "issued_to": "test_string", "expiry_date": "2026-06-18"} 
+SUCCESS (Code 200): [POST] /gift-cards/redeem | Payload: {"card_code": "test_string", "amount_to_deduct": 1.0} 
+CRASH: [POST] /api/counter/authenticate -> type object 'CounterService' has no attribute 'authenticate'
+CRASH: [POST] /api/delivery/create -> Invalid isoformat string: 'test_string'
+SUCCESS (Code 200): [GET] /api/delivery/today 
+SUCCESS (Code 422): [POST] /api/delivery/{delivery_id}/update-status | Payload: {"status": "test_string", "notes": "test_string"} 
+SUCCESS (Code 200): [POST] /api/loyalty/earn | Payload: {"customer_id": 1, "invoice_id": 1, "amount": 1.0} 
+FAIL: [POST] /api/loyalty/redeem | Payload: {"customer_id": 1, "points": 1, "invoice_id": 1}  -> 400
+SUCCESS (Code 200): [GET] /api/festivals/upcoming 
+SUCCESS (Code 200): [GET] /api/occasions/today 
+SUCCESS (Code 200): [GET] /api/collections/today-summary 
+SUCCESS (Code 200): [GET] /api/templates 
+SUCCESS (Code 200): [POST] /api/templates/save | Payload: {"template_name": "test_string", "template_items": []} 
+SUCCESS (Code 200): [GET] /api/credit-score/1 
+SUCCESS (Code 200): [GET] /api/reports/daily 
+SUCCESS (Code 200): [POST] /api/flash-sale/setup | Payload: {"category": "test_string", "discount_pct": 1.0, "hours": 1} 
+SUCCESS (Code 200): [GET] /api/analytics/churn-risk 
+SUCCESS (Code 200): [GET] /api/inventory/generate-purchase-orders 
+SUCCESS (Code 200): [GET] /api/khata/9999999999 
+SUCCESS (Code 422): [POST] /api/khata/update | Payload: {"customer_phone": "test_string", "amount": 1.0, "transaction_type": "test_string", "reference_id": "test_string"} 
+ERROR: [POST] /api/expenses/create | Payload: {"category": "test_string", "amount": 1.0, "description": "test_string", "date": "test_string"}  -> 500
+SUCCESS (Code 200): [GET] /api/expenses 
+SUCCESS (Code 200): [GET] /api/khata-history/9999999999 
+SUCCESS (Code 200): [GET] /api/expenses/history 
+SUCCESS (Code 200): [GET] /api/transactions/recent 
+SUCCESS (Code 200): [GET] /api/transactions/online-payments 
+SUCCESS (Code 200): [GET] /api/data/integrity-check 
+SUCCESS (Code 200): [POST] /api/sync/sales 
+SUCCESS (Code 200): [POST] /api/sync/invoices 
+SUCCESS (Code 200): [POST] /api/sync/khata-balances 
+SUCCESS (Code 200): [POST] /api/sync/expenses 
+SUCCESS (Code 200): [POST] /api/sync/invoices/chunked 
+SUCCESS (Code 200): [DELETE] /api/products/1 
+SUCCESS (Code 200): [GET] / 
+SUCCESS (Code 200): [GET] /health 
