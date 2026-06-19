@@ -17,7 +17,7 @@ import logging
 
 from db import get_db
 from models import User, RefreshToken, SessionToken
-from security import verify_password, get_password_hash
+from security import verify_password, hash_password
 
 router = APIRouter(prefix="/api/auth-hardened", tags=["authentication hardened"])
 logger = logging.getLogger(__name__)

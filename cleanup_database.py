@@ -42,8 +42,23 @@ try:
             conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
             print(f"✓ Dropped table: {table}")
         
+        # Drop all enum types
+        print("\nDropping all enum types...")
+        result = conn.execute(text("""
+            SELECT typname 
+            FROM pg_type 
+            WHERE typtype = 'e' 
+            AND typnamespace = 'public'::regnamespace
+        """))
+        
+        enums = [row[0] for row in result]
+        
+        for enum in enums:
+            conn.execute(text(f"DROP TYPE IF EXISTS {enum} CASCADE"))
+            print(f"✓ Dropped enum type: {enum}")
+        
         conn.commit()
-        print("\n✅ All tables dropped successfully")
+        print("\n✅ All tables and enum types dropped successfully")
         print("Now you can run: alembic upgrade head")
         
 except Exception as e:

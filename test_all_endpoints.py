@@ -4,8 +4,8 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# Force SQLite for instant testing
-os.environ['DATABASE_URL'] = 'sqlite:///./test.db'
+# Use external PostgreSQL database for testing
+os.environ['DATABASE_URL'] = 'postgresql://retail_mind_xxog_user:hjvmy6P7OxYlA7rec54JLx6OL0LlLocc@dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com/retail_mind_xxog?sslmode=require'
 
 from fastapi.testclient import TestClient
 from app import api
@@ -14,9 +14,9 @@ from email_notifications import EmailNotificationService
 
 EmailNotificationService.send_email = lambda *args, **kwargs: True
 
-# Initialize SQLite tables
-from db import Base, engine
-Base.metadata.create_all(bind=engine)
+# Skip table creation - schema already exists from Alembic migration
+# from db import Base, engine
+# Base.metadata.create_all(bind=engine)
 
 client = TestClient(api)
 print("Starting SQLite Comprehensive Endpoint Test...")
