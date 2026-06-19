@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
-import jwt
+from jose import jwt
 import secrets
 import logging
 
