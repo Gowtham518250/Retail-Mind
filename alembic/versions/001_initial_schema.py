@@ -423,7 +423,7 @@ def upgrade() -> None:
         sa.Column('current_tier_id', sa.Integer(), nullable=True),
         sa.Column('tier_updated_at', sa.DateTime(), nullable=True),
         sa.Column('last_tier_bump_notified', sa.Boolean(), nullable=True),
-        sa.ForeignKeyConstraint(['current_tier_id'], ['loyalty_tiers.id'),
+        sa.ForeignKeyConstraint(['current_tier_id'], ['loyalty_tiers.id']),
         sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
