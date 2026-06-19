@@ -583,7 +583,7 @@ def upgrade() -> None:
         sa.Column('card_collected', sa.Numeric(precision=10, scale=2), nullable=True),
         sa.Column('whatsapp_sent', sa.Boolean(), nullable=True),
         sa.Column('whatsapp_sent_at', sa.DateTime(), nullable=True),
-        sa.ForeignKeyConstraint(['top_product_id'], ['products.id'),
+        sa.ForeignKeyConstraint(['top_product_id'], ['products.id']),
         sa.ForeignKeyConstraint(['user_id'], ['user_details.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
