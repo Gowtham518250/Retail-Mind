@@ -21,7 +21,7 @@ class UserCreate(BaseModel):
     email: str
 
 class UserLogin(BaseModel):
-    username: str
+    email: str
     password: str
 
 @router.post("/register")
@@ -117,12 +117,12 @@ def verify_otp(request: VerifyOTPRequest):
 
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.user_name == user.username).first()
+    db_user = db.query(User).filter(User.email == user.email).first()
     
     if not db_user or not verify_password(user.password, db_user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
         
@@ -131,3 +131,54 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     )
     
     return {"access_token": access_token, "token_type": "bearer", "role": ROLE_OWNER}
+
+
+@router.get("/sales")
+def get_sales(user_id: int, db: Session = Depends(get_db)):
+    """
+    Get all sales/invoices for a user to restore when app data is cleared.
+    This endpoint is used by the frontend to download sales history from the cloud.
+    """
+    try:
+        from models import Invoice, InvoiceLineItem
+        from sqlalchemy import desc
+        
+        # Get all invoices for this user
+        invoices = db.query(Invoice).filter(
+            Invoice.user_id == user_id
+        ).order_by(desc(Invoice.created_at)).all()
+        
+        sales_data = []
+        for invoice in invoices:
+            # Get line items for this invoice
+            line_items = db.query(InvoiceLineItem).filter(
+                InvoiceLineItem.invoice_id == invoice.id
+            ).all()
+            
+            sales_record = {
+                'id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'customer_name': invoice.customer_name,
+                'customer_phone': invoice.customer_phone,
+                'total_amount': float(invoice.total_amount),
+                'paid_amount': float(invoice.paid_amount),
+                'payment_status': invoice.payment_status,
+                'invoice_date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                'created_at': invoice.created_at.isoformat() if invoice.created_at else None,
+                'line_items': [
+                    {
+                        'product_id': item.product_id,
+                        'product_name': item.description,
+                        'quantity': item.quantity,
+                        'unit_price': float(item.unit_price),
+                        'line_total': float(item.line_total),
+                    }
+                    for item in line_items
+                ]
+            }
+            sales_data.append(sales_record)
+        
+        return sales_data
+    except Exception as e:
+        logger.error(f"Error fetching sales: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch sales: {str(e)}")

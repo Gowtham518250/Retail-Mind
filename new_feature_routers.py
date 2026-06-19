@@ -194,6 +194,46 @@ def get_khata_balance(customer_phone: str, user_id: int = Depends(check_current_
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
+
+@router.get("/khata/customers")
+def get_khata_customers(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Get all customers with khata (credit) balances"""
+    try:
+        from models import KhataBalance, Customer
+        
+        # Get all khata balances for this shop
+        khata_balances = db.query(KhataBalance).filter(
+            KhataBalance.shop_id == user_id
+        ).all()
+        
+        customers_with_khata = []
+        for khata in khata_balances:
+            # Try to get customer details
+            customer = db.query(Customer).filter(
+                Customer.phone == khata.customer_phone,
+                Customer.user_id == user_id
+            ).first()
+            
+            customers_with_khata.append({
+                "customer_phone": khata.customer_phone,
+                "customer_name": customer.customer_name if customer else khata.customer_name or "Unknown",
+                "khata_balance": float(khata.khata_balance) if khata.khata_balance else 0,
+                "last_transaction": khata.last_transaction.isoformat() if khata.last_transaction else None,
+                "is_active": customer.is_active if customer else True
+            })
+        
+        # Sort by balance (highest first)
+        customers_with_khata.sort(key=lambda x: x["khata_balance"], reverse=True)
+        
+        return {
+            "status": "success",
+            "customers": customers_with_khata,
+            "total_customers": len(customers_with_khata),
+            "total_outstanding": sum(c["khata_balance"] for c in customers_with_khata)
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 @router.post("/khata/update")
 def update_khata_balance(req: KhataBalanceUpdate, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Update customer khata balance when invoice is created or payment received - stores transaction history"""
