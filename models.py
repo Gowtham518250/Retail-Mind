@@ -20,6 +20,9 @@ class User(Base):
     user_name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     password = Column(String(100), nullable=False)
+    # Role of the account: OWNER, CUSTOMER, WORKER or DELIVERY.
+    # Drives role-based dashboard routing on login.
+    user_type = Column(String(20), nullable=False, server_default="OWNER", default="OWNER", index=True)
     
     # Relationships
     products = relationship("Product", back_populates="owner")

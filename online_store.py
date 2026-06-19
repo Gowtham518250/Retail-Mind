@@ -26,7 +26,8 @@ from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
     check_login_lockout, record_login_failure, record_login_success,
-    owner_only, customer_only, get_current_user, sanitize_input
+    owner_only, customer_only, get_current_user, sanitize_input,
+    normalize_email, normalize_role,
 )
 from email_notifications import EmailNotificationService
 
@@ -68,15 +69,17 @@ def register_customer(
     db: Session = Depends(get_db),
 ):
     """Register a new customer account"""
-    existing = db.query(User).filter(User.email == data.email).first()
+    email = normalize_email(data.email)
+    existing = db.query(User).filter(func.lower(User.email) == email).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Email already registered.")
+        raise HTTPException(status_code=409, detail="This email already has an account. Please log in instead.")
 
     name = sanitize_input(data.name, "name")
     customer = User(
         user_name=name,
-        email=data.email,
+        email=email,
         password=hash_password(data.password),
+        user_type=ROLE_CUSTOMER,
     )
     db.add(customer)
     db.commit()
@@ -102,6 +105,8 @@ def register_customer(
         "token_type": "bearer",
         "customer_id": customer.id,
         "name": customer.user_name,
+        "role": ROLE_CUSTOMER,
+        "user_type": ROLE_CUSTOMER,
     }
 
 
@@ -115,18 +120,22 @@ def customer_login(
     ip = request.client.host
     check_login_lockout(ip)
 
-    user = db.query(User).filter(User.email == data.email).first()
+    email = normalize_email(data.email)
+    user = db.query(User).filter(func.lower(User.email) == email).first()
     if not user or not verify_password(data.password, user.password):
         record_login_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     record_login_success(ip)
-    token = create_access_token({"sub": str(user.id), "role": ROLE_CUSTOMER})
+    role = normalize_role(user.user_type) or ROLE_CUSTOMER
+    token = create_access_token({"sub": str(user.id), "role": role})
     return {
         "access_token": token,
         "token_type": "bearer",
         "customer_id": user.id,
         "name": user.user_name,
+        "role": role,
+        "user_type": role,
     }
 
 

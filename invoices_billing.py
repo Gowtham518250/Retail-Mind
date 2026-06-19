@@ -96,7 +96,7 @@ def sync_offline_invoice(
         if not cust:
             cust = Customer(
                 user_id=shop_id,
-                name=sanitize_input(data.customer_name or "Cash Customer", "customer_name"),
+                customer_name=sanitize_input(data.customer_name or "Cash Customer", "customer_name"),
                 phone=phone
             )
             db.add(cust)
@@ -229,13 +229,19 @@ def create_invoice(
     shop_id = current_user
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
-    # Check for duplicate invoice number
+    # Idempotency: a repeated request (e.g. double-tap or retry) with the same
+    # invoice_number must NOT create a second invoice. Return the existing one.
     existing = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         Invoice.invoice_number == invoice_number
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Invoice number already exists")
+        return {
+            "message": "Invoice already exists.",
+            "invoice_id": existing.id,
+            "invoice_number": existing.invoice_number,
+            "duplicate": True,
+        }
 
     # Find/Create Customer
     customer_id = None

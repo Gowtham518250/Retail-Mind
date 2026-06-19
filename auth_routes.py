@@ -4,9 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+
 from db import get_db
 from models import User, ShopProfile
-from security import hash_password, verify_password, create_access_token, ROLE_OWNER
+from security import (
+    hash_password, verify_password, create_access_token,
+    ROLE_OWNER, normalize_email, normalize_role,
+)
 from email_notifications import EmailNotificationService
 import random
 import time
@@ -19,6 +25,7 @@ class UserCreate(BaseModel):
     username: str
     password: str
     email: str
+    user_type: Optional[str] = ROLE_OWNER
 
 class UserLogin(BaseModel):
     email: str
@@ -26,40 +33,51 @@ class UserLogin(BaseModel):
 
 @router.post("/register")
 def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.user_name == user.username).first():
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Hash password securely
+    email = normalize_email(user.email)
+    role = normalize_role(user.user_type)
+    logger.info(f"Registration attempt: email={email}, role={role}")
+
+    # Email uniqueness check (case-insensitive). The email is the real identity
+    # across all roles, so an existing email is the only hard conflict.
+    if db.query(User).filter(func.lower(User.email) == email).first():
+        logger.info(f"Registration rejected: email already exists ({email})")
+        raise HTTPException(status_code=409, detail="This email already has an account. Please log in instead.")
+
     hashed_password = hash_password(user.password)
-    
-    # Create new user
     new_user = User(
         user_name=user.username,
-        email=user.email,
-        password=hashed_password
+        email=email,
+        password=hashed_password,
+        user_type=role,
     )
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    # Auto-create Shop Profile
-    shop_profile = ShopProfile(shop_id=new_user.id, shop_name=f"{user.username}'s Shop")
-    db.add(shop_profile)
-    db.commit()
-
-    # Send Welcome Email with Credentials in the background
     try:
-        subject, body = EmailNotificationService.welcome_credentials_template(user.username, user.password, "Shop Owner")
+        db.flush()
+        # Owners get an auto-created shop profile; other roles do not.
+        if role == ROLE_OWNER:
+            db.add(ShopProfile(shop_id=new_user.id, shop_name=f"{user.username}'s Shop"))
+        db.commit()
+        db.refresh(new_user)
+    except IntegrityError:
+        db.rollback()
+        logger.warning(f"Registration race/integrity error for email={email}")
+        raise HTTPException(status_code=409, detail="This email already has an account. Please log in instead.")
+
+    logger.info(f"Registration success: user_id={new_user.id}, email={email}, role={role}")
+
+    # Send Welcome Email with Credentials in the background (best-effort)
+    try:
+        subject, body = EmailNotificationService.welcome_credentials_template(user.username, user.password, role.title())
         background_tasks.add_task(
             EmailNotificationService.send_email,
-            recipient_email=user.email,
+            recipient_email=email,
             subject=subject,
             body=body
         )
     except Exception as e:
         logger.error(f"Failed to queue welcome email: {e}")
 
-    return {"msg": "User registered successfully", "user_id": new_user.id}
+    return {"msg": "User registered successfully", "user_id": new_user.id, "role": role}
 
 class SendOTPRequest(BaseModel):
     email: str
@@ -117,7 +135,8 @@ def verify_otp(request: VerifyOTPRequest):
 
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
+    email = normalize_email(user.email)
+    db_user = db.query(User).filter(func.lower(User.email) == email).first()
     
     if not db_user or not verify_password(user.password, db_user.password):
         raise HTTPException(
@@ -125,12 +144,21 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
+    # Role comes from the stored account type, NOT from this endpoint, so each
+    # user lands on the correct dashboard (owner/customer/worker/delivery).
+    role = normalize_role(db_user.user_type)
     access_token = create_access_token(
-        data={"sub": str(db_user.id), "role": ROLE_OWNER}
+        data={"sub": str(db_user.id), "role": role}
     )
     
-    return {"access_token": access_token, "token_type": "bearer", "role": ROLE_OWNER}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": role,
+        "user_id": db_user.id,
+        "user_type": role,
+    }
 
 
 @router.get("/sales")
