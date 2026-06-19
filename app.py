@@ -31,10 +31,14 @@ logger = logging.getLogger("ai_shop_pro")
 # ========================
 # Core Auth & Session
 from auth_routes import router as authentication_router
+from auth_hardening_service import router as auth_hardening_router
 from session_routes import router as session_router
 
 # Core ERP
 from inventory import router as inventory_router
+from inventory_sync_service import router as inventory_sync_router
+from inventory_reconciliation_service import router as inventory_reconcile_router
+from sales_restore_service import router as sales_restore_router
 from attendance import router as attendance_router
 from invoices_billing import router as invoices_router
 from customers import router as customers_router
@@ -56,6 +60,8 @@ from new_feature_routers import router as new_features_router
 from caching_system import router as caching_router
 from batch_operations import router as batch_operations_router
 from rate_limiting import router as rate_limiting_router
+from security_hardening import router as security_hardening_router
+from observability_service import router as observability_router
 
 # DB initialization
 from db import engine, get_db
@@ -142,11 +148,15 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Auth
 api.include_router(authentication_router, prefix="/auth", tags=["Authentication"])
+api.include_router(auth_hardening_router, tags=["Authentication Hardened"])
 api.include_router(session_router, tags=["Session Management"])
 
 # Core ERP
 api.include_router(bill_router, prefix="/bill", tags=["Bill Generation"])
 api.include_router(inventory_router, tags=["Inventory Management"])
+api.include_router(inventory_sync_router, tags=["Inventory Sync Service"])
+api.include_router(inventory_reconcile_router, tags=["Inventory Reconciliation"])
+api.include_router(sales_restore_router, tags=["Sales Restoration"])
 api.include_router(attendance_router, tags=["Attendance Management"])
 api.include_router(invoices_router, tags=["Invoices & Billing"])
 api.include_router(customers_router, tags=["Customer Management"])
@@ -167,6 +177,8 @@ api.include_router(new_features_router, tags=["Legacy Features"])
 api.include_router(caching_router, prefix="/cache", tags=["Caching System"])
 api.include_router(batch_operations_router, prefix="/batch", tags=["Batch Operations"])
 api.include_router(rate_limiting_router, tags=["Rate Limiting"])
+api.include_router(security_hardening_router, tags=["Security Hardening"])
+api.include_router(observability_router, tags=["Observability"])
 
 # ========================
 # ROOT & HEALTH ENDPOINTS
