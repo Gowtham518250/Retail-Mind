@@ -794,6 +794,23 @@ def test_gst_gift():
 def test_online_store():
     section("23 - ONLINE STORE")
     store_email = f"store_{int(time.time())}@test.com"
+    # In test_online_store(), change:
+    run("Register Store Customer",
+        "POST", "/store/customer/register",
+        payload={...},
+        expected_codes=(200, 201, 400, 409),
+        capture={"customer_token": "access_token"},   # ADD THIS
+    )
+
+    # Then before Place Order, temporarily swap the token:
+    saved_token = STATE["access_token"]
+    STATE["access_token"] = STATE.get("customer_token") or STATE["access_token"]
+
+    run("Place Order", ...)
+    run("Get My Orders", ...)
+    run("Track Order", ...)
+
+    STATE["access_token"] = saved_token  # Restore owner token
     run("Register Store Customer",
         "POST", "/store/customer/register",
         payload={

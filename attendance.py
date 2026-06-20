@@ -399,23 +399,25 @@ def approve_leave(
     leave.status = "APPROVED"
     
     # Create attendance records for leave period
-    current = leave.from_date
-    while current <= leave.to_date:
+    from_date = leave.from_date if isinstance(leave.from_date, date) else leave.from_date.date()
+    to_date = leave.to_date if isinstance(leave.to_date, date) else leave.to_date.date()
+    current = from_date
+    while current <= to_date:
         existing = db.query(Attendance).filter(
             and_(
-                Attendance.employee_id == leave.employee_id,
-                Attendance.attendance_date == current
+            Attendance.employee_id == leave.employee_id,
+            Attendance.attendance_date == current
             )
         ).first()
         
         if not existing:
             attendance = Attendance(
-                employee_id=leave.employee_id,
-                attendance_date=current,
-                status="LEAVE"
+            employee_id=leave.employee_id,
+            attendance_date=current,
+            status="LEAVE"
             )
             db.add(attendance)
-        
+    
         current += timedelta(days=1)
     
     db.commit()

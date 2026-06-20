@@ -10,11 +10,19 @@ conn = psycopg2.connect(
 
 cur = conn.cursor()
 
+
+
+cur.execute("""
+ALTER TABLE gift_cards ALTER COLUMN expiry_date DROP NOT NULL;
+""")
+
 cur.execute("""
 ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 """)
 
-
+cur.execute("""
+UPDATE gift_cards SET is_active = TRUE WHERE is_active IS NULL;
+""")
 
 conn.commit()
 

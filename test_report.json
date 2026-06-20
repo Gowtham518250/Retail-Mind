@@ -1,1105 +1,1129 @@
 {
-  "run_at": "2026-06-20T16:10:06.794338Z",
+  "run_at": "2026-06-20T16:53:33.208098Z",
   "base_url": "https://retail-mind-vkbp.onrender.com",
   "summary": {
-    "total": 182,
-    "passed": 0,
-    "failed": 0,
+    "total": 186,
+    "passed": 168,
+    "failed": 18,
     "skipped": 0,
-    "errors": 182
+    "errors": 0
   },
   "results": [
     {
       "label": "Root",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: / (Caused by NameRes"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Health Check (/health)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /health (Caused by N"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Observability Health",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/h"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Observability Ready",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/r"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Observability Metrics",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/m"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Business Overview",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/b"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Performance Summary",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/p"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "DB Performance",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/p"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Register",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /auth/register (Caus"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Send OTP",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /auth/send-otp (Caus"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Verify OTP (expect 400/422 without real OTP)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /auth/verify-otp (Ca"
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
     },
     {
       "label": "Login",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /auth/login (Caused "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Hardened Register",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/auth-hardened/r"
+      "status": "PASS",
+      "code": 500,
+      "detail": ""
     },
     {
       "label": "Hardened Login",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/auth-hardened/l"
+      "status": "PASS",
+      "code": 401,
+      "detail": ""
     },
     {
       "label": "Hardened Refresh (no token)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/auth-hardened/r"
+      "status": "PASS",
+      "code": 401,
+      "detail": ""
     },
     {
       "label": "Hardened Logout",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/auth-hardened/l"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Logout All",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Active Sessions (hardened)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Refresh Token",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/session/refresh"
+      "status": "PASS",
+      "code": 401,
+      "detail": ""
     },
     {
       "label": "Get Active Sessions",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/session/active/"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Offline Data",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/session/offline"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync All Offline Data",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/session/offline"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Shop Profile (/api/shop)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/shop/profile (C"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Get Business Hours",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/shop/business-h"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Get Tax Config",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/shop/tax-config"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Get Shop Profile (/shop)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /shop/profile (Cause"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get UPI QR",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /shop/upi-qr?amount="
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Get Public Shop Info",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /shop/public/1 (Caus"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Toggle Online Store (enable)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /shop/toggle-online-"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Shop Profile",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /shop/profile (Cause"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update API Shop Settings",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/shop/settings ("
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
     },
     {
       "label": "Create Product",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/produ"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Products",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/produ"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Single Product",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/produ"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Product",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/produ"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Create Stock Movement",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/stock"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Stock Movements",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/stock"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Low Stock Products",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/low-s"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Stock Alerts",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/stock"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Create Batch",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/batch"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Batches",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/batch"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Expiring Batches",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/expir"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Stock Value",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/analy"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Inventory Status",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/analy"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Generate Purchase Orders (Supplier POs)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/gener"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Soft Delete Product",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/products/1 (Cau"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Current Stock",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-sync/"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get All Stock",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-sync/"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Deduct Stock (idempotent)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-sync/"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Deduct Stock Batch",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-sync/"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Reconcile Inventory",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-sync/"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Full Reconciliation",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-recon"
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic"
     },
     {
       "label": "Correct Stock Manually",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-recon"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Stock Audit Trail",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-recon"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Auto Fix Discrepancies",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory-recon"
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic"
     },
     {
       "label": "Create Customer",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/ (Cau"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Customers",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/?limi"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Single Customer",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/1 (Ca"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Customer",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/1 (Ca"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Set Contact Preference",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/1/set"
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
     },
     {
       "label": "Search By Phone",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/searc"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Search By Name",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/searc"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Credit Score",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/credit-score/1 "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Soft Delete Customer",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/customers/1 (Ca"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Create Invoice",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/create"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Offline Invoice",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/sync ("
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Invoices",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/?limit"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Single Invoice",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/1 (Cau"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Get Overdue Invoices",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/overdu"
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'int_parsing', 'loc': ['path', 'invoice_id'], 'msg': 'Input should be a valid integer, unable to pa"
     },
     {
       "label": "Get Invoice Payments",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/paymen"
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'int_parsing', 'loc': ['path', 'invoice_id'], 'msg': 'Input should be a valid integer, unable to pa"
     },
     {
       "label": "Get Invoice Analytics",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/analyt"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Delete Invoice",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/invoices/1 (Cau"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Generate Bill",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /bill/Generate/Bill "
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Get Bill",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /bill/scan/BILL-001 "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
-      "label": "Get QR Image",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /bill/qr/BILL-001 (C"
+      "label": "Get UPI QR",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Create Worker",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/work"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Workers",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/work"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Worker",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/work"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Employee Check-In",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/chec"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Employee Check-Out",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/chec"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Record Manual Attendance",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/reco"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Employee Attendance",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/empl"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Attendance By Date",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/date"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Request Leave",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/leav"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Leave Requests",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/leav"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Approve Leave",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/leav"
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/leave-request/7/approve'}"
     },
     {
       "label": "Get Attendance Summary",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/anal"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Employee Analytics",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/anal"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Delete Worker",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/work"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Add Khata Credit",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /khata/credit (Cause"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Record Repayment",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /khata/repayment (Ca"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "List Khata Customers",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /khata/customers?lim"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Customer Khata History",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /khata/history/99999"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get WhatsApp Reminder URL",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /khata/whatsapp-remi"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Khata Balance (API)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/khata/999999999"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Khata Customers (API)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/khata/customers"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Khata Balance",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/khata/update (C"
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'detail': \"unsupported operand type(s) for +: 'decimal.Decimal' and 'float'\"}"
     },
     {
       "label": "Get Khata History (API)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/khata-history/9"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Create Purchase Order",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /purchase-orders/ (C"
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'missing', 'loc': ['body', 'items', 0, 'product_name'], 'msg': 'Field required', 'input': {'product"
     },
     {
       "label": "List Purchase Orders",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /purchase-orders/?li"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Mark PO Delivered",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /purchase-orders/1/m"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Cancel Purchase Order",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /purchase-orders/1/c"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Create Delivery",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/delivery/create"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Today Deliveries",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/delivery/today "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Delivery Status",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/delivery/1/upda"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Earn Points",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/loyalty/earn (C"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Redeem Points",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/loyalty/redeem "
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
     },
     {
       "label": "Create Expense (/api/expenses)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/expenses/create"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Expenses (/api/expenses)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/expenses?limit="
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Expense History",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/expenses/histor"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Add Expense (/expenses)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /expenses (Caused by"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "List Expenses (/expenses)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /expenses?limit=10 ("
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "List Workers",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /workers (Caused by "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Add Worker",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /workers (Caused by "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Worker (enterprise)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /workers/1 (Caused b"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Pay Worker Salary",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /workers/1/pay-salar"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Add Reconciliation",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /bank-recon (Caused "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "List Reconciliations",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /bank-recon (Caused "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Profit & Loss",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /enterprise/pnl (Cau"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "All Transactions",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /enterprise/transact"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Stock Analysis",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /retail/stock-analys"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Daily Report",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/reports/daily ("
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Churn Risk",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/analytics/churn"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "UPI Summary",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/collections/tod"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Recent Transactions",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/transactions/re"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Online Payments",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/transactions/on"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Authenticate Counter",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/counter/authent"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Upcoming Festivals",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/festivals/upcom"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Today Occasions",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/occasions/today"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Templates",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/templates (Caus"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Save Template",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/templates/save "
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Setup Flash Sale",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/flash-sale/setu"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Sales (legacy)",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /auth/sales?user_id="
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Issue Gift Card",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /gift-cards (Caused "
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/gift-cards'}"
     },
     {
       "label": "Redeem Gift Card",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /gift-cards/redeem ("
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/gift-cards/redeem'}"
     },
     {
       "label": "Export GSTR1",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /gst/export-gstr1?mo"
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
     },
     {
       "label": "Register Store Customer",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/customer/regi"
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/store/customer/register'}"
     },
     {
       "label": "Store Customer Login",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/customer/logi"
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/store/customer/login'}"
     },
     {
       "label": "Find Nearby Shops",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/shops/nearby?"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Browse Shop Products",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/shops/1/produ"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Place Order",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/order (Caused"
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get My Orders",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/my-orders (Ca"
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Track Order",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/order/1/track"
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Incoming Orders",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/owner/orders?"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Update Order Status",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /store/owner/orders/"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Restore All Sales",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sales-restore/r"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Restore Summary",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sales-restore/r"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Restore Customers",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sales-restore/r"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Export Backup",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/data/backup/exp"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Data Integrity Check",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/data/integrity-"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Sales Batch",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sync/sales (Cau"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Invoices Batch",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sync/invoices ("
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Khata Batch",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sync/khata-bala"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Expenses Batch",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sync/expenses ("
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Invoices Chunked",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/sync/invoices/c"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Bulk Export Products",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /batch/api/batch/pro"
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
     },
     {
       "label": "Bulk Import Products",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /batch/api/batch/pro"
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
     },
     {
       "label": "Bulk Import Customers",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /batch/api/batch/cus"
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
     },
     {
       "label": "Get Batch Status",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /batch/api/batch/sta"
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Get Batch History",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /batch/api/batch/his"
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
     },
     {
       "label": "Cache Stats",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /cache/api/cache/sta"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Warm Product Cache",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /cache/api/cache/war"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Warm Analytics Cache",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /cache/api/cache/war"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Clear Cache Pattern",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /cache/api/cache/cle"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Rate Limit Status",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/rate-limit/stat"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sec Rate Limit Status",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/security/rate-l"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get CSRF Token",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/security/csrf-t"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Security Headers",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/security/securi"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Validate Password",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/security/valida"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Check Input Security",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/security/check-"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Check SQL Injection",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/security/check-"
+      "status": "PASS",
+      "code": 403,
+      "detail": ""
     },
     {
       "label": "Sanitize Batch",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/security/saniti"
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Log Event",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/l"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Log Error",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/observability/e"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Create Sale Legacy",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /auth/sales (Caused "
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Delete Product",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/inventory/produ"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Reject Leave",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/attendance/leav"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Create Shop Profile",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/shop/create (Ca"
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Update Profile",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/shop/profile (C"
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Upload Logo",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/shop/upload-log"
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Create Shop Profile",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /shop/profile (Cause"
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
     },
     {
       "label": "Clear Cache Pattern",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /cache/api/cache/cle"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Clear All Cache",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /cache/api/cache/cle"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Rate Limit Status",
-      "status": "ERROR",
-      "code": "-",
-      "detail": "HTTPSConnectionPool(host='retail-mind-vkbp.onrender.com', port=443): Max retries exceeded with url: /api/rate-limit/stat"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Session Logout",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Session Logout All",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     }
   ]
 }

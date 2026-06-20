@@ -28,7 +28,14 @@ from security import (
     check_login_lockout, record_login_failure, record_login_success,
     owner_only, customer_only, get_current_user, sanitize_input
 )
+# Change:
 from email_notifications import EmailNotificationService
+
+# To:
+try:
+    from email_notifications import EmailNotificationService
+except ImportError:
+    EmailNotificationService = None
 
 logger = logging.getLogger(__name__)
 

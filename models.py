@@ -828,7 +828,6 @@ class GiftCard(Base):
     is_active = Column(Boolean, default=True)
     status = Column(Enum("ACTIVE", "REDEEMED", "EXPIRED", create_constraint=False), default="ACTIVE")
 
-
 class BatchOperation(Base):
     """Track batch operations"""
     __tablename__ = "batch_operations"

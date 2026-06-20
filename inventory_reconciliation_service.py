@@ -43,7 +43,7 @@ class StockCorrectionRequest(BaseModel):
 
 @router.post("/full-reconciliation", response_model=ReconciliationReport)
 def full_inventory_reconciliation(
-    local_inventory: List[Dict[str, Any]],
+    local_inventory: List[Dict[str, Any]]=None,
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
