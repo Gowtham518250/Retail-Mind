@@ -31,6 +31,9 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     if db.query(User).filter(User.user_name == user.username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
     
+    if not user.email or user.email.strip() == "":
+        raise HTTPException(status_code=400, detail="Email is required")
+
     from sqlalchemy import func
     # Check email uniqueness (case-insensitive)
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
