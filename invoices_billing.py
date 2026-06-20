@@ -37,6 +37,7 @@ class InvoiceLineItemCreate(BaseModel):
 
 class InvoiceSyncCreate(BaseModel):
     invoice_number: str
+    offline_id: Optional[str] = None
     customer_phone: Optional[str] = Field(None, min_length=10, max_length=10, pattern=r"^\d{10}$")
     customer_name: Optional[str] = None
     total_amount: float
@@ -78,10 +79,17 @@ def sync_offline_invoice(
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
     # Check for duplicate sync (idempotency)
-    existing = db.query(Invoice).filter(
-        Invoice.user_id == shop_id,
-        Invoice.invoice_number == invoice_number
-    ).first()
+    if data.offline_id:
+        existing = db.query(Invoice).filter(
+            Invoice.user_id == shop_id,
+            Invoice.offline_id == data.offline_id
+        ).first()
+    else:
+        existing = db.query(Invoice).filter(
+            Invoice.user_id == shop_id,
+            Invoice.invoice_number == invoice_number
+        ).first()
+
     if existing:
         return {"message": "Invoice already synced.", "invoice_id": existing.id}
 
@@ -115,6 +123,7 @@ def sync_offline_invoice(
         customer_name=sanitize_input(data.customer_name or "Cash Customer", "customer_name"),
         customer_phone=data.customer_phone,
         invoice_number=invoice_number,
+        offline_id=data.offline_id,
         invoice_date=inv_date,
         due_date=inv_date,
         subtotal=data.total_amount - data.tax,

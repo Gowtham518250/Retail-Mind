@@ -183,6 +183,7 @@ class Invoice(Base):
     customer_name = Column(String(100), nullable=True)
     customer_phone = Column(String(20), nullable=True)
     invoice_number = Column(String(50), nullable=False, index=True)
+    offline_id = Column(String(50), nullable=True, index=True, unique=True)
     invoice_date = Column(Date, server_default=func.now(), index=True)
     due_date = Column(Date, nullable=False)
     subtotal = Column(Numeric(10, 2), default=0)
