@@ -597,7 +597,14 @@ async def sync_invoices_batch(payload: dict = Body(...), user_id: int = Depends(
         for inv in invoices_data:
             # Check if invoice already exists to avoid duplication
             existing = db.query(Invoice).filter(Invoice.invoice_number == inv.get('invoice_number')).first()
-            if existing: continue
+            if existing:
+                existing.total_amount = inv.get('total_amount', existing.total_amount)
+                existing.paid_amount = inv.get('paid_amount', existing.paid_amount)
+                existing.payment_status = inv.get('payment_status', existing.payment_status)
+                existing.status = inv.get('status', existing.status)
+                # Note: We do not deduct inventory again for upserted invoices to avoid double-deduction
+                skipped_count += 1
+                continue
             
             # Create invoice record
             new_invoice = Invoice(
@@ -621,12 +628,21 @@ async def sync_invoices_batch(payload: dict = Body(...), user_id: int = Depends(
                 new_item = InvoiceLineItem(
                     invoice_id=new_invoice.id,
                     product_id=item.get('product_id'),
-                    description=item.get('item', item.get('description', 'Product')),
+                    description=item.get('item', item.get('product_name', item.get('product', item.get('itemName', item.get('description', 'Unknown Product'))))),
                     quantity=item.get('qty', item.get('quantity', 1)),
                     unit_price=item.get('price', item.get('unit_price', 0)),
                     line_total=item.get('total', 0)
                 )
                 db.add(new_item)
+                
+                # Deduct inventory using row-level lock
+                product_id = item.get('product_id')
+                if product_id:
+                    from models import Product
+                    product = db.query(Product).filter(Product.id == product_id, Product.user_id == user_id).with_for_update().first()
+                    if product and product.stock_quantity is not None:
+                        qty = float(item.get('qty', item.get('quantity', 1)))
+                        product.stock_quantity = max(0, float(product.stock_quantity) - qty)
                 
             synced_count += 1
             
@@ -733,6 +749,10 @@ async def sync_invoices_chunked(
                 Invoice.invoice_number == inv.get('invoice_number')
             ).first()
             if existing:
+                existing.total_amount = inv.get('total_amount', existing.total_amount)
+                existing.paid_amount = inv.get('paid_amount', existing.paid_amount)
+                existing.payment_status = inv.get('payment_status', existing.payment_status)
+                existing.status = inv.get('status', existing.status)
                 skipped_count += 1
                 continue
 
@@ -755,11 +775,20 @@ async def sync_invoices_chunked(
                 db.add(InvoiceLineItem(
                     invoice_id=new_invoice.id,
                     product_id=item.get('product_id'),
-                    description=item.get('item', item.get('description', 'Product')),
+                    description=item.get('item', item.get('product_name', item.get('product', item.get('itemName', item.get('description', 'Unknown Product'))))),
                     quantity=item.get('qty', item.get('quantity', 1)),
                     unit_price=item.get('price', item.get('unit_price', 0)),
                     line_total=item.get('total', 0)
                 ))
+                
+                # Deduct inventory using row-level lock
+                product_id = item.get('product_id')
+                if product_id:
+                    from models import Product
+                    product = db.query(Product).filter(Product.id == product_id, Product.user_id == user_id).with_for_update().first()
+                    if product and product.stock_quantity is not None:
+                        qty = float(item.get('qty', item.get('quantity', 1)))
+                        product.stock_quantity = max(0, float(product.stock_quantity) - qty)
             synced_count += 1
 
         db.commit()

@@ -43,6 +43,9 @@ class ShopProfileUpdate(BaseModel):
     gst_number: Optional[str] = None
     logo_url: Optional[str] = None
     is_online_store_enabled: Optional[bool] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    city: Optional[str] = None
 
 class ShopProfileResponse(BaseModel):
     id: int
@@ -54,6 +57,9 @@ class ShopProfileResponse(BaseModel):
     gst_number: Optional[str]
     logo_url: Optional[str]
     is_online_store_enabled: bool
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    city: Optional[str] = None
 
     class Config:
         from_attributes = True

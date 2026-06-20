@@ -21,13 +21,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db import get_db
-from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction
+from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction, OnlineCustomerAuth
 from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
     check_login_lockout, record_login_failure, record_login_success,
-    owner_only, customer_only, get_current_user, sanitize_input,
-    normalize_email, normalize_role,
+    owner_only, customer_only, get_current_user, sanitize_input
 )
 from email_notifications import EmailNotificationService
 
@@ -69,17 +68,15 @@ def register_customer(
     db: Session = Depends(get_db),
 ):
     """Register a new customer account"""
-    email = normalize_email(data.email)
-    existing = db.query(User).filter(func.lower(User.email) == email).first()
+    existing = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
     if existing:
-        raise HTTPException(status_code=409, detail="This email already has an account. Please log in instead.")
+        raise HTTPException(status_code=409, detail="Email already registered.")
 
     name = sanitize_input(data.name, "name")
-    customer = User(
+    customer = OnlineCustomerAuth(
         user_name=name,
-        email=email,
+        email=data.email,
         password=hash_password(data.password),
-        user_type=ROLE_CUSTOMER,
     )
     db.add(customer)
     db.commit()
@@ -105,8 +102,6 @@ def register_customer(
         "token_type": "bearer",
         "customer_id": customer.id,
         "name": customer.user_name,
-        "role": ROLE_CUSTOMER,
-        "user_type": ROLE_CUSTOMER,
     }
 
 
@@ -117,25 +112,21 @@ def customer_login(
     db: Session = Depends(get_db),
 ):
     """Customer login — returns JWT with CUSTOMER role"""
-    ip = request.client.host
+    ip = request.client.host if request.client else "unknown"
     check_login_lockout(ip)
 
-    email = normalize_email(data.email)
-    user = db.query(User).filter(func.lower(User.email) == email).first()
+    user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
     if not user or not verify_password(data.password, user.password):
         record_login_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     record_login_success(ip)
-    role = normalize_role(user.user_type) or ROLE_CUSTOMER
-    token = create_access_token({"sub": str(user.id), "role": role})
+    token = create_access_token({"sub": str(user.id), "role": ROLE_CUSTOMER})
     return {
         "access_token": token,
         "token_type": "bearer",
         "customer_id": user.id,
         "name": user.user_name,
-        "role": role,
-        "user_type": role,
     }
 
 
@@ -447,7 +438,7 @@ def update_order_status(
         items = json.loads(order.items_json)
         
         # Get customer details
-        customer = db.query(User).filter(User.id == order.customer_id).first()
+        customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == order.customer_id).first()
         customer_name = customer.user_name if customer else "Online Customer"
         
         # Create Invoice

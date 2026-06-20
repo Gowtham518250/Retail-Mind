@@ -307,7 +307,12 @@ def create_invoice(
                 Product.user_id == shop_id
             ).first()
             if product:
-                product.current_stock = max(0, (product.current_stock or 0) - item.quantity)
+                if (product.current_stock or 0) < item.quantity:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Insufficient stock for product ID {product.id}. Available: {product.current_stock or 0}, Requested: {item.quantity}"
+                    )
+                product.current_stock = (product.current_stock or 0) - item.quantity
                 # Log stock movement
                 mov = StockMovement(
                     product_id=product.id,

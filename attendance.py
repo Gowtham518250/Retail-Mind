@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date, timedelta
 from typing import List, Optional
 from db import sessionLocal, get_db
+from security import get_current_user as check_current_user
 from models import Attendance, LeaveRequest, User, Worker
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
 class WorkerCreate(BaseModel):
     name: str
-    phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    phone: Optional[str] = ""
     address: Optional[str] = ""
     salary: float = 0
     assigned_work: Optional[str] = ""
@@ -27,7 +28,7 @@ class WorkerCreate(BaseModel):
 
 class WorkerUpdate(BaseModel):
     name: Optional[str] = None
-    phone: Optional[str] = Field(None, min_length=10, max_length=10, pattern=r"^\d{10}$")
+    phone: Optional[str] = None
     address: Optional[str] = None
     salary: Optional[float] = None
     assigned_work: Optional[str] = None
@@ -82,10 +83,14 @@ def update_worker(
 @router.delete("/workers/{worker_id}")
 def delete_worker(
     worker_id: int,
+    user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a worker from the database"""
-    worker = db.query(Worker).filter(Worker.id == worker_id).first()
+    worker = db.query(Worker).filter(
+        Worker.id == worker_id,
+        Worker.shop_id == user_id
+    ).first()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
     
@@ -133,7 +138,7 @@ def employee_check_in(
     db: Session = Depends(get_db)
 ):
     """Employee check-in"""
-    employee = db.query(User).filter(User.id == employee_id).first()
+    employee = db.query(Worker).filter(Worker.id == employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
@@ -176,7 +181,7 @@ def employee_check_out(
     db: Session = Depends(get_db)
 ):
     """Employee check-out"""
-    employee = db.query(User).filter(User.id == employee_id).first()
+    employee = db.query(Worker).filter(Worker.id == employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
@@ -219,7 +224,7 @@ def record_manual_attendance(
     db: Session = Depends(get_db)
 ):
     """Manually record attendance"""
-    employee = db.query(User).filter(User.id == record.employee_id).first()
+    employee = db.query(Worker).filter(Worker.id == record.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
@@ -306,7 +311,7 @@ def request_leave(
     db: Session = Depends(get_db)
 ):
     """Request leave"""
-    employee = db.query(User).filter(User.id == leave_request.employee_id).first()
+    employee = db.query(Worker).filter(Worker.id == leave_request.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     

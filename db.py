@@ -8,13 +8,13 @@ from sqlalchemy.engine import URL
 # Load environment - try .env.local first (SQLite dev), then .env.production, then .env
 if os.path.exists('.env.local'):
     load_dotenv('.env.local')
-    print("📌 Using LOCAL environment (.env.local - SQLite)")
+    print("Using LOCAL environment (.env.local - SQLite)")
 elif os.path.exists('.env.production'):
     load_dotenv('.env.production')
-    print("📌 Using PRODUCTION environment (.env.production)")
+    print("Using PRODUCTION environment (.env.production)")
 else:
     load_dotenv()
-    print("📌 Using DEFAULT environment (.env)")
+    print("Using DEFAULT environment (.env)")
 
 # Get database configuration from environment variables
 # Render/Railway typically provides 'DATABASE_URL' automatically
