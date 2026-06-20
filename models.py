@@ -824,7 +824,8 @@ class GiftCard(Base):
     current_balance = Column(Numeric(10, 2), nullable=False)
     issued_to = Column(String(100))
     issued_date = Column(DateTime, server_default=func.now())
-    expiry_date = Column(Date, nullable=False)
+    expiry_date = Column(Date, nullable=True)
+    is_active = Column(Boolean, default=True)
     status = Column(Enum("ACTIVE", "REDEEMED", "EXPIRED", create_constraint=False), default="ACTIVE")
 
 

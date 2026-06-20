@@ -49,7 +49,7 @@ class BatchOperationStatus(BaseModel):
 
 # ====================== BATCH OPERATIONS ROUTER ======================
 
-router = APIRouter(prefix="/api/batch", tags=["Batch Operations"])
+router = APIRouter(prefix="/batch", tags=["Batch Operations"])
 
 
 @router.post("/products/import")

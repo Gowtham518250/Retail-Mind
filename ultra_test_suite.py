@@ -15,9 +15,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 # ─────────────────────────────────────────────
-#  CONFIG
-# ─────────────────────────────────────────────
-BASE_URL = "https://retail-mind-vkbp.onrender.com"
+import os
+BASE_URL = os.getenv("TEST_BASE_URL", "https://retail-mind-vkbp.onrender.com")
 TIMEOUT  = 15   # seconds per request
 
 # ── State shared across tests ──────────────────
@@ -115,7 +114,7 @@ def run(
     return result
 
 def _print_row(r):
-    icons = {"PASS": "[PASS]", "FAIL": "[FAIL]", "SKIP": "⏭ ", "TIMEOUT": "⏱ ", "ERROR": "💥"}
+    icons = {"PASS": "[PASS]", "FAIL": "[FAIL]", "SKIP": "[SKIP]", "TIMEOUT": "[TIME]", "ERROR": "[ERR]"}
     icon  = icons.get(r["status"], "?")
     detail = f"  -> {r['detail']}" if r["detail"] else ""
     print(f"  {icon} [{r['code']:>3}]  {r['label']}{detail}")
@@ -971,8 +970,8 @@ def print_summary():
     print(f"  Total    : {total}")
     print(f"  [PASS] PASS  : {passed}")
     print(f"  [FAIL] FAIL  : {failed}")
-    print(f"  ⏭  SKIP  : {skipped}")
-    print(f"  ⏱  TIMEOUT/ERR : {timeout}")
+    print(f"  [SKIP] SKIP  : {skipped}")
+    print(f"  [TIME] TIMEOUT/ERR : {timeout}")
     print(f"  Pass rate: {passed/total*100:.1f}%" if total else "  No tests run")
     print(bar)
 

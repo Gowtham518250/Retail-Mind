@@ -104,7 +104,7 @@ def sync_offline_invoice(
         if not cust:
             cust = Customer(
                 user_id=shop_id,
-                name=sanitize_input(data.customer_name or "Cash Customer", "customer_name"),
+                customer_name=sanitize_input(data.customer_name or "Cash Customer", "customer_name"),
                 phone=phone
             )
             db.add(cust)

@@ -1,12 +1,12 @@
 {
-  "run_at": "2026-06-20T13:49:51.437127Z",
+  "run_at": "2026-06-20T15:16:08.983428Z",
   "base_url": "https://retail-mind-vkbp.onrender.com",
   "summary": {
     "total": 186,
-    "passed": 159,
-    "failed": 24,
+    "passed": 148,
+    "failed": 32,
     "skipped": 0,
-    "errors": 3
+    "errors": 6
   },
   "results": [
     {
@@ -29,21 +29,21 @@
     },
     {
       "label": "Observability Ready",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
     },
     {
       "label": "Observability Metrics",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
     },
     {
       "label": "Business Overview",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
     },
     {
       "label": "Performance Summary",
@@ -221,9 +221,9 @@
     },
     {
       "label": "Create Stock Movement",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/inventory/stock-movement'}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Stock Movements",
@@ -347,57 +347,57 @@
     },
     {
       "label": "Get Customers",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/'}"
     },
     {
       "label": "Get Single Customer",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/1'}"
     },
     {
       "label": "Update Customer",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/1'}"
     },
     {
       "label": "Set Contact Preference",
-      "status": "PASS",
-      "code": 400,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/1/set-contact-preference'}"
     },
     {
       "label": "Search By Phone",
       "status": "FAIL",
-      "code": 404,
-      "detail": "{'detail': 'Customer not found'}"
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/search/by-phone'}"
     },
     {
       "label": "Search By Name",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/search/by-name'}"
     },
     {
       "label": "Get Credit Score",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/credit-score/1'}"
     },
     {
       "label": "Soft Delete Customer",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/1'}"
     },
     {
       "label": "Create Invoice",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/invoices/create'}"
     },
     {
       "label": "Sync Offline Invoice",
@@ -491,9 +491,9 @@
     },
     {
       "label": "Record Manual Attendance",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/record-manual'}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Employee Attendance",
@@ -509,9 +509,9 @@
     },
     {
       "label": "Request Leave",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/leave-request'}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Leave Requests",
@@ -521,9 +521,9 @@
     },
     {
       "label": "Approve Leave",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/leave-request/5/approve'}"
     },
     {
       "label": "Get Attendance Summary",
@@ -539,9 +539,9 @@
     },
     {
       "label": "Delete Worker",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/workers/14'}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Add Khata Credit",
@@ -589,7 +589,7 @@
       "label": "Update Khata Balance",
       "status": "FAIL",
       "code": 500,
-      "detail": "{'detail': '(psycopg2.errors.InvalidTextRepresentation) invalid input value for enum khata_transaction_type: \"CREDIT\"\\nL"
+      "detail": "{'detail': \"unsupported operand type(s) for +: 'decimal.Decimal' and 'float'\"}"
     },
     {
       "label": "Get Khata History (API)",
@@ -635,9 +635,9 @@
     },
     {
       "label": "Update Delivery Status",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/delivery/1/update-status'}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Earn Points",
@@ -648,7 +648,7 @@
     {
       "label": "Redeem Points",
       "status": "PASS",
-      "code": 400,
+      "code": 200,
       "detail": ""
     },
     {
@@ -696,13 +696,13 @@
     {
       "label": "Update Worker (enterprise)",
       "status": "PASS",
-      "code": 200,
+      "code": 404,
       "detail": ""
     },
     {
       "label": "Pay Worker Salary",
       "status": "PASS",
-      "code": 200,
+      "code": 404,
       "detail": ""
     },
     {
@@ -743,9 +743,9 @@
     },
     {
       "label": "Churn Risk",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/analytics/churn-risk'}"
     },
     {
       "label": "UPI Summary",
@@ -809,15 +809,15 @@
     },
     {
       "label": "Issue Gift Card",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/gift-cards'}"
     },
     {
       "label": "Redeem Gift Card",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/gift-cards/redeem'}"
     },
     {
       "label": "Export GSTR1",
@@ -887,15 +887,15 @@
     },
     {
       "label": "Get Restore Summary",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'detail': \"Summary failed: (psycopg2.errors.UndefinedColumn) column customers.state does not exist\\nLINE 2: ...tomers_a"
     },
     {
       "label": "Restore Customers",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'detail': \"Customer restoration failed: (psycopg2.errors.UndefinedColumn) column customers.state does not exist\\nLINE 1"
     },
     {
       "label": "Export Backup",
@@ -905,9 +905,9 @@
     },
     {
       "label": "Data Integrity Check",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'detail': \"'KhataBalance' object has no attribute 'khata_id'\"}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Sync Sales Batch",
@@ -1068,7 +1068,7 @@
     {
       "label": "Reject Leave",
       "status": "PASS",
-      "code": 404,
+      "code": 200,
       "detail": ""
     },
     {
