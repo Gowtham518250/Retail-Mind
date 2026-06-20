@@ -109,8 +109,8 @@ class ShopService:
                 setattr(shop_profile, key, json.dumps(value))
             elif value is not None:
                 # Aliases for better compatibility with mobile client
-                if key == "shop_phone": key = "phone"
-                if key == "shop_gst" or key == "gstin": key = "gst_number"
+                if key in ["shop_phone", "phone_number"]: key = "phone"
+                if key in ["shop_gst", "gstin"]: key = "gst_number"
                 if key == "shop_email": key = "email"
                 if key == "upi_id": key = "primary_upi_id"
                 
@@ -235,6 +235,7 @@ def get_profile(user_id: int = Depends(check_current_user), db: Session = Depend
                 "shop_name": profile.shop_name,
                 "shop_type": profile.shop_type,
                 "phone": profile.phone,
+                "phone_number": profile.phone,
                 "location": profile.location,
                 "email": profile.email,
                 "website": profile.website,

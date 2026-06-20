@@ -19,23 +19,23 @@ router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 # ==================== PYDANTIC MODELS ====================
 
 class ProductCreate(BaseModel):
-    product_name: str
-    sku: str
+    product_name: str = Field(..., min_length=2, max_length=100)
+    sku: str = Field(..., min_length=2, max_length=50)
     description: Optional[str] = None
-    current_stock: int = 0
-    min_stock: int = 10
-    max_stock: int = 100
-    reorder_level: int = 20
-    unit_price: float
+    current_stock: int = Field(0, ge=0)
+    min_stock: int = Field(10, ge=0)
+    max_stock: int = Field(100, gt=0)
+    reorder_level: int = Field(20, ge=0)
+    unit_price: float = Field(..., ge=0)
     category: Optional[str] = None
 
 class ProductUpdate(BaseModel):
-    product_name: Optional[str] = None
+    product_name: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = None
-    min_stock: Optional[int] = None
-    max_stock: Optional[int] = None
-    reorder_level: Optional[int] = None
-    unit_price: Optional[float] = None
+    min_stock: Optional[int] = Field(None, ge=0)
+    max_stock: Optional[int] = Field(None, gt=0)
+    reorder_level: Optional[int] = Field(None, ge=0)
+    unit_price: Optional[float] = Field(None, ge=0)
     category: Optional[str] = None
 
 class StockMovementCreate(BaseModel):

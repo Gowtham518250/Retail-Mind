@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db import get_db
-from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction
+from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction, OnlineCustomerAuth
 from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
@@ -68,12 +68,12 @@ def register_customer(
     db: Session = Depends(get_db),
 ):
     """Register a new customer account"""
-    existing = db.query(User).filter(User.email == data.email).first()
+    existing = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered.")
 
     name = sanitize_input(data.name, "name")
-    customer = User(
+    customer = OnlineCustomerAuth(
         user_name=name,
         email=data.email,
         password=hash_password(data.password),
@@ -115,7 +115,7 @@ def customer_login(
     ip = request.client.host
     check_login_lockout(ip)
 
-    user = db.query(User).filter(User.email == data.email).first()
+    user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
     if not user or not verify_password(data.password, user.password):
         record_login_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid email or password.")
@@ -438,7 +438,7 @@ def update_order_status(
         items = json.loads(order.items_json)
         
         # Get customer details
-        customer = db.query(User).filter(User.id == order.customer_id).first()
+        customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == order.customer_id).first()
         customer_name = customer.user_name if customer else "Online Customer"
         
         # Create Invoice

@@ -13,6 +13,16 @@ from db import Base
 
 # ==================== EXISTING MODELS ====================
 
+class OnlineCustomerAuth(Base):
+    """Stores online customers (users of the Customer App) entirely separate from shop owners."""
+    __tablename__ = "online_customers"
+    
+    id = Column(Integer, primary_key=True, nullable=False)
+    user_name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    password = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class User(Base):
     __tablename__ = "user_details"
     
@@ -20,6 +30,7 @@ class User(Base):
     user_name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     password = Column(String(100), nullable=False)
+    user_type = Column(String(50), default="OWNER", nullable=False)
     
     # Relationships
     products = relationship("Product", back_populates="owner")
@@ -116,6 +127,8 @@ class Attendance(Base):
     status = Column(Enum("PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE", create_constraint=False), default="ABSENT")
     working_hours = Column(Float, default=0.0)  # Calculated automatically
     notes = Column(Text)
+    
+    __table_args__ = (UniqueConstraint('employee_id', 'attendance_date', name='uix_employee_date'),)
     
     # Relationship
     employee = relationship("User", back_populates="attendance")
