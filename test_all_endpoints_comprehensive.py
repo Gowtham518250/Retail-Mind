@@ -212,7 +212,7 @@ def test_authentication():
     
     # Login
     login_data = {
-        "username": register_data["username"],
+        "email": register_data["email"],
         "password": register_data["password"]
     }
     success, response = test_endpoint(
