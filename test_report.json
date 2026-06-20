@@ -1,0 +1,1129 @@
+{
+  "run_at": "2026-06-20T13:49:51.437127Z",
+  "base_url": "https://retail-mind-vkbp.onrender.com",
+  "summary": {
+    "total": 186,
+    "passed": 159,
+    "failed": 24,
+    "skipped": 0,
+    "errors": 3
+  },
+  "results": [
+    {
+      "label": "Root",
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
+    },
+    {
+      "label": "Health Check (/health)",
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
+    },
+    {
+      "label": "Observability Health",
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
+    },
+    {
+      "label": "Observability Ready",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Observability Metrics",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Business Overview",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Performance Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "DB Performance",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Register",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Send OTP",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Verify OTP (expect 400/422 without real OTP)",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Login",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Register",
+      "status": "PASS",
+      "code": 500,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Login",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'missing', 'loc': ['body', 'username'], 'msg': 'Field required', 'input': None, 'url': 'https://err"
+    },
+    {
+      "label": "Hardened Refresh (no token)",
+      "status": "PASS",
+      "code": 401,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Logout",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Logout All",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Active Sessions (hardened)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Refresh Token",
+      "status": "PASS",
+      "code": 401,
+      "detail": ""
+    },
+    {
+      "label": "Get Active Sessions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Offline Data",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync All Offline Data",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Shop Profile (/api/shop)",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Business Hours",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Tax Config",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Shop Profile (/shop)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get UPI QR",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': 'No UPI ID configured. Please update your shop profile.'}"
+    },
+    {
+      "label": "Get Public Shop Info",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Toggle Online Store (enable)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Shop Profile",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update API Shop Settings",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Create Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Products",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Single Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Stock Movement",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/inventory/stock-movement'}"
+    },
+    {
+      "label": "Get Stock Movements",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Low Stock Products",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Stock Alerts",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Batches",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Expiring Batches",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Stock Value",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Inventory Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Generate Purchase Orders (Supplier POs)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Soft Delete Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Current Stock",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get All Stock",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Deduct Stock (idempotent)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Deduct Stock Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Reconcile Inventory",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Full Reconciliation",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic"
+    },
+    {
+      "label": "Correct Stock Manually",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Stock Audit Trail",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Auto Fix Discrepancies",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic"
+    },
+    {
+      "label": "Create Customer",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/customers/'}"
+    },
+    {
+      "label": "Get Customers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Single Customer",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Update Customer",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Set Contact Preference",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Search By Phone",
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Customer not found'}"
+    },
+    {
+      "label": "Search By Name",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Credit Score",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Soft Delete Customer",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Create Invoice",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Offline Invoice",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Invoices",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Single Invoice",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Overdue Invoices",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'int_parsing', 'loc': ['path', 'invoice_id'], 'msg': 'Input should be a valid integer, unable to pa"
+    },
+    {
+      "label": "Get Invoice Payments",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'int_parsing', 'loc': ['path', 'invoice_id'], 'msg': 'Input should be a valid integer, unable to pa"
+    },
+    {
+      "label": "Get Invoice Analytics",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Delete Invoice",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Generate Bill",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Get Bill",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get QR Image",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Worker",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Workers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Worker",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Employee Check-In",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Employee Check-Out",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Record Manual Attendance",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/record-manual'}"
+    },
+    {
+      "label": "Get Employee Attendance",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Attendance By Date",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Request Leave",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/leave-request'}"
+    },
+    {
+      "label": "Get Leave Requests",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Approve Leave",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Attendance Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Employee Analytics",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Delete Worker",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/workers/14'}"
+    },
+    {
+      "label": "Add Khata Credit",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Record Repayment",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Khata Customers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Customer Khata History",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get WhatsApp Reminder URL",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Khata Balance (API)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Khata Customers (API)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Khata Balance",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'detail': '(psycopg2.errors.InvalidTextRepresentation) invalid input value for enum khata_transaction_type: \"CREDIT\"\\nL"
+    },
+    {
+      "label": "Get Khata History (API)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Purchase Order",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'missing', 'loc': ['body', 'items', 0, 'product_name'], 'msg': 'Field required', 'input': {'product"
+    },
+    {
+      "label": "List Purchase Orders",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Mark PO Delivered",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Cancel Purchase Order",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Create Delivery",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Today Deliveries",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Delivery Status",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/delivery/1/update-status'}"
+    },
+    {
+      "label": "Earn Points",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Redeem Points",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Create Expense (/api/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Expenses (/api/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Expense History",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Add Expense (/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Expenses (/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Workers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Add Worker",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Worker (enterprise)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Pay Worker Salary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Add Reconciliation",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Reconciliations",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Profit & Loss",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "All Transactions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Stock Analysis",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Daily Report",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Churn Risk",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "UPI Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Recent Transactions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Online Payments",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Authenticate Counter",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Upcoming Festivals",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Today Occasions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Templates",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Save Template",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Setup Flash Sale",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Sales (legacy)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Issue Gift Card",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Redeem Gift Card",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Export GSTR1",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Register Store Customer",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/store/customer/register'}"
+    },
+    {
+      "label": "Store Customer Login",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/store/customer/login'}"
+    },
+    {
+      "label": "Find Nearby Shops",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Browse Shop Products",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Place Order",
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}"
+    },
+    {
+      "label": "Get My Orders",
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}"
+    },
+    {
+      "label": "Track Order",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Incoming Orders",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Order Status",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Restore All Sales",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Restore Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Restore Customers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Export Backup",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Data Integrity Check",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'detail': \"'KhataBalance' object has no attribute 'khata_id'\"}"
+    },
+    {
+      "label": "Sync Sales Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Invoices Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Khata Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Expenses Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Invoices Chunked",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Bulk Export Products",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Bulk Import Products",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Bulk Import Customers",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Get Batch Status",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/batch/api/batch/status/1'}"
+    },
+    {
+      "label": "Get Batch History",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/batch/api/batch/history'}"
+    },
+    {
+      "label": "Cache Stats",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Warm Product Cache",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Warm Analytics Cache",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Clear Cache Pattern",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Rate Limit Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sec Rate Limit Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get CSRF Token",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Security Headers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Validate Password",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Check Input Security",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Check SQL Injection",
+      "status": "FAIL",
+      "code": 403,
+      "detail": "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-w"
+    },
+    {
+      "label": "Sanitize Batch",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Log Event",
+      "status": "FAIL",
+      "code": 422,
+      "detail": "{'detail': [{'type': 'dict_type', 'loc': ['body', 'context'], 'msg': 'Input should be a valid dictionary', 'input': 'pyt"
+    },
+    {
+      "label": "Log Error",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Sale Legacy",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Delete Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Reject Leave",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Create Shop Profile",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Update Profile",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Upload Logo",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Create Shop Profile",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Clear Cache Pattern",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Clear All Cache",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Rate Limit Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Session Logout",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Session Logout All",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    }
+  ]
+}

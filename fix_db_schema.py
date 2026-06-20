@@ -1,20 +1,9 @@
 from sqlalchemy import create_engine, text
-import os
-from dotenv import load_dotenv
 
-load_dotenv(".env")
-load_dotenv(".env.local", override=True) # Ensure we get the correct DB URL used by app
+# Hardcode external PostgreSQL URL from Render
+DB_URL = "postgresql://retail_mind_xxog_user:hjvmy6P7OxYlA7rec54JLx6OL0LlLocc@dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com/retail_mind_xxog"
 
-DB_URL = os.getenv("DATABASE_URL")
-if not DB_URL:
-    print("FATAL: No DATABASE_URL found.")
-    exit(1)
-
-# Fix postgres prefix if needed
-if DB_URL.startswith("postgres://"):
-    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
-
-print(f"Connecting to database to apply patch...")
+print(f"Connecting to live Render PostgreSQL database to apply patch...")
 engine = create_engine(DB_URL)
 
 with engine.connect() as conn:

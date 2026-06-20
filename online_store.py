@@ -76,6 +76,9 @@ def register_customer(
     customer = OnlineCustomerAuth(
         user_name=name,
         email=data.email,
+        phone=data.phone,
+        city=data.city,
+        address=data.address,
         password=hash_password(data.password),
     )
     db.add(customer)

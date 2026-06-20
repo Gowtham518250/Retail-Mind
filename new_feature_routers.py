@@ -258,17 +258,26 @@ def update_khata_balance(req: KhataBalanceUpdate, user_id: int = Depends(check_c
             db.flush()  # Get khata.id before creating history
         
         # Update khata balance
-        if req.transaction_type == 'invoice':
+        if req.transaction_type.lower() in ('invoice', 'credit', 'debit'):
             khata.khata_balance = (khata.khata_balance or 0) + req.amount
-        elif req.transaction_type == 'payment':
+        elif req.transaction_type.lower() in ('payment', 'repayment'):
             khata.khata_balance = max(0, (khata.khata_balance or 0) - req.amount)
         
         khata.last_transaction = datetime.now()
         
+        # Map transaction_type to valid KhataHistory enum values:
+        # KhataHistory accepts: INVOICE, PAYMENT, ADJUSTMENT
+        TXTYPE_MAP = {
+            'credit': 'INVOICE', 'invoice': 'INVOICE', 'debit': 'INVOICE',
+            'payment': 'PAYMENT', 'repayment': 'PAYMENT',
+            'adjustment': 'ADJUSTMENT'
+        }
+        valid_tx_type = TXTYPE_MAP.get(req.transaction_type.lower(), 'ADJUSTMENT')
+        
         # ✅ STORE TRANSACTION HISTORY
         history_entry = KhataHistory(
             khata_id=khata.id,
-            transaction_type=req.transaction_type.upper(),
+            transaction_type=valid_tx_type,
             amount=req.amount,
             reference_id=req.reference_id,
             description=f"{req.transaction_type} - {req.reference_id}"
@@ -521,15 +530,16 @@ def verify_data_integrity(db: Session = Depends(get_db)):
         
         issues = []
         
-        # Check 1: Orphaned khata records
-        all_khata = db.query(KhataBalance).all()
+        # Check 1: Negative khata balances (data corruption indicator)
+        # KhataBalance primary key is 'id', not 'khata_id'
+        all_khata = db.query(KhataBalance).limit(500).all()
         for khata in all_khata:
-            if not khata.khata_id and khata.khata_balance < 0:
+            if khata.khata_balance is not None and float(khata.khata_balance) < 0:
                 issues.append(f"Negative balance for customer {khata.customer_phone}")
         
         # Check 2: Missing transactions
         invoices_with_no_history = 0
-        for inv in db.query(Invoice).all():
+        for inv in db.query(Invoice).limit(500).all():
             history_count = db.query(KhataHistory).filter(
                 KhataHistory.reference_id == inv.invoice_number
             ).count()
