@@ -235,6 +235,74 @@ async def get_batch_history(
     return [op.to_dict() for op in operations]
 
 
+# ====================== SIMPLE JSON-BASED BULK ROUTES ======================
+
+@router.get("/bulk-export/products")
+def simple_bulk_export_products(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """Export all active products as JSON list"""
+    from models import Product
+    products = db.query(Product).filter_by(user_id=user_id, is_active=True).all()
+    return [
+        {
+            "id": p.id,
+            "product_name": p.product_name,
+            "sku": p.sku,
+            "unit_price": float(p.unit_price),
+            "current_stock": p.current_stock,
+        }
+        for p in products
+    ]
+
+
+@router.post("/bulk-import/products")
+def simple_bulk_import_products(
+    user_id: int,
+    items: List[dict],
+    db: Session = Depends(get_db)
+):
+    """Bulk import products from JSON list"""
+    from models import Product
+    created = 0
+    for item in items:
+        p = Product(user_id=user_id, **item)
+        db.add(p)
+        created += 1
+    db.commit()
+    return {"imported": created}
+
+
+@router.post("/bulk-import/customers")
+def simple_bulk_import_customers(
+    user_id: int,
+    items: List[dict],
+    db: Session = Depends(get_db)
+):
+    """Bulk import customers from JSON list"""
+    from models import Customer
+    created = 0
+    for item in items:
+        c = Customer(user_id=user_id, **item)
+        db.add(c)
+        created += 1
+    db.commit()
+    return {"imported": created}
+
+
+@router.get("/batch-history")
+def simple_batch_history(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get recent batch operation history"""
+    ops = db.query(BatchOperation).filter_by(
+        user_id=user_id
+    ).order_by(BatchOperation.started_at.desc()).limit(50).all()
+    return [op.to_dict() for op in ops]
+
+
 # ====================== BACKGROUND PROCESSORS ======================
 
 def _process_product_import(

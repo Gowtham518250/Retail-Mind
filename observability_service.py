@@ -16,7 +16,7 @@ import psutil
 import os
 
 from db import get_db
-from models import User, Product, Invoice
+from models import User, Product, Invoice, sales
 
 router = APIRouter(prefix="/api/observability", tags=["observability"])
 
@@ -423,8 +423,15 @@ def get_business_overview(db: Session = Depends(get_db)):
                 Invoice.invoice_date >= month_start
             ).scalar() or 0
             
+            total_invoices = db.query(func.count(Invoice.id)).scalar() or 0
+            total_sales_records = db.query(func.count(sales.id)).scalar() or 0
+            
             overview["today_sales_count"] = today_sales
             overview["month_sales_count"] = month_sales
+            overview["sales_count"] = total_sales_records
+            overview["total_invoices"] = total_invoices
+            overview["total_sales"] = total_invoices
+            overview["invoice_count"] = total_invoices
         except Exception as e:
             overview["sales_error"] = str(e)
         

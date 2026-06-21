@@ -51,6 +51,7 @@ class CustomerRegister(BaseModel):
     is_active: Optional[bool] = True
 
     @field_validator("email")
+    @classmethod
     def validate_email(cls, v):
         if "@" not in v or "." not in v.split("@")[-1]:
             raise ValueError("value is not a valid email address")
@@ -61,6 +62,7 @@ class CustomerLogin(BaseModel):
     password: str
 
     @field_validator("email")
+    @classmethod
     def validate_email(cls, v):
         if "@" not in v or "." not in v.split("@")[-1]:
             raise ValueError("value is not a valid email address")

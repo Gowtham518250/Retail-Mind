@@ -132,32 +132,48 @@ def verify_otp(request: VerifyOTPRequest):
 
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
-    # Case-insensitive email lookup
-    db_user = db.query(User).filter(User.email.ilike(user.email)).first()
-    
-    if not db_user or not verify_password(user.password, db_user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        # Case-insensitive email lookup
+        db_user = db.query(User).filter(User.email.ilike(user.email)).first()
+
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not verify_password(user.password, db_user.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Get user role from database
+        user_role = db_user.user_type if db_user.user_type else ROLE_OWNER
+
+        # Create access token with user role
+        access_token = create_access_token(
+            data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
         )
-    
-    # Get user role from database
-    user_role = getattr(db_user, 'user_type', ROLE_OWNER)  # Default to OWNER if user_type doesn't exist
-    
-    # Create access token with user role
-    access_token = create_access_token(
-        data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
-    )
-    
-    return {
-        "access_token": access_token, 
-        "token_type": "bearer", 
-        "role": user_role,
-        "user_type": user_role,
-        "user_id": db_user.id,
-        "username": db_user.user_name
-    }
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "role": user_role,
+            "user_type": user_role,
+            "user_id": db_user.id,
+            "username": db_user.user_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed due to an internal error"
+        )
 
 
 @router.get("/sales")

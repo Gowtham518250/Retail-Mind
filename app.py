@@ -9,7 +9,7 @@ Fully secured FastAPI app with:
 - All ERP modules registered
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -65,6 +65,7 @@ from observability_service import router as observability_router
 
 # DB initialization
 from db import engine, get_db
+from sqlalchemy.orm import Session
 from models import Base
 
 # ========================
@@ -214,6 +215,12 @@ async def root():
             "No data leakage across shops",
         ]
     }
+
+@api.get("/api/analytics/business-overview", tags=["Analytics"])
+async def analytics_business_overview(db: Session = Depends(get_db)):
+    """Alias for observability business overview — used by dashboard tests"""
+    from observability_service import get_business_overview
+    return get_business_overview(db=db)
 
 @api.get("/health", tags=["System"])
 async def health_check():

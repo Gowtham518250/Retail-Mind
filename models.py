@@ -751,28 +751,32 @@ class ShopProfile(Base):
     city = Column(String(100))
     state = Column(String(100))
     postal_code = Column(String(10))
-    
+
     # Essential Payment & Config
+    primary_upi_id = Column(String(100))
     upi_id = Column(String(100))
-    upi_ids = Column(Text)  # JSON string
-    shop_categories = Column(Text)  # JSON string
+    upi_ids = Column(Text)
     is_online_store_enabled = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
-    
-    # Additional Business Details
+
+    # Business Registration
     pan_number = Column(String(50))
     registration_number = Column(String(100))
+
+    # Contact Person
     contact_person_name = Column(String(100))
     contact_person_phone = Column(String(20))
     contact_person_email = Column(String(100))
-    
-    # Branding
+
+    # Categories & Branding
+    shop_categories = Column(Text)
     color_primary = Column(String(20))
     color_secondary = Column(String(20))
     logo_file_path = Column(String(500))
     logo_version = Column(Integer, default=0)
-    
+
     # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships

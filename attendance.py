@@ -141,7 +141,7 @@ def employee_check_in(
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
+
     today = date.today()
     attendance = db.query(Attendance).filter(
         and_(
@@ -149,8 +149,13 @@ def employee_check_in(
             Attendance.attendance_date == today
         )
     ).first()
-    
-    if not attendance:
+
+    if attendance:
+        if attendance.check_in_time is not None:
+            raise HTTPException(status_code=400, detail="Already checked in today")
+        attendance.check_in_time = datetime.now()
+        attendance.status = "PRESENT"
+    else:
         attendance = Attendance(
             employee_id=employee_id,
             attendance_date=today,
@@ -158,16 +163,27 @@ def employee_check_in(
             status="PRESENT"
         )
         db.add(attendance)
-    elif attendance.check_in_time is None:
-        attendance.check_in_time = datetime.now()
-        if attendance.status == "ABSENT":
+
+    try:
+        db.commit()
+        db.refresh(attendance)
+    except Exception:
+        db.rollback()
+        # Re-fetch in case of race condition on unique constraint
+        attendance = db.query(Attendance).filter(
+            and_(
+                Attendance.employee_id == employee_id,
+                Attendance.attendance_date == today
+            )
+        ).first()
+        if attendance:
+            attendance.check_in_time = datetime.now()
             attendance.status = "PRESENT"
-    else:
-        raise HTTPException(status_code=400, detail="Already checked in today")
-    
-    db.commit()
-    db.refresh(attendance)
-    
+            db.commit()
+            db.refresh(attendance)
+        else:
+            raise HTTPException(status_code=500, detail="Failed to record check-in")
+
     return {
         "message": "Check-in successful",
         "employee_id": employee_id,
@@ -465,14 +481,15 @@ def get_attendance_summary(
     absent = sum(1 for r in records if r.status == "ABSENT")
     leave = sum(1 for r in records if r.status == "LEAVE")
     
+    total_records = len(records)
     return {
         "period_days": days,
-        "total_records": len(records),
+        "total_records": total_records,
         "present": present,
         "absent": absent,
         "leave": leave,
         "total_employees": len(employees),
-        "attendance_percentage": (present / len(records) * 100) if records else 0
+        "attendance_percentage": round((present / total_records * 100), 1) if total_records > 0 else 0.0
     }
 
 @router.get("/analytics/employee/{employee_id}")
@@ -503,5 +520,5 @@ def get_employee_analytics(
         "absent": absent,
         "leave": leave,
         "total_working_hours": total_hours,
-        "attendance_percentage": (present / len(records) * 100) if records else 0
+        "attendance_percentage": round((present / len(records) * 100), 1) if len(records) > 0 else 0.0
     }
