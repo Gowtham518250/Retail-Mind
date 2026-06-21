@@ -34,24 +34,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 ROLE_OWNER = "OWNER"
 ROLE_CUSTOMER = "CUSTOMER"
 ROLE_WORKER = "WORKER"
-ROLE_DELIVERY = "DELIVERY"
-VALID_ROLES = {ROLE_OWNER, ROLE_CUSTOMER, ROLE_WORKER, ROLE_DELIVERY}
-
-def normalize_email(email: Optional[str]) -> Optional[str]:
-    """Normalize email for storage/comparison: trim and lowercase.
-
-    Ensures email uniqueness and login are case-insensitive.
-    """
-    if not email:
-        return email
-    return email.strip().lower()
-
-def normalize_role(user_type: Optional[str]) -> str:
-    """Coerce a user_type/role string to a valid role, defaulting to OWNER."""
-    if not user_type:
-        return ROLE_OWNER
-    role = user_type.strip().upper()
-    return role if role in VALID_ROLES else ROLE_OWNER
+VALID_ROLES = {ROLE_OWNER, ROLE_CUSTOMER, ROLE_WORKER}
 
 # =====================
 # PASSWORD HASHING

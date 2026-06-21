@@ -299,6 +299,46 @@ def update_profile(data: dict, user_id: int = Depends(check_current_user), db: S
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/profile")
+def upsert_profile(data: dict, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Create or update shop profile (upsert). Accepts POST so the mobile app
+    can save profile data regardless of whether a profile already exists."""
+
+    existing = db.query(ShopProfile).filter_by(shop_id=user_id).first()
+
+    try:
+        if existing:
+            profile = ShopService.update_shop_profile(db, user_id, data)
+            return {
+                "status": "success",
+                "message": "Shop profile updated successfully",
+                "shop_id": profile.id,
+            }
+        else:
+            user = db.query(User).filter_by(id=user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            profile = ShopService.create_shop_profile(db, user_id, data)
+            return {
+                "status": "success",
+                "message": "Shop profile created successfully",
+                "shop_profile": {
+                    "id": profile.id,
+                    "shop_name": profile.shop_name,
+                    "shop_type": profile.shop_type,
+                    "phone": profile.phone,
+                    "location": profile.location,
+                    "email": profile.email,
+                    "gst_number": profile.gst_number,
+                    "created_at": profile.created_at,
+                },
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete("/profile")
 def delete_profile(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Delete shop profile and all settings"""

@@ -3,9 +3,13 @@ Phase 1 critical bug-fix regression tests.
 
 Covers the backend fixes that are unique to this branch:
   - Registration email uniqueness (case-insensitive, clear error)
+  - Registration returns access_token + role for auto-login
   - Customer auth resolves the CUSTOMER role (not OWNER)
   - Offline invoice sync does not crash when creating a new customer
   - Invoice creation is idempotent (no duplicate invoices)
+  - Legacy /auth/sales idempotency and inventory deduction
+  - GET /auth/sales resolves product names from products table
+  - POST /api/shop/profile upsert (no 405)
 """
 
 import os
@@ -121,3 +125,88 @@ def test_invoice_create_is_idempotent():
     assert r2.status_code == 200, r2.text
     assert r2.json()["invoice_id"] == first_id
     assert r2.json().get("duplicate") is True
+
+
+# ── NEW TESTS (round 2) ──────────────────────────────────────────────
+
+
+def test_registration_returns_access_token():
+    """Registration must return access_token so the app can auto-login."""
+    email = _unique_email()
+    r = client.post("/auth/register", json={"username": f"Reg_{uuid.uuid4().hex[:6]}", "password": "Passw0rd!", "email": email})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+    assert data["role"] in ("OWNER", "CUSTOMER", "WORKER", "DELIVERY")
+    assert data["is_active"] is True
+
+
+def test_profile_upsert_post():
+    """POST /api/shop/profile must create-or-update (no 405)."""
+    email = _unique_email()
+    token = _owner_token(email)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/api/shop/profile", json={"shop_name": "Test Shop"}, headers=headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "success"
+
+    # Second call should update, not fail
+    r2 = client.post("/api/shop/profile", json={"shop_name": "Updated Shop"}, headers=headers)
+    assert r2.status_code == 200, r2.text
+
+
+def test_legacy_sales_idempotency():
+    """POST /auth/sales must not create duplicate invoices on retry."""
+    email = _unique_email()
+    # Register + login
+    client.post("/auth/register", json={"username": f"Shop_{uuid.uuid4().hex[:6]}", "password": "Passw0rd!", "email": email})
+    login = client.post("/auth/login", json={"email": email, "password": "Passw0rd!"})
+    user_id = login.json()["user_id"]
+
+    r1 = client.post("/auth/sales", data={
+        "user_id": user_id,
+        "product_name": "Milk",
+        "price": 50.0,
+        "quantity": 2,
+        "total": 100.0,
+        "date": "2026-06-19",
+    })
+    assert r1.status_code == 200, r1.text
+
+    # Retry same sale
+    r2 = client.post("/auth/sales", data={
+        "user_id": user_id,
+        "product_name": "Milk",
+        "price": 50.0,
+        "quantity": 2,
+        "total": 100.0,
+        "date": "2026-06-19",
+    })
+    assert r2.status_code == 200, r2.text
+    assert r2.json().get("duplicate") is True
+
+
+def test_get_sales_returns_data():
+    """GET /auth/sales must return sales for a user."""
+    email = _unique_email()
+    client.post("/auth/register", json={"username": f"Shop_{uuid.uuid4().hex[:6]}", "password": "Passw0rd!", "email": email})
+    login = client.post("/auth/login", json={"email": email, "password": "Passw0rd!"})
+    user_id = login.json()["user_id"]
+
+    # Create a sale
+    client.post("/auth/sales", data={
+        "user_id": user_id,
+        "product_name": "Bread",
+        "price": 40.0,
+        "quantity": 1,
+        "total": 40.0,
+    })
+
+    r = client.get(f"/auth/sales?user_id={user_id}")
+    assert r.status_code == 200, r.text
+    sales = r.json()
+    assert len(sales) >= 1
+    assert sales[0]["line_items"][0]["product_name"] == "Bread"

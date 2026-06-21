@@ -15,11 +15,9 @@ from jose import jwt
 import secrets
 import logging
 
-from sqlalchemy import func as sa_func
-
 from db import get_db
 from models import User, RefreshToken, SessionToken
-from security import verify_password, hash_password, normalize_email
+from security import verify_password, hash_password
 
 router = APIRouter(prefix="/api/auth-hardened", tags=["authentication hardened"])
 logger = logging.getLogger(__name__)
@@ -91,22 +89,21 @@ def register_user(
     Enhanced user registration with password strength validation.
     """
     try:
-        # Check if email already exists (case-insensitive)
-        email = normalize_email(user_data.email)
-        existing_user = db.query(User).filter(sa_func.lower(User.email) == email).first()
+        # Check if email already exists
+        existing_user = db.query(User).filter(User.email == user_data.email).first()
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
         
-        # Hash password
-        hashed_password = hash_password(user_data.password)
+        # Hash password with bcrypt
+        hashed_password = get_password_hash(user_data.password)
         
         # Create new user
         new_user = User(
             user_name=user_data.user_name,
-            email=email,
+            email=user_data.email,
             password=hashed_password
         )
         
@@ -155,8 +152,8 @@ def login_user(
     Implements rate limiting and account lockout after failed attempts.
     """
     try:
-        # Find user by email (case-insensitive)
-        user = db.query(User).filter(sa_func.lower(User.email) == normalize_email(login_data.email)).first()
+        # Find user by email
+        user = db.query(User).filter(User.email == login_data.email).first()
         
         if not user or not verify_password(login_data.password, user.password):
             # Log failed attempt (implement rate limiting here)
