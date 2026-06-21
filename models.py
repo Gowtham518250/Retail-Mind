@@ -743,6 +743,8 @@ class ShopProfile(Base):
     
     # Location Information
     address = Column(Text)
+    address_line1 = Column(String(200))
+    address_line2 = Column(String(200))
     location = Column(String(300))
     latitude = Column(Float)
     longitude = Column(Float)
@@ -752,8 +754,26 @@ class ShopProfile(Base):
     
     # Essential Payment & Config
     upi_id = Column(String(100))
+    upi_ids = Column(Text)  # JSON string
+    shop_categories = Column(Text)  # JSON string
     is_online_store_enabled = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    
+    # Additional Business Details
+    pan_number = Column(String(50))
+    registration_number = Column(String(100))
+    contact_person_name = Column(String(100))
+    contact_person_phone = Column(String(20))
+    contact_person_email = Column(String(100))
+    
+    # Branding
+    color_primary = Column(String(20))
+    color_secondary = Column(String(20))
+    logo_file_path = Column(String(500))
+    logo_version = Column(Integer, default=0)
+    
+    # Timestamps
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     shop_settings = relationship("ShopSettings", back_populates="shop_profile", uselist=False, cascade="all, delete-orphan")

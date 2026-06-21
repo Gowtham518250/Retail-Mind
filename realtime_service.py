@@ -325,14 +325,19 @@ async def get_live_sales(shop_id: int, db: Session = Depends(get_db)):
 async def get_live_metrics(shop_id: int, db: Session = Depends(get_db)):
     """Get live dashboard metrics"""
     try:
+        from models import Invoice
         metrics = RealtimeDataService.get_daily_metrics(db, shop_id)
         low_stock = RealtimeDataService.get_low_stock_products(db, shop_id)
         workers = RealtimeDataService.get_active_workers(db, shop_id)
         pending = RealtimeDataService.get_pending_payments(db, shop_id)
         
+        # Add sales count
+        sales_count = db.query(Invoice).filter(Invoice.user_id == shop_id).count()
+        
         return {
             "status": "success",
             "metrics": metrics,
+            "sales_count": sales_count,
             "alerts": {
                 "low_stock_count": len(low_stock),
                 "low_stock_items": low_stock[:5],
