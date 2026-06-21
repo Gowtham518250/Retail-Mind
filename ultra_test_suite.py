@@ -793,42 +793,55 @@ def test_gst_gift():
 # ─── 23. ONLINE STORE ─────────────────────────
 def test_online_store():
     section("23 - ONLINE STORE")
-    store_email = f"store_{int(time.time())}@test.com"
-    # In test_online_store(), change:
-    run("Register Store Customer",
-        "POST", "/store/customer/register",
-        payload={...},
-        expected_codes=(200, 201, 400, 409),
-        capture={"customer_token": "access_token"},   # ADD THIS
-    )
-
-    # Then before Place Order, temporarily swap the token:
-    saved_token = STATE["access_token"]
-    STATE["access_token"] = STATE.get("customer_token") or STATE["access_token"]
-
-    run("Place Order", ...)
-    run("Get My Orders", ...)
-    run("Track Order", ...)
-
-    STATE["access_token"] = saved_token  # Restore owner token
+    card_code = f"store_{int(time.time())}@test.com"
     run("Register Store Customer",
         "POST", "/store/customer/register",
         payload={
             "name":     f"Store User {int(time.time())}",
-            "email":    store_email,
+            "email":    f"store_{int(time.time())}@test.com",
             "phone":    "9666666666",
             "password": "Store@123",
             "city":     "Hyderabad",
         },
         expected_codes=(200, 201, 400, 409),
+        capture={"customer_token": "access_token"},
     )
     run("Store Customer Login",
         "POST", "/store/customer/login",
-        payload={"email": store_email, "password": "Store@123"},
+        payload={"email": "store@test.com", "password": "Store@123"},
         expected_codes=(200, 201, 400, 401),
-        capture={"customer_token": "access_token"}
+        capture={"customer_token": "access_token"},
     )
-    
+
+    # Swap to customer token for customer-only endpoints
+    saved_token = STATE["access_token"]
+    STATE["access_token"] = STATE.get("customer_token") or saved_token
+
+    run("Find Nearby Shops",     "GET", "/store/shops/nearby",                       params={"city": "Hyderabad"}, expected_codes=(200, 201, 401))
+    run("Browse Shop Products",  "GET", f"/store/shops/{STATE['shop_id']}/products", params={"limit": 10},         expected_codes=(200, 201, 401, 404))
+    run("Place Order",
+        "POST", "/store/order",
+        payload={
+            "shop_id": STATE["shop_id"],
+            "items": [{"product_id": STATE["product_id"] or 1, "quantity": 1}],
+            "delivery_address": "123 Test Street, Hyderabad",
+        },
+        capture={"order_id": "order_id"},
+        expected_codes=(200, 201, 400, 401),
+    )
+    run("Get My Orders",  "GET", "/store/my-orders",                                    expected_codes=(200, 201, 401))
+    run("Track Order",    "GET", f"/store/order/{STATE['order_id'] or 1}/track",        expected_codes=(200, 201, 401, 404))
+
+    # Restore owner token
+    STATE["access_token"] = saved_token
+
+    run("Get Incoming Orders",  "GET", "/store/owner/orders",  params={"limit": 10},   expected_codes=(200, 201, 401))
+    oid = STATE["order_id"] or 1
+    run("Update Order Status",
+        "POST", f"/store/owner/orders/{oid}/action",
+        params={"action": "confirm"},
+        expected_codes=(200, 201, 400, 401, 404),
+    )
     # Helper to inject customer token
     def get_customer_headers():
         h = {"Content-Type": "application/json"}

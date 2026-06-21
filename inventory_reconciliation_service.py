@@ -46,6 +46,7 @@ def full_inventory_reconciliation(
     local_inventory: List[Dict[str, Any]]=None,
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
+    
 ):
     """
     Perform full inventory reconciliation between local cache and backend.
@@ -265,7 +266,7 @@ def get_stock_audit_trail(
 
 @router.post("/auto-fix-discrepancies")
 def auto_fix_discrepancies(
-    local_inventory: List[Dict[str, Any]],
+    local_inventory: Optional[List[Dict[str, Any]]] =None,
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):

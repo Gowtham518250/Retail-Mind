@@ -12,21 +12,15 @@ cur = conn.cursor()
 
 
 
-cur.execute("""
-ALTER TABLE gift_cards ALTER COLUMN expiry_date DROP NOT NULL;
+olp=cur.execute("""
+SELECT column_name FROM information_schema.columns 
+WHERE table_name = 'khata_history';
 """)
 
-cur.execute("""
-ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-""")
 
-cur.execute("""
-UPDATE gift_cards SET is_active = TRUE WHERE is_active IS NULL;
-""")
 
 conn.commit()
 
-print("✅ Columns added successfully")
 
 cur.close()
 conn.close()
