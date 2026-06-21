@@ -185,7 +185,7 @@ def sync_offline_invoice(
     return {"message": "Invoice synced and inventory deducted.", "invoice_id": invoice.id}
 
 
-@router.get("/", response_model=List[InvoiceResponse])
+@router.get("/")
 def get_invoices(
     status: Optional[str] = None,
     payment_status: Optional[str] = None,
@@ -215,10 +215,6 @@ def create_invoice(
     db: Session = Depends(get_db),
     current_user: dict = Depends(worker_or_owner),
 ):
-    """
-    Create a new invoice manually (online mode).
-    Similar to sync but for real-time invoice creation.
-    """
     shop_id = current_user
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
@@ -236,7 +232,6 @@ def create_invoice(
             "duplicate": True,
         }
 
-    # Find/Create Customer
     customer_id = None
     if data.customer_phone:
         phone = sanitize_input(data.customer_phone, "customer_phone")
@@ -259,7 +254,6 @@ def create_invoice(
     except ValueError:
         inv_date = date.today()
 
-    # Create Invoice
     invoice = Invoice(
         user_id=shop_id,
         customer_id=customer_id,
@@ -280,7 +274,6 @@ def create_invoice(
     db.add(invoice)
     db.flush()
 
-    # Process Line Items & Deduct Inventory
     for item in data.line_items:
         line_total = item.quantity * item.unit_price
         db_line = InvoiceLineItem(
@@ -293,7 +286,6 @@ def create_invoice(
         )
         db.add(db_line)
 
-        # Inventory Auto-Deduction
         if item.product_id:
             product = db.query(Product).filter(
                 Product.id == item.product_id,
@@ -306,7 +298,6 @@ def create_invoice(
                         detail=f"Insufficient stock for product ID {product.id}. Available: {product.current_stock or 0}, Requested: {item.quantity}"
                     )
                 product.current_stock = (product.current_stock or 0) - item.quantity
-                # Log stock movement
                 mov = StockMovement(
                     product_id=product.id,
                     movement_type="OUT",
@@ -316,7 +307,6 @@ def create_invoice(
                 )
                 db.add(mov)
 
-    # Universal Journal Entry
     tx = UniversalTransaction(
         shop_id=shop_id,
         tx_type="INCOME",
@@ -356,18 +346,45 @@ def create_invoice(
         ],
     }
 
+    line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
+    return {
+        "id":             invoice.id,
+        "invoice_id":     invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "total_amount":   float(invoice.total_amount),
+        "paid_amount":    float(invoice.paid_amount),
+        "subtotal":       float(invoice.subtotal),
+        "tax":            float(invoice.tax),
+        "status":         invoice.status,
+        "payment_status": invoice.payment_status,
+        "invoice_date":   str(invoice.invoice_date),
+        "created_at":     invoice.created_at.isoformat(),
+        "message":        "Invoice created successfully.",
+        "line_items": [
+            {
+                "product_id":   li.product_id,
+                "product_name": li.description,
+                "quantity":     li.quantity,
+                "unit_price":   float(li.unit_price),
+                "total":        float(li.line_total),
+            }
+            for li in line_items_out
+        ],
+    }
+
+
+# ── These MUST come before /{invoice_id} ──────────────────────────────
 
 # --- Fixed route order: /overdue, /payments, /analytics/summary BEFORE /{invoice_id} ---
 
 @router.get("/overdue")
 def get_overdue_invoices(
-    days_overdue: int = Query(30, description="Days past due date"),
+    days_overdue: int = Query(30),
     skip: int = Query(0),
     limit: int = Query(100),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Get all overdue invoices"""
     shop_id = current_user
     cutoff_date = date.today() - timedelta(days=days_overdue)
 
@@ -392,7 +409,6 @@ def get_invoice_payments(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Get payments for invoices"""
     shop_id = current_user
     from models import Payment
 
@@ -427,11 +443,10 @@ def get_invoice_analytics(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Get invoice analytics summary"""
     shop_id = current_user
 
     if not start_date:
-        start_date = date.today().replace(day=1)  # Current month start
+        start_date = date.today().replace(day=1)
     if not end_date:
         end_date = date.today()
 
@@ -463,15 +478,8 @@ def get_invoice_analytics(
         "total_amount": float(total_amount),
         "total_paid": float(total_paid),
         "outstanding_amount": float(total_amount - total_paid),
-        "payment_status_breakdown": {
-            "paid": paid_count,
-            "unpaid": unpaid_count,
-            "partial": partial_count
-        },
-        "status_breakdown": {
-            "sent": sent_count,
-            "overdue": overdue_count
-        },
+        "payment_status_breakdown": {"paid": paid_count, "unpaid": unpaid_count, "partial": partial_count},
+        "status_breakdown": {"sent": sent_count, "overdue": overdue_count},
         "collection_rate": round((total_paid / total_amount * 100) if total_amount > 0 else 0, 2)
     }
 
@@ -524,7 +532,6 @@ def delete_invoice(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Delete an invoice (Owner only)"""
     shop_id = current_user
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
