@@ -1,10 +1,10 @@
 {
-  "run_at": "2026-06-20T16:53:33.208098Z",
+  "run_at": "2026-06-21T01:14:53.232797Z",
   "base_url": "https://retail-mind-vkbp.onrender.com",
   "summary": {
-    "total": 186,
-    "passed": 168,
-    "failed": 18,
+    "total": 193,
+    "passed": 174,
+    "failed": 19,
     "skipped": 0,
     "errors": 0
   },
@@ -318,8 +318,8 @@
     {
       "label": "Full Reconciliation",
       "status": "FAIL",
-      "code": 422,
-      "detail": "{'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic"
+      "code": 500,
+      "detail": "{'detail': \"Reconciliation failed: 'NoneType' object is not iterable\"}"
     },
     {
       "label": "Correct Stock Manually",
@@ -335,9 +335,9 @@
     },
     {
       "label": "Auto Fix Discrepancies",
-      "status": "FAIL",
-      "code": 422,
-      "detail": "{'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Create Customer",
@@ -521,9 +521,9 @@
     },
     {
       "label": "Approve Leave",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/leave-request/7/approve'}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Attendance Summary",
@@ -545,15 +545,15 @@
     },
     {
       "label": "Add Khata Credit",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/khata/credit'}"
     },
     {
       "label": "Record Repayment",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'No Khata account found for this customer.'}"
     },
     {
       "label": "List Khata Customers",
@@ -564,13 +564,13 @@
     {
       "label": "Get Customer Khata History",
       "status": "PASS",
-      "code": 200,
+      "code": 404,
       "detail": ""
     },
     {
       "label": "Get WhatsApp Reminder URL",
       "status": "PASS",
-      "code": 200,
+      "code": 404,
       "detail": ""
     },
     {
@@ -587,9 +587,9 @@
     },
     {
       "label": "Update Khata Balance",
-      "status": "FAIL",
-      "code": 500,
-      "detail": "{'detail': \"unsupported operand type(s) for +: 'decimal.Decimal' and 'float'\"}"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Get Khata History (API)",
@@ -599,9 +599,9 @@
     },
     {
       "label": "Create Purchase Order",
-      "status": "FAIL",
-      "code": 422,
-      "detail": "{'detail': [{'type': 'missing', 'loc': ['body', 'items', 0, 'product_name'], 'msg': 'Field required', 'input': {'product"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "List Purchase Orders",
@@ -612,14 +612,14 @@
     {
       "label": "Mark PO Delivered",
       "status": "PASS",
-      "code": 404,
+      "code": 200,
       "detail": ""
     },
     {
       "label": "Cancel Purchase Order",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 409,
+      "detail": "{'detail': 'Cannot cancel a delivered PO.'}"
     },
     {
       "label": "Create Delivery",
@@ -836,6 +836,48 @@
       "status": "FAIL",
       "code": 500,
       "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/store/customer/login'}"
+    },
+    {
+      "label": "Find Nearby Shops",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Browse Shop Products",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Place Order",
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}"
+    },
+    {
+      "label": "Get My Orders",
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}"
+    },
+    {
+      "label": "Track Order",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Incoming Orders",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Order Status",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
     },
     {
       "label": "Find Nearby Shops",

@@ -53,6 +53,7 @@ def full_inventory_reconciliation(
     Detects discrepancies and provides correction recommendations.
     """
     try:
+        local_inventory = local_inventory or []
         discrepancies = []
         fixes_applied = 0
         

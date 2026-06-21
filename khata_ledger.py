@@ -97,7 +97,7 @@ def add_khata_credit(
     desc = sanitize_input(data.description or "Purchased on Khata", "description")
 
     khata = _get_or_create_khata(db, shop_id, data.customer_phone, data.customer_name)
-    khata.khata_balance = float(khata.khata_balance or 0) + float(amount)
+    khata.khata_balance = float(khata.khata_balance or 0) + float(data.amount)
     khata.last_transaction = datetime.now(timezone.utc)
 
     history = KhataHistory(
