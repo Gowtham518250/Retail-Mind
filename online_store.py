@@ -66,6 +66,10 @@ class CustomerLogin(BaseModel):
             raise ValueError("value is not a valid email address")
         return v.lower().strip()
 
+class CustomerLoginPhone(BaseModel):
+    phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    password: str
+
 class OrderItem(BaseModel):
     product_id: int
     quantity: int = Field(..., gt=0)
@@ -149,6 +153,33 @@ def customer_login(
         "token_type": "bearer",
         "customer_id": user.id,
         "name": user.user_name,
+    }
+
+
+@router.post("/customer/login/phone")
+def customer_login_phone(
+    data: CustomerLoginPhone,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Customer login via phone number — returns JWT with CUSTOMER role"""
+    ip = request.client.host
+    check_login_lockout(ip)
+
+    user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
+    if not user or not verify_password(data.password, user.password):
+        record_login_failure(ip)
+        raise HTTPException(status_code=401, detail="Invalid phone or password.")
+
+    record_login_success(ip)
+    token = create_access_token({"sub": str(user.id), "role": ROLE_CUSTOMER})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "customer_id": user.id,
+        "name": user.user_name,
+        "email": user.email,
+        "phone": user.phone,
     }
 
 

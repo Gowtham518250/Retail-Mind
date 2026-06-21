@@ -74,7 +74,20 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     except Exception as e:
         logger.error(f"Failed to queue welcome email: {e}")
 
-    return {"msg": "User registered successfully", "user_id": new_user.id}
+    # Generate access token for immediate login after registration
+    access_token = create_access_token(
+        data={"sub": str(new_user.id), "role": new_user.user_type, "user_type": new_user.user_type}
+    )
+
+    return {
+        "msg": "User registered successfully",
+        "user_id": new_user.id,
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": new_user.user_type,
+        "user_type": new_user.user_type,
+        "username": new_user.user_name
+    }
 
 class SendOTPRequest(BaseModel):
     email: str

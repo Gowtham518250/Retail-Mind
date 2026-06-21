@@ -137,11 +137,17 @@ def employee_check_in(
     employee_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
-    """Employee check-in"""
+    """Employee check-in - accepts both user_id and worker_id"""
+    # First try to find as Worker
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
+
+    # If not found as Worker, try to find as User (for shopkeepers/owners checking in)
+    if not employee:
+        employee = db.query(User).filter(User.id == employee_id).first()
+
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
+
     today = date.today()
     attendance = db.query(Attendance).filter(
         and_(
@@ -149,7 +155,7 @@ def employee_check_in(
             Attendance.attendance_date == today
         )
     ).first()
-    
+
     if not attendance:
         attendance = Attendance(
             employee_id=employee_id,
@@ -164,10 +170,10 @@ def employee_check_in(
             attendance.status = "PRESENT"
     else:
         raise HTTPException(status_code=400, detail="Already checked in today")
-    
+
     db.commit()
     db.refresh(attendance)
-    
+
     return {
         "message": "Check-in successful",
         "employee_id": employee_id,
@@ -180,11 +186,17 @@ def employee_check_out(
     employee_id: int = Query(...),
     db: Session = Depends(get_db)
 ):
-    """Employee check-out"""
+    """Employee check-out - accepts both user_id and worker_id"""
+    # First try to find as Worker
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
+
+    # If not found as Worker, try to find as User (for shopkeepers/owners checking out)
+    if not employee:
+        employee = db.query(User).filter(User.id == employee_id).first()
+
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
+
     today = date.today()
     attendance = db.query(Attendance).filter(
         and_(
@@ -192,23 +204,23 @@ def employee_check_out(
             Attendance.attendance_date == today
         )
     ).first()
-    
+
     if not attendance or not attendance.check_in_time:
         raise HTTPException(status_code=400, detail="No check-in found for today")
-    
+
     if attendance.check_out_time:
         raise HTTPException(status_code=400, detail="Already checked out today")
-    
+
     attendance.check_out_time = datetime.now()
-    
+
     # Calculate working hours
     if attendance.check_in_time and attendance.check_out_time:
         duration = attendance.check_out_time - attendance.check_in_time
         attendance.working_hours = duration.total_seconds() / 3600  # Convert to hours
-    
+
     db.commit()
     db.refresh(attendance)
-    
+
     return {
         "message": "Check-out successful",
         "employee_id": employee_id,
@@ -297,17 +309,25 @@ def get_employee_attendance(
 @router.get("/date/{date_str}")
 def get_attendance_by_date(
     date_str: str,
+    employee_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """Get all attendance records for a specific date"""
+    """Get all attendance records for a specific date (optionally filtered by employee_id)"""
     att_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-    
-    records = db.query(Attendance).filter(Attendance.attendance_date == att_date).all()
-    
+
+    # Build query
+    query = db.query(Attendance).filter(Attendance.attendance_date == att_date)
+
+    # Filter by employee_id if provided
+    if employee_id is not None:
+        query = query.filter(Attendance.employee_id == employee_id)
+
+    records = query.order_by(desc(Attendance.attendance_date)).all()
+
     present = sum(1 for r in records if r.status == "PRESENT")
     absent = sum(1 for r in records if r.status == "ABSENT")
     leave = sum(1 for r in records if r.status == "LEAVE")
-    
+
     return {
         "date": att_date,
         "total_records": len(records),
