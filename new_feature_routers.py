@@ -240,6 +240,7 @@ def update_khata_balance(req: KhataBalanceUpdate, user_id: int = Depends(check_c
     try:
         from models import KhataBalance, KhataHistory
         from datetime import datetime
+        from decimal import Decimal
         
         # Get or create khata record
         khata = db.query(KhataBalance).filter(
@@ -257,11 +258,19 @@ def update_khata_balance(req: KhataBalanceUpdate, user_id: int = Depends(check_c
             db.add(khata)
             db.flush()  # Get khata.id before creating history
         
-        # Update khata balance
+        # Update khata balance using Decimal to avoid mixed-type arithmetic
+        current = Decimal(str(khata.khata_balance or 0))
+        amount = Decimal(str(req.amount))
         if req.transaction_type.lower() in ('invoice', 'credit', 'debit'):
-            khata.khata_balance = (khata.khata_balance or 0) + req.amount
+            new_balance = current + amount
         elif req.transaction_type.lower() in ('payment', 'repayment'):
-            khata.khata_balance = max(0, (khata.khata_balance or 0) - req.amount)
+            new_balance = current - amount
+            if new_balance < Decimal('0'):
+                new_balance = Decimal('0')
+        else:
+            # default adjustment
+            new_balance = current + amount
+        khata.khata_balance = new_balance
         
         khata.last_transaction = datetime.now()
         
@@ -278,7 +287,7 @@ def update_khata_balance(req: KhataBalanceUpdate, user_id: int = Depends(check_c
         history_entry = KhataHistory(
             khata_id=khata.id,
             transaction_type=valid_tx_type,
-            amount=req.amount,
+            amount=Decimal(str(req.amount)),
             reference_id=req.reference_id,
             description=f"{req.transaction_type} - {req.reference_id}"
         )

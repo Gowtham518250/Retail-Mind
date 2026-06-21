@@ -10,6 +10,163 @@ from datetime import datetime, date
 import enum
 from db import Base
 
+# ==================== ENUM TYPES ====================
+
+class StockMovementType(str, enum.Enum):
+    IN = "IN"
+    OUT = "OUT"
+    ADJUSTMENT = "ADJUSTMENT"
+
+class AttendanceStatus(str, enum.Enum):
+    PRESENT = "PRESENT"
+    ABSENT = "ABSENT"
+    LEAVE = "LEAVE"
+    HALF_DAY = "HALF_DAY"
+    LATE = "LATE"
+
+class LeaveType(str, enum.Enum):
+    VACATION = "VACATION"
+    SICK = "SICK"
+    PERSONAL = "PERSONAL"
+
+class LeaveStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+class ContactPreference(str, enum.Enum):
+    EMAIL = "EMAIL"
+    WHATSAPP = "WHATSAPP"
+    CALL = "CALL"
+    SMS = "SMS"
+
+class InvoiceStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    SENT = "SENT"
+    PAID = "PAID"
+    OVERDUE = "OVERDUE"
+    PARTIAL = "PARTIAL"
+    CANCELLED = "CANCELLED"
+
+class PaymentStatus(str, enum.Enum):
+    UNPAID = "UNPAID"
+    PARTIAL = "PARTIAL"
+    PAID = "PAID"
+    OVERDUE = "OVERDUE"
+
+class PaymentMethod(str, enum.Enum):
+    CASH = "CASH"
+    CARD = "CARD"
+    TRANSFER = "TRANSFER"
+    CHEQUE = "CHEQUE"
+    ONLINE = "ONLINE"
+
+class NotificationType(str, enum.Enum):
+    PAYMENT_REMINDER = "PAYMENT_REMINDER"
+    INVOICE_SENT = "INVOICE_SENT"
+    PAYMENT_RECEIVED = "PAYMENT_RECEIVED"
+    OVERDUE_ALERT = "OVERDUE_ALERT"
+    LOW_STOCK = "LOW_STOCK"
+
+class NotificationChannel(str, enum.Enum):
+    EMAIL = "EMAIL"
+    WHATSAPP = "WHATSAPP"
+    SMS = "SMS"
+    CALL = "CALL"
+
+class NotificationStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+
+class TaskPriority(str, enum.Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+class TaskStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"
+    FAILED = "FAILED"
+
+class CallStatus(str, enum.Enum):
+    NOT_CALLED = "NOT_CALLED"
+    RINGING = "RINGING"
+    ANSWERED = "ANSWERED"
+    DECLINED = "DECLINED"
+    FAILED = "FAILED"
+
+class LoyaltyTransactionType(str, enum.Enum):
+    EARN = "EARN"
+    REDEEM = "REDEEM"
+    ADJUST = "ADJUST"
+    EXPIRE = "EXPIRE"
+
+class OrderStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    CONFIRM = "CONFIRM"
+    FAILED = "FAILED"
+    REFUND = "REFUND"
+
+class UpiStatus(str, enum.Enum):
+    """UPI payment status enum"""
+    PENDING = "PENDING"
+    CONFIRM = "CONFIRM"
+    FAILED = "FAILED"
+    REFUND = "REFUND"
+
+class DeliveryStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    OUT = "OUT"
+    DELIVERED = "DELIVERED"
+    FAILED = "FAILED"
+    RETURNED = "RETURNED"
+
+class ScoreBadge(str, enum.Enum):
+    CAUTION = "CAUTION"
+    REGULAR = "REGULAR"
+    TRUSTED = "TRUSTED"
+
+class OccasionType(str, enum.Enum):
+    BIRTHDAY = "BIRTHDAY"
+    ANNIVERSARY = "ANNIVERSARY"
+    WEDDING = "WEDDING"
+    CUSTOM = "CUSTOM"
+
+class KhataTransactionType(str, enum.Enum):
+    INVOICE = "INVOICE"
+    PAYMENT = "PAYMENT"
+    ADJUSTMENT = "ADJUSTMENT"
+
+class OnlineOrderStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    DISPATCHED = "DISPATCHED"
+    DELIVERED = "DELIVERED"
+    REJECTED = "REJECTED"
+
+class PurchaseOrderStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+
+class BankReconciliationStatus(str, enum.Enum):
+    MATCHED = "MATCHED"
+    DISCREPANCY = "DISCREPANCY"
+    PENDING = "PENDING"
+
+class UniversalTransactionType(str, enum.Enum):
+    INCOME = "INCOME"
+    EXPENSE = "EXPENSE"
+
+class GiftCardStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    REDEEMED = "REDEEMED"
+    EXPIRED = "EXPIRED"
+
 
 # ==================== EXISTING MODELS ====================
 
@@ -95,7 +252,7 @@ class StockMovement(Base):
     
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    movement_type = Column(Enum("IN", "OUT", "ADJUSTMENT", create_constraint=False), nullable=False)
+    movement_type = Column(Enum(StockMovementType, name="stock_movement_type"), nullable=False)
     quantity = Column(Integer, nullable=False)
     reason = Column(String(200))  # e.g., "Purchase", "Sale", "Damage", "Inventory Adjustment"
     reference_id = Column(String(100))  # e.g., invoice_id, purchase_order_id
@@ -129,7 +286,7 @@ class Attendance(Base):
     attendance_date = Column(Date, nullable=False)
     check_in_time = Column(DateTime)
     check_out_time = Column(DateTime)
-    status = Column(Enum("PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE", create_constraint=False), default="ABSENT")
+    status = Column(Enum(AttendanceStatus, name="attendance_status"), default=AttendanceStatus.ABSENT)
     working_hours = Column(Float, default=0.0)  # Calculated automatically
     notes = Column(Text)
     
@@ -144,11 +301,11 @@ class LeaveRequest(Base):
     
     id = Column(Integer, primary_key=True)
     employee_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
-    leave_type = Column(Enum("VACATION", "SICK", "PERSONAL", create_constraint=False), nullable=False)
+    leave_type = Column(Enum(LeaveType, name="leave_type"), nullable=False)
     from_date = Column(Date, nullable=False)
     to_date = Column(Date, nullable=False)
     reason = Column(Text)
-    status = Column(Enum("PENDING", "APPROVED", "REJECTED", create_constraint=False), default="PENDING")
+    status = Column(Enum(LeaveStatus, name="leave_status"), default=LeaveStatus.PENDING)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -169,7 +326,7 @@ class Customer(Base):
     postal_code = Column(String(20))    # Added: was missing from model
     credit_limit = Column(Numeric(10, 2), default=0)
     payment_terms = Column(String(50))  # e.g., "Net 30", "COD"
-    contact_preference = Column(Enum("EMAIL", "WHATSAPP", "CALL", "SMS", create_constraint=False), default="EMAIL")
+    contact_preference = Column(Enum(ContactPreference, name="contact_preference"), default=ContactPreference.EMAIL)
     is_active = Column(Boolean, default=True)  # Soft-delete: False = customer archived
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -197,8 +354,8 @@ class Invoice(Base):
     tax = Column(Numeric(10, 2), default=0)
     total_amount = Column(Numeric(10, 2), nullable=False)
     paid_amount = Column(Numeric(10, 2), default=0)
-    status = Column(Enum("DRAFT", "SENT", "PAID", "OVERDUE", "PARTIAL", "CANCELLED", create_constraint=False), default="DRAFT")
-    payment_status = Column(Enum("UNPAID", "PARTIAL", "PAID", "OVERDUE", create_constraint=False), default="UNPAID", index=True)
+    status = Column(Enum(InvoiceStatus, name="invoice_status"), default=InvoiceStatus.DRAFT)
+    payment_status = Column(Enum(PaymentStatus, name="payment_status"), default=PaymentStatus.UNPAID, index=True)
     payment_method = Column(String(50))
     source = Column(String(50), default="MANUAL_ENTRY") # OFFLINE_SYNC, ONLINE_ORDER, MANUAL_ENTRY
     notes = Column(Text)
@@ -210,8 +367,18 @@ class Invoice(Base):
     # Relationships
     user = relationship("User", back_populates="invoices")
     customer = relationship("Customer", back_populates="invoices")
-    line_items = relationship("InvoiceLineItem", back_populates="invoice")
-    payments = relationship("Payment", back_populates="invoice")
+    line_items = relationship(
+        "InvoiceLineItem",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    payments = relationship(
+        "Payment",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class InvoiceLineItem(Base):
@@ -235,7 +402,7 @@ class Payment(Base):
     
     id = Column(Integer, primary_key=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
-    payment_method = Column(Enum("CASH", "CARD", "TRANSFER", "CHEQUE", "ONLINE", create_constraint=False), nullable=False)
+    payment_method = Column(Enum(PaymentMethod, name="payment_method"), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     payment_date = Column(DateTime, server_default=func.now())
     reference_number = Column(String(100))  # Transaction ID, check number, etc.
@@ -252,11 +419,11 @@ class Notification(Base):
     
     id = Column(Integer, primary_key=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"))
-    notification_type = Column(Enum("PAYMENT_REMINDER", "INVOICE_SENT", "PAYMENT_RECEIVED", "OVERDUE_ALERT", "LOW_STOCK", create_constraint=False), nullable=False)
-    channel = Column(Enum("EMAIL", "WHATSAPP", "SMS", "CALL", create_constraint=False), nullable=False)
+    notification_type = Column(Enum(NotificationType, name="notification_type"), nullable=False)
+    channel = Column(Enum(NotificationChannel, name="notification_channel"), nullable=False)
     recipient = Column(String(255), nullable=False)  # Email, phone, or contact number
     message = Column(Text)
-    status = Column(Enum("PENDING", "SENT", "FAILED", create_constraint=False), default="PENDING")
+    status = Column(Enum(NotificationStatus, name="notification_status"), default=NotificationStatus.PENDING)
     attempted_at = Column(DateTime)
     sent_at = Column(DateTime)
     error_message = Column(Text)
@@ -273,12 +440,12 @@ class AgentEscalation(Base):
     agent_id = Column(Integer, ForeignKey("user_details.id", ondelete="SET NULL"))
     escalation_reason = Column(String(200))  # e.g., "PAYMENT_OVERDUE_7_DAYS", "MULTIPLE_REMINDERS_IGNORED"
     escalation_level = Column(Integer, default=1)  # 1, 2, 3 (increasing severity)
-    priority = Column(Enum("LOW", "MEDIUM", "HIGH", "CRITICAL", create_constraint=False), default="MEDIUM")
-    status = Column(Enum("PENDING", "IN_PROGRESS", "RESOLVED", "FAILED", create_constraint=False), default="PENDING")
+    priority = Column(Enum(TaskPriority, name="task_priority"), default=TaskPriority.MEDIUM)
+    status = Column(Enum(TaskStatus, name="task_status"), default=TaskStatus.PENDING)
     call_initiated = Column(Boolean, default=False)
     call_timestamp = Column(DateTime)
     call_duration = Column(Integer)  # in seconds
-    call_status = Column(Enum("NOT_CALLED", "RINGING", "ANSWERED", "DECLINED", "FAILED", create_constraint=False), default="NOT_CALLED")
+    call_status = Column(Enum(CallStatus, name="call_status"), default=CallStatus.NOT_CALLED)
     notes = Column(Text)
     resolution_date = Column(DateTime)
 
@@ -457,7 +624,7 @@ class LoyaltyTransaction(Base):
     
     id = Column(Integer, primary_key=True)
     customer_loyalty_id = Column(Integer, ForeignKey("customer_loyalty.id", ondelete="CASCADE"), nullable=False)
-    transaction_type = Column(Enum("EARN", "REDEEM", "ADJUST", "EXPIRE", create_constraint=False), nullable=False)
+    transaction_type = Column(Enum(LoyaltyTransactionType, name="loyalty_transaction_type"), nullable=False)
     points = Column(Integer, nullable=False)
     reference_id = Column(String(100))  # invoice_id, sale_id
     notes = Column(Text)
@@ -476,7 +643,7 @@ class UpiLedger(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     upi_reference = Column(String(100), unique=True)  # Transaction ref
     customer_upi = Column(String(100))  # Payer UPI
-    status = Column(Enum("PENDING", "CONFIRM", "FAILED", "REFUND", create_constraint=False), default="PENDING")
+    status = Column(Enum(UpiStatus, name="upi_status"), default=UpiStatus.PENDING)
     payment_date = Column(DateTime, server_default=func.now())
 
 
@@ -503,7 +670,7 @@ class DeliveryTracking(Base):
     
     id = Column(Integer, primary_key=True)
     delivery_id = Column(Integer, ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
-    status = Column(Enum("PENDING", "OUT", "DELIVERED", "FAILED", "RETURNED", create_constraint=False), nullable=False)
+    status = Column(Enum(DeliveryStatus, name="delivery_status"), nullable=False)
     status_timestamp = Column(DateTime, server_default=func.now())
     staff_name = Column(String(100))
     notes = Column(Text)
@@ -561,7 +728,7 @@ class CustomerCreditScore(Base):
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     credit_score = Column(Integer, default=50)  # 0-100
-    score_badge = Column(Enum("CAUTION", "REGULAR", "TRUSTED", create_constraint=False), default="REGULAR")
+    score_badge = Column(Enum(ScoreBadge, name="score_badge"), default=ScoreBadge.REGULAR)
     suggested_credit_limit = Column(Numeric(10, 2), default=0)
     
     # Scoring factors
@@ -582,7 +749,7 @@ class CustomerOccasion(Base):
     
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
-    occasion_type = Column(Enum("BIRTHDAY", "ANNIVERSARY", "WEDDING", "CUSTOM", create_constraint=False), nullable=False)
+    occasion_type = Column(Enum(OccasionType, name="occasion_type"), nullable=False)
     occasion_date = Column(Date, nullable=False)  # MM-DD format for annual
     discount_percentage = Column(Float, default=10)
     last_notification_sent = Column(DateTime)
@@ -696,7 +863,7 @@ class KhataHistory(Base):
     
     id = Column(Integer, primary_key=True)
     khata_id = Column(Integer, ForeignKey("khata_balances.id", ondelete="CASCADE"), nullable=False)
-    transaction_type = Column(Enum("INVOICE", "PAYMENT", "ADJUSTMENT", create_constraint=False), nullable=False)
+    transaction_type = Column(Enum(KhataTransactionType, name="khata_transaction_type"), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     reference_id = Column(String(100))  # invoice_number or payment_id
     description = Column(String(200))
@@ -785,7 +952,7 @@ class OnlineOrder(Base):
     id = Column(Integer, primary_key=True)
     shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
     customer_id = Column(Integer, nullable=False) # In future, link to a CustomerUser table
-    order_status = Column(Enum("PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED", "REJECTED", create_constraint=False), default="PENDING")
+    order_status = Column(Enum(OnlineOrderStatus, name="online_order_status"), default=OnlineOrderStatus.PENDING)
     total_amount = Column(Numeric(10, 2), nullable=False)
     delivery_address = Column(Text)
     items_json = Column(Text, nullable=False) # JSON: [{product_id, name, qty, price}, ...]
@@ -800,7 +967,7 @@ class PurchaseOrder(Base):
     id = Column(Integer, primary_key=True)
     shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
     supplier_name = Column(String(100), nullable=False)
-    status = Column(Enum("DRAFT", "SENT", "DELIVERED", "CANCELLED", create_constraint=False), default="DRAFT")
+    status = Column(Enum(PurchaseOrderStatus, name="purchase_order_status"), default=PurchaseOrderStatus.DRAFT)
     total_cost = Column(Numeric(12, 2), default=0)
     items_json = Column(Text, nullable=False)
     expected_delivery = Column(Date)
@@ -817,7 +984,7 @@ class BankReconciliation(Base):
     recon_date = Column(Date, nullable=False)
     expected_upi_amount = Column(Numeric(12, 2), default=0)
     actual_bank_deposit = Column(Numeric(12, 2), default=0)
-    status = Column(Enum("MATCHED", "DISCREPANCY", "PENDING", create_constraint=False), default="PENDING")
+    status = Column(Enum(BankReconciliationStatus, name="bank_reconciliation_status"), default=BankReconciliationStatus.PENDING)
     notes = Column(Text)
 
 class UniversalTransaction(Base):
@@ -826,7 +993,7 @@ class UniversalTransaction(Base):
     
     id = Column(Integer, primary_key=True)
     shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
-    tx_type = Column(Enum("INCOME", "EXPENSE", create_constraint=False), nullable=False)
+    tx_type = Column(Enum(UniversalTransactionType, name="universal_transaction_type"), nullable=False)
     category = Column(String(50)) # SALE, KHATA_REPAY, EXPENSE, PO_PAYMENT, SALARY
     amount = Column(Numeric(12, 2), nullable=False)
     reference_id = Column(String(100)) # ID to link back to the exact invoice/expense
@@ -848,7 +1015,7 @@ class GiftCard(Base):
     issued_date = Column(DateTime, server_default=func.now())
     expiry_date = Column(Date, nullable=True)
     is_active = Column(Boolean, default=True)
-    status = Column(Enum("ACTIVE", "REDEEMED", "EXPIRED", create_constraint=False), default="ACTIVE")
+    status = Column(Enum(GiftCardStatus, name="gift_card_status"), default=GiftCardStatus.ACTIVE)
 
 class BatchOperation(Base):
     """Track batch operations"""

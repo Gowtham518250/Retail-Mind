@@ -179,6 +179,12 @@ class ShopService:
 
 router = APIRouter(prefix="/api/shop", tags=["Shop Profile"])
 
+
+@router.get("/")
+def shop_root(user_id: int = Depends(check_current_user)):
+    """Simple authenticated root for /api/shop to aid health checks and tests"""
+    return {"status": "success", "message": "Shop API root", "user_id": user_id}
+
 @router.post("/create")
 def create_shop_profile(data: dict, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """

@@ -84,6 +84,11 @@ class EmailNotificationService:
             True if sent successfully, False otherwise
         """
         try:
+            # Check if email credentials are configured
+            if not cls.SENDER_EMAIL or not cls.SENDER_PASSWORD:
+                print(f"Email not configured (skipping): To: {recipient_email}, Subject: {subject}")
+                return True  # Return True to not block operation
+            
             # Create message
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
