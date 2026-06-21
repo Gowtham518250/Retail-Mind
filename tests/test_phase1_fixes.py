@@ -210,3 +210,93 @@ def test_get_sales_returns_data():
     sales = r.json()
     assert len(sales) >= 1
     assert sales[0]["line_items"][0]["product_name"] == "Bread"
+
+
+# ── ROUND 3: Invoice response, route order, customer auth fixes ──────
+
+
+def test_invoice_create_returns_full_object():
+    """POST /api/invoices/create must return id, total_amount, line_items."""
+    token = _owner_token(_unique_email())
+    inv_no = f"INV-FULL-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "invoice_number": inv_no,
+        "total_amount": 150.0,
+        "paid_amount": 150.0,
+        "tax": 10.0,
+        "payment_status": "PAID",
+        "invoice_date": "2026-06-19",
+        "line_items": [{"product_name": "Chips", "quantity": 3, "unit_price": 50.0}],
+    }
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.post("/api/invoices/create", json=payload, headers=headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "id" in data
+    assert data["total_amount"] == 150.0
+    assert data["tax"] == 10.0
+    assert len(data["line_items"]) == 1
+    assert data["line_items"][0]["product_name"] == "Chips"
+    assert data["line_items"][0]["quantity"] == 3
+
+
+def test_get_invoice_returns_line_items():
+    """GET /api/invoices/{id} must return line_items with product_name."""
+    token = _owner_token(_unique_email())
+    inv_no = f"INV-DET-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "invoice_number": inv_no,
+        "total_amount": 80.0,
+        "paid_amount": 80.0,
+        "payment_status": "PAID",
+        "invoice_date": "2026-06-19",
+        "line_items": [{"product_name": "Water", "quantity": 4, "unit_price": 20.0}],
+    }
+    headers = {"Authorization": f"Bearer {token}"}
+    create_r = client.post("/api/invoices/create", json=payload, headers=headers)
+    assert create_r.status_code == 200, create_r.text
+    invoice_id = create_r.json()["id"]
+
+    get_r = client.get(f"/api/invoices/{invoice_id}", headers=headers)
+    assert get_r.status_code == 200, get_r.text
+    data = get_r.json()
+    assert "line_items" in data
+    assert data["line_items"][0]["product_name"] == "Water"
+
+
+def test_overdue_endpoint_not_captured_by_invoice_id():
+    """GET /api/invoices/overdue must not 422 (route order fix)."""
+    token = _owner_token(_unique_email())
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.get("/api/invoices/overdue", headers=headers)
+    assert r.status_code == 200, r.text
+    assert "overdue_invoices" in r.json()
+
+
+def test_payments_endpoint_not_captured_by_invoice_id():
+    """GET /api/invoices/payments must not 422 (route order fix)."""
+    token = _owner_token(_unique_email())
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.get("/api/invoices/payments", headers=headers)
+    assert r.status_code == 200, r.text
+    assert "payments" in r.json()
+
+
+def test_customer_register_no_email_import_crash():
+    """Customer registration must not crash due to email_notifications import."""
+    email = _unique_email()
+    r = client.post("/store/customer/register", json={
+        "name": "Test Cust",
+        "email": email,
+        "phone": "9876500001",
+        "password": "secret123",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["customer_id"] is not None
+
+
+def test_forgot_password_endpoint_exists():
+    """POST /store/customer/forgot-password must return 200."""
+    r = client.post("/store/customer/forgot-password?email=nobody@example.com")
+    assert r.status_code == 200, r.text
+    assert "reset link" in r.json()["message"].lower()
