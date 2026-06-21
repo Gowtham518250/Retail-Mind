@@ -295,8 +295,10 @@ def update_profile(data: dict, user_id: int = Depends(check_current_user), db: S
             "message": "Shop profile updated successfully",
             "shop_id": profile.id
         }
-    except Exception as e:
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.delete("/profile")

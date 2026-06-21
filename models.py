@@ -24,6 +24,7 @@ class OnlineCustomerAuth(Base):
     city = Column(String(100), nullable=True)     # Added for location filtering
     address = Column(Text, nullable=True)         # Added for delivery
     password = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class User(Base):
@@ -34,6 +35,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False)
     password = Column(String(100), nullable=False)
     user_type = Column(String(50), default="OWNER", nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships
     products = relationship("Product", back_populates="owner")

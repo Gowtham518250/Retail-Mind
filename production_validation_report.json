@@ -1,10 +1,10 @@
 {
-  "run_at": "2026-06-21T13:48:10.596919",
+  "run_at": "2026-06-21T15:16:58.448395",
   "base_url": "https://retail-mind-vkbp.onrender.com",
-  "total": 55,
-  "passed": 42,
-  "failed": 13,
-  "pass_rate": 76.4,
+  "total": 56,
+  "passed": 52,
+  "failed": 4,
+  "pass_rate": 92.9,
   "results": [
     {
       "test": "Stock before sale readable (=100)",
@@ -14,7 +14,7 @@
     {
       "test": "Invoice created successfully",
       "status": "PASS",
-      "detail": "code=200 body={'message': 'Invoice created successfully.', 'invoice_id': 63, 'invoice_number': 'INV-DEDUCT-1782029"
+      "detail": "code=200 body={'id': 79, 'invoice_id': 79, 'invoice_number': 'INV-DEDUCT-1782035136', 'total_amount': 250.0, 'paid"
     },
     {
       "test": "Stock deducted correctly (100 - 5 = 95, got 95)",
@@ -29,17 +29,22 @@
     {
       "test": "Duplicate invoice rejected (409)",
       "status": "PASS",
-      "detail": "Expected 409, got 400. Duplicate invoices are being created! body={'detail': 'Invoice number already exists'}"
+      "detail": "Expected 409, got 409. Duplicate invoices are being created! body={'detail': 'Invoice number already exists'}"
     },
     {
       "test": "Invoice created",
       "status": "PASS",
-      "detail": "No ID in response: {'message': 'Invoice created successfully.', 'invoice_id': 65, 'invoice_number': 'INV-PNAME-17820298"
+      "detail": "No ID in response: {'id': 81, 'invoice_id': 81, 'invoice_number': 'INV-PNAME-1782035136', 'total_amount': 200.0, 'paid_"
     },
     {
       "test": "Product name saved correctly (not 'Unknown')",
-      "status": "FAIL",
-      "detail": "Product name is 'Unknown'! line_items=[]"
+      "status": "PASS",
+      "detail": "Product name is 'Unknown'! line_items=[{'product_id': None, 'product_name': 'Premium Basmati Rice', 'quantity': 2, 'unit_price': 100.0, 'total': 200.0}]"
+    },
+    {
+      "test": "Product name matches 'Premium Basmati Rice'",
+      "status": "PASS",
+      "detail": "Expected 'Premium Basmati Rice', got 'Premium Basmati Rice'"
     },
     {
       "test": "Shop profile updated",
@@ -49,10 +54,10 @@
     {
       "test": "Shop name persisted after re-login",
       "status": "PASS",
-      "detail": "Expected 'RetailMind Shop 1782029830', got 'RetailMind Shop 1782029830'"
+      "detail": "Expected 'RetailMind Shop 1782035136', got 'RetailMind Shop 1782035136'"
     },
     {
-      "test": "Worker 'Worker_Val_1782029830' created",
+      "test": "Worker 'Worker_Val_1782035136' created",
       "status": "PASS",
       "detail": "code=200"
     },
@@ -62,9 +67,9 @@
       "detail": "code=200"
     },
     {
-      "test": "Worker 'Worker_Val_1782029830' persists after restore",
+      "test": "Worker 'Worker_Val_1782035136' persists after restore",
       "status": "PASS",
-      "detail": "Worker missing after restore! Found: ['Worker_Val_1782029830']"
+      "detail": "Worker missing after restore! Found: ['Worker_Val_1782035136']"
     },
     {
       "test": "Dashboard readable",
@@ -103,8 +108,8 @@
     },
     {
       "test": "Forgot password endpoint exists",
-      "status": "FAIL",
-      "detail": "code=404 \u2014 endpoint missing"
+      "status": "PASS",
+      "detail": "code=422 \u2014 endpoint missing"
     },
     {
       "test": "Reset password endpoint exists",
@@ -168,23 +173,23 @@
     },
     {
       "test": "Invoice has 'id' field",
-      "status": "FAIL",
-      "detail": "Missing 'id'. keys=['message', 'invoice_id', 'invoice_number']"
+      "status": "PASS",
+      "detail": "Missing 'id'. keys=['id', 'invoice_id', 'invoice_number', 'total_amount', 'paid_amount', 'subtotal', 'tax', 'status', 'payment_status', 'invoice_date', 'created_at', 'message', 'line_items']"
     },
     {
       "test": "Invoice has 'total_amount' field",
-      "status": "FAIL",
+      "status": "PASS",
       "detail": "Missing 'total_amount'"
     },
     {
       "test": "Invoice total_amount is numeric",
-      "status": "FAIL",
-      "detail": "total_amount type=NoneType"
+      "status": "PASS",
+      "detail": "total_amount type=float"
     },
     {
       "test": "Invoice total_amount is correct (118.0)",
-      "status": "FAIL",
-      "detail": "total_amount=None"
+      "status": "PASS",
+      "detail": "total_amount=118.0"
     },
     {
       "test": "Invoice has 'invoice_number'",
@@ -193,7 +198,7 @@
     },
     {
       "test": "Invoice has 'line_items'",
-      "status": "FAIL",
+      "status": "PASS",
       "detail": "Missing line_items"
     },
     {
@@ -244,7 +249,7 @@
     {
       "test": "Khata credit added (\u20b9500)",
       "status": "PASS",
-      "detail": "code=200 body={'message': 'Khata credit recorded successfully', 'customer_phone': '9782029830', 'amount_added': 50"
+      "detail": "code=200 body={'message': 'Khata credit recorded successfully', 'customer_phone': '9782035136', 'amount_added': 50"
     },
     {
       "test": "Second Khata credit added (\u20b9300)",
@@ -267,14 +272,14 @@
       "detail": "Expected 400 for over-payment, got 400. Customer can pay more than they owe!"
     },
     {
-      "test": "GST saved correctly (expected 180.0, got -1.0)",
-      "status": "FAIL",
-      "detail": "Tax mismatch: expected \u20b9180.0, stored \u20b9-1.0"
+      "test": "GST saved correctly (expected 180.0, got 180.0)",
+      "status": "PASS",
+      "detail": "Tax mismatch: expected \u20b9180.0, stored \u20b9180.0"
     },
     {
-      "test": "Total with GST correct (expected 1180.0, got -1.0)",
-      "status": "FAIL",
-      "detail": "Total mismatch: expected \u20b91180.0, stored \u20b9-1.0"
+      "test": "Total with GST correct (expected 1180.0, got 1180.0)",
+      "status": "PASS",
+      "detail": "Total mismatch: expected \u20b91180.0, stored \u20b91180.0"
     },
     {
       "test": "GSTR-1 export requires GST number (400 is fine)",

@@ -20,6 +20,8 @@ class UserCreate(BaseModel):
     password: str
     email: str
     user_type: Optional[str] = "OWNER"
+    role: Optional[str] = "OWNER"
+    is_active: Optional[bool] = True
 
 class UserLogin(BaseModel):
     email: str
@@ -47,7 +49,8 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         user_name=user.username,
         email=user.email.strip().lower(),  # Store email in lowercase for consistency
         password=hashed_password,
-        user_type=user.user_type.upper() if user.user_type else "OWNER"
+        user_type=user.user_type.upper() if user.user_type else "OWNER",
+        is_active=user.is_active if user.is_active is not None else True
     )
     db.add(new_user)
     db.commit()

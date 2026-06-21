@@ -47,6 +47,8 @@ class CustomerRegister(BaseModel):
     password: str = Field(..., min_length=6)
     city: Optional[str] = None
     address: Optional[str] = None
+    role: Optional[str] = "CUSTOMER"
+    is_active: Optional[bool] = True
 
 class CustomerLogin(BaseModel):
     email: EmailStr
@@ -83,6 +85,7 @@ def register_customer(
         city=data.city,
         address=data.address,
         password=hash_password(data.password),
+        is_active=data.is_active if data.is_active is not None else True,
     )
     db.add(customer)
     db.commit()
