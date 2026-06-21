@@ -16,7 +16,7 @@ from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -42,7 +42,7 @@ router = APIRouter(prefix="/store", tags=["Online Store"])
 # =====================
 class CustomerRegister(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    email: EmailStr
+    email: str
     phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     password: str = Field(..., min_length=6)
     city: Optional[str] = None
@@ -50,9 +50,23 @@ class CustomerRegister(BaseModel):
     role: Optional[str] = "CUSTOMER"
     is_active: Optional[bool] = True
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("value is not a valid email address")
+        return v.lower().strip()
+
 class CustomerLogin(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("value is not a valid email address")
+        return v.lower().strip()
 
 class OrderItem(BaseModel):
     product_id: int
