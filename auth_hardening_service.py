@@ -98,7 +98,7 @@ def register_user(
             )
         
         # Hash password with bcrypt
-        hashed_password = get_password_hash(user_data.password)
+        hashed_password = hash_password(user_data.password)
         
         # Create new user
         new_user = User(

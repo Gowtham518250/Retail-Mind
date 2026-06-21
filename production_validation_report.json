@@ -1,0 +1,285 @@
+{
+  "run_at": "2026-06-21T13:48:10.596919",
+  "base_url": "https://retail-mind-vkbp.onrender.com",
+  "total": 55,
+  "passed": 42,
+  "failed": 13,
+  "pass_rate": 76.4,
+  "results": [
+    {
+      "test": "Stock before sale readable (=100)",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "test": "Invoice created successfully",
+      "status": "PASS",
+      "detail": "code=200 body={'message': 'Invoice created successfully.', 'invoice_id': 63, 'invoice_number': 'INV-DEDUCT-1782029"
+    },
+    {
+      "test": "Stock deducted correctly (100 - 5 = 95, got 95)",
+      "status": "PASS",
+      "detail": "Expected 95, got 95. Stock NOT deducting on sale!"
+    },
+    {
+      "test": "First invoice created",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Duplicate invoice rejected (409)",
+      "status": "PASS",
+      "detail": "Expected 409, got 400. Duplicate invoices are being created! body={'detail': 'Invoice number already exists'}"
+    },
+    {
+      "test": "Invoice created",
+      "status": "PASS",
+      "detail": "No ID in response: {'message': 'Invoice created successfully.', 'invoice_id': 65, 'invoice_number': 'INV-PNAME-17820298"
+    },
+    {
+      "test": "Product name saved correctly (not 'Unknown')",
+      "status": "FAIL",
+      "detail": "Product name is 'Unknown'! line_items=[]"
+    },
+    {
+      "test": "Shop profile updated",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Shop name persisted after re-login",
+      "status": "PASS",
+      "detail": "Expected 'RetailMind Shop 1782029830', got 'RetailMind Shop 1782029830'"
+    },
+    {
+      "test": "Worker 'Worker_Val_1782029830' created",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Backup/restore triggered",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Worker 'Worker_Val_1782029830' persists after restore",
+      "status": "PASS",
+      "detail": "Worker missing after restore! Found: ['Worker_Val_1782029830']"
+    },
+    {
+      "test": "Dashboard readable",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Invoices list readable",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Dashboard has sales count field",
+      "status": "FAIL",
+      "detail": "No sales count field in dashboard. body keys: ['report']"
+    },
+    {
+      "test": "Voice billing endpoint exists",
+      "status": "FAIL",
+      "detail": "None of the common voice endpoints found. Add /api/voice/process"
+    },
+    {
+      "test": "Customer register",
+      "status": "FAIL",
+      "detail": "code=422 body={'detail': [{'type': 'value_error', 'loc': ['body', 'email'], 'msg': 'value is not a valid email add"
+    },
+    {
+      "test": "Customer login",
+      "status": "FAIL",
+      "detail": "code=422 body={'detail': [{'type': 'value_error', 'loc': ['body', 'email'], 'msg': 'value is not a valid email add"
+    },
+    {
+      "test": "Customer profile readable",
+      "status": "PASS",
+      "detail": "code=404"
+    },
+    {
+      "test": "Forgot password endpoint exists",
+      "status": "FAIL",
+      "detail": "code=404 \u2014 endpoint missing"
+    },
+    {
+      "test": "Reset password endpoint exists",
+      "status": "PASS",
+      "detail": "code=404 \u2014 endpoint missing"
+    },
+    {
+      "test": "Online store enabled",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Products browsable in store",
+      "status": "PASS",
+      "detail": "code=404"
+    },
+    {
+      "test": "Customer can place order",
+      "status": "PASS",
+      "detail": "code=403"
+    },
+    {
+      "test": "Owner sees incoming orders",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Order tracking works",
+      "status": "PASS",
+      "detail": "code=404"
+    },
+    {
+      "test": "All 10 concurrent invoices created (10/10 succeeded)",
+      "status": "PASS",
+      "detail": "Only 10/10 succeeded. 0 server errors. Race condition suspected."
+    },
+    {
+      "test": "No 500 errors under concurrency",
+      "status": "PASS",
+      "detail": "0 concurrent requests crashed the server"
+    },
+    {
+      "test": "No duplicate invoice numbers (found 10 unique)",
+      "status": "PASS",
+      "detail": "0 duplicate invoice numbers created!"
+    },
+    {
+      "test": "First offline sync accepted",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Duplicate offline sync rejected or deduplicated",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Only 1 record created (not duplicated), found 1",
+      "status": "PASS",
+      "detail": "Duplicate offline sync created 1 records!"
+    },
+    {
+      "test": "Invoice has 'id' field",
+      "status": "FAIL",
+      "detail": "Missing 'id'. keys=['message', 'invoice_id', 'invoice_number']"
+    },
+    {
+      "test": "Invoice has 'total_amount' field",
+      "status": "FAIL",
+      "detail": "Missing 'total_amount'"
+    },
+    {
+      "test": "Invoice total_amount is numeric",
+      "status": "FAIL",
+      "detail": "total_amount type=NoneType"
+    },
+    {
+      "test": "Invoice total_amount is correct (118.0)",
+      "status": "FAIL",
+      "detail": "total_amount=None"
+    },
+    {
+      "test": "Invoice has 'invoice_number'",
+      "status": "PASS",
+      "detail": "Missing invoice_number"
+    },
+    {
+      "test": "Invoice has 'line_items'",
+      "status": "FAIL",
+      "detail": "Missing line_items"
+    },
+    {
+      "test": "Product has 'id'",
+      "status": "PASS",
+      "detail": "keys=['id', 'product_name', 'sku', 'current_stock', 'min_stock', 'max_stock', 'unit_price', 'category']"
+    },
+    {
+      "test": "Product has 'current_stock'",
+      "status": "PASS",
+      "detail": "Missing current_stock"
+    },
+    {
+      "test": "Product has 'unit_price'",
+      "status": "PASS",
+      "detail": "Missing unit_price"
+    },
+    {
+      "test": "unit_price is numeric",
+      "status": "PASS",
+      "detail": "unit_price type=float"
+    },
+    {
+      "test": "unit_price value correct (99.99)",
+      "status": "PASS",
+      "detail": "unit_price=99.99"
+    },
+    {
+      "test": "Customer has 'id'",
+      "status": "PASS",
+      "detail": "keys=['id', 'customer_name', 'email', 'phone', 'whatsapp_number', 'address', 'city', 'state', 'postal_code', 'credit_limit', 'payment_terms', 'contact_preference', 'created_at']"
+    },
+    {
+      "test": "Customer has 'customer_name'",
+      "status": "PASS",
+      "detail": "Missing customer_name"
+    },
+    {
+      "test": "Customer has 'phone'",
+      "status": "PASS",
+      "detail": "Missing phone"
+    },
+    {
+      "test": "credit_limit is numeric",
+      "status": "PASS",
+      "detail": "credit_limit type=float"
+    },
+    {
+      "test": "Khata credit added (\u20b9500)",
+      "status": "PASS",
+      "detail": "code=200 body={'message': 'Khata credit recorded successfully', 'customer_phone': '9782029830', 'amount_added': 50"
+    },
+    {
+      "test": "Second Khata credit added (\u20b9300)",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Khata repayment recorded (\u20b9200)",
+      "status": "PASS",
+      "detail": "code=200"
+    },
+    {
+      "test": "Khata balance correct (500+300-200=600, got 600.0)",
+      "status": "PASS",
+      "detail": "Expected \u20b9600, got \u20b9600.0. Balance calculation broken!"
+    },
+    {
+      "test": "Over-payment rejected (400)",
+      "status": "PASS",
+      "detail": "Expected 400 for over-payment, got 400. Customer can pay more than they owe!"
+    },
+    {
+      "test": "GST saved correctly (expected 180.0, got -1.0)",
+      "status": "FAIL",
+      "detail": "Tax mismatch: expected \u20b9180.0, stored \u20b9-1.0"
+    },
+    {
+      "test": "Total with GST correct (expected 1180.0, got -1.0)",
+      "status": "FAIL",
+      "detail": "Total mismatch: expected \u20b91180.0, stored \u20b9-1.0"
+    },
+    {
+      "test": "GSTR-1 export requires GST number (400 is fine)",
+      "status": "PASS",
+      "detail": "code=400"
+    }
+  ]
+}

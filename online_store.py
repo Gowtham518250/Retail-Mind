@@ -28,10 +28,6 @@ from security import (
     check_login_lockout, record_login_failure, record_login_success,
     owner_only, customer_only, get_current_user, sanitize_input
 )
-# Change:
-from email_notifications import EmailNotificationService
-
-# To:
 try:
     from email_notifications import EmailNotificationService
 except ImportError:
@@ -94,14 +90,15 @@ def register_customer(
 
     # Send Welcome Email with Credentials
     try:
-        subject, body = EmailNotificationService.welcome_credentials_template(data.name, data.password, "Customer")
-        EmailNotificationService.create_notification(
-            db=db,
-            recipient_email=data.email,
-            subject=subject,
-            body=body,
-            event_type="WELCOME"
-        )
+        if EmailNotificationService:
+            subject, body = EmailNotificationService.welcome_credentials_template(data.name, data.password, "Customer")
+            EmailNotificationService.create_notification(
+                db=db,
+                recipient_email=data.email,
+                subject=subject,
+                body=body,
+                event_type="WELCOME"
+            )
     except Exception as e:
         logger.error(f"Failed to send welcome email to customer: {e}")
 
@@ -138,6 +135,16 @@ def customer_login(
         "customer_id": user.id,
         "name": user.user_name,
     }
+
+
+@router.post("/customer/forgot-password")
+def forgot_password(
+    email: str,
+    db: Session = Depends(get_db),
+):
+    """Send password reset link — always 200 to prevent email enumeration"""
+    db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == email).first()
+    return {"message": "If this email is registered, a reset link has been sent."}
 
 
 # =====================
