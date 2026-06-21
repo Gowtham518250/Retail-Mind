@@ -1,5 +1,5 @@
 """
-🧾 INVOICES & BILLING API — AI Shop Pro Enterprise Backend
+INVOICES & BILLING API — AI Shop Pro Enterprise Backend
 Covers:
   - Generate invoices
   - Accept offline-synced invoices from app (`/sync` endpoints)
@@ -198,12 +198,14 @@ def get_invoices(
     """Get all invoices for the shop"""
     shop_id = current_user
     query = db.query(Invoice).filter(Invoice.user_id == shop_id)
+
     if status:
         query = query.filter(Invoice.status == status.upper())
     if payment_status:
         query = query.filter(Invoice.payment_status == payment_status.upper())
     if source:
         query = query.filter(Invoice.source == source.upper())
+
     return query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
 
 
@@ -216,12 +218,19 @@ def create_invoice(
     shop_id = current_user
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
+    # Idempotency: a repeated request (e.g. double-tap or retry) with the same
+    # invoice_number must NOT create a second invoice. Return the existing one.
     existing = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         Invoice.invoice_number == invoice_number
     ).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Invoice number already exists")
+        return {
+            "message": "Invoice already exists.",
+            "invoice_id": existing.id,
+            "invoice_number": existing.invoice_number,
+            "duplicate": True,
+        }
 
     customer_id = None
     if data.customer_phone:
@@ -311,6 +320,31 @@ def create_invoice(
 
     db.commit()
     db.refresh(invoice)
+    line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
+    return {
+        "id":             invoice.id,
+        "invoice_id":     invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "total_amount":   float(invoice.total_amount),
+        "paid_amount":    float(invoice.paid_amount),
+        "subtotal":       float(invoice.subtotal),
+        "tax":            float(invoice.tax),
+        "status":         invoice.status,
+        "payment_status": invoice.payment_status,
+        "invoice_date":   str(invoice.invoice_date),
+        "created_at":     invoice.created_at.isoformat(),
+        "message":        "Invoice created successfully.",
+        "line_items": [
+            {
+                "product_id":   li.product_id,
+                "product_name": li.description,
+                "quantity":     li.quantity,
+                "unit_price":   float(li.unit_price),
+                "total":        float(li.line_total),
+            }
+            for li in line_items_out
+        ],
+    }
 
     line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
     return {
@@ -341,6 +375,8 @@ def create_invoice(
 
 # ── These MUST come before /{invoice_id} ──────────────────────────────
 
+# --- Fixed route order: /overdue, /payments, /analytics/summary BEFORE /{invoice_id} ---
+
 @router.get("/overdue")
 def get_overdue_invoices(
     days_overdue: int = Query(30),
@@ -351,11 +387,13 @@ def get_overdue_invoices(
 ):
     shop_id = current_user
     cutoff_date = date.today() - timedelta(days=days_overdue)
+
     overdue_invoices = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         Invoice.payment_status.in_(["UNPAID", "PARTIAL"]),
         Invoice.due_date < cutoff_date
     ).order_by(desc(Invoice.due_date)).offset(skip).limit(limit).all()
+
     return {
         "overdue_invoices": overdue_invoices,
         "count": len(overdue_invoices),
@@ -373,10 +411,14 @@ def get_invoice_payments(
 ):
     shop_id = current_user
     from models import Payment
+
     query = db.query(Payment).join(Invoice).filter(Invoice.user_id == shop_id)
+
     if invoice_id:
         query = query.filter(Payment.invoice_id == invoice_id)
+
     payments = query.order_by(desc(Payment.payment_date)).offset(skip).limit(limit).all()
+
     return {
         "payments": [
             {
@@ -402,26 +444,34 @@ def get_invoice_analytics(
     current_user: dict = Depends(owner_only),
 ):
     shop_id = current_user
+
     if not start_date:
         start_date = date.today().replace(day=1)
     if not end_date:
         end_date = date.today()
+
     query = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         Invoice.invoice_date >= start_date,
         Invoice.invoice_date <= end_date
     )
+
     total_invoices = query.count()
-    total_amount   = query.with_entities(func.sum(Invoice.total_amount)).scalar() or 0
-    total_paid     = query.with_entities(func.sum(Invoice.paid_amount)).scalar() or 0
-    paid_count     = query.filter(Invoice.payment_status == "PAID").count()
-    unpaid_count   = query.filter(Invoice.payment_status == "UNPAID").count()
-    partial_count  = query.filter(Invoice.payment_status == "PARTIAL").count()
-    sent_count     = query.filter(Invoice.status == "SENT").count()
-    overdue_count  = query.filter(
+    total_amount = query.with_entities(func.sum(Invoice.total_amount)).scalar() or 0
+    total_paid = query.with_entities(func.sum(Invoice.paid_amount)).scalar() or 0
+
+    # Count by payment status
+    paid_count = query.filter(Invoice.payment_status == "PAID").count()
+    unpaid_count = query.filter(Invoice.payment_status == "UNPAID").count()
+    partial_count = query.filter(Invoice.payment_status == "PARTIAL").count()
+
+    # Count by status
+    sent_count = query.filter(Invoice.status == "SENT").count()
+    overdue_count = query.filter(
         Invoice.payment_status.in_(["UNPAID", "PARTIAL"]),
         Invoice.due_date < date.today()
     ).count()
+
     return {
         "period": {"start": str(start_date), "end": str(end_date)},
         "total_invoices": total_invoices,
@@ -434,7 +484,7 @@ def get_invoice_analytics(
     }
 
 
-# ── /{invoice_id} MUST be last ────────────────────────────────────────
+# --- /{invoice_id} routes MUST be last (catch-all path param) ---
 
 @router.get("/{invoice_id}")
 def get_invoice(
@@ -442,6 +492,7 @@ def get_invoice(
     db: Session = Depends(get_db),
     current_user: dict = Depends(worker_or_owner),
 ):
+    """Get specific invoice details with line items"""
     shop_id = current_user
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
@@ -449,6 +500,7 @@ def get_invoice(
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
     line_items = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice_id).all()
     return {
         "id":             invoice.id,
@@ -487,6 +539,7 @@ def delete_invoice(
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
     db.delete(invoice)
     db.commit()
     return {"message": "Invoice deleted securely."}

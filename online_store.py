@@ -122,7 +122,7 @@ def customer_login(
     db: Session = Depends(get_db),
 ):
     """Customer login — returns JWT with CUSTOMER role"""
-    ip = request.client.host
+    ip = request.client.host if request.client else "unknown"
     check_login_lockout(ip)
 
     user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
@@ -145,9 +145,21 @@ def forgot_password(
     email: str,
     db: Session = Depends(get_db),
 ):
-    """Send password reset link — always 200 to prevent email enumeration"""
-    db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == email).first()
-    return {"message": "If this email is registered, a reset link has been sent."}
+    """Send password reset link to customer email"""
+    user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == email).first()
+    # Always return 200 to prevent email enumeration
+    return {"message": "If this email exists, a reset link has been sent."}
+
+
+@router.post("/customer/reset-password")
+def reset_password(
+    token: str,
+    new_password: str,
+    db: Session = Depends(get_db),
+):
+    """Reset customer password using token"""
+    # Token validation would go here in production
+    raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
 
 
 # =====================

@@ -74,7 +74,22 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     except Exception as e:
         logger.error(f"Failed to queue welcome email: {e}")
 
-    return {"msg": "User registered successfully", "user_id": new_user.id}
+    # Return access_token so the app can auto-login after registration
+    user_role = new_user.user_type or "OWNER"
+    access_token = create_access_token(
+        data={"sub": str(new_user.id), "role": user_role, "user_type": user_role}
+    )
+
+    return {
+        "msg": "User registered successfully",
+        "user_id": new_user.id,
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user_role,
+        "user_type": user_role,
+        "username": new_user.user_name,
+        "is_active": True,
+    }
 
 class SendOTPRequest(BaseModel):
     email: str
@@ -167,7 +182,7 @@ def get_sales(user_id: int, db: Session = Depends(get_db)):
     This endpoint is used by the frontend to download sales history from the cloud.
     """
     try:
-        from models import Invoice, InvoiceLineItem
+        from models import Invoice, InvoiceLineItem, Product
         from sqlalchemy import desc
         
         # Get all invoices for this user
@@ -182,6 +197,21 @@ def get_sales(user_id: int, db: Session = Depends(get_db)):
                 InvoiceLineItem.invoice_id == invoice.id
             ).all()
             
+            resolved_items = []
+            for item in line_items:
+                name = item.description
+                if (not name or name == "Unknown Product") and item.product_id:
+                    prod = db.query(Product).filter(Product.id == item.product_id).first()
+                    if prod:
+                        name = prod.product_name
+                resolved_items.append({
+                    'product_id': item.product_id,
+                    'product_name': name or "Unknown Product",
+                    'quantity': item.quantity,
+                    'unit_price': float(item.unit_price),
+                    'line_total': float(item.line_total),
+                })
+
             sales_record = {
                 'id': invoice.id,
                 'invoice_number': invoice.invoice_number,
@@ -192,16 +222,7 @@ def get_sales(user_id: int, db: Session = Depends(get_db)):
                 'payment_status': invoice.payment_status,
                 'invoice_date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
                 'created_at': invoice.created_at.isoformat() if invoice.created_at else None,
-                'line_items': [
-                    {
-                        'product_id': item.product_id,
-                        'product_name': item.description,
-                        'quantity': item.quantity,
-                        'unit_price': float(item.unit_price),
-                        'line_total': float(item.line_total),
-                    }
-                    for item in line_items
-                ]
+                'line_items': resolved_items,
             }
             sales_data.append(sales_record)
         
@@ -218,6 +239,7 @@ def create_sale_legacy(
     product: str = Form(None),
     item: str = Form(None),
     itemName: str = Form(None),
+    product_id: int = Form(None),
     price: float = Form(0.0),
     quantity: int = Form(1),
     total: float = Form(0.0),
@@ -228,49 +250,98 @@ def create_sale_legacy(
     Handle legacy frontend sales sync.
     """
     try:
-        from models import sales, Invoice, InvoiceLineItem
+        from models import sales, Invoice, InvoiceLineItem, Product, StockMovement
         from datetime import datetime, date as date_obj
-        
+
         sale_date = datetime.now().date()
         if date:
             try:
                 sale_date = datetime.strptime(date, "%Y-%m-%d").date()
             except:
                 pass
-        
+
         # Resolve the product name from any of the fields the frontend might send
-        actual_product_name = product_name or product or item or itemName or "Unknown Product"
-                
-        # Also create an Invoice so it shows up correctly in the new system
-        invoice_number = f"INV-{int(time.time())}"
-        
+        actual_product_name = product_name or product or item or itemName
+
+        # If a product_id was supplied, look up the real name from the DB
+        resolved_product_id = product_id
+        if resolved_product_id:
+            db_product = db.query(Product).filter(
+                Product.id == resolved_product_id,
+                Product.user_id == user_id
+            ).first()
+            if db_product:
+                if not actual_product_name:
+                    actual_product_name = db_product.product_name
+            else:
+                resolved_product_id = None
+
+        if not actual_product_name:
+            actual_product_name = "Unknown Product"
+
+        # Idempotency: prevent duplicate invoices from double-tap / retry.
+        # Use a deterministic key: user_id + sale_date + product + total.
+        import hashlib
+        idem_src = f"{user_id}-{sale_date}-{actual_product_name}-{total}-{quantity}"
+        idem_hash = hashlib.md5(idem_src.encode()).hexdigest()[:12]
+        invoice_number = f"INV-{idem_hash}"
+
+        existing = db.query(Invoice).filter(
+            Invoice.user_id == user_id,
+            Invoice.invoice_number == invoice_number
+        ).first()
+        if existing:
+            return {
+                "msg": "Sale already recorded",
+                "invoice_id": existing.id,
+                "duplicate": True,
+            }
+
         from models import ShopProfile
         shop = db.query(ShopProfile).filter(ShopProfile.shop_id == user_id).first()
         shop_id = shop.id if shop else None
-        
+
         new_invoice = Invoice(
             user_id=user_id,
-            shop_id=shop_id,
             invoice_number=invoice_number,
             total_amount=total,
             paid_amount=total,
             payment_status="PAID",
             payment_method="CASH",
-            invoice_date=sale_date
+            invoice_date=sale_date,
+            due_date=sale_date,
         )
         db.add(new_invoice)
         db.flush()
-        
+
         new_line = InvoiceLineItem(
             invoice_id=new_invoice.id,
+            product_id=resolved_product_id,
             description=actual_product_name,
             quantity=quantity,
             unit_price=price,
             line_total=total
         )
         db.add(new_line)
+
+        # Deduct inventory when a product_id is linked
+        if resolved_product_id:
+            db_product = db.query(Product).filter(
+                Product.id == resolved_product_id
+            ).first()
+            if db_product:
+                db_product.current_stock = max(0, (db_product.current_stock or 0) - quantity)
+                mov = StockMovement(
+                    product_id=db_product.id,
+                    movement_type="OUT",
+                    quantity=quantity,
+                    reason="Legacy Sale",
+                    reference_id=invoice_number,
+                )
+                db.add(mov)
+
         db.commit()
-        
+
         return {"msg": "Sale saved successfully", "invoice_id": new_invoice.id}
     except Exception as e:
         db.rollback()
