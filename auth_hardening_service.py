@@ -141,9 +141,13 @@ def register_user(
         )
 
 
+class HardenedLoginRequest(BaseModel):
+    email: str
+    password: str
+
 @router.post("/login", response_model=LoginResponse)
 def login_user(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: HardenedLoginRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -152,11 +156,11 @@ def login_user(
     """
     try:
         # Find user by email (case-insensitive)
-        user = db.query(User).filter(sa_func.lower(User.email) == normalize_email(form_data.username)).first()
+        user = db.query(User).filter(sa_func.lower(User.email) == normalize_email(login_data.email)).first()
         
-        if not user or not verify_password(form_data.password, user.password):
+        if not user or not verify_password(login_data.password, user.password):
             # Log failed attempt (implement rate limiting here)
-            logger.warning(f"Failed login attempt for email: {form_data.username}")
+            logger.warning(f"Failed login attempt for email: {login_data.email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",

@@ -20,6 +20,9 @@ class OnlineCustomerAuth(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     user_name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
+    phone = Column(String(20), nullable=True)     # Added for online store orders
+    city = Column(String(100), nullable=True)     # Added for location filtering
+    address = Column(Text, nullable=True)         # Added for delivery
     password = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -160,6 +163,8 @@ class Customer(Base):
     whatsapp_number = Column(String(20))  # For WhatsApp notifications
     address = Column(Text)
     city = Column(String(50))
+    state = Column(String(50))          # Added: was missing from model
+    postal_code = Column(String(20))    # Added: was missing from model
     credit_limit = Column(Numeric(10, 2), default=0)
     payment_terms = Column(String(50))  # e.g., "Net 30", "COD"
     contact_preference = Column(Enum("EMAIL", "WHATSAPP", "CALL", "SMS", create_constraint=False), default="EMAIL")
@@ -183,6 +188,7 @@ class Invoice(Base):
     customer_name = Column(String(100), nullable=True)
     customer_phone = Column(String(20), nullable=True)
     invoice_number = Column(String(50), nullable=False, index=True)
+    offline_id = Column(String(50), nullable=True, index=True, unique=True)
     invoice_date = Column(Date, server_default=func.now(), index=True)
     due_date = Column(Date, nullable=False)
     subtotal = Column(Numeric(10, 2), default=0)
@@ -817,8 +823,40 @@ class GiftCard(Base):
     initial_balance = Column(Numeric(10, 2), nullable=False)
     current_balance = Column(Numeric(10, 2), nullable=False)
     issued_to = Column(String(100))
-    expiry_date = Column(Date)
+    issued_date = Column(DateTime, server_default=func.now())
+    expiry_date = Column(Date, nullable=True)
     is_active = Column(Boolean, default=True)
+    status = Column(Enum("ACTIVE", "REDEEMED", "EXPIRED", create_constraint=False), default="ACTIVE")
+
+class BatchOperation(Base):
+    """Track batch operations"""
+    __tablename__ = "batch_operations"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False)
+    operation_type = Column(String(50), nullable=False)  # IMPORT, EXPORT, UPDATE, DELETE
+    entity_type = Column(String(50), nullable=False)     # PRODUCT, CUSTOMER, SALE, etc.
+    status = Column(String(50), default="PROCESSING")    # PROCESSING, COMPLETED, FAILED
+    total_records = Column(Integer, default=0)
+    processed_records = Column(Integer, default=0)
+    failed_records = Column(Integer, default=0)
+    errors = Column(Text, nullable=True) # Changed from JSON to Text for broad compatibility
+    started_at = Column(DateTime, server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
+    operation_metadata = Column(Text, nullable=True) # Changed from JSON to Text for broad compatibility
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "operation_type": self.operation_type,
+            "entity_type": self.entity_type,
+            "status": self.status,
+            "total_records": self.total_records,
+            "processed_records": self.processed_records,
+            "failed_records": self.failed_records,
+            "progress_percent": round((self.processed_records / max(self.total_records, 1)) * 100),
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
 
 # ==================== END OF MODELS ====================
-

@@ -47,9 +47,19 @@ class DeliveryService:
         if not delivery:
             return {"error": "Delivery not found"}
         
+        # Normalize status to valid Enum values
+        VALID_STATUSES = {"PENDING", "OUT", "DELIVERED", "FAILED", "RETURNED"}
+        normalized_status = status.upper() if status else "PENDING"
+        if normalized_status not in VALID_STATUSES:
+            # Map common variations
+            if "DELIVER" in normalized_status: normalized_status = "DELIVERED"
+            elif "FAIL" in normalized_status: normalized_status = "FAILED"
+            elif "RETURN" in normalized_status: normalized_status = "RETURNED"
+            else: normalized_status = "PENDING"
+            
         tracking = DeliveryTracking(
             delivery_id=delivery_id,
-            status=status,
+            status=normalized_status,
             staff_name=staff_name or delivery.assigned_to,
             notes=notes,
             location_lat=lat,
@@ -60,9 +70,9 @@ class DeliveryService:
         
         return {
             "delivery_id": delivery_id,
-            "status": status,
+            "status": normalized_status,
             "timestamp": tracking.status_timestamp.isoformat(),
-            "notes": f"WhatsApp webhook: Send '{status}' notification to customer"
+            "notes": f"WhatsApp webhook: Send '{normalized_status}' notification to customer"
         }
     
     @staticmethod

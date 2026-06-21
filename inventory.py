@@ -180,39 +180,55 @@ def create_stock_movement(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    # Normalize movement_type to uppercase to match enum constraints
+    VALID_TYPES = {"IN", "OUT", "ADJUSTMENT"}
+    movement_type = movement.movement_type.upper() if movement.movement_type else "IN"
+    if movement_type not in VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid movement_type. Must be one of: {list(VALID_TYPES)}")
+    
     # Update product stock
-    if movement.movement_type == "IN":
+    if movement_type == "IN":
         product.current_stock += movement.quantity
-    elif movement.movement_type == "OUT":
+    elif movement_type == "OUT":
         if product.current_stock < movement.quantity:
             raise HTTPException(status_code=400, detail="Insufficient stock")
         product.current_stock -= movement.quantity
-    elif movement.movement_type == "ADJUSTMENT":
+    elif movement_type == "ADJUSTMENT":
         product.current_stock = movement.quantity
     
-    # Create stock movement record
-    db_movement = StockMovement(**movement.dict())
-    db.add(db_movement)
-    
-    # Check if stock is below minimum
-    if product.current_stock <= product.min_stock:
-        notification = Notification(
-            notification_type="LOW_STOCK",
-            channel="EMAIL",
-            recipient=f"admin@store.com",
-            message=f"Product {product.product_name} (SKU: {product.sku}) is below minimum stock level. Current: {product.current_stock}, Minimum: {product.min_stock}",
-            status="PENDING"
+    try:
+        # Create stock movement record with normalized type
+        db_movement = StockMovement(
+            product_id=movement.product_id,
+            movement_type=movement_type,
+            quantity=movement.quantity,
+            reason=movement.reason,
+            reference_id=movement.reference_id
         )
-        db.add(notification)
-    
-    db.add(product)
-    db.commit()
+        db.add(db_movement)
+        
+        # Check if stock is below minimum
+        if product.current_stock <= product.min_stock:
+            notification = Notification(
+                notification_type="LOW_STOCK",
+                channel="EMAIL",
+                recipient=f"admin@store.com",
+                message=f"Product {product.product_name} (SKU: {product.sku}) is below minimum stock level. Current: {product.current_stock}, Minimum: {product.min_stock}",
+                status="PENDING"
+            )
+            db.add(notification)
+        
+        db.add(product)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Stock movement failed: {str(e)}")
     
     return {
         "message": "Stock movement recorded",
         "product_id": movement.product_id,
         "current_stock": product.current_stock,
-        "movement_type": movement.movement_type
+        "movement_type": movement_type
     }
 
 @router.get("/stock-movements/{product_id}")

@@ -18,36 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class BatchOperation(Base):
-    """Track batch operations"""
-    __tablename__ = "batch_operations"
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
-    operation_type = Column(String(50), nullable=False)  # IMPORT, EXPORT, UPDATE, DELETE
-    entity_type = Column(String(50), nullable=False)     # PRODUCT, CUSTOMER, SALE, etc.
-    status = Column(String(50), default="PROCESSING")    # PROCESSING, COMPLETED, FAILED
-    total_records = Column(Integer, default=0)
-    processed_records = Column(Integer, default=0)
-    failed_records = Column(Integer, default=0)
-    errors = Column(JSON, nullable=True)
-    started_at = Column(DateTime, server_default=func.now())
-    completed_at = Column(DateTime, nullable=True)
-    operation_metadata = Column(JSON, nullable=True)
-    
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "operation_type": self.operation_type,
-            "entity_type": self.entity_type,
-            "status": self.status,
-            "total_records": self.total_records,
-            "processed_records": self.processed_records,
-            "failed_records": self.failed_records,
-            "progress_percent": round((self.processed_records / max(self.total_records, 1)) * 100),
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-        }
+from models import BatchOperation
 
 
 # ====================== REQUEST/RESPONSE MODELS ======================
@@ -77,9 +48,7 @@ class BatchOperationStatus(BaseModel):
 
 
 # ====================== BATCH OPERATIONS ROUTER ======================
-
-router = APIRouter(prefix="/api/batch", tags=["Batch Operations"])
-
+router = APIRouter(prefix="/batch/api/batch", tags=["Batch Operations"])
 
 @router.post("/products/import")
 async def bulk_import_products(

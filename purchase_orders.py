@@ -26,9 +26,10 @@ router = APIRouter(prefix="/purchase-orders", tags=["Purchase Orders"])
 # =====================
 class POItem(BaseModel):
     product_id: Optional[int] = None
-    product_name: str
+    product_name: Optional[str] = None       # make optional
     quantity: int = Field(..., gt=0)
-    unit_cost: float = Field(..., ge=0)
+    unit_cost: Optional[float] = Field(None, ge=0)   # keep original
+    unit_price: Optional[float] = Field(None, ge=0)
 
 class PurchaseOrderCreate(BaseModel):
     supplier_name: str = Field(..., min_length=2, max_length=100)
@@ -63,7 +64,7 @@ def create_purchase_order(
     supplier_name = sanitize_input(data.supplier_name, "supplier_name")
 
     items_data = [item.model_dump() for item in data.items]
-    total_cost = sum(item["quantity"] * item["unit_cost"] for item in items_data)
+    total_cost = sum(item["quantity"] * (item.get("unit_cost") or item.get("unit_price") or 0) for item in items_data)
 
     po = PurchaseOrder(
         shop_id=shop_id,

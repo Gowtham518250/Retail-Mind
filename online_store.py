@@ -13,7 +13,7 @@ import math
 import json
 import logging
 from typing import Optional, List
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
@@ -28,7 +28,14 @@ from security import (
     check_login_lockout, record_login_failure, record_login_success,
     owner_only, customer_only, get_current_user, sanitize_input
 )
+# Change:
 from email_notifications import EmailNotificationService
+
+# To:
+try:
+    from email_notifications import EmailNotificationService
+except ImportError:
+    EmailNotificationService = None
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +83,9 @@ def register_customer(
     customer = OnlineCustomerAuth(
         user_name=name,
         email=data.email,
+        phone=data.phone,
+        city=data.city,
+        address=data.address,
         password=hash_password(data.password),
     )
     db.add(customer)

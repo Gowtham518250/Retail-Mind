@@ -46,12 +46,12 @@ class CustomerResponse(BaseModel):
     id: int
     customer_name: str
     email: Optional[str]
-    phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    phone: str
     whatsapp_number: Optional[str]
     address: Optional[str]
     city: Optional[str]
-    state: Optional[str]
-    postal_code: Optional[str]
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
     credit_limit: float
     payment_terms: Optional[str]
     contact_preference: str
@@ -78,14 +78,28 @@ def create_customer(
     if existing:
         raise HTTPException(status_code=400, detail="Customer with this phone number already exists")
     
+    # Normalize contact_preference to uppercase (DB enum requires uppercase)
+    VALID_PREFS = {"EMAIL", "WHATSAPP", "CALL", "SMS"}
+    PREF_MAP = {"email": "EMAIL", "whatsapp": "WHATSAPP", "call": "CALL", "sms": "SMS"}
+    contact_pref = customer.contact_preference.upper() if customer.contact_preference else "EMAIL"
+    if contact_pref not in VALID_PREFS:
+        contact_pref = PREF_MAP.get(customer.contact_preference.lower(), "EMAIL")
+    
+    customer_data = customer.dict()
+    customer_data["contact_preference"] = contact_pref
+    
     db_customer = Customer(
         user_id=user_id,
-        **customer.dict()
+        **customer_data
     )
     
     db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
+    try:
+        db.commit()
+        db.refresh(db_customer)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Customer creation failed: {str(e)}")
     
     return db_customer
 
