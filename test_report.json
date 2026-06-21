@@ -1,31 +1,31 @@
 {
-  "run_at": "2026-06-21T07:24:19.594409Z",
+  "run_at": "2026-06-21T10:43:21.406614Z",
   "base_url": "https://retail-mind-vkbp.onrender.com",
   "summary": {
-    "total": 186,
-    "passed": 173,
-    "failed": 10,
+    "total": 182,
+    "passed": 84,
+    "failed": 98,
     "skipped": 0,
-    "errors": 3
+    "errors": 0
   },
   "results": [
     {
       "label": "Root",
-      "status": "TIMEOUT",
-      "code": "-",
-      "detail": ">15s"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Health Check (/health)",
-      "status": "TIMEOUT",
-      "code": "-",
-      "detail": ">15s"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Observability Health",
-      "status": "TIMEOUT",
-      "code": "-",
-      "detail": ">15s"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Observability Ready",
@@ -60,7 +60,7 @@
     {
       "label": "Register",
       "status": "PASS",
-      "code": 200,
+      "code": 500,
       "detail": ""
     },
     {
@@ -77,9 +77,9 @@
     },
     {
       "label": "Login",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/auth/login'}"
     },
     {
       "label": "Hardened Register",
@@ -89,9 +89,9 @@
     },
     {
       "label": "Hardened Login",
-      "status": "PASS",
-      "code": 401,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'detail': 'Login failed'}"
     },
     {
       "label": "Hardened Refresh (no token)",
@@ -102,19 +102,7 @@
     {
       "label": "Hardened Logout",
       "status": "PASS",
-      "code": 200,
-      "detail": ""
-    },
-    {
-      "label": "Hardened Logout All",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
-    },
-    {
-      "label": "Get Active Sessions (hardened)",
-      "status": "PASS",
-      "code": 200,
+      "code": 401,
       "detail": ""
     },
     {
@@ -143,33 +131,33 @@
     },
     {
       "label": "Get Shop Profile (/api/shop)",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Business Hours",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Tax Config",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Shop Profile (/shop)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get UPI QR",
-      "status": "PASS",
-      "code": 422,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Public Shop Info",
@@ -179,45 +167,45 @@
     },
     {
       "label": "Toggle Online Store (enable)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update Shop Profile",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update API Shop Settings",
-      "status": "PASS",
-      "code": 400,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Product",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Products",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Single Product",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update Product",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Stock Movement",
@@ -233,15 +221,15 @@
     },
     {
       "label": "Get Low Stock Products",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Stock Alerts",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Batch",
@@ -275,93 +263,93 @@
     },
     {
       "label": "Generate Purchase Orders (Supplier POs)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Soft Delete Product",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Current Stock",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get All Stock",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Deduct Stock (idempotent)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Deduct Stock Batch",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Reconcile Inventory",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Full Reconciliation",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Correct Stock Manually",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Stock Audit Trail",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Auto Fix Discrepancies",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Customer",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Customers",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Single Customer",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update Customer",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Set Contact Preference",
@@ -371,15 +359,15 @@
     },
     {
       "label": "Search By Phone",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Search By Name",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Credit Score",
@@ -389,57 +377,57 @@
     },
     {
       "label": "Soft Delete Customer",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Invoice",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Sync Offline Invoice",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Invoices",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Single Invoice",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Overdue Invoices",
       "status": "FAIL",
-      "code": 422,
-      "detail": "{'detail': [{'type': 'int_parsing', 'loc': ['path', 'invoice_id'], 'msg': 'Input should be a valid integer, unable to pa"
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Invoice Payments",
       "status": "FAIL",
-      "code": 422,
-      "detail": "{'detail': [{'type': 'int_parsing', 'loc': ['path', 'invoice_id'], 'msg': 'Input should be a valid integer, unable to pa"
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Invoice Analytics",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Delete Invoice",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Generate Bill",
@@ -479,14 +467,14 @@
     },
     {
       "label": "Employee Check-In",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/check-in'}"
     },
     {
       "label": "Employee Check-Out",
       "status": "PASS",
-      "code": 200,
+      "code": 400,
       "detail": ""
     },
     {
@@ -527,9 +515,9 @@
     },
     {
       "label": "Get Attendance Summary",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/attendance/analytics/summary'}"
     },
     {
       "label": "Get Employee Analytics",
@@ -539,87 +527,87 @@
     },
     {
       "label": "Delete Worker",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Add Khata Credit",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Record Repayment",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "List Khata Customers",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Customer Khata History",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get WhatsApp Reminder URL",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Khata Balance (API)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Khata Customers (API)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update Khata Balance",
       "status": "FAIL",
-      "code": 500,
-      "detail": "{'detail': \"unsupported operand type(s) for +: 'decimal.Decimal' and 'float'\"}"
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Khata History (API)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Purchase Order",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "List Purchase Orders",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Mark PO Delivered",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Cancel Purchase Order",
       "status": "FAIL",
-      "code": 409,
-      "detail": "{'detail': 'Cannot cancel a delivered PO.'}"
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Delivery",
@@ -653,99 +641,99 @@
     },
     {
       "label": "Create Expense (/api/expenses)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Expenses (/api/expenses)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Expense History",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Add Expense (/expenses)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "List Expenses (/expenses)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "List Workers",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Add Worker",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update Worker (enterprise)",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Pay Worker Salary",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Add Reconciliation",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "List Reconciliations",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Profit & Loss",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "All Transactions",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Stock Analysis",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Daily Report",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Churn Risk",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "UPI Summary",
@@ -797,9 +785,9 @@
     },
     {
       "label": "Setup Flash Sale",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Sales (legacy)",
@@ -810,20 +798,20 @@
     {
       "label": "Issue Gift Card",
       "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/gift-cards'}"
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Redeem Gift Card",
       "status": "FAIL",
-      "code": 500,
-      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/gift-cards/redeem'}"
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Export GSTR1",
-      "status": "PASS",
-      "code": 400,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Register Store Customer",
@@ -864,44 +852,44 @@
     {
       "label": "Track Order",
       "status": "PASS",
-      "code": 404,
+      "code": 403,
       "detail": ""
     },
     {
       "label": "Get Incoming Orders",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update Order Status",
-      "status": "PASS",
-      "code": 404,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Restore All Sales",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Get Restore Summary",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Restore Customers",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Export Backup",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Data Integrity Check",
@@ -911,33 +899,33 @@
     },
     {
       "label": "Sync Sales Batch",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Sync Invoices Batch",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Sync Khata Batch",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Sync Expenses Batch",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Sync Invoices Chunked",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Bulk Export Products",
@@ -1061,9 +1049,9 @@
     },
     {
       "label": "Delete Product",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Reject Leave",
@@ -1073,27 +1061,27 @@
     },
     {
       "label": "Create Shop Profile",
-      "status": "PASS",
-      "code": 422,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Update Profile",
-      "status": "PASS",
-      "code": 422,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Upload Logo",
-      "status": "PASS",
-      "code": 422,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Create Shop Profile",
-      "status": "PASS",
-      "code": 422,
-      "detail": ""
+      "status": "FAIL",
+      "code": 403,
+      "detail": "{'detail': 'Not authenticated'}"
     },
     {
       "label": "Clear Cache Pattern",
@@ -1109,18 +1097,6 @@
     },
     {
       "label": "Get Rate Limit Status",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
-    },
-    {
-      "label": "Session Logout",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
-    },
-    {
-      "label": "Session Logout All",
       "status": "PASS",
       "code": 200,
       "detail": ""

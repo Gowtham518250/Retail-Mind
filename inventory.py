@@ -16,6 +16,45 @@ from models import Product, StockMovement, ProductBatch, Notification
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
+# ==================== BATCH OPERATIONS ====================
+
+@router.get("/bulk-export/products")
+def bulk_export_products(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Export all products for bulk operations"""
+    products = db.query(Product).filter_by(user_id=user_id, is_active=True).all()
+    return [{"id": p.id, "product_name": p.product_name, "sku": p.sku,
+             "unit_price": float(p.unit_price), "current_stock": p.current_stock} for p in products]
+
+@router.post("/bulk-import/products")
+def bulk_import_products(items: list[dict], user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Import products in bulk"""
+    created = 0
+    for item in items:
+        p = Product(user_id=user_id, **item)
+        db.add(p)
+        created += 1
+    db.commit()
+    return {"imported": created}
+
+@router.post("/bulk-import/customers")
+def bulk_import_customers(items: list[dict], user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Import customers in bulk"""
+    from models import Customer
+    created = 0
+    for item in items:
+        c = Customer(user_id=user_id, **item)
+        db.add(c)
+        created += 1
+    db.commit()
+    return {"imported": created}
+
+@router.get("/batch-history")
+def get_batch_history(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Get batch operation history"""
+    from models import BatchOperation
+    ops = db.query(BatchOperation).filter_by(user_id=user_id).order_by(BatchOperation.started_at.desc()).limit(50).all()
+    return [op.to_dict() for op in ops]
+
 # ==================== PYDANTIC MODELS ====================
 
 class ProductCreate(BaseModel):

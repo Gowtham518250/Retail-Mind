@@ -743,16 +743,14 @@ class ShopProfile(Base):
     
     # Location Information
     address = Column(Text)
+    address_line1 = Column(String(200))
+    address_line2 = Column(String(200))
     location = Column(String(300))
     latitude = Column(Float)
     longitude = Column(Float)
     city = Column(String(100))
     state = Column(String(100))
     postal_code = Column(String(10))
-    
-    # Address Details
-    address_line1 = Column(String(200))
-    address_line2 = Column(String(200))
 
     # Essential Payment & Config
     primary_upi_id = Column(String(100))
