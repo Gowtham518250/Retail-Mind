@@ -1,6 +1,6 @@
 {
-  "run_at": "2026-06-21T15:17:54.742334Z",
-  "base_url": "http://127.0.0.1:8000",
+  "run_at": "2026-06-21T20:37:43.137282Z",
+  "base_url": "https://retail-mind-vkbp.onrender.com",
   "summary": {
     "total": 186,
     "passed": 176,
@@ -11,15 +11,15 @@
   "results": [
     {
       "label": "Root",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
     },
     {
       "label": "Health Check (/health)",
-      "status": "PASS",
-      "code": 200,
-      "detail": ""
+      "status": "TIMEOUT",
+      "code": "-",
+      "detail": ">15s"
     },
     {
       "label": "Observability Health",
@@ -977,15 +977,15 @@
     },
     {
       "label": "Warm Product Cache",
-      "status": "TIMEOUT",
-      "code": "-",
-      "detail": ">15s"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Warm Analytics Cache",
-      "status": "TIMEOUT",
-      "code": "-",
-      "detail": ">15s"
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     },
     {
       "label": "Clear Cache Pattern",
@@ -1032,7 +1032,7 @@
     {
       "label": "Check SQL Injection",
       "status": "PASS",
-      "code": 200,
+      "code": 403,
       "detail": ""
     },
     {

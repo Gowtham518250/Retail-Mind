@@ -1,6 +1,6 @@
 {
-  "run_at": "2026-06-21T21:34:44.890269",
-  "base_url": "http://127.0.0.1:8000",
+  "run_at": "2026-06-22T02:04:03.044877",
+  "base_url": "https://retail-mind-vkbp.onrender.com",
   "total": 56,
   "passed": 53,
   "failed": 3,
@@ -14,7 +14,7 @@
     {
       "test": "Invoice created successfully",
       "status": "PASS",
-      "detail": "code=200 body={'id': 29, 'invoice_id': 29, 'invoice_number': 'INV-DEDUCT-1782057778', 'total_amount': 250.0, 'paid"
+      "detail": "code=200 body={'id': 49, 'invoice_id': 49, 'invoice_number': 'INV-DEDUCT-1782073954', 'total_amount': 250.0, 'paid"
     },
     {
       "test": "Stock deducted correctly (100 - 5 = 95, got 95)",
@@ -34,7 +34,7 @@
     {
       "test": "Invoice created",
       "status": "PASS",
-      "detail": "No ID in response: {'id': 31, 'invoice_id': 31, 'invoice_number': 'INV-PNAME-1782057778', 'total_amount': 200.0, 'paid_"
+      "detail": "No ID in response: {'id': 51, 'invoice_id': 51, 'invoice_number': 'INV-PNAME-1782073954', 'total_amount': 200.0, 'paid_"
     },
     {
       "test": "Product name saved correctly (not 'Unknown')",
@@ -54,10 +54,10 @@
     {
       "test": "Shop name persisted after re-login",
       "status": "PASS",
-      "detail": "Expected 'RetailMind Shop 1782057778', got 'RetailMind Shop 1782057778'"
+      "detail": "Expected 'RetailMind Shop 1782073954', got 'RetailMind Shop 1782073954'"
     },
     {
-      "test": "Worker 'Worker_Val_1782057778' created",
+      "test": "Worker 'Worker_Val_1782073954' created",
       "status": "PASS",
       "detail": "code=200"
     },
@@ -67,9 +67,9 @@
       "detail": "code=200"
     },
     {
-      "test": "Worker 'Worker_Val_1782057778' persists after restore",
+      "test": "Worker 'Worker_Val_1782073954' persists after restore",
       "status": "PASS",
-      "detail": "Worker missing after restore! Found: ['Worker_Val_1782057778']"
+      "detail": "Worker missing after restore! Found: ['Worker_Val_1782073954']"
     },
     {
       "test": "Dashboard readable",
@@ -99,7 +99,7 @@
     {
       "test": "Customer login",
       "status": "PASS",
-      "detail": "code=200 body={'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2Iiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwI"
+      "detail": "code=200 body={'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3Iiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwI"
     },
     {
       "test": "Customer profile readable",
@@ -249,7 +249,7 @@
     {
       "test": "Khata credit added (\u20b9500)",
       "status": "PASS",
-      "detail": "code=200 body={'message': 'Khata credit recorded successfully', 'customer_phone': '9782057778', 'amount_added': 50"
+      "detail": "code=200 body={'message': 'Khata credit recorded successfully', 'customer_phone': '9782073954', 'amount_added': 50"
     },
     {
       "test": "Second Khata credit added (\u20b9300)",
