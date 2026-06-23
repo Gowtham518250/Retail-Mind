@@ -190,33 +190,49 @@ def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(ge
         
         sales_data = []
         for invoice in invoices:
-            # Get line items for this invoice
+            # Flatten invoices into legacy sales objects expected by the frontend
             line_items = db.query(InvoiceLineItem).filter(
                 InvoiceLineItem.invoice_id == invoice.id
             ).all()
-            
-            sales_record = {
-                'id': invoice.id,
-                'invoice_number': invoice.invoice_number,
-                'customer_name': invoice.customer_name,
-                'customer_phone': invoice.customer_phone,
-                'total_amount': float(invoice.total_amount),
-                'paid_amount': float(invoice.paid_amount),
-                'payment_status': invoice.payment_status,
-                'invoice_date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
-                'created_at': invoice.created_at.isoformat() if invoice.created_at else None,
-                'line_items': [
-                    {
-                        'product_id': item.product_id,
-                        'product_name': item.description,
+
+            if not line_items:
+                # If there are no line items, just create a placeholder
+                sales_record = {
+                    'id': invoice.id,
+                    'invoice_id': invoice.id,
+                    'invoice_number': invoice.invoice_number,
+                    'customer_name': invoice.customer_name,
+                    'product_name': 'Unknown Product',
+                    'product': 'Unknown Product',
+                    'price': float(invoice.total_amount),
+                    'quantity': 1,
+                    'total': float(invoice.total_amount),
+                    'totalAmount': float(invoice.total_amount),
+                    'date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                    'created_at': invoice.created_at.isoformat() if invoice.created_at else None,
+                    'payment_status': invoice.payment_status,
+                }
+                sales_data.append(sales_record)
+            else:
+                for idx, item in enumerate(line_items):
+                    sales_record = {
+                        'id': f"{invoice.id}_{idx}", # Unique ID for the flattened item
+                        'invoice_id': invoice.id,
+                        'invoice_number': invoice.invoice_number,
+                        'customer_name': invoice.customer_name,
+                        'product_name': item.description or 'Unknown',
+                        'product': item.description or 'Unknown',
+                        'item': item.description or 'Unknown',
+                        'price': float(item.unit_price),
                         'quantity': item.quantity,
-                        'unit_price': float(item.unit_price),
-                        'line_total': float(item.line_total),
+                        'total': float(item.line_total),
+                        'totalAmount': float(item.line_total),
+                        'final_amount': float(item.line_total),
+                        'date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                        'created_at': invoice.created_at.isoformat() if invoice.created_at else None,
+                        'payment_status': invoice.payment_status,
                     }
-                    for item in line_items
-                ]
-            }
-            sales_data.append(sales_record)
+                    sales_data.append(sales_record)
         
         return sales_data
     except Exception as e:

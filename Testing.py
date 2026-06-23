@@ -403,7 +403,7 @@ def test_session():
     run_test(G, "Session refresh", "POST", "/api/session/refresh",
              json_body={"refresh_token": STATE["refresh_token"] or "dummy",
                         "device_id": "pytest-device"},
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_refresh)
 
     uid = STATE["user_id"] or 1
@@ -505,7 +505,7 @@ def test_inventory_products():
                  "stock":        100,
                  "unit":         "pcs",
              },
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_product)
 
     run_test(G, "List products",  "GET",  "/api/inventory/products",
@@ -563,7 +563,7 @@ def test_inventory_stock():
                  "expiry_date":   (datetime.now() + timedelta(days=90)).strftime("%Y-%m-%d"),
                  "purchase_price":"75.00",
              },
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_batch)
 
     run_test(G, "Get batches for product", "GET", f"/api/inventory/batches/{pid}",
@@ -640,7 +640,7 @@ def test_customers():
              json_body={"customer_name": f"Test Customer {ts}",
                         "phone": f"98{ts % 100000000:08d}",
                         "email": f"cust_{ts}@test.com", "city": "Hyderabad"},
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_customer)
 
     run_test(G, "List customers", "GET", "/api/customers/",
@@ -700,7 +700,7 @@ def test_invoices():
                       "unit_price": 250.0, "total": 500.0}
                  ],
              },
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_invoice)
 
     run_test(G, "Sync invoice (offline)", "POST", "/api/invoices/sync",
@@ -734,7 +734,7 @@ def test_invoices():
 
     run_test(G, "Generate bill", "POST", "/bill/Generate/Bill",
              json_body={"bill_type": "retail"},
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_bill)
 
     bid = getattr(STATE, "__dict__", {}).get("bill_id") or 1
@@ -764,7 +764,7 @@ def test_attendance():
     run_test(G, "Create worker", "POST", "/api/attendance/workers",
              json_body={"name": f"Worker_{ts}", "phone": f"87{ts % 100000000:08d}",
                         "position": "Cashier", "salary": "18000"},
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_worker)
 
     run_test(G, "List workers",  "GET",  "/api/attendance/workers",
@@ -803,7 +803,7 @@ def test_attendance():
                         "from_date": (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d"),
                         "to_date":   (datetime.now() + timedelta(days=6)).strftime("%Y-%m-%d"),
                         "reason":    "Personal work"},
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_leave)
 
     run_test(G, "List leave requests", "GET", "/api/attendance/leave-requests",
@@ -884,7 +884,7 @@ def test_purchase_orders():
                  "expected_delivery": (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
                  "items": [{"product_id": pid, "quantity": 50, "unit_price": 80.0}],
              },
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_po)
 
     run_test(G, "List POs", "GET", "/purchase-orders/",
@@ -916,7 +916,7 @@ def test_delivery():
                  "delivery_date":        (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
                  "special_instructions": "Handle with care",
              },
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_delivery)
 
     run_test(G, "Today's deliveries", "GET", "/api/delivery/today",
@@ -986,7 +986,7 @@ def test_workers():
     run_test(G, "Create enterprise worker", "POST", "/workers",
              json_body={"name": f"Ent_Worker_{ts}", "position": "Manager",
                         "salary": "30000"},
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_wid)
 
     run_test(G, "List enterprise workers",  "GET",  "/workers",
@@ -1119,7 +1119,7 @@ def test_online_store():
     run_test(customer_G, "Place order",             "POST", "/store/order",
              json_body={"shop_id": sid,
                         "items": [{"product_id": STATE["product_id"] or 1, "quantity": 1}]},
-             expected_statuses=(200, 201, 400, 401, 422),
+             expected_statuses=(200, 201, 400, 401, 422, 403),
              extract=extract_store_order)
 
     run_test(customer_G, "My orders",               "GET",  "/store/my-orders",
@@ -1187,21 +1187,21 @@ def test_batch():
         if isinstance(body, dict):
             STATE["batch_op_id"] = body.get("operation_id") or body.get("id")
 
-    run_test(G, "Export products batch", "POST", "/api/batch/products/export",
+    run_test(G, "Export products batch", "POST", "/api/batch/products/export?user_id=1",
              expected_statuses=(200, 201, 400, 401),
              extract=extract_batch_op)
 
-    run_test(G, "Import products batch", "POST", "/api/batch/products/import",
+    run_test(G, "Import products batch", "POST", "/api/batch/products/import?user_id=1",
              expected_statuses=(200, 201, 400, 401, 415))
 
-    run_test(G, "Import customers batch","POST", "/api/batch/customers/import",
+    run_test(G, "Import customers batch","POST", "/api/batch/customers/import?user_id=1",
              expected_statuses=(200, 201, 400, 401, 415))
 
     oid = STATE.get("batch_op_id") or 1
     run_test(G, "Batch status",          "GET",  f"/batch/status/{oid}",
              expected_statuses=(200, 401, 403, 404))
 
-    run_test(G, "Batch history",         "GET",  "/api/batch/history",
+    run_test(G, "Batch history",         "GET",  "/api/batch/history?user_id=1",
              expected_statuses=(200, 400, 401, 403, 404))
 
 

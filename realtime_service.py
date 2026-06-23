@@ -16,7 +16,7 @@ from collections import defaultdict
 import logging
 
 from db import get_db, engine, Base
-from models import Product, Sales, Customer, Invoice, Payment, Notification, User, Attendance
+from models import Product, sales, Customer, Invoice, Payment, Notification, User, Attendance
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class RealtimeDataService:
     @staticmethod
     def get_live_sales(db: Session, shop_id: int, limit: int = 10) -> List[dict]:
         """Get latest sales in real-time"""
-        sales = db.query(Sales).filter_by(user_id=shop_id).order_by(desc(Sales.id)).limit(limit).all()
+        sales_list = db.query(sales).filter_by(shopkeeper_id=shop_id).order_by(desc(sales.id)).limit(limit).all()
         
         return [{
             "id": s.id,
@@ -88,7 +88,7 @@ class RealtimeDataService:
             "total": float(s.quantity * s.price),
             "timestamp": s.created_at.isoformat() if hasattr(s, 'created_at') else "",
             "status": "completed"
-        } for s in sales]
+        } for s in sales_list]
     
     @staticmethod
     def get_low_stock_products(db: Session, shop_id: int, threshold: int = 10) -> List[dict]:
@@ -113,21 +113,21 @@ class RealtimeDataService:
         today = datetime.now().date()
         
         # Total sales today
-        sales_today = db.query(func.sum(Sales.quantity)).filter(
-            Sales.user_id == shop_id,
-            func.date(Sales.created_at) == today
+        sales_today = db.query(func.sum(sales.quantity)).filter(
+            sales.shopkeeper_id == shop_id,
+            func.date(sales.created_at) == today
         ).scalar() or 0
         
         # Revenue today
-        revenue = db.query(func.sum(Sales.quantity * Sales.price)).filter(
-            Sales.user_id == shop_id,
-            func.date(Sales.created_at) == today
+        revenue = db.query(func.sum(sales.quantity * sales.price)).filter(
+            sales.shopkeeper_id == shop_id,
+            func.date(sales.created_at) == today
         ).scalar() or 0
         
         # Transaction count
-        transactions = db.query(func.count(Sales.id)).filter(
-            Sales.user_id == shop_id,
-            func.date(Sales.created_at) == today
+        transactions = db.query(func.count(sales.id)).filter(
+            sales.shopkeeper_id == shop_id,
+            func.date(sales.created_at) == today
         ).scalar() or 0
         
         # Active customers today

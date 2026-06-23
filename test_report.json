@@ -1,5581 +1,1129 @@
 {
-  "meta": {
-    "base_url": "https://retail-mind-vkbp.onrender.com",
-    "run_at": "2026-06-23T17:44:43.533941",
-    "total": 183,
-    "passed": 169,
-    "failed": 14,
-    "errors": 0,
+  "run_at": "2026-06-23T12:39:25.538213Z",
+  "base_url": "https://retail-mind-vkbp.onrender.com",
+  "summary": {
+    "total": 186,
+    "passed": 179,
+    "failed": 7,
     "skipped": 0,
-    "pass_rate": "92.3%"
+    "errors": 0
   },
-  "failures": [
-    {
-      "group": "auth",
-      "name": "Post auth sales",
-      "method": "POST",
-      "path": "/auth/sales",
-      "status": 500,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 401, 403, 422), got 500. Body: {'detail': \"Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice\"}",
-      "duration": 0.289,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Business hours",
-      "method": "GET",
-      "path": "/api/shop/business-hours",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.269,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Shop settings not found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Tax config",
-      "method": "GET",
-      "path": "/api/shop/tax-config",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.392,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Shop settings not found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "UPI QR (api)",
-      "method": "GET",
-      "path": "/api/shop/upi-qr",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.31,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "UPI QR (shop)",
-      "method": "GET",
-      "path": "/shop/upi-qr",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 422. Body: {'detail': 'No UPI ID configured. Please update your shop profile.'}",
-      "duration": 0.29,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "No UPI ID configured. Please update your shop profile."
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Correct stock",
-      "method": "POST",
-      "path": "/api/inventory-reconcile/correct-stock",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Product not found'}",
-      "duration": 0.283,
-      "request": {
-        "body": {
-          "product_id": 1,
-          "correct_stock": 48,
-          "reason": "physical count"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "purchase-orders",
-      "name": "Cancel PO",
-      "method": "POST",
-      "path": "/purchase-orders/12/cancel",
-      "status": 409,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 404), got 409. Body: {'detail': 'Cannot cancel a delivered PO.'}",
-      "duration": 0.295,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Cannot cancel a delivered PO."
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Export GSTR1",
-      "method": "GET",
-      "path": "/gst/export-gstr1?month=6&year=2026",
-      "status": 400,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 400. Body: {'detail': 'GST number not configured in Shop Settings.'}",
-      "duration": 0.286,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "GST number not configured in Shop Settings."
-      }
-    },
-    {
-      "group": "store",
-      "name": "Place order",
-      "method": "POST",
-      "path": "/store/order",
-      "status": 403,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.275,
-      "request": {
-        "body": {
-          "shop_id": 1,
-          "items": [
-            {
-              "product_id": 1,
-              "quantity": 1
-            }
-          ]
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Access denied. Required roles: ('CUSTOMER',). Your role: OWNER"
-      }
-    },
-    {
-      "group": "store",
-      "name": "My orders",
-      "method": "GET",
-      "path": "/store/my-orders",
-      "status": 403,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.437,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Access denied. Required roles: ('CUSTOMER',). Your role: OWNER"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Export products batch",
-      "method": "POST",
-      "path": "/batch/products/export",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.292,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Import products batch",
-      "method": "POST",
-      "path": "/batch/products/import",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.283,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Import customers batch",
-      "method": "POST",
-      "path": "/batch/customers/import",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.3,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Batch history",
-      "method": "GET",
-      "path": "/batch/history",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.311,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    }
-  ],
-  "all_results": [
-    {
-      "group": "health",
-      "name": "Root health",
-      "method": "GET",
-      "path": "/health",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.827,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "healthy",
-        "database": "connected",
-        "timestamp": 1782216812.9143438
-      }
-    },
-    {
-      "group": "health",
-      "name": "Observability health",
-      "method": "GET",
-      "path": "/api/observability/health",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.36,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "degraded",
-        "timestamp": "2026-06-23T12:13:33.305675",
-        "version": "3.0.0",
-        "uptime_seconds": 151.015179,
-        "components": {
-          "database": {
-            "status": "healthy",
-            "message": "Database connection successful"
-          },
-          "memory": {
-            "status": "healthy",
-            "message": "Memory usage: 0.4%",
-            "rss_mb": 130.53125
-          },
-          "cpu": {
-            "status": "healthy",
-            "message": "CPU usage: 0.0%"
-          },
-          "disk": {
-            "status": "degraded",
-            "message": "Disk usage: 83.3%",
-            "free_gb": 64.55276489257812
-          }
-        }
-      }
-    },
-    {
-      "group": "health",
-      "name": "Observability ready",
-      "method": "GET",
-      "path": "/api/observability/ready",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.308,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "ready",
-        "message": "Application is ready to serve traffic",
-        "timestamp": "2026-06-23T12:13:33.596809"
-      }
-    },
-    {
-      "group": "health",
-      "name": "Observability metrics",
-      "method": "GET",
-      "path": "/api/observability/metrics",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.373,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "users_total": 39,
-        "products_total": 19,
-        "invoices_total": 72,
-        "products_active": 11,
-        "invoices_last_24h": 5,
-        "memory_rss_mb": 130.53125,
-        "memory_percent": 0.41588135085272104,
-        "cpu_percent": 0.0,
-        "uptime_seconds": 151.798752,
-        "timestamp": "2026-06-23T12:13:33.988768",
-        "version": "3.0.0"
-      }
-    },
-    {
-      "group": "health",
-      "name": "Business overview",
-      "method": "GET",
-      "path": "/api/observability/business/overview",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.306,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "today_revenue": 185.0,
-        "month_revenue": 10430.0,
-        "today_sales_count": 3,
-        "month_sales_count": 72,
-        "total_products": 19,
-        "low_stock_products": 1,
-        "stock_health_percentage": 94.73684210526315,
-        "timestamp": "2026-06-23T12:13:34.269139"
-      }
-    },
-    {
-      "group": "health",
-      "name": "Performance summary",
-      "method": "GET",
-      "path": "/api/observability/performance/summary",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.285,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "db_query_time_ms": 4.032,
-        "db_query_status": "healthy",
-        "avg_response_time_ms": 0.0,
-        "p95_response_time_ms": 0.0,
-        "p99_response_time_ms": 0.0,
-        "error_rate": 0.0,
-        "total_requests": 0,
-        "error_count": 0,
-        "timestamp": "2026-06-23T12:13:34.558123"
-      }
-    },
-    {
-      "group": "health",
-      "name": "Performance database",
-      "method": "GET",
-      "path": "/api/observability/performance/database",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.318,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "user_details_count": 39,
-        "products_count": 19,
-        "invoices_count": 72,
-        "customers_count": 21,
-        "connection_pool_status": "active",
-        "timestamp": "2026-06-23T12:13:34.852163"
-      }
-    },
-    {
-      "group": "health",
-      "name": "Log entry",
-      "method": "POST",
-      "path": "/api/observability/log",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.321,
-      "request": {
-        "body": {
-          "level": "info",
-          "message": "Automated test log entry",
-          "context": {
-            "source": "pytest"
-          }
-        },
-        "params": null
-      },
-      "response": {
-        "status": "logged",
-        "timestamp": "2026-06-23T12:13:35.171785"
-      }
-    },
-    {
-      "group": "health",
-      "name": "Error event",
-      "method": "POST",
-      "path": "/api/observability/error",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.28,
-      "request": {
-        "body": {},
-        "params": null
-      },
-      "response": {
-        "status": "logged",
-        "error_id": "ERR_20260623121335"
-      }
-    },
-    {
-      "group": "auth",
-      "name": "Register user",
-      "method": "POST",
-      "path": "/auth/register",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.663,
-      "request": {
-        "body": {
-          "username": "tester_1782216812",
-          "password": "Test@1234!",
-          "email": "tester_1782216812@example.com",
-          "user_type": "owner"
-        },
-        "params": null
-      },
-      "response": {
-        "msg": "User registered successfully",
-        "user_id": 40,
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MCIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjIwNDE3LCJpYXQiOjE3ODIyMTY4MTd9.-youphMNxYzjXn1idmaYmHkokVjJihWsnisLNyyC0dk",
-        "token_type": "bearer",
-        "role": "OWNER",
-        "user_type": "OWNER",
-        "username": "tester_1782216812"
-      }
-    },
-    {
-      "group": "auth",
-      "name": "Login user",
-      "method": "POST",
-      "path": "/auth/login",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.656,
-      "request": {
-        "body": {
-          "email": "tester_1782216812@example.com",
-          "password": "Test@1234!"
-        },
-        "params": null
-      },
-      "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MCIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjIwNDE4LCJpYXQiOjE3ODIyMTY4MTh9.zfq_oupr9mcZg0qzTQjTWIpUscoaI5kMONUWt1yfXso",
-        "token_type": "bearer",
-        "role": "OWNER",
-        "user_type": "OWNER",
-        "user_id": 40,
-        "username": "tester_1782216812"
-      }
-    },
-    {
-      "group": "auth",
-      "name": "Get auth sales",
-      "method": "GET",
-      "path": "/auth/sales",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.327,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": []
-    },
-    {
-      "group": "auth",
-      "name": "Post auth sales",
-      "method": "POST",
-      "path": "/auth/sales",
-      "status": 500,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 401, 403, 422), got 500. Body: {'detail': \"Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice\"}",
-      "duration": 0.289,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice"
-      }
-    },
-    {
-      "group": "auth-hardened",
-      "name": "Hardened register",
-      "method": "POST",
-      "path": "/api/auth-hardened/register",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.861,
-      "request": {
-        "body": {
-          "email": "h_1782216819@example.com",
-          "password": "HardPass@9!",
-          "user_name": "huser_1782216819"
-        },
-        "params": null
-      },
-      "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MjIxODYyMX0._VFrEj9h4Pp3NTM82yH1bQEgIJZf0RCskK0m_pbwwaY",
-        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MjE2MjEsImp0aSI6InNVSll2TVNNaHpUVnh0NlRKZmwwa2htdkcyNlBFZUQxY29XVm44QmRONlkifQ.g537bUyaqpQ3bV40wRDa9zGIYUTvWPjQ6H2tKKLlOdc",
-        "token_type": "bearer",
-        "user_id": 41,
-        "email": "h_1782216819@example.com",
-        "user_name": "huser_1782216819"
-      }
-    },
-    {
-      "group": "auth-hardened",
-      "name": "Hardened login",
-      "method": "POST",
-      "path": "/api/auth-hardened/login",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.649,
-      "request": {
-        "body": {
-          "email": "h_1782216819@example.com",
-          "password": "HardPass@9!"
-        },
-        "params": null
-      },
-      "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MjIxODYyMn0.jQ7Wofav0bhGAJiZMzmVSoXtYEyh2a5fwxn48FYCx_s",
-        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MjE2MjIsImp0aSI6InBjdzQyT1ZPalFDcXB3RjlEanZobi1Kc05IS1p5NWUwMWJ5d1FjS2hoS2cifQ.hLR_zlVRo8Rxtf0c8XICG9yKPwsD_bKKJ5P6ieExzxI",
-        "token_type": "bearer",
-        "user_id": 41,
-        "email": "h_1782216819@example.com",
-        "user_name": "huser_1782216819"
-      }
-    },
-    {
-      "group": "auth-hardened",
-      "name": "Hardened refresh (bad token)",
-      "method": "POST",
-      "path": "/api/auth-hardened/refresh",
-      "status": 401,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.295,
-      "request": {
-        "body": {
-          "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MjE2MjIsImp0aSI6InBjdzQyT1ZPalFDcXB3RjlEanZobi1Kc05IS1p5NWUwMWJ5d1FjS2hoS2cifQ.hLR_zlVRo8Rxtf0c8XICG9yKPwsD_bKKJ5P6ieExzxI"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Invalid refresh token"
-      }
-    },
-    {
-      "group": "auth-hardened",
-      "name": "Active sessions (hardened)",
-      "method": "GET",
-      "path": "/api/auth-hardened/active-sessions/41",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.3,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "user_id": 41,
-        "active_sessions": 0,
-        "sessions": []
-      }
-    },
-    {
-      "group": "auth-hardened",
-      "name": "Hardened logout",
-      "method": "POST",
-      "path": "/api/auth-hardened/logout",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.944,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Logged out successfully",
-        "logged_out_devices": 1
-      }
-    },
-    {
-      "group": "auth-hardened",
-      "name": "Hardened logout-all",
-      "method": "POST",
-      "path": "/api/auth-hardened/logout-all",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.488,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Logged out from all devices successfully",
-        "logged_out_devices": 0
-      }
-    },
-    {
-      "group": "session",
-      "name": "Session refresh",
-      "method": "POST",
-      "path": "/api/session/refresh",
-      "status": 401,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.307,
-      "request": {
-        "body": {
-          "refresh_token": "dummy",
-          "device_id": "pytest-device"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Invalid refresh token"
-      }
-    },
-    {
-      "group": "session",
-      "name": "Active sessions",
-      "method": "GET",
-      "path": "/api/session/active/40",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.295,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "sessions": []
-      }
-    },
-    {
-      "group": "session",
-      "name": "Offline queue",
-      "method": "POST",
-      "path": "/api/session/offline/queue",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.295,
-      "request": {
-        "body": {
-          "user_id": 40,
-          "data_type": "sale",
-          "payload": {
-            "test": true
-          }
-        },
-        "params": null
-      },
-      "response": {
-        "queued": true,
-        "queue_id": 14,
-        "type": "sale",
-        "will_sync_when_online": true
-      }
-    },
-    {
-      "group": "session",
-      "name": "Offline sync",
-      "method": "POST",
-      "path": "/api/session/offline/sync",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.307,
-      "request": {
-        "body": {
-          "user_id": 40
-        },
-        "params": null
-      },
-      "response": {
-        "synced": true,
-        "count": 1,
-        "items": [
-          {
-            "id": 14,
-            "type": "sale",
-            "synced": true
-          }
-        ],
-        "message": "Synced 1 offline items"
-      }
-    },
-    {
-      "group": "session",
-      "name": "Session logout",
-      "method": "POST",
-      "path": "/api/session/logout",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.287,
-      "request": {
-        "body": {
-          "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MCIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjIwNDE4LCJpYXQiOjE3ODIyMTY4MTh9.zfq_oupr9mcZg0qzTQjTWIpUscoaI5kMONUWt1yfXso"
-        },
-        "params": null
-      },
-      "response": {
-        "status": "Already logged out or invalid token"
-      }
-    },
-    {
-      "group": "session",
-      "name": "Session logout-all",
-      "method": "POST",
-      "path": "/api/session/logout-all",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.264,
-      "request": {
-        "body": {
-          "user_id": 40
-        },
-        "params": null
-      },
-      "response": {
-        "status": "Logged out from 0 devices"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Create shop",
-      "method": "POST",
-      "path": "/api/shop/create",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.269,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Get shop profile",
-      "method": "GET",
-      "path": "/api/shop/profile",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.38,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Shop settings not found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Get shop profile (alt)",
-      "method": "GET",
-      "path": "/shop/profile",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.305,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "id": 27,
-        "shop_id": 40,
-        "shop_name": "tester_1782216812's Shop",
-        "address": null,
-        "phone": null,
-        "upi_id": null,
-        "gst_number": null,
-        "logo_url": null,
-        "is_online_store_enabled": false,
-        "latitude": null,
-        "longitude": null,
-        "city": null
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Business hours",
-      "method": "GET",
-      "path": "/api/shop/business-hours",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.269,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Shop settings not found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Tax config",
-      "method": "GET",
-      "path": "/api/shop/tax-config",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.392,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Shop settings not found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "UPI QR (api)",
-      "method": "GET",
-      "path": "/api/shop/upi-qr",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.31,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "UPI QR (shop)",
-      "method": "GET",
-      "path": "/shop/upi-qr",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 422. Body: {'detail': 'No UPI ID configured. Please update your shop profile.'}",
-      "duration": 0.29,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "No UPI ID configured. Please update your shop profile."
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Public shop profile",
-      "method": "GET",
-      "path": "/shop/public/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.359,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Shop not found or online store is disabled."
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Toggle online store",
-      "method": "POST",
-      "path": "/shop/toggle-online-store?enable=true",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.281,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Online store ENABLED successfully.",
-        "is_online_store_enabled": true
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Update shop profile (PUT shop)",
-      "method": "PUT",
-      "path": "/shop/profile",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.3,
-      "request": {
-        "body": {
-          "shop_name": "Test Retail Shop",
-          "phone": "9999999999",
-          "city": "Hyderabad"
-        },
-        "params": null
-      },
-      "response": {
-        "id": 27,
-        "shop_id": 40,
-        "shop_name": "Test Retail Shop",
-        "address": null,
-        "phone": "9999999999",
-        "upi_id": null,
-        "gst_number": null,
-        "logo_url": null,
-        "is_online_store_enabled": true,
-        "latitude": null,
-        "longitude": null,
-        "city": "Hyderabad"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Update shop settings (api)",
-      "method": "PUT",
-      "path": "/api/shop/settings",
-      "status": 400,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.305,
-      "request": {
-        "body": {},
-        "params": null
-      },
-      "response": {
-        "detail": "Shop settings not found"
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Update shop profile (api PUT)",
-      "method": "PUT",
-      "path": "/api/shop/profile",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.302,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Upload shop logo",
-      "method": "POST",
-      "path": "/api/shop/upload-logo",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.4,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "file"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Post shop profile",
-      "method": "POST",
-      "path": "/shop/profile",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.296,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Create product",
-      "method": "POST",
-      "path": "/api/inventory/products",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.298,
-      "request": {
-        "body": {
-          "product_name": "TestProduct_1782216831",
-          "unit_price": "99.99",
-          "category": "Test",
-          "stock": 100,
-          "unit": "pcs"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "sku"
-            ],
-            "msg": "Field required",
-            "input": {
-              "product_name": "TestProduct_1782216831",
-              "unit_price": "99.99",
-              "category": "Test",
-              "stock": 100,
-              "unit": "pcs"
-            },
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "List products",
-      "method": "GET",
-      "path": "/api/inventory/products",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.364,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": []
-    },
-    {
-      "group": "inventory-products",
-      "name": "Get product",
-      "method": "GET",
-      "path": "/api/inventory/products/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.3,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Update product",
-      "method": "PUT",
-      "path": "/api/inventory/products/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.12,
-      "request": {
-        "body": {
-          "unit_price": "109.99",
-          "category": "Updated"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Low stock",
-      "method": "GET",
-      "path": "/api/inventory/low-stock",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.296,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "low_stock_products": [],
-        "count": 0
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Stock alerts",
-      "method": "GET",
-      "path": "/api/inventory/stock-alerts",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.526,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "alerts": [],
-        "total_alerts": 0
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Stock value analytics",
-      "method": "GET",
-      "path": "/api/inventory/analytics/stock-value",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.277,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "total_stock_value": 0,
-        "total_items": 0,
-        "total_products": 0
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Inventory status analytics",
-      "method": "GET",
-      "path": "/api/inventory/analytics/inventory-status",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.36,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "total_products": 0,
-        "low_stock": 0,
-        "critical_stock": 0,
-        "optimal_stock": 0,
-        "overstocked": 0,
-        "total_items_in_stock": 0,
-        "total_stock_value": 0
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Generate purchase orders",
-      "method": "GET",
-      "path": "/api/inventory/generate-purchase-orders",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.321,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "generated",
-        "total_suppliers": 0,
-        "purchase_orders": {},
-        "whatsapp_ready": true
-      }
-    },
-    {
-      "group": "inventory-stock",
-      "name": "Stock movement (in)",
-      "method": "POST",
-      "path": "/api/inventory/stock-movement",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.317,
-      "request": {
-        "body": {
-          "product_id": 1,
-          "movement_type": "in",
-          "quantity": 10,
-          "reason": "Test stock in"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Stock movement recorded",
-        "product_id": 1,
-        "current_stock": 158,
-        "movement_type": "IN"
-      }
-    },
-    {
-      "group": "inventory-stock",
-      "name": "Get stock movements",
-      "method": "GET",
-      "path": "/api/inventory/stock-movements/1",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.32,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "product_id": 1,
-        "movements": [
-          {
-            "movement_type": "IN",
-            "reason": "Test stock in",
-            "created_at": "2026-06-23T12:13:55.349616",
-            "product_id": 1,
-            "id": 43,
-            "quantity": 10,
-            "reference_id": null
-          },
-          {
-            "movement_type": "IN",
-            "reason": "Test stock in",
-            "created_at": "2026-06-23T12:12:41.315598",
-            "product_id": 1,
-            "id": 42,
-            "quantity": 10,
-            "reference_id": null
-          },
-          {
-            "movement_type": "IN",
-            "reason": "Test stock in",
-            "created_at": "2026-06-23T12:05:39.088460",
-            "product_id": 1,
-            "id": 41,
-            "quantity": 10,
-            "reference_id": null
-          },
-          {
-            "movement_type": "IN",
-            "reason": "Test stock in",
-            "created_at": "2026-06-23T12:02:44.599658",
-            "product_id": 1,
-            "id": 40,
-            "quantity": 10,
-            "reference_id": null
-          },
-          {
-            "movement_type": "IN",
-            "reason": "Test stock in",
-            "created_at": "2026-06-23T11:26:04.084355",
-            "product_id": 1,
-            "id": 39,
-            "quantity": 10,
-            "reference_id": null
-          },
-          {
-            "movement_type": "IN",
-            "reason": "Test stock in",
-            "created_at": "2026-06-23T11:23:55.914115",
-            "product_id": 1,
-            "id": 38,
-            "quantity": 10,
-            "reference_id": null
-          },
-          {
-            "movement_type": "IN",
-            "reason": "Purchase Order Delivery",
-            "created_at": "2026-06-21T14:38:09.184460",
-            "product_id": 1,
-            "id": 5,
-            "quantity": 50,
-            "reference_id": "PO-1"
-          },
-          {
-            "movement_type": "ADJUSTMENT",
-            "reason": "MANUAL_CORRECTION: physical count",
-            "created_at": "2026-06-21T14:36:21.982614",
-            "product_id": 1,
-            "id": 4,
-            "quantity": 9,
-            "reference_id": "RECONCILIATION_20260621143622"
-          },
-          {
-            "movement_type": "OUT",
-            "reason": "SALE",
-            "created_at": "2026-06-21T14:36:16.207005",
-            "product_id": 1,
-            "id": 3,
-            "quantity": 1,
-            "reference_id": "B-1782052575"
-          },
-          {
-            "movement_type": "OUT",
-            "reason": "test sale",
-            "created_at": "2026-06-21T14:36:12.474437",
-            "product_id": 1,
-            "id": 2,
-            "quantity": 2,
-            "reference_id": "REF-1782052572"
-          },
-          {
-            "movement_type": "IN",
-            "reason": "Test stock in",
-            "created_at": "2026-06-21T14:35:46.444355",
-            "product_id": 1,
-            "id": 1,
-            "quantity": 10,
-            "reference_id": null
-          }
-        ],
-        "total_movements": 11
-      }
-    },
-    {
-      "group": "inventory-stock",
-      "name": "Create batch",
-      "method": "POST",
-      "path": "/api/inventory/batches",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.319,
-      "request": {
-        "body": {
-          "product_id": 1,
-          "batch_number": "BATCH-1782216835",
-          "quantity": 50,
-          "expiry_date": "2026-09-21",
-          "purchase_price": "75.00"
-        },
-        "params": null
-      },
-      "response": {
-        "batch_number": "BATCH-1782216835",
-        "expiry_date": "2026-09-21",
-        "manufacture_date": null,
-        "id": 13,
-        "product_id": 1,
-        "quantity": 50
-      }
-    },
-    {
-      "group": "inventory-stock",
-      "name": "Get batches for product",
-      "method": "GET",
-      "path": "/api/inventory/batches/1",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.268,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": [
-        {
-          "batch_number": "BATCH-1782052554",
-          "expiry_date": "2026-12-18",
-          "manufacture_date": null,
-          "id": 1,
-          "product_id": 1,
-          "quantity": 20
-        },
-        {
-          "batch_number": "BATCH-1782213835",
-          "expiry_date": "2026-09-21",
-          "manufacture_date": null,
-          "id": 8,
-          "product_id": 1,
-          "quantity": 50
-        },
-        {
-          "batch_number": "BATCH-1782213963",
-          "expiry_date": "2026-09-21",
-          "manufacture_date": null,
-          "id": 9,
-          "product_id": 1,
-          "quantity": 50
-        },
-        {
-          "batch_number": "BATCH-1782216164",
-          "expiry_date": "2026-09-21",
-          "manufacture_date": null,
-          "id": 10,
-          "product_id": 1,
-          "quantity": 50
-        },
-        {
-          "batch_number": "BATCH-1782216338",
-          "expiry_date": "2026-09-21",
-          "manufacture_date": null,
-          "id": 11,
-          "product_id": 1,
-          "quantity": 50
-        },
-        {
-          "batch_number": "BATCH-1782216761",
-          "expiry_date": "2026-09-21",
-          "manufacture_date": null,
-          "id": 12,
-          "product_id": 1,
-          "quantity": 50
-        },
-        {
-          "batch_number": "BATCH-1782216835",
-          "expiry_date": "2026-09-21",
-          "manufacture_date": null,
-          "id": 13,
-          "product_id": 1,
-          "quantity": 50
-        }
-      ]
-    },
-    {
-      "group": "inventory-stock",
-      "name": "Expiring batches",
-      "method": "GET",
-      "path": "/api/inventory/expiring-batches",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.291,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "expiring_batches": [],
-        "count": 0
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Current stock for product",
-      "method": "GET",
-      "path": "/api/inventory-sync/current-stock/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.324,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "All stock",
-      "method": "GET",
-      "path": "/api/inventory-sync/all-stock",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.582,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "user_id": 40,
-        "timestamp": "2026-06-23T12:13:57.371732",
-        "total_products": 0,
-        "products": []
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Deduct stock",
-      "method": "POST",
-      "path": "/api/inventory-sync/deduct-stock",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.454,
-      "request": {
-        "body": {
-          "product_id": 1,
-          "quantity": 2,
-          "reason": "test sale",
-          "reference_id": "REF-1782216836"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "idempotency_key"
-            ],
-            "msg": "Field required",
-            "input": {
-              "product_id": 1,
-              "quantity": 2,
-              "reason": "test sale",
-              "reference_id": "REF-1782216836"
-            },
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Deduct stock batch",
-      "method": "POST",
-      "path": "/api/inventory-sync/deduct-stock-batch",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.319,
-      "request": {
-        "body": {
-          "updates": [
-            {
-              "product_id": 1,
-              "quantity": 1,
-              "reference_id": "B-1782216836"
-            }
-          ]
-        },
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "updates",
-              0,
-              "idempotency_key"
-            ],
-            "msg": "Field required",
-            "input": {
-              "product_id": 1,
-              "quantity": 1,
-              "reference_id": "B-1782216836"
-            },
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Reconcile stock",
-      "method": "POST",
-      "path": "/api/inventory-sync/reconcile",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.321,
-      "request": {
-        "body": {
-          "local_inventory": [
-            {
-              "product_id": 1,
-              "quantity": 45
-            }
-          ]
-        },
-        "params": null
-      },
-      "response": {
-        "reconciled": true,
-        "discrepancies_found": 1,
-        "fixes_applied": 0,
-        "details": [
-          {
-            "product_id": 1,
-            "product_name": "Unknown",
-            "issue": "Product not found in backend",
-            "local_stock": 0,
-            "backend_stock": null,
-            "action": "DELETE_LOCAL"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Full reconciliation",
-      "method": "POST",
-      "path": "/api/inventory-reconcile/full-reconciliation",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.29,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "user_id": 40,
-        "timestamp": "2026-06-23T12:13:58.853956",
-        "total_products": 0,
-        "discrepancies_found": 0,
-        "fixes_applied": 0,
-        "discrepancies": [],
-        "backend_stock_summary": {
-          "total_products": 0,
-          "total_stock_units": 0,
-          "total_stock_value": 0,
-          "low_stock_count": 0,
-          "out_of_stock_count": 0
-        }
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Correct stock",
-      "method": "POST",
-      "path": "/api/inventory-reconcile/correct-stock",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Product not found'}",
-      "duration": 0.283,
-      "request": {
-        "body": {
-          "product_id": 1,
-          "correct_stock": 48,
-          "reason": "physical count"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Audit trail",
-      "method": "GET",
-      "path": "/api/inventory-reconcile/audit-trail/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.296,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Auto-fix discrepancies",
-      "method": "POST",
-      "path": "/api/inventory-reconcile/auto-fix-discrepancies",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.285,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "success": true,
-        "user_id": 40,
-        "timestamp": "2026-06-23T12:13:59.715533",
-        "total_products_corrected": 0,
-        "corrected_inventory": [],
-        "message": "Local cache should be replaced with this data"
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Delete product (products route)",
-      "method": "DELETE",
-      "path": "/api/products/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.754,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "inventory-sync",
-      "name": "Delete product (inventory route)",
-      "method": "DELETE",
-      "path": "/api/inventory/products/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.295,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Product not found"
-      }
-    },
-    {
-      "group": "customers",
-      "name": "Create customer",
-      "method": "POST",
-      "path": "/api/customers/",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.369,
-      "request": {
-        "body": {
-          "customer_name": "Test Customer 1782216840",
-          "phone": "9882216840",
-          "email": "cust_1782216840@test.com",
-          "city": "Hyderabad"
-        },
-        "params": null
-      },
-      "response": {
-        "id": 22,
-        "customer_name": "Test Customer 1782216840",
-        "email": "cust_1782216840@test.com",
-        "phone": "9882216840",
-        "whatsapp_number": null,
-        "address": null,
-        "city": "Hyderabad",
-        "state": null,
-        "postal_code": null,
-        "credit_limit": 0.0,
-        "payment_terms": null,
-        "contact_preference": "EMAIL",
-        "created_at": "2026-06-23T12:14:01.059637"
-      }
-    },
-    {
-      "group": "customers",
-      "name": "List customers",
-      "method": "GET",
-      "path": "/api/customers/",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.273,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": [
-        {
-          "id": 22,
-          "customer_name": "Test Customer 1782216840",
-          "email": "cust_1782216840@test.com",
-          "phone": "9882216840",
-          "whatsapp_number": null,
-          "address": null,
-          "city": "Hyderabad",
-          "state": null,
-          "postal_code": null,
-          "credit_limit": 0.0,
-          "payment_terms": null,
-          "contact_preference": "EMAIL",
-          "created_at": "2026-06-23T12:14:01.059637"
-        }
-      ]
-    },
-    {
-      "group": "customers",
-      "name": "Get customer",
-      "method": "GET",
-      "path": "/api/customers/22",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.352,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "id": 22,
-        "customer_name": "Test Customer 1782216840",
-        "email": "cust_1782216840@test.com",
-        "phone": "9882216840",
-        "whatsapp_number": null,
-        "address": null,
-        "city": "Hyderabad",
-        "state": null,
-        "postal_code": null,
-        "credit_limit": 0.0,
-        "payment_terms": null,
-        "contact_preference": "EMAIL",
-        "created_at": "2026-06-23T12:14:01.059637"
-      }
-    },
-    {
-      "group": "customers",
-      "name": "Update customer",
-      "method": "PUT",
-      "path": "/api/customers/22",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.296,
-      "request": {
-        "body": {
-          "city": "Mumbai"
-        },
-        "params": null
-      },
-      "response": {
-        "id": 22,
-        "customer_name": "Test Customer 1782216840",
-        "email": "cust_1782216840@test.com",
-        "phone": "9882216840",
-        "whatsapp_number": null,
-        "address": null,
-        "city": "Mumbai",
-        "state": null,
-        "postal_code": null,
-        "credit_limit": 0.0,
-        "payment_terms": null,
-        "contact_preference": "EMAIL",
-        "created_at": "2026-06-23T12:14:01.059637"
-      }
-    },
-    {
-      "group": "customers",
-      "name": "Set contact preference",
-      "method": "POST",
-      "path": "/api/customers/22/set-contact-preference",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.343,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "preference"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "customers",
-      "name": "Search by phone",
-      "method": "GET",
-      "path": "/api/customers/search/by-phone",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.317,
-      "request": {
-        "body": null,
-        "params": {
-          "phone": "9999999999"
-        }
-      },
-      "response": []
-    },
-    {
-      "group": "customers",
-      "name": "Search by name",
-      "method": "GET",
-      "path": "/api/customers/search/by-name",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.32,
-      "request": {
-        "body": null,
-        "params": {
-          "name": "Test"
-        }
-      },
-      "response": {
-        "search_term": "Test",
-        "results": [
-          {
-            "customer_name": "Test Customer 1782216840",
-            "phone": "9882216840",
-            "address": null,
-            "state": null,
-            "credit_limit": 0.0,
-            "contact_preference": "EMAIL",
-            "created_at": "2026-06-23T12:14:01.059637",
-            "updated_at": "2026-06-23T12:14:02.053206",
-            "user_id": 40,
-            "id": 22,
-            "email": "cust_1782216840@test.com",
-            "whatsapp_number": null,
-            "city": "Mumbai",
-            "postal_code": null,
-            "payment_terms": null,
-            "is_active": true
-          }
-        ],
-        "count": 1
-      }
-    },
-    {
-      "group": "customers",
-      "name": "Credit score",
-      "method": "GET",
-      "path": "/api/credit-score/22",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.32,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "customer_id": 22,
-        "credit_score": 50,
-        "badge": "REGULAR",
-        "reason": "New customer"
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "Create invoice",
-      "method": "POST",
-      "path": "/api/invoices/create",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.319,
-      "request": {
-        "body": {
-          "invoice_number": "INV-1782216843",
-          "customer_name": "Test Customer",
-          "customer_phone": "1234567890",
-          "total_amount": 500.0,
-          "paid_amount": 500.0,
-          "tax": 9.0,
-          "payment_status": "paid",
-          "invoice_date": "2026-06-23",
-          "line_items": [
-            {
-              "product_name": "Widget",
-              "quantity": 2,
-              "unit_price": 250.0,
-              "total": 500.0
-            }
-          ]
-        },
-        "params": null
-      },
-      "response": {
-        "id": 84,
-        "invoice_id": 84,
-        "invoice_number": "INV-1782216843",
-        "total_amount": 500.0,
-        "paid_amount": 500.0,
-        "subtotal": 491.0,
-        "tax": 9.0,
-        "status": "SENT",
-        "payment_status": "PAID",
-        "invoice_date": "2026-06-23",
-        "created_at": "2026-06-23T12:14:03.659653",
-        "message": "Invoice created successfully.",
-        "line_items": [
-          {
-            "product_id": null,
-            "product_name": "Widget",
-            "quantity": 2,
-            "unit_price": 250.0,
-            "total": 500.0
-          }
-        ]
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "Sync invoice (offline)",
-      "method": "POST",
-      "path": "/api/invoices/sync",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.29,
-      "request": {
-        "body": {
-          "invoice_number": "INV-OFF-1782216843",
-          "customer_name": "Offline Customer",
-          "total_amount": 300.0,
-          "paid_amount": 300.0,
-          "payment_status": "paid",
-          "invoice_date": "2026-06-23"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "line_items"
-            ],
-            "msg": "Field required",
-            "input": {
-              "invoice_number": "INV-OFF-1782216843",
-              "customer_name": "Offline Customer",
-              "total_amount": 300.0,
-              "paid_amount": 300.0,
-              "payment_status": "paid",
-              "invoice_date": "2026-06-23"
-            },
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "List invoices",
-      "method": "GET",
-      "path": "/api/invoices/",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.274,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": [
-        {
-          "invoice_number": "INV-1782216843",
-          "status": "SENT",
-          "id": 84,
-          "offline_id": null,
-          "payment_status": "PAID",
-          "invoice_date": "2026-06-23",
-          "payment_method": null,
-          "due_date": "2026-06-23",
-          "source": "MANUAL_ENTRY",
-          "customer_id": 23,
-          "subtotal": 491.0,
-          "notes": "",
-          "customer_name": "Test Customer",
-          "tax": 9.0,
-          "created_at": "2026-06-23T12:14:03.659653",
-          "customer_phone": "1234567890",
-          "total_amount": 500.0,
-          "updated_at": "2026-06-23T12:14:03.659653",
-          "user_id": 40,
-          "paid_amount": 500.0
-        }
-      ]
-    },
-    {
-      "group": "invoices",
-      "name": "Get invoice",
-      "method": "GET",
-      "path": "/api/invoices/84",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.305,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "id": 84,
-        "invoice_number": "INV-1782216843",
-        "total_amount": 500.0,
-        "paid_amount": 500.0,
-        "subtotal": 491.0,
-        "tax": 9.0,
-        "status": "SENT",
-        "payment_status": "PAID",
-        "invoice_date": "2026-06-23",
-        "created_at": "2026-06-23T12:14:03.659653",
-        "line_items": [
-          {
-            "product_id": null,
-            "product_name": "Widget",
-            "quantity": 2,
-            "unit_price": 250.0,
-            "total": 500.0
-          }
-        ]
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "Overdue invoices",
-      "method": "GET",
-      "path": "/api/invoices/overdue",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.268,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "overdue_invoices": [],
-        "count": 0,
-        "days_overdue_threshold": 30
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "Payments list",
-      "method": "GET",
-      "path": "/api/invoices/payments",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.462,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "payments": [],
-        "count": 0
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "Invoice analytics",
-      "method": "GET",
-      "path": "/api/invoices/analytics/summary",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.325,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "period": {
-          "start": "2026-06-01",
-          "end": "2026-06-23"
-        },
-        "total_invoices": 1,
-        "total_amount": 500.0,
-        "total_paid": 500.0,
-        "outstanding_amount": 0.0,
-        "payment_status_breakdown": {
-          "paid": 1,
-          "unpaid": 0,
-          "partial": 0
-        },
-        "status_breakdown": {
-          "sent": 1,
-          "overdue": 0
-        },
-        "collection_rate": 100.0
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "Generate bill",
-      "method": "POST",
-      "path": "/bill/Generate/Bill",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.314,
-      "request": {
-        "body": {
-          "bill_type": "retail"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "Product"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          },
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "Price"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          },
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "Quantity"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "invoices",
-      "name": "Scan bill",
-      "method": "GET",
-      "path": "/bill/scan/1",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.319,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": "<h3>Bill expired</h3>"
-    },
-    {
-      "group": "invoices",
-      "name": "Rate limit status (invoices)",
-      "method": "GET",
-      "path": "/api/rate-limit/status/invoices",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.32,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "endpoint": "invoices",
-        "limit": 1000,
-        "window_seconds": 60,
-        "remaining": 1000,
-        "reset_in_seconds": null,
-        "user_id": "117.99.198.202"
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Create worker",
-      "method": "POST",
-      "path": "/api/attendance/workers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.386,
-      "request": {
-        "body": {
-          "name": "Worker_1782216846",
-          "phone": "8782216846",
-          "position": "Cashier",
-          "salary": "18000"
-        },
-        "params": null
-      },
-      "response": {
-        "name": "Worker_1782216846",
-        "phone": "8782216846",
-        "shopkeeper_id": 40,
-        "address": "",
-        "assigned_work": "",
-        "position": "Cashier",
-        "status": "active",
-        "id": 23,
-        "salary": 18000.0,
-        "join_date": "2026-06-23",
-        "pin": ""
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "List workers",
-      "method": "GET",
-      "path": "/api/attendance/workers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.981,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": [
-        {
-          "name": "Worker_1782216846",
-          "phone": "8782216846",
-          "shopkeeper_id": 40,
-          "address": "",
-          "assigned_work": "",
-          "position": "Cashier",
-          "status": "active",
-          "id": 23,
-          "salary": 18000.0,
-          "join_date": "2026-06-23",
-          "pin": ""
-        }
-      ]
-    },
-    {
-      "group": "attendance",
-      "name": "Update worker",
-      "method": "PUT",
-      "path": "/api/attendance/workers/23",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.343,
-      "request": {
-        "body": {
-          "salary": "22000",
-          "position": "Senior Cashier"
-        },
-        "params": null
-      },
-      "response": {
-        "name": "Worker_1782216846",
-        "phone": "8782216846",
-        "shopkeeper_id": 40,
-        "address": "",
-        "assigned_work": "",
-        "position": "Senior Cashier",
-        "status": "active",
-        "id": 23,
-        "salary": 22000.0,
-        "join_date": "2026-06-23",
-        "pin": ""
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Check-in",
-      "method": "POST",
-      "path": "/api/attendance/check-in",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.288,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "employee_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Check-out",
-      "method": "POST",
-      "path": "/api/attendance/check-out",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.266,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "employee_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Manual attendance record",
-      "method": "POST",
-      "path": "/api/attendance/record-manual",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.275,
-      "request": {
-        "body": {
-          "employee_id": 23,
-          "attendance_date": "2026-06-23",
-          "status": "present",
-          "notes": "Auto test"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Attendance recorded successfully",
-        "worker_id": 23,
-        "status": "PRESENT"
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Employee attendance history",
-      "method": "GET",
-      "path": "/api/attendance/employee/23",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.274,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "employee_id": 23,
-        "records": [
-          {
-            "attendance_date": "2026-06-28",
-            "check_in_time": null,
-            "check_out_time": null,
-            "working_hours": 0.0,
-            "id": 27,
-            "employee_id": 23,
-            "status": "LEAVE",
-            "notes": null
-          },
-          {
-            "attendance_date": "2026-06-27",
-            "check_in_time": null,
-            "check_out_time": null,
-            "working_hours": 0.0,
-            "id": 26,
-            "employee_id": 23,
-            "status": "LEAVE",
-            "notes": null
-          },
-          {
-            "attendance_date": "2026-06-22",
-            "check_in_time": null,
-            "check_out_time": null,
-            "working_hours": 0.0,
-            "id": 25,
-            "employee_id": 23,
-            "status": "PRESENT",
-            "notes": "Auto test"
-          }
-        ],
-        "total_records": 3
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Attendance by date",
-      "method": "GET",
-      "path": "/api/attendance/date/2026-06-23",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.287,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "date": "2026-06-23",
-        "total_records": 4,
-        "present": 4,
-        "absent": 0,
-        "leave": 0,
-        "records": [
-          {
-            "attendance_date": "2026-06-23",
-            "check_in_time": "2026-06-23T03:56:16.042385",
-            "check_out_time": null,
-            "working_hours": 0.0,
-            "id": 30,
-            "employee_id": 29,
-            "status": "PRESENT",
-            "notes": null
-          },
-          {
-            "attendance_date": "2026-06-23",
-            "check_in_time": "2026-06-23T10:18:35.795544",
-            "check_out_time": "2026-06-23T10:18:43.610754",
-            "working_hours": 0.0021708916666666666,
-            "id": 31,
-            "employee_id": 27,
-            "status": "PRESENT",
-            "notes": null
-          },
-          {
-            "attendance_date": "2026-06-23",
-            "check_in_time": null,
-            "check_out_time": null,
-            "working_hours": 0.0,
-            "id": 32,
-            "employee_id": 38,
-            "status": "PRESENT",
-            "notes": "Auto test"
-          },
-          {
-            "attendance_date": "2026-06-23",
-            "check_in_time": null,
-            "check_out_time": null,
-            "working_hours": 0.0,
-            "id": 35,
-            "employee_id": 40,
-            "status": "PRESENT",
-            "notes": "Auto test"
-          }
-        ]
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Leave request",
-      "method": "POST",
-      "path": "/api/attendance/leave-request",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.315,
-      "request": {
-        "body": {
-          "employee_id": 23,
-          "leave_type": "casual",
-          "from_date": "2026-06-28",
-          "to_date": "2026-06-29",
-          "reason": "Personal work"
-        },
-        "params": null
-      },
-      "response": {
-        "to_date": "2026-06-29",
-        "leave_type": "PERSONAL",
-        "from_date": "2026-06-28",
-        "status": "PENDING",
-        "id": 9,
-        "employee_id": 40,
-        "reason": "Personal work",
-        "created_at": "2026-06-23T12:14:09.969124"
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "List leave requests",
-      "method": "GET",
-      "path": "/api/attendance/leave-requests",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.283,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "leave_requests": [
-          {
-            "to_date": "2026-06-29",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-28",
-            "status": "PENDING",
-            "id": 9,
-            "employee_id": 40,
-            "reason": "Personal work",
-            "created_at": "2026-06-23T12:14:09.969124"
-          },
-          {
-            "to_date": "2026-06-29",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-28",
-            "status": "REJECTED",
-            "id": 8,
-            "employee_id": 38,
-            "reason": "Personal work",
-            "created_at": "2026-06-23T12:12:54.706304"
-          },
-          {
-            "to_date": "2026-06-28",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-27",
-            "status": "APPROVED",
-            "id": 7,
-            "employee_id": 23,
-            "reason": "Personal work",
-            "created_at": "2026-06-21T20:34:46.575108"
-          },
-          {
-            "to_date": "2026-06-27",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-26",
-            "status": "APPROVED",
-            "id": 6,
-            "employee_id": 19,
-            "reason": "Personal work",
-            "created_at": "2026-06-21T15:13:46.134638"
-          },
-          {
-            "to_date": "2026-06-27",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-26",
-            "status": "APPROVED",
-            "id": 5,
-            "employee_id": 16,
-            "reason": "Personal work",
-            "created_at": "2026-06-21T15:04:50.144520"
-          },
-          {
-            "to_date": "2026-06-27",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-26",
-            "status": "APPROVED",
-            "id": 4,
-            "employee_id": 11,
-            "reason": "Personal work",
-            "created_at": "2026-06-21T14:55:01.340774"
-          },
-          {
-            "to_date": "2026-06-27",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-26",
-            "status": "APPROVED",
-            "id": 3,
-            "employee_id": 9,
-            "reason": "Personal work",
-            "created_at": "2026-06-21T14:50:35.404097"
-          },
-          {
-            "to_date": "2026-06-27",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-26",
-            "status": "APPROVED",
-            "id": 2,
-            "employee_id": 7,
-            "reason": "Personal work",
-            "created_at": "2026-06-21T14:41:44.851022"
-          },
-          {
-            "to_date": "2026-06-27",
-            "leave_type": "PERSONAL",
-            "from_date": "2026-06-26",
-            "status": "REJECTED",
-            "id": 1,
-            "employee_id": 5,
-            "reason": "Personal work",
-            "created_at": "2026-06-21T14:37:31.945183"
-          }
-        ],
-        "total": 9
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Approve leave",
-      "method": "PUT",
-      "path": "/api/attendance/leave-request/9/approve",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.293,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Leave approved"
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Reject leave",
-      "method": "PUT",
-      "path": "/api/attendance/leave-request/9/reject",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.378,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Leave rejected"
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Attendance analytics summary",
-      "method": "GET",
-      "path": "/api/attendance/analytics/summary",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.343,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "period_days": 30,
-        "total_records": 37,
-        "present": 19,
-        "absent": 0,
-        "leave": 18,
-        "total_employees": 41,
-        "attendance_percentage": 51.35135135135135
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Employee analytics",
-      "method": "GET",
-      "path": "/api/attendance/analytics/employee/23",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.357,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "employee_id": 23,
-        "period_days": 30,
-        "present": 1,
-        "absent": 0,
-        "leave": 2,
-        "total_working_hours": 0,
-        "attendance_percentage": 33.33333333333333
-      }
-    },
-    {
-      "group": "khata",
-      "name": "Add credit entry",
-      "method": "POST",
-      "path": "/khata/credit",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.301,
-      "request": {
-        "body": {
-          "customer_phone": "9082216851",
-          "customer_name": "Test Customer",
-          "amount": 500.0,
-          "description": "Test credit"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Khata credit recorded successfully",
-        "customer_phone": "9082216851",
-        "amount_added": 500.0,
-        "total_outstanding": 500.0
-      }
-    },
-    {
-      "group": "khata",
-      "name": "Add repayment",
-      "method": "POST",
-      "path": "/khata/repayment",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.382,
-      "request": {
-        "body": {
-          "customer_phone": "9082216851",
-          "amount": 100.0,
-          "description": "Partial repay"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Repayment recorded successfully",
-        "customer_phone": "9082216851",
-        "amount_paid": 100.0,
-        "remaining_balance": 400.0
-      }
-    },
-    {
-      "group": "khata",
-      "name": "List khata customers",
-      "method": "GET",
-      "path": "/khata/customers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.441,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "total_outstanding": 400.0,
-        "customers": [
-          {
-            "id": 16,
-            "customer_name": "Test Customer",
-            "customer_phone": "9082216851",
-            "khata_balance": 400.0,
-            "last_transaction": "2026-06-23T12:14:12.228549"
-          }
-        ]
-      }
-    },
-    {
-      "group": "khata",
-      "name": "Khata history",
-      "method": "GET",
-      "path": "/khata/history/9082216851",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.483,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": [
-        {
-          "id": 44,
-          "transaction_type": "PAYMENT",
-          "amount": 100.0,
-          "reference_id": "PAY-16-1782216852",
-          "description": "Partial repay",
-          "transaction_date": "2026-06-23T12:14:12.227925"
-        },
-        {
-          "id": 43,
-          "transaction_type": "INVOICE",
-          "amount": 500.0,
-          "reference_id": "KHATA-16-1782216851",
-          "description": "Test credit",
-          "transaction_date": "2026-06-23T12:14:11.929667"
-        }
-      ]
-    },
-    {
-      "group": "khata",
-      "name": "WhatsApp reminder",
-      "method": "GET",
-      "path": "/khata/whatsapp-reminder/9082216851",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.355,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "customer_name": "Test Customer",
-        "customer_phone": "9082216851",
-        "outstanding_balance": 400.0,
-        "whatsapp_url": "https://wa.me/919082216851?text=Namaste%20Test%20Customer%20%F0%9F%99%8F%0A%0AAapka%20khata%20balance%20hai%3A%20%2A%E2%82%B9400.00%2A%0A%0AKripaya%20jaldi%20payment%20karein.%0A%0AShukriya%21%20%F0%9F%8F%AA",
-        "message_preview": "Namaste Test Customer \ud83d\ude4f\n\nAapka khata balance hai: *\u20b9400.00*\n\nKripaya jaldi payment karein.\n\nShukriya! \ud83c\udfea"
-      }
-    },
-    {
-      "group": "khata",
-      "name": "API khata detail",
-      "method": "GET",
-      "path": "/api/khata/9082216851",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.351,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "customer_phone": "9082216851",
-        "khata_balance": 0,
-        "status": "no_customer"
-      }
-    },
-    {
-      "group": "khata",
-      "name": "API khata customers",
-      "method": "GET",
-      "path": "/api/khata/customers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.308,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "customer_phone": "customers",
-        "khata_balance": 0,
-        "status": "no_customer"
-      }
-    },
-    {
-      "group": "khata",
-      "name": "API khata update",
-      "method": "POST",
-      "path": "/api/khata/update",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.306,
-      "request": {
-        "body": {
-          "customer_phone": "9082216851",
-          "amount": 200.0,
-          "transaction_type": "credit",
-          "reference_id": "KH-1782216851"
-        },
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "customer_phone": "9082216851",
-        "new_balance": 600.0,
-        "transaction_type": "credit",
-        "amount": 200.0,
-        "transaction_id": 45
-      }
-    },
-    {
-      "group": "khata",
-      "name": "Khata history (api)",
-      "method": "GET",
-      "path": "/api/khata-history/9082216851",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.311,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "customer_phone": "9082216851",
-        "current_balance": 600.0,
-        "transaction_count": 3,
-        "transactions": [
-          {
-            "id": 45,
-            "type": "INVOICE",
-            "amount": 200.0,
-            "reference_id": "KH-1782216851",
-            "description": "credit - KH-1782216851",
-            "date": "2026-06-23T12:14:14.548176"
-          },
-          {
-            "id": 44,
-            "type": "PAYMENT",
-            "amount": 100.0,
-            "reference_id": "PAY-16-1782216852",
-            "description": "Partial repay",
-            "date": "2026-06-23T12:14:12.227925"
-          },
-          {
-            "id": 43,
-            "type": "INVOICE",
-            "amount": 500.0,
-            "reference_id": "KHATA-16-1782216851",
-            "description": "Test credit",
-            "date": "2026-06-23T12:14:11.929667"
-          }
-        ]
-      }
-    },
-    {
-      "group": "purchase-orders",
-      "name": "Create PO",
-      "method": "POST",
-      "path": "/purchase-orders/",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.301,
-      "request": {
-        "body": {
-          "supplier_name": "ABC Suppliers",
-          "expected_delivery": "2026-06-30",
-          "items": [
-            {
-              "product_id": 1,
-              "quantity": 50,
-              "unit_price": 80.0
-            }
-          ]
-        },
-        "params": null
-      },
-      "response": {
-        "id": 12,
-        "supplier_name": "ABC Suppliers",
-        "status": "DRAFT",
-        "total_cost": 4000.0,
-        "expected_delivery": "2026-06-30",
-        "items_json": "[{\"product_id\": 1, \"product_name\": null, \"quantity\": 50, \"unit_cost\": null, \"unit_price\": 80.0}]",
-        "created_at": "2026-06-23T12:14:15.176251"
-      }
-    },
-    {
-      "group": "purchase-orders",
-      "name": "List POs",
-      "method": "GET",
-      "path": "/purchase-orders/",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.293,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": [
-        {
-          "id": 12,
-          "supplier_name": "ABC Suppliers",
-          "status": "DRAFT",
-          "total_cost": 4000.0,
-          "expected_delivery": "2026-06-30",
-          "items_json": "[{\"product_id\": 1, \"product_name\": null, \"quantity\": 50, \"unit_cost\": null, \"unit_price\": 80.0}]",
-          "created_at": "2026-06-23T12:14:15.176251"
-        }
-      ]
-    },
-    {
-      "group": "purchase-orders",
-      "name": "Mark PO delivered",
-      "method": "POST",
-      "path": "/purchase-orders/12/mark-delivered",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.299,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "PO #12 marked as delivered. Stock updated.",
-        "stock_updates": [],
-        "total_cost": 4000.0
-      }
-    },
-    {
-      "group": "purchase-orders",
-      "name": "Cancel PO",
-      "method": "POST",
-      "path": "/purchase-orders/12/cancel",
-      "status": 409,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 404), got 409. Body: {'detail': 'Cannot cancel a delivered PO.'}",
-      "duration": 0.295,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Cannot cancel a delivered PO."
-      }
-    },
-    {
-      "group": "delivery",
-      "name": "Create delivery",
-      "method": "POST",
-      "path": "/api/delivery/create",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.306,
-      "request": {
-        "body": {
-          "customer_id": 22,
-          "invoice_id": 84,
-          "delivery_address": "123 Test Street, Hyderabad",
-          "delivery_date": "2026-06-24",
-          "special_instructions": "Handle with care"
-        },
-        "params": null
-      },
-      "response": {
-        "delivery_id": 12,
-        "status": "created",
-        "delivery_date": "2026-06-24"
-      }
-    },
-    {
-      "group": "delivery",
-      "name": "Today's deliveries",
-      "method": "GET",
-      "path": "/api/delivery/today",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.343,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "deliveries": []
-      }
-    },
-    {
-      "group": "delivery",
-      "name": "Update delivery status",
-      "method": "POST",
-      "path": "/api/delivery/12/update-status",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.31,
-      "request": {
-        "body": {
-          "status": "delivered",
-          "notes": "Delivered successfully"
-        },
-        "params": null
-      },
-      "response": {
-        "delivery_id": 12,
-        "status": "DELIVERED",
-        "timestamp": "2026-06-23T12:14:17.016459",
-        "notes": "WhatsApp webhook: Send 'DELIVERED' notification to customer"
-      }
-    },
-    {
-      "group": "loyalty",
-      "name": "Earn loyalty points",
-      "method": "POST",
-      "path": "/api/loyalty/earn",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.408,
-      "request": {
-        "body": {
-          "customer_id": 22,
-          "invoice_id": 84,
-          "amount": 500.0
-        },
-        "params": null
-      },
-      "response": {
-        "points_earned": 5,
-        "total_points": 5,
-        "available_points": 5,
-        "tier_name": "Bronze",
-        "tier_bumped": false
-      }
-    },
-    {
-      "group": "loyalty",
-      "name": "Redeem loyalty points",
-      "method": "POST",
-      "path": "/api/loyalty/redeem",
-      "status": 400,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.297,
-      "request": {
-        "body": {
-          "customer_id": 22,
-          "points": 10,
-          "invoice_id": 84
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Insufficient points"
-      }
-    },
-    {
-      "group": "expenses",
-      "name": "Create expense (api)",
-      "method": "POST",
-      "path": "/api/expenses/create",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.344,
-      "request": {
-        "body": {
-          "category": "utilities",
-          "amount": 1500.0,
-          "description": "Electricity bill",
-          "date": "2026-06-23"
-        },
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "expense_id": 22,
-        "amount": 1500.0,
-        "category": "utilities"
-      }
-    },
-    {
-      "group": "expenses",
-      "name": "List expenses (api)",
-      "method": "GET",
-      "path": "/api/expenses",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.322,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "expenses": [
-          {
-            "id": 22,
-            "category": "utilities",
-            "amount": 1500.0,
-            "description": "Electricity bill",
-            "date": "2026-06-23"
-          }
-        ]
-      }
-    },
-    {
-      "group": "expenses",
-      "name": "Expense history (api)",
-      "method": "GET",
-      "path": "/api/expenses/history",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.316,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "category_filter": null,
-        "total_amount": 1500.0,
-        "count": 1,
-        "expenses": [
-          {
-            "id": 22,
-            "category": "utilities",
-            "amount": 1500.0,
-            "description": "Electricity bill",
-            "date": "2026-06-23",
-            "payment_method": null
-          }
-        ]
-      }
-    },
-    {
-      "group": "expenses",
-      "name": "Create expense (legacy)",
-      "method": "POST",
-      "path": "/expenses",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.481,
-      "request": {
-        "body": {
-          "category": "rent",
-          "amount": 20000.0,
-          "expense_date": "2026-06-23",
-          "payment_method": "cash"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Expense logged successfully.",
-        "amount": 20000.0,
-        "category": "rent"
-      }
-    },
-    {
-      "group": "expenses",
-      "name": "List expenses (legacy)",
-      "method": "GET",
-      "path": "/expenses",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.289,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "total_expenses": 21500.0,
-        "expenses": [
-          {
-            "id": 22,
-            "category": "utilities",
-            "amount": 1500.0,
-            "description": "Electricity bill",
-            "expense_date": "2026-06-23",
-            "payment_method": null
-          },
-          {
-            "id": 23,
-            "category": "rent",
-            "amount": 20000.0,
-            "description": null,
-            "expense_date": "2026-06-23",
-            "payment_method": "cash"
-          }
-        ]
-      }
-    },
-    {
-      "group": "workers",
-      "name": "Create enterprise worker",
-      "method": "POST",
-      "path": "/workers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.348,
-      "request": {
-        "body": {
-          "name": "Ent_Worker_1782216859",
-          "position": "Manager",
-          "salary": "30000"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Worker added successfully.",
-        "worker_id": 24,
-        "name": "Ent_Worker_1782216859"
-      }
-    },
-    {
-      "group": "workers",
-      "name": "List enterprise workers",
-      "method": "GET",
-      "path": "/workers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.479,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "total_monthly_salary": 52000.0,
-        "workers": [
-          {
-            "id": 23,
-            "name": "Worker_1782216846",
-            "phone": "8782216846",
-            "position": "Senior Cashier",
-            "salary": 22000.0,
-            "assigned_work": "",
-            "status": "active",
-            "join_date": "2026-06-23"
-          },
-          {
-            "id": 24,
-            "name": "Ent_Worker_1782216859",
-            "phone": null,
-            "position": "Manager",
-            "salary": 30000.0,
-            "assigned_work": null,
-            "status": "active",
-            "join_date": "2026-06-23"
-          }
-        ]
-      }
-    },
-    {
-      "group": "workers",
-      "name": "Update enterprise worker",
-      "method": "PUT",
-      "path": "/workers/24",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.293,
-      "request": {
-        "body": {
-          "salary": "19000",
-          "status": "active"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Worker updated.",
-        "worker_id": 24
-      }
-    },
-    {
-      "group": "workers",
-      "name": "Pay salary",
-      "method": "POST",
-      "path": "/workers/24/pay-salary?month=2026-06",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.278,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Salary of \u20b919000.00 paid to Ent_Worker_1782216859 for 2026-06.",
-        "amount": 19000.0,
-        "worker_name": "Ent_Worker_1782216859"
-      }
-    },
-    {
-      "group": "enterprise",
-      "name": "Create bank recon",
-      "method": "POST",
-      "path": "/bank-recon",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.279,
-      "request": {
-        "body": {
-          "recon_date": "2026-06-23",
-          "expected_upi_amount": 50000.0,
-          "actual_bank_deposit": 49800.0,
-          "notes": "Minor discrepancy"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Reconciliation recorded.",
-        "status": "DISCREPANCY",
-        "difference": 200.0,
-        "date": "2026-06-23",
-        "alert": "\u26a0\ufe0f Discrepancy of \u20b9200.00 detected!"
-      }
-    },
-    {
-      "group": "enterprise",
-      "name": "List bank recons",
-      "method": "GET",
-      "path": "/bank-recon",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.27,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "records": [
-          {
-            "id": 11,
-            "date": "2026-06-23",
-            "expected_upi": 50000.0,
-            "actual_bank": 49800.0,
-            "status": "DISCREPANCY",
-            "difference": 200.0,
-            "notes": "Minor discrepancy"
-          }
-        ]
-      }
-    },
-    {
-      "group": "enterprise",
-      "name": "Enterprise P&L",
-      "method": "GET",
-      "path": "/enterprise/pnl",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.298,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "period": {
-          "start": "2026-06-01",
-          "end": "2026-06-23"
-        },
-        "total_income": 1100.0,
-        "total_expenses": 43000.0,
-        "net_profit": -41900.0,
-        "profit_margin_pct": -3809.09,
-        "status": "LOSS",
-        "breakdown": [
-          {
-            "category": "KHATA_CREDIT",
-            "type": "INCOME",
-            "total": 500.0,
-            "transactions": 1
-          },
-          {
-            "category": "KHATA_REPAY",
-            "type": "INCOME",
-            "total": 100.0,
-            "transactions": 1
-          },
-          {
-            "category": "PO_PAYMENT",
-            "type": "EXPENSE",
-            "total": 4000.0,
-            "transactions": 1
-          },
-          {
-            "category": "RENT",
-            "type": "EXPENSE",
-            "total": 20000.0,
-            "transactions": 1
-          },
-          {
-            "category": "SALARY",
-            "type": "EXPENSE",
-            "total": 19000.0,
-            "transactions": 1
-          },
-          {
-            "category": "SALE",
-            "type": "INCOME",
-            "total": 500.0,
-            "transactions": 1
-          }
-        ]
-      }
-    },
-    {
-      "group": "enterprise",
-      "name": "Enterprise transactions",
-      "method": "GET",
-      "path": "/enterprise/transactions",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.499,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "transactions": [
-          {
-            "id": 144,
-            "type": "EXPENSE",
-            "category": "SALARY",
-            "amount": 19000.0,
-            "reference_id": "SALARY-W24-2026-06",
-            "description": "Salary: Ent_Worker_1782216859 (2026-06)",
-            "date": "2026-06-23T12:14:20.900329"
-          },
-          {
-            "id": 143,
-            "type": "EXPENSE",
-            "category": "RENT",
-            "amount": 20000.0,
-            "reference_id": null,
-            "description": "rent expense",
-            "date": "2026-06-23T12:14:19.198003"
-          },
-          {
-            "id": 142,
-            "type": "EXPENSE",
-            "category": "PO_PAYMENT",
-            "amount": 4000.0,
-            "reference_id": "PO-12",
-            "description": "Purchase Order from ABC Suppliers",
-            "date": "2026-06-23T12:14:15.778581"
-          },
-          {
-            "id": 141,
-            "type": "INCOME",
-            "category": "KHATA_REPAY",
-            "amount": 100.0,
-            "reference_id": "KHATA-PAY-16",
-            "description": "Khata repayment from 9082216851",
-            "date": "2026-06-23T12:14:12.227925"
-          },
-          {
-            "id": 140,
-            "type": "INCOME",
-            "category": "KHATA_CREDIT",
-            "amount": 500.0,
-            "reference_id": "KHATA-16",
-            "description": "Khata credit for 9082216851",
-            "date": "2026-06-23T12:14:11.929667"
-          },
-          {
-            "id": 139,
-            "type": "INCOME",
-            "category": "SALE",
-            "amount": 500.0,
-            "reference_id": "INV-1782216843",
-            "description": "Manual Invoice: INV-1782216843",
-            "date": "2026-06-23T00:00:00"
-          }
-        ]
-      }
-    },
-    {
-      "group": "enterprise",
-      "name": "Retail stock analysis",
-      "method": "GET",
-      "path": "/retail/stock-analysis",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.321,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "fast_moving_products": [],
-        "low_stock_alerts": [],
-        "out_of_stock": [],
-        "summary": {
-          "total_products": 0,
-          "low_stock_count": 0,
-          "out_of_stock_count": 0
-        }
-      }
-    },
-    {
-      "group": "reports",
-      "name": "Daily report",
-      "method": "GET",
-      "path": "/api/reports/daily",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.297,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "report": {
-          "report_id": 14,
-          "report_date": "2026-06-23",
-          "total_revenue": 0.0,
-          "total_expenses": 0.0,
-          "total_profit": 0.0,
-          "bill_count": 1,
-          "top_product": "N/A",
-          "cash": 0.0,
-          "upi": 0.0,
-          "card": 0.0
-        }
-      }
-    },
-    {
-      "group": "reports",
-      "name": "Churn risk",
-      "method": "GET",
-      "path": "/api/analytics/churn-risk",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.29,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "at_risk_count": 0,
-        "customers": []
-      }
-    },
-    {
-      "group": "reports",
-      "name": "Today collections",
-      "method": "GET",
-      "path": "/api/collections/today-summary",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.294,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "today_upi_total": 0.0,
-        "pending_transactions": 0,
-        "confirmed_transactions": 0,
-        "unmatched_count": 0,
-        "error": "(psycopg2.errors.InvalidTextRepresentation) invalid input value for enum order_status: \"CONFIRM\"\nLINE 3: ...06-23'::date AND upi_ledger.status IN ('PENDING', 'CONFIRM')\n                                                             ^\n\n[SQL: SELECT sum(upi_ledger.amount) AS sum_1 \nFROM upi_ledger \nWHERE upi_ledger.shop_id = %(shop_id_1)s AND date(upi_ledger.payment_date) = %(date_1)s AND upi_ledger.status IN (%(status_1_1)s, %(status_1_2)s)]\n[parameters: {'shop_id_1': 1, 'date_1': datetime.date(2026, 6, 23), 'status_1_1': 'PENDING', 'status_1_2': 'CONFIRM'}]\n(Background on this error at: https://sqlalche.me/e/20/9h9h)"
-      }
-    },
-    {
-      "group": "reports",
-      "name": "Recent transactions",
-      "method": "GET",
-      "path": "/api/transactions/recent",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.315,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "count": 50,
-        "transactions": [
-          {
-            "type": "CASH",
-            "customer_name": "Test Customer",
-            "customer_phone": "1234567890",
-            "amount": 500.0,
-            "date": "2026-06-23T12:14:03.659653",
-            "reference_id": "INV-1782216843",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 25.0,
-            "date": "2026-06-23T06:10:19.477854",
-            "reference_id": "SALE_1782195018799996_799",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 10.0,
-            "date": "2026-06-23T03:50:06.670106",
-            "reference_id": "SALE_1782186606047712_47",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 150.0,
-            "date": "2026-06-23T03:12:23.729070",
-            "reference_id": "SALE_1782179149230434_230",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 10.0,
-            "date": "2026-06-22T15:22:55.995930",
-            "reference_id": "SALE_1782141776313307_313",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 10.0,
-            "date": "2026-06-22T12:27:20.053209",
-            "reference_id": "SALE_1782131240464299_464",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 25.0,
-            "date": "2026-06-22T09:26:48.599635",
-            "reference_id": "SALE_1782120407945814",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 20.0,
-            "date": "2026-06-22T09:25:47.625472",
-            "reference_id": "SALE_1782120346998891",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 10.0,
-            "date": "2026-06-22T01:27:11.649397",
-            "reference_id": "SALE_1782091631137298",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 25.0,
-            "date": "2026-06-22T01:26:41.564313",
-            "reference_id": "SALE_1782091601054194",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 10.0,
-            "date": "2026-06-21T21:07:52.331141",
-            "reference_id": "SALE_1782076071846358",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 25.0,
-            "date": "2026-06-21T21:07:37.748183",
-            "reference_id": "SALE_1782076056712759",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 10.0,
-            "date": "2026-06-21T21:07:13.542982",
-            "reference_id": "SALE_1782076033035303",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 200.0,
-            "date": "2026-06-21T20:34:18.732554",
-            "reference_id": "INV-OFF-1782074058",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 1180.0,
-            "date": "2026-06-21T20:34:01.656716",
-            "reference_id": "INV-GST-1782073954",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 118.0,
-            "date": "2026-06-21T20:33:53.362648",
-            "reference_id": "INV-SCHEMA-1782073954",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 300.0,
-            "date": "2026-06-21T20:33:48.049422",
-            "reference_id": "INV-OFF-1782073954-DEDUP",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:44.430202",
-            "reference_id": "CONC-1782073954-9",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:44.355222",
-            "reference_id": "CONC-1782073954-7",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:44.314762",
-            "reference_id": "CONC-1782073954-8",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:44.087218",
-            "reference_id": "CONC-1782073954-5",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:44.085591",
-            "reference_id": "CONC-1782073954-4",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:43.980304",
-            "reference_id": "CONC-1782073954-6",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:43.885212",
-            "reference_id": "CONC-1782073954-2",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:43.885001",
-            "reference_id": "CONC-1782073954-3",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:43.815294",
-            "reference_id": "CONC-1782073954-1",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T20:33:43.761158",
-            "reference_id": "CONC-1782073954-0",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 200.0,
-            "date": "2026-06-21T20:32:56.391757",
-            "reference_id": "INV-PNAME-1782073954",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 100.0,
-            "date": "2026-06-21T20:32:53.530123",
-            "reference_id": "INV-DUP-1782073954",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 250.0,
-            "date": "2026-06-21T20:32:49.752743",
-            "reference_id": "INV-DEDUCT-1782073954",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 11.0,
-            "date": "2026-06-21T16:19:00.177595",
-            "reference_id": "SALE_1782058739749965",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 25.0,
-            "date": "2026-06-21T16:18:15.872644",
-            "reference_id": "SALE_1782058695435419",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 200.0,
-            "date": "2026-06-21T16:12:22.096963",
-            "reference_id": "SALE_1782058341678794",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 1180.0,
-            "date": "2026-06-21T16:04:40.138325",
-            "reference_id": "INV-GST-1782057778",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 118.0,
-            "date": "2026-06-21T16:04:17.681142",
-            "reference_id": "INV-SCHEMA-1782057778",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 300.0,
-            "date": "2026-06-21T16:04:10.160459",
-            "reference_id": "INV-OFF-1782057778-DEDUP",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:04.210392",
-            "reference_id": "CONC-1782057778-7",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:04.149280",
-            "reference_id": "CONC-1782057778-9",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:04.147144",
-            "reference_id": "CONC-1782057778-6",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:04.062456",
-            "reference_id": "CONC-1782057778-5",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:04.061558",
-            "reference_id": "CONC-1782057778-8",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:02.674130",
-            "reference_id": "CONC-1782057778-4",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:02.639777",
-            "reference_id": "CONC-1782057778-2",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:02.638542",
-            "reference_id": "CONC-1782057778-3",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:02.604222",
-            "reference_id": "CONC-1782057778-1",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 50.0,
-            "date": "2026-06-21T16:04:02.603192",
-            "reference_id": "CONC-1782057778-0",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 200.0,
-            "date": "2026-06-21T16:03:22.729140",
-            "reference_id": "INV-PNAME-1782057778",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 100.0,
-            "date": "2026-06-21T16:03:17.327603",
-            "reference_id": "INV-DUP-1782057778",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 250.0,
-            "date": "2026-06-21T16:03:10.223207",
-            "reference_id": "INV-DEDUCT-1782057778",
-            "payment_status": "PAID"
-          },
-          {
-            "type": "CASH",
-            "customer_name": "Cash Customer",
-            "customer_phone": null,
-            "amount": 200.0,
-            "date": "2026-06-21T15:13:09.321272",
-            "reference_id": "INV-OFF-1782054788",
-            "payment_status": "PAID"
-          }
-        ]
-      }
-    },
-    {
-      "group": "reports",
-      "name": "Online payments",
-      "method": "GET",
-      "path": "/api/transactions/online-payments",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.295,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "online_count": 0,
-        "transactions": []
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Counter authenticate",
-      "method": "POST",
-      "path": "/api/counter/authenticate",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.288,
-      "request": {
-        "body": {
-          "billing_pin": "1234"
-        },
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "staff": {
-          "authenticated": false,
-          "error": "Invalid PIN"
-        }
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Upcoming festivals",
-      "method": "GET",
-      "path": "/api/festivals/upcoming",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.306,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "festivals": []
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Today occasions",
-      "method": "GET",
-      "path": "/api/occasions/today",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.285,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "occasions": []
-      }
-    },
-    {
-      "group": "misc",
-      "name": "List templates",
-      "method": "GET",
-      "path": "/api/templates",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.286,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "templates": []
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Save template",
-      "method": "POST",
-      "path": "/api/templates/save",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.302,
-      "request": {
-        "body": {
-          "template_name": "Quick Sale",
-          "template_items": [
-            {
-              "product_id": 1,
-              "quantity": 1
-            }
-          ]
-        },
-        "params": null
-      },
-      "response": {
-        "template_id": 1,
-        "template_name": "Quick Sale",
-        "status": "updated",
-        "item_count": 1
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Flash sale setup",
-      "method": "POST",
-      "path": "/api/flash-sale/setup",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.3,
-      "request": {
-        "body": {
-          "category": "Test",
-          "discount_pct": 10.0,
-          "hours": 2
-        },
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "message": "Flash sale activated for Test",
-        "discount": "10.0%",
-        "duration": "2 hours",
-        "products_affected": 0,
-        "expiry": "2026-06-23T14:14:25.821228"
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Issue gift card",
-      "method": "POST",
-      "path": "/gift-cards",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.288,
-      "request": {
-        "body": {
-          "card_code": "GC-1782216864",
-          "initial_balance": 500.0,
-          "issued_to": "Test User",
-          "expiry_date": "2027-06-23"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Gift card issued successfully.",
-        "card_code": "GC-1782216864",
-        "balance": 500.0
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Redeem gift card",
-      "method": "POST",
-      "path": "/gift-cards/redeem",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.298,
-      "request": {
-        "body": {
-          "card_code": "GC-1782216864",
-          "amount_to_deduct": 100.0
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Successfully deducted \u20b9100.00",
-        "remaining_balance": 400.0
-      }
-    },
-    {
-      "group": "misc",
-      "name": "Export GSTR1",
-      "method": "GET",
-      "path": "/gst/export-gstr1?month=6&year=2026",
-      "status": 400,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 400. Body: {'detail': 'GST number not configured in Shop Settings.'}",
-      "duration": 0.286,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "GST number not configured in Shop Settings."
-      }
-    },
-    {
-      "group": "store",
-      "name": "Store customer register",
-      "method": "POST",
-      "path": "/store/customer/register",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.626,
-      "request": {
-        "body": {
-          "name": "Store User 1782216866",
-          "email": "store_1782216866@example.com",
-          "password": "StorePass@9!",
-          "phone": "9182216866"
-        },
-        "params": null
-      },
-      "response": {
-        "message": "Customer account created successfully.",
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNiIsInJvbGUiOiJDVVNUT01FUiIsImV4cCI6MTc4MjIyMDQ2OCwiaWF0IjoxNzgyMjE2ODY4fQ.fJQLM-7QwFqTb8rCZYvLwxNNvp3lUycXBedEkIU7POg",
-        "token_type": "bearer",
-        "customer_id": 16,
-        "name": "Store User 1782216866"
-      }
-    },
-    {
-      "group": "store",
-      "name": "Store customer login",
-      "method": "POST",
-      "path": "/store/customer/login",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.68,
-      "request": {
-        "body": {
-          "email": "store_1782216866@example.com",
-          "password": "StorePass@9!"
-        },
-        "params": null
-      },
-      "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNiIsInJvbGUiOiJDVVNUT01FUiIsImV4cCI6MTc4MjIyMDQ2OSwiaWF0IjoxNzgyMjE2ODY5fQ.iYHckOiT0TneNbT-j3OBwWLKnE5M-2Ofdo1nYh2wwGY",
-        "token_type": "bearer",
-        "customer_id": 16,
-        "name": "Store User 1782216866"
-      }
-    },
-    {
-      "group": "store",
-      "name": "Nearby shops",
-      "method": "GET",
-      "path": "/store/shops/nearby",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 1.151,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "shops": [
-          {
-            "shop_id": 5,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 7,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 9,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 11,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 14,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 16,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 17,
-            "shop_name": "RetailMind Shop 1782054130",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 19,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 21,
-            "shop_name": "RetailMind Shop 1782057778",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 23,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 24,
-            "shop_name": "RetailMind Shop 1782073954",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 29,
-            "shop_name": "Shiva",
-            "address": null,
-            "phone": "8125436350",
-            "logo_url": null
-          },
-          {
-            "shop_id": 27,
-            "shop_name": "GOWTHAM's Shop",
-            "address": null,
-            "phone": null,
-            "logo_url": null
-          },
-          {
-            "shop_id": 38,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          },
-          {
-            "shop_id": 40,
-            "shop_name": "Test Retail Shop",
-            "address": null,
-            "phone": "9999999999",
-            "logo_url": null
-          }
-        ],
-        "count": 15
-      }
-    },
-    {
-      "group": "store",
-      "name": "Shop products",
-      "method": "GET",
-      "path": "/store/shops/1/products",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.294,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Shop not found or online store disabled."
-      }
-    },
-    {
-      "group": "store",
-      "name": "Place order",
-      "method": "POST",
-      "path": "/store/order",
-      "status": 403,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.275,
-      "request": {
-        "body": {
-          "shop_id": 1,
-          "items": [
-            {
-              "product_id": 1,
-              "quantity": 1
-            }
-          ]
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Access denied. Required roles: ('CUSTOMER',). Your role: OWNER"
-      }
-    },
-    {
-      "group": "store",
-      "name": "My orders",
-      "method": "GET",
-      "path": "/store/my-orders",
-      "status": 403,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.437,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Access denied. Required roles: ('CUSTOMER',). Your role: OWNER"
-      }
-    },
-    {
-      "group": "store",
-      "name": "Track order",
-      "method": "GET",
-      "path": "/store/order/1/track",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.276,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Order not found."
-      }
-    },
-    {
-      "group": "store",
-      "name": "Owner: all orders",
-      "method": "GET",
-      "path": "/store/owner/orders",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.362,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "orders": [],
-        "total": 0
-      }
-    },
-    {
-      "group": "store",
-      "name": "Owner: order action",
-      "method": "POST",
-      "path": "/store/owner/orders/1/action",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.284,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "action"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "sales-restore",
-      "name": "Restore all sales",
-      "method": "POST",
-      "path": "/api/sales-restore/restore-all",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.286,
-      "request": {
-        "body": {
-          "include_stock_impact": false
-        },
-        "params": null
-      },
-      "response": {
-        "user_id": 40,
-        "timestamp": "2026-06-23T12:14:33.372352",
-        "total_invoices_restored": 1,
-        "total_line_items_restored": 1,
-        "customers_restored": 1,
-        "stock_impact_applied": false,
-        "invoices": [
-          {
-            "id": 84,
-            "invoice_number": "INV-1782216843",
-            "customer_id": 23,
-            "customer_name": "Test Customer",
-            "customer_phone": "1234567890",
-            "invoice_date": "2026-06-23",
-            "due_date": "2026-06-23",
-            "subtotal": 491.0,
-            "tax": 9.0,
-            "total_amount": 500.0,
-            "paid_amount": 500.0,
-            "status": "SENT",
-            "payment_status": "PAID",
-            "payment_method": null,
-            "source": "MANUAL_ENTRY",
-            "notes": "",
-            "created_at": "2026-06-23T12:14:03.659653",
-            "updated_at": "2026-06-23T12:14:03.659653",
-            "line_items": [
-              {
-                "id": 84,
-                "product_id": null,
-                "description": "Widget",
-                "quantity": 2,
-                "unit_price": 250.0,
-                "line_total": 500.0
-              }
-            ]
-          }
-        ],
-        "summary": {
-          "total_revenue": 500.0,
-          "total_paid": 500.0,
-          "outstanding_amount": 0.0,
-          "unpaid_invoices": 0,
-          "paid_invoices": 1,
-          "average_invoice_value": 500.0,
-          "date_range": {
-            "start": null,
-            "end": null,
-            "actual_start": "2026-06-23",
-            "actual_end": "2026-06-23"
-          }
-        }
-      }
-    },
-    {
-      "group": "sales-restore",
-      "name": "Restore summary",
-      "method": "GET",
-      "path": "/api/sales-restore/restore-summary",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.309,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "user_id": 40,
-        "available_for_restore": true,
-        "invoice_summary": {
-          "total_invoices": 1,
-          "paid": 1,
-          "unpaid": 0,
-          "partial": 0
-        },
-        "date_range": {
-          "oldest_invoice": "2026-06-23T12:14:03.659653",
-          "newest_invoice": "2026-06-23T12:14:03.659653"
-        },
-        "financial_summary": {
-          "total_revenue": 500.0,
-          "customer_count": 2
-        },
-        "timestamp": "2026-06-23T12:14:33.668447"
-      }
-    },
-    {
-      "group": "sales-restore",
-      "name": "Restore customers",
-      "method": "POST",
-      "path": "/api/sales-restore/restore-customers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.399,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "user_id": 40,
-        "timestamp": "2026-06-23T12:14:33.975603",
-        "total_customers_restored": 2,
-        "customers": [
-          {
-            "id": 22,
-            "customer_name": "Test Customer 1782216840",
-            "email": "cust_1782216840@test.com",
-            "phone": "9882216840",
-            "whatsapp_number": null,
-            "address": null,
-            "city": "Mumbai",
-            "credit_limit": 0,
-            "payment_terms": null,
-            "contact_preference": "EMAIL",
-            "is_active": true,
-            "created_at": "2026-06-23T12:14:01.059637",
-            "invoice_count": 0
-          },
-          {
-            "id": 23,
-            "customer_name": "Test Customer",
-            "email": null,
-            "phone": "1234567890",
-            "whatsapp_number": null,
-            "address": null,
-            "city": null,
-            "credit_limit": 0,
-            "payment_terms": null,
-            "contact_preference": "EMAIL",
-            "is_active": true,
-            "created_at": "2026-06-23T12:14:03.659653",
-            "invoice_count": 1
-          }
-        ]
-      }
-    },
-    {
-      "group": "sales-restore",
-      "name": "Backup export",
-      "method": "GET",
-      "path": "/api/data/backup/export",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.32,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "backup_summary": {
-          "backup_timestamp": "2026-06-23T12:14:34.370495",
-          "user_id": 40,
-          "invoices": 1,
-          "khata_customers": 1,
-          "expenses": 3,
-          "products": 0
-        }
-      }
-    },
-    {
-      "group": "sales-restore",
-      "name": "Data integrity check",
-      "method": "GET",
-      "path": "/api/data/integrity-check",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.452,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "warning",
-        "integrity_issues": [
-          "72 paid invoices missing history records"
-        ],
-        "issue_count": 1
-      }
-    },
-    {
-      "group": "sync",
-      "name": "Sync sales",
-      "method": "POST",
-      "path": "/api/sync/sales",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.307,
-      "request": {
-        "body": {},
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "synced_count": 0,
-        "user_id": 40
-      }
-    },
-    {
-      "group": "sync",
-      "name": "Sync invoices",
-      "method": "POST",
-      "path": "/api/sync/invoices",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.293,
-      "request": {
-        "body": {},
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "synced_count": 0
-      }
-    },
-    {
-      "group": "sync",
-      "name": "Sync khata balances",
-      "method": "POST",
-      "path": "/api/sync/khata-balances",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.304,
-      "request": {
-        "body": {},
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "synced_count": 0
-      }
-    },
-    {
-      "group": "sync",
-      "name": "Sync expenses",
-      "method": "POST",
-      "path": "/api/sync/expenses",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.269,
-      "request": {
-        "body": {},
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "synced_count": 0
-      }
-    },
-    {
-      "group": "sync",
-      "name": "Sync invoices chunked",
-      "method": "POST",
-      "path": "/api/sync/invoices/chunked",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.272,
-      "request": {
-        "body": {},
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "chunk_index": 0,
-        "total_chunks": 1,
-        "synced_count": 0,
-        "skipped_duplicates": 0,
-        "is_complete": true
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Export products batch",
-      "method": "POST",
-      "path": "/batch/products/export",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.292,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Import products batch",
-      "method": "POST",
-      "path": "/batch/products/import",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.283,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Import customers batch",
-      "method": "POST",
-      "path": "/batch/customers/import",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.3,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Batch status",
-      "method": "GET",
-      "path": "/batch/status/1",
-      "status": 404,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.422,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "batch",
-      "name": "Batch history",
-      "method": "GET",
-      "path": "/batch/history",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.311,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": "Not Found"
-      }
-    },
-    {
-      "group": "cache",
-      "name": "Cache stats",
-      "method": "GET",
-      "path": "/cache/api/cache/stats",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.276,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {}
-    },
-    {
-      "group": "cache",
-      "name": "Warm products cache",
-      "method": "POST",
-      "path": "/cache/api/cache/warm/products",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.364,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "products_cached": 19
-      }
-    },
-    {
-      "group": "cache",
-      "name": "Warm analytics cache",
-      "method": "POST",
-      "path": "/cache/api/cache/warm/analytics",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.272,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success"
-      }
-    },
-    {
-      "group": "cache",
-      "name": "Clear products cache",
-      "method": "DELETE",
-      "path": "/cache/api/cache/clear/products:*",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.366,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "cleared": 0
-      }
-    },
-    {
-      "group": "cache",
-      "name": "Clear cache by pattern",
-      "method": "DELETE",
-      "path": "/cache/api/cache/clear/1",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.321,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "success",
-        "cleared": 0
-      }
-    },
-    {
-      "group": "cache",
-      "name": "Clear all cache",
-      "method": "DELETE",
-      "path": "/cache/api/cache/clear-all",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.303,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "status": "failed"
-      }
-    },
-    {
-      "group": "security",
-      "name": "Rate limit status (dynamic)",
-      "method": "GET",
-      "path": "/api/rate-limit/status/invoices",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.338,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "endpoint": "invoices",
-        "limit": 1000,
-        "window_seconds": 60,
-        "remaining": 1000,
-        "reset_in_seconds": null,
-        "user_id": "117.99.198.202"
-      }
-    },
-    {
-      "group": "security",
-      "name": "Security rate limit status",
-      "method": "GET",
-      "path": "/api/security/rate-limit-status",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.271,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "client_id": "117.99.198.202",
-        "max_requests": 100,
-        "remaining_requests": 100,
-        "window_seconds": 60,
-        "reset_in_seconds": 60
-      }
-    },
-    {
-      "group": "security",
-      "name": "CSRF token",
-      "method": "GET",
-      "path": "/api/security/csrf-token",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.367,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "csrf_token": "C0ZwzLTYoQpKj6owHuXzrMfcVzzvmlaVxKNiBOU62o4",
-        "expires_in": 3600,
-        "usage": "Include this token in your forms as a hidden field and validate on submission"
-      }
-    },
-    {
-      "group": "security",
-      "name": "Security headers check",
-      "method": "GET",
-      "path": "/api/security/security-headers",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.319,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "security_headers": {
-          "X-Content-Type-Options": "nosniff",
-          "X-Frame-Options": "DENY",
-          "X-XSS-Protection": "1; mode=block",
-          "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';",
-          "Referrer-Policy": "strict-origin-when-cross-origin",
-          "Permissions-Policy": "geolocation=(), microphone=(), camera=()"
-        },
-        "description": "These headers should be configured in your web server or reverse proxy"
-      }
-    },
-    {
-      "group": "security",
-      "name": "Validate password",
-      "method": "POST",
-      "path": "/api/security/validate-password",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.285,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "password"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "security",
-      "name": "Check input (SQL injection)",
-      "method": "POST",
-      "path": "/api/security/check-input",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.284,
-      "request": {
-        "body": {
-          "input_data": "SELECT * FROM users",
-          "check_type": "sql"
-        },
-        "params": null
-      },
-      "response": {
-        "is_safe": false,
-        "sanitized_value": null,
-        "error_message": "Unknown check type",
-        "risk_level": "LOW"
-      }
-    },
-    {
-      "group": "security",
-      "name": "SQL injection header check",
-      "method": "GET",
-      "path": "/api/security/check-sql-injection?query=select * from users",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.283,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "is_suspicious": true,
-        "detected_patterns": [
-          [
-            "select",
-            "select"
-          ]
-        ],
-        "recommendation": "Use parameterized queries to prevent SQL injection"
-      }
-    },
-    {
-      "group": "security",
-      "name": "Sanitize batch",
-      "method": "POST",
-      "path": "/api/security/sanitize-batch",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.428,
-      "request": {
-        "body": {
-          "inputs": {
-            "test": "value"
-          }
-        },
-        "params": null
-      },
-      "response": {
-        "success": true,
-        "sanitized": {
-          "inputs": {
-            "test": "value"
-          }
-        },
-        "errors": []
-      }
-    },
-    {
-      "group": "cleanup",
-      "name": "Delete invoice",
-      "method": "DELETE",
-      "path": "/api/invoices/84",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.317,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Invoice deleted securely."
-      }
-    },
-    {
-      "group": "cleanup",
-      "name": "Delete customer",
-      "method": "DELETE",
-      "path": "/api/customers/22",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.319,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Customer 'Test Customer 1782216840' archived. Khata and invoice history preserved."
-      }
-    },
-    {
-      "group": "cleanup",
-      "name": "Delete attendance worker",
-      "method": "DELETE",
-      "path": "/api/attendance/workers/23",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.294,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "message": "Worker deleted successfully",
-        "worker_id": 23
-      }
+  "results": [
+    {
+      "label": "Root",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Health Check (/health)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Observability Health",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Observability Ready",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Observability Metrics",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Business Overview",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Performance Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "DB Performance",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Register",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Send OTP",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Verify OTP (expect 400/422 without real OTP)",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Login",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Register",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Login",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Refresh (no token)",
+      "status": "PASS",
+      "code": 401,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Logout",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Hardened Logout All",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Active Sessions (hardened)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Refresh Token",
+      "status": "PASS",
+      "code": 401,
+      "detail": ""
+    },
+    {
+      "label": "Get Active Sessions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Offline Data",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync All Offline Data",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Shop Profile (/api/shop)",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Business Hours",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Tax Config",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Shop Profile (/shop)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get UPI QR",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Get Public Shop Info",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Toggle Online Store (enable)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Shop Profile",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update API Shop Settings",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Create Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Products",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Single Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Stock Movement",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Stock Movements",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Low Stock Products",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Stock Alerts",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Batches",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Expiring Batches",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Stock Value",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Inventory Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Generate Purchase Orders (Supplier POs)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Soft Delete Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Current Stock",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get All Stock",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Deduct Stock (idempotent)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Deduct Stock Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Reconcile Inventory",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Full Reconciliation",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Correct Stock Manually",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Stock Audit Trail",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Auto Fix Discrepancies",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Customer",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Customers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Single Customer",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Customer",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Set Contact Preference",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Search By Phone",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Search By Name",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Credit Score",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Soft Delete Customer",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Invoice",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Offline Invoice",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Invoices",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Single Invoice",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Overdue Invoices",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Invoice Payments",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Invoice Analytics",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Delete Invoice",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Generate Bill",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Get Bill",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get UPI QR",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Create Worker",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Workers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Worker",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Employee Check-In",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Employee Check-Out",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Record Manual Attendance",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Employee Attendance",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Attendance By Date",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Request Leave",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Leave Requests",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Approve Leave",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Attendance Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Employee Analytics",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Delete Worker",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Add Khata Credit",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Record Repayment",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Khata Customers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Customer Khata History",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get WhatsApp Reminder URL",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Khata Balance (API)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Khata Customers (API)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Khata Balance",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Khata History (API)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Purchase Order",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Purchase Orders",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Mark PO Delivered",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Cancel Purchase Order",
+      "status": "FAIL",
+      "code": 409,
+      "detail": "{'detail': 'Cannot cancel a delivered PO.'}"
+    },
+    {
+      "label": "Create Delivery",
+      "status": "FAIL",
+      "code": 500,
+      "detail": "{'error': 'Internal server error. Our team has been notified.', 'path': '/api/delivery/create'}"
+    },
+    {
+      "label": "Get Today Deliveries",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Delivery Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Earn Points",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Redeem Points",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Create Expense (/api/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Expenses (/api/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Expense History",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Add Expense (/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Expenses (/expenses)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Workers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Add Worker",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Worker (enterprise)",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Pay Worker Salary",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Add Reconciliation",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "List Reconciliations",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Profit & Loss",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "All Transactions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Stock Analysis",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Daily Report",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Churn Risk",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "UPI Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Recent Transactions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Online Payments",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Authenticate Counter",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Upcoming Festivals",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Today Occasions",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Templates",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Save Template",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Setup Flash Sale",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Sales (legacy)",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Issue Gift Card",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Redeem Gift Card",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Export GSTR1",
+      "status": "PASS",
+      "code": 400,
+      "detail": ""
+    },
+    {
+      "label": "Register Store Customer",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Store Customer Login",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Find Nearby Shops",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Browse Shop Products",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Place Order",
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Shop not found or not accepting online orders.'}"
+    },
+    {
+      "label": "Get My Orders",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Track Order",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Incoming Orders",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Update Order Status",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Restore All Sales",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Restore Summary",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Restore Customers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Export Backup",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Data Integrity Check",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Sales Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Invoices Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Khata Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Expenses Batch",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sync Invoices Chunked",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Bulk Export Products",
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
+    },
+    {
+      "label": "Bulk Import Products",
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
+    },
+    {
+      "label": "Bulk Import Customers",
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
+    },
+    {
+      "label": "Get Batch Status",
+      "status": "PASS",
+      "code": 404,
+      "detail": ""
+    },
+    {
+      "label": "Get Batch History",
+      "status": "FAIL",
+      "code": 404,
+      "detail": "{'detail': 'Not Found'}"
+    },
+    {
+      "label": "Cache Stats",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Warm Product Cache",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Warm Analytics Cache",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Clear Cache Pattern",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Rate Limit Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Sec Rate Limit Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get CSRF Token",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Security Headers",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Validate Password",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Check Input Security",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Check SQL Injection",
+      "status": "PASS",
+      "code": 403,
+      "detail": ""
+    },
+    {
+      "label": "Sanitize Batch",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Log Event",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Log Error",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Sale Legacy",
+      "status": "PASS",
+      "code": 500,
+      "detail": ""
+    },
+    {
+      "label": "Delete Product",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Reject Leave",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Create Shop Profile",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Update Profile",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Upload Logo",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Create Shop Profile",
+      "status": "PASS",
+      "code": 422,
+      "detail": ""
+    },
+    {
+      "label": "Clear Cache Pattern",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Clear All Cache",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Get Rate Limit Status",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Session Logout",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
+    },
+    {
+      "label": "Session Logout All",
+      "status": "PASS",
+      "code": 200,
+      "detail": ""
     }
   ]
 }
