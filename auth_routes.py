@@ -263,7 +263,6 @@ def create_sale_legacy(
         
         new_invoice = Invoice(
             user_id=user_id,
-            shop_id=shop_id,
             invoice_number=invoice_number,
             total_amount=total,
             paid_amount=total,

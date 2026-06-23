@@ -48,7 +48,7 @@ class BatchOperationStatus(BaseModel):
 
 
 # ====================== BATCH OPERATIONS ROUTER ======================
-router = APIRouter(prefix="/batch/api/batch", tags=["Batch Operations"])
+router = APIRouter(prefix="/api/batch", tags=["Batch Operations"])
 
 @router.post("/products/import")
 async def bulk_import_products(

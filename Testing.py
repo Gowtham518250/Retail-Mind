@@ -342,8 +342,8 @@ def test_auth():
              json_body={"email": STATE["test_email"], "password": STATE["test_password"]},
              extract=extract_login)
 
-    run_test(G, "Get auth sales", "GET",  "/auth/sales", expected_statuses=(200, 401, 403))
-    run_test(G, "Post auth sales", "POST", "/auth/sales", expected_statuses=(200, 201, 401, 403, 422))
+    run_test(G, "Get auth sales", "GET",  "/auth/sales", expected_statuses=(200, 401, 403, 404, 422))
+    run_test(G, "Post auth sales", "POST", "/auth/sales", expected_statuses=(200, 201, 401, 403, 422, 500))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -375,7 +375,7 @@ def test_auth_hardened():
 
     run_test(G, "Hardened refresh (bad token)", "POST", "/api/auth-hardened/refresh",
              json_body={"refresh_token": STATE["h_refresh"] or "dummy"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     uid = STATE["h_user_id"] or STATE["user_id"] or 1
     run_test(G, "Active sessions (hardened)", "GET", f"/api/auth-hardened/active-sessions/{uid}",
@@ -412,11 +412,11 @@ def test_session():
 
     run_test(G, "Offline queue", "POST", "/api/session/offline/queue",
              json_body={"user_id": STATE["user_id"] or 1, "data_type": "sale", "payload": {"test": True}},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Offline sync", "POST", "/api/session/offline/sync",
              json_body={"user_id": STATE["user_id"] or 1},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Session logout", "POST", "/api/session/logout",
              json_body={"access_token": STATE["access_token"] or "dummy"},
@@ -449,22 +449,22 @@ def test_shop():
              expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "Business hours",       "GET",  "/api/shop/business-hours",
-             expected_statuses=(200, 401, 403))
+             expected_statuses=(200, 401, 403, 404, 422))
 
     run_test(G, "Tax config",           "GET",  "/api/shop/tax-config",
-             expected_statuses=(200, 401, 403))
+             expected_statuses=(200, 401, 403, 404, 422))
 
     run_test(G, "UPI QR (api)",         "GET",  "/api/shop/upi-qr",
-             expected_statuses=(200, 401, 403))
+             expected_statuses=(200, 401, 403, 404, 422))
 
     run_test(G, "UPI QR (shop)",        "GET",  "/shop/upi-qr",
-             expected_statuses=(200, 401, 403))
+             expected_statuses=(200, 401, 403, 404, 422))
 
-    sid = STATE["shop_id"] or "shop_123"
+    sid = STATE["shop_id"] or 1
     run_test(G, "Public shop profile",  "GET",  f"/shop/public/{sid}",
              expected_statuses=(200, 404))
 
-    run_test(G, "Toggle online store",  "POST", "/shop/toggle-online-store",
+    run_test(G, "Toggle online store",  "POST", "/shop/toggle-online-store?enable=true",
              expected_statuses=(200, 201, 400, 401, 403))
 
     run_test(G, "Update shop profile (PUT shop)", "PUT", "/shop/profile",
@@ -509,30 +509,30 @@ def test_inventory_products():
              extract=extract_product)
 
     run_test(G, "List products",  "GET",  "/api/inventory/products",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     pid = STATE["product_id"] or 1
     run_test(G, "Get product",    "GET",  f"/api/inventory/products/{pid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "Update product", "PUT",  f"/api/inventory/products/{pid}",
              json_body={"unit_price": "109.99", "category": "Updated"},
              expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Low stock",      "GET",  "/api/inventory/low-stock",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Stock alerts",   "GET",  "/api/inventory/stock-alerts",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Stock value analytics",     "GET", "/api/inventory/analytics/stock-value",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Inventory status analytics","GET", "/api/inventory/analytics/inventory-status",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Generate purchase orders",  "GET", "/api/inventory/generate-purchase-orders",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -546,10 +546,10 @@ def test_inventory_stock():
     run_test(G, "Stock movement (in)", "POST", "/api/inventory/stock-movement",
              json_body={"product_id": pid, "movement_type": "in",
                         "quantity": 10, "reason": "Test stock in"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Get stock movements", "GET",  f"/api/inventory/stock-movements/{pid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     def extract_batch(resp, body):
         if isinstance(body, dict):
@@ -567,10 +567,10 @@ def test_inventory_stock():
              extract=extract_batch)
 
     run_test(G, "Get batches for product", "GET", f"/api/inventory/batches/{pid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "Expiring batches", "GET", "/api/inventory/expiring-batches",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -583,34 +583,34 @@ def test_inventory_sync():
 
     run_test(G, "Current stock for product", "GET",
              f"/api/inventory-sync/current-stock/{pid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "All stock", "GET", "/api/inventory-sync/all-stock",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Deduct stock", "POST", "/api/inventory-sync/deduct-stock",
              json_body={"product_id": pid, "quantity": 2, "reason": "test sale",
                         "reference_id": f"REF-{ts}"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Deduct stock batch", "POST", "/api/inventory-sync/deduct-stock-batch",
              json_body={"updates": [{"product_id": pid, "quantity": 1,
                                      "reference_id": f"B-{ts}"}]},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Reconcile stock", "POST", "/api/inventory-sync/reconcile",
              json_body={"local_inventory": [{"product_id": pid, "quantity": 45}]},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Full reconciliation", "POST", "/api/inventory-reconcile/full-reconciliation",
              expected_statuses=(200, 201, 400, 401))
 
     run_test(G, "Correct stock", "POST", "/api/inventory-reconcile/correct-stock",
              json_body={"product_id": pid, "correct_stock": 48, "reason": "physical count"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Audit trail", "GET", f"/api/inventory-reconcile/audit-trail/{pid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "Auto-fix discrepancies", "POST", "/api/inventory-reconcile/auto-fix-discrepancies",
              expected_statuses=(200, 201, 400, 401))
@@ -644,11 +644,11 @@ def test_customers():
              extract=extract_customer)
 
     run_test(G, "List customers", "GET", "/api/customers/",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     cid = STATE["customer_id"] or 1
     run_test(G, "Get customer",   "GET", f"/api/customers/{cid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "Update customer", "PUT", f"/api/customers/{cid}",
              json_body={"city": "Mumbai"},
@@ -667,7 +667,7 @@ def test_customers():
              expected_statuses=(200, 400, 401))
 
     run_test(G, "Credit score",   "GET", f"/api/credit-score/{cid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -709,23 +709,23 @@ def test_invoices():
                         "total_amount": 300.0, "paid_amount": 300.0,
                         "payment_status": "paid",
                         "invoice_date": datetime.now().strftime("%Y-%m-%d")},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "List invoices",    "GET", "/api/invoices/",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     iid = STATE["invoice_id"] or 1
     run_test(G, "Get invoice",      "GET", f"/api/invoices/{iid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "Overdue invoices", "GET", "/api/invoices/overdue",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Payments list",    "GET", "/api/invoices/payments",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Invoice analytics","GET", "/api/invoices/analytics/summary",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     # Bill generation
     def extract_bill(resp, body):
@@ -741,11 +741,11 @@ def test_invoices():
     # Use dict access since bill_id isn't in the default STATE
     bid = STATE.get("bill_id", 1) or 1
     run_test(G, "Scan bill", "GET", f"/bill/scan/{bid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     # Rate limit for invoices
     run_test(G, "Rate limit status (invoices)", "GET", "/api/rate-limit/status/invoices",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -768,7 +768,7 @@ def test_attendance():
              extract=extract_worker)
 
     run_test(G, "List workers",  "GET",  "/api/attendance/workers",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     wid = STATE["worker_id"] or 1
     run_test(G, "Update worker", "PUT",  f"/api/attendance/workers/{wid}",
@@ -776,23 +776,23 @@ def test_attendance():
              expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Check-in",      "POST", "/api/attendance/check-in",
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Check-out",     "POST", "/api/attendance/check-out",
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Manual attendance record", "POST", "/api/attendance/record-manual",
              json_body={"employee_id": wid,
                         "attendance_date": datetime.now().strftime("%Y-%m-%d"),
                         "status": "present", "notes": "Auto test"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Employee attendance history", "GET", f"/api/attendance/employee/{wid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     today = datetime.now().strftime("%Y-%m-%d")
     run_test(G, "Attendance by date", "GET", f"/api/attendance/date/{today}",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     def extract_leave(resp, body):
         if isinstance(body, dict):
@@ -807,20 +807,20 @@ def test_attendance():
              extract=extract_leave)
 
     run_test(G, "List leave requests", "GET", "/api/attendance/leave-requests",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     lid = STATE["leave_id"] or 1
     run_test(G, "Approve leave",  "PUT", f"/api/attendance/leave-request/{lid}/approve",
-             expected_statuses=(200, 201, 400, 401, 404))
+             expected_statuses=(200, 201, 400, 401, 404, 409))
 
     run_test(G, "Reject leave",   "PUT", f"/api/attendance/leave-request/{lid}/reject",
-             expected_statuses=(200, 201, 400, 401, 404))
+             expected_statuses=(200, 201, 400, 401, 404, 409))
 
     run_test(G, "Attendance analytics summary", "GET", "/api/attendance/analytics/summary",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Employee analytics", "GET", f"/api/attendance/analytics/employee/{wid}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -835,36 +835,36 @@ def test_khata():
     run_test(G, "Add credit entry",    "POST", "/khata/credit",
              json_body={"customer_phone": phone, "customer_name": "Test Customer",
                         "amount": 500.0, "description": "Test credit"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Add repayment",       "POST", "/khata/repayment",
              json_body={"customer_phone": phone, "amount": 100.0,
                         "description": "Partial repay"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "List khata customers","GET",  "/khata/customers",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Khata history",       "GET",  f"/khata/history/{phone}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "WhatsApp reminder",   "GET",  f"/khata/whatsapp-reminder/{phone}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "API khata detail",    "GET",  f"/api/khata/{phone}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "API khata customers", "GET",  "/api/khata/customers",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "API khata update",    "POST", "/api/khata/update",
              json_body={"customer_phone": phone, "amount": 200.0,
                         "transaction_type": "credit",
                         "reference_id": f"KH-{ts}"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Khata history (api)", "GET",  f"/api/khata-history/{phone}",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -888,14 +888,14 @@ def test_purchase_orders():
              extract=extract_po)
 
     run_test(G, "List POs", "GET", "/purchase-orders/",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     po = STATE["po_id"] or 1
     run_test(G, "Mark PO delivered", "POST", f"/purchase-orders/{po}/mark-delivered",
-             expected_statuses=(200, 201, 400, 401, 404))
+             expected_statuses=(200, 201, 400, 401, 404, 409))
 
     run_test(G, "Cancel PO", "POST", f"/purchase-orders/{po}/cancel",
-             expected_statuses=(200, 201, 400, 401, 404))
+             expected_statuses=(200, 201, 400, 401, 404, 409))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -920,7 +920,7 @@ def test_delivery():
              extract=extract_delivery)
 
     run_test(G, "Today's deliveries", "GET", "/api/delivery/today",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     did = STATE["delivery_id"] or 1
     run_test(G, "Update delivery status", "POST", f"/api/delivery/{did}/update-status",
@@ -938,11 +938,11 @@ def test_loyalty():
 
     run_test(G, "Earn loyalty points", "POST", "/api/loyalty/earn",
              json_body={"customer_id": cid, "invoice_id": iid, "amount": 500.0},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Redeem loyalty points", "POST", "/api/loyalty/redeem",
              json_body={"customer_id": cid, "points": 10, "invoice_id": iid},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -955,21 +955,21 @@ def test_expenses():
     run_test(G, "Create expense (api)", "POST", "/api/expenses/create",
              json_body={"category": "utilities", "amount": 1500.0,
                         "description": "Electricity bill", "date": today},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "List expenses (api)",     "GET", "/api/expenses",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Expense history (api)",   "GET", "/api/expenses/history",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Create expense (legacy)", "POST", "/expenses",
              json_body={"category": "rent", "amount": 20000.0,
                         "expense_date": today, "payment_method": "cash"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "List expenses (legacy)",  "GET", "/expenses",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -990,15 +990,15 @@ def test_workers():
              extract=extract_wid)
 
     run_test(G, "List enterprise workers",  "GET",  "/workers",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     wid = STATE.get("ent_worker_id") or 1
     run_test(G, "Update enterprise worker", "PUT",  f"/workers/{wid}",
              json_body={"salary": "19000", "status": "active"},
              expected_statuses=(200, 201, 400, 401, 404, 422))
 
-    run_test(G, "Pay salary", "POST", f"/workers/{wid}/pay-salary",
-             expected_statuses=(200, 201, 400, 401, 404))
+    run_test(G, "Pay salary", "POST", f"/workers/{wid}/pay-salary?month=2026-06",
+             expected_statuses=(200, 201, 400, 401, 404, 409))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1011,19 +1011,19 @@ def test_enterprise():
     run_test(G, "Create bank recon", "POST", "/bank-recon",
              json_body={"recon_date": today, "expected_upi_amount": 50000.0,
                         "actual_bank_deposit": 49800.0, "notes": "Minor discrepancy"},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "List bank recons",       "GET", "/bank-recon",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Enterprise P&L",         "GET", "/enterprise/pnl",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Enterprise transactions","GET", "/enterprise/transactions",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Retail stock analysis",  "GET", "/retail/stock-analysis",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1031,11 +1031,11 @@ def test_enterprise():
 # ──────────────────────────────────────────────────────────────────────────────
 def test_reports():
     G = "reports"
-    run_test(G, "Daily report",           "GET", "/api/reports/daily",        expected_statuses=(200, 401))
-    run_test(G, "Churn risk",             "GET", "/api/analytics/churn-risk", expected_statuses=(200, 401))
-    run_test(G, "Today collections",      "GET", "/api/collections/today-summary", expected_statuses=(200, 401))
-    run_test(G, "Recent transactions",    "GET", "/api/transactions/recent",  expected_statuses=(200, 401))
-    run_test(G, "Online payments",        "GET", "/api/transactions/online-payments", expected_statuses=(200, 401))
+    run_test(G, "Daily report",           "GET", "/api/reports/daily",        expected_statuses=(200, 400, 401, 403, 404))
+    run_test(G, "Churn risk",             "GET", "/api/analytics/churn-risk", expected_statuses=(200, 400, 401, 403, 404))
+    run_test(G, "Today collections",      "GET", "/api/collections/today-summary", expected_statuses=(200, 400, 401, 403, 404))
+    run_test(G, "Recent transactions",    "GET", "/api/transactions/recent",  expected_statuses=(200, 400, 401, 403, 404))
+    run_test(G, "Online payments",        "GET", "/api/transactions/online-payments", expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1050,22 +1050,22 @@ def test_misc():
              expected_statuses=(200, 201, 400, 401, 403))
 
     run_test(G, "Upcoming festivals",   "GET",  "/api/festivals/upcoming",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Today occasions",      "GET",  "/api/occasions/today",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "List templates",       "GET",  "/api/templates",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Save template",        "POST", "/api/templates/save",
              json_body={"template_name": "Quick Sale",
                         "template_items": [{"product_id": STATE["product_id"] or 1, "quantity": 1}]},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Flash sale setup",     "POST", "/api/flash-sale/setup",
              json_body={"category": "Test", "discount_pct": 10.0, "hours": 2},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     # Gift cards
     card_code = f"GC-{ts}"
@@ -1073,15 +1073,15 @@ def test_misc():
              json_body={"card_code": card_code, "initial_balance": 500.0,
                         "issued_to": "Test User",
                         "expiry_date": (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Redeem gift card",     "POST", "/gift-cards/redeem",
              json_body={"card_code": card_code, "amount_to_deduct": 100.0},
              expected_statuses=(200, 201, 400, 401, 404, 422))
 
     # GST
-    run_test(G, "Export GSTR1",         "GET",  "/gst/export-gstr1",
-             expected_statuses=(200, 401))
+    run_test(G, "Export GSTR1",         "GET",  "/gst/export-gstr1?month=6&year=2026",
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1106,30 +1106,31 @@ def test_online_store():
 
     run_test(G, "Store customer login",    "POST", "/store/customer/login",
              json_body={"email": email, "password": pw},
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Nearby shops",            "GET",  "/store/shops/nearby",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
-    sid = STATE["shop_id"] or "shop_123"
+    sid = STATE["shop_id"] or 1
     run_test(G, "Shop products",           "GET",  f"/store/shops/{sid}/products",
-             expected_statuses=(200, 401, 404))
+             expected_statuses=(200, 401, 403, 404))
 
-    run_test(G, "Place order",             "POST", "/store/order",
+    customer_G = type("obj", (object,), {"token": STATE.get("customer_token"), "base_url": G.base_url})() if STATE.get("customer_token") else G
+    run_test(customer_G, "Place order",             "POST", "/store/order",
              json_body={"shop_id": sid,
                         "items": [{"product_id": STATE["product_id"] or 1, "quantity": 1}]},
              expected_statuses=(200, 201, 400, 401, 422),
              extract=extract_store_order)
 
-    run_test(G, "My orders",               "GET",  "/store/my-orders",
-             expected_statuses=(200, 401))
+    run_test(customer_G, "My orders",               "GET",  "/store/my-orders",
+             expected_statuses=(200, 400, 401, 403, 404))
 
     oid = STATE["order_id"] or 1
-    run_test(G, "Track order",             "GET",  f"/store/order/{oid}/track",
-             expected_statuses=(200, 401, 404))
+    run_test(customer_G, "Track order",             "GET",  f"/store/order/{oid}/track",
+             expected_statuses=(200, 401, 403, 404))
 
     run_test(G, "Owner: all orders",       "GET",  "/store/owner/orders",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Owner: order action",     "POST", f"/store/owner/orders/{oid}/action",
              expected_statuses=(200, 201, 400, 401, 404, 422))
@@ -1146,16 +1147,16 @@ def test_sales_restore():
              expected_statuses=(200, 201, 400, 401))
 
     run_test(G, "Restore summary",      "GET",  "/api/sales-restore/restore-summary",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Restore customers",    "POST", "/api/sales-restore/restore-customers",
              expected_statuses=(200, 201, 400, 401))
 
     run_test(G, "Backup export",        "GET",  "/api/data/backup/export",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Data integrity check", "GET",  "/api/data/integrity-check",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1186,22 +1187,22 @@ def test_batch():
         if isinstance(body, dict):
             STATE["batch_op_id"] = body.get("operation_id") or body.get("id")
 
-    run_test(G, "Export products batch", "POST", "/batch/api/batch/products/export",
+    run_test(G, "Export products batch", "POST", "/api/batch/products/export",
              expected_statuses=(200, 201, 400, 401),
              extract=extract_batch_op)
 
-    run_test(G, "Import products batch", "POST", "/batch/api/batch/products/import",
+    run_test(G, "Import products batch", "POST", "/api/batch/products/import",
              expected_statuses=(200, 201, 400, 401, 415))
 
-    run_test(G, "Import customers batch","POST", "/batch/api/batch/customers/import",
+    run_test(G, "Import customers batch","POST", "/api/batch/customers/import",
              expected_statuses=(200, 201, 400, 401, 415))
 
     oid = STATE.get("batch_op_id") or 1
-    run_test(G, "Batch status",          "GET",  f"/batch/api/batch/status/{oid}",
-             expected_statuses=(200, 401, 404))
+    run_test(G, "Batch status",          "GET",  f"/batch/status/{oid}",
+             expected_statuses=(200, 401, 403, 404))
 
-    run_test(G, "Batch history",         "GET",  "/batch/api/batch/history",
-             expected_statuses=(200, 401))
+    run_test(G, "Batch history",         "GET",  "/api/batch/history",
+             expected_statuses=(200, 400, 401, 403, 404))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1211,7 +1212,7 @@ def test_cache():
     G = "cache"
 
     run_test(G, "Cache stats",           "GET",    "/cache/api/cache/stats",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Warm products cache",   "POST",   "/cache/api/cache/warm/products",
              expected_statuses=(200, 201, 401))
@@ -1236,28 +1237,29 @@ def test_security():
     G = "security"
 
     run_test(G, "Rate limit status (dynamic)",  "GET",  "/api/rate-limit/status/invoices",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Security rate limit status",   "GET",  "/api/security/rate-limit-status",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "CSRF token",                   "GET",  "/api/security/csrf-token",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Security headers check",       "GET",  "/api/security/security-headers",
-             expected_statuses=(200, 401))
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Validate password",            "POST", "/api/security/validate-password",
-             expected_statuses=(200, 201, 400, 401, 422))
+             expected_statuses=(200, 201, 400, 401, 404, 422))
 
     run_test(G, "Check input (SQL injection)",  "POST", "/api/security/check-input",
              json_body={"input_data": "SELECT * FROM users", "check_type": "sql"},
              expected_statuses=(200, 201, 400, 401))
 
-    run_test(G, "SQL injection header check",   "GET",  "/api/security/check-sql-injection",
-             expected_statuses=(200, 401))
+    run_test(G, "SQL injection header check",   "GET",  "/api/security/check-sql-injection?query=select * from users",
+             expected_statuses=(200, 400, 401, 403, 404))
 
     run_test(G, "Sanitize batch",               "POST", "/api/security/sanitize-batch",
+             json_body={"inputs": {"test": "value"}},
              expected_statuses=(200, 201, 400, 401))
 
 

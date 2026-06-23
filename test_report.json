@@ -1,109 +1,30 @@
 {
   "meta": {
     "base_url": "https://retail-mind-vkbp.onrender.com",
-    "run_at": "2026-06-23T16:56:49.865526",
+    "run_at": "2026-06-23T17:44:43.533941",
     "total": 183,
-    "passed": 153,
-    "failed": 30,
+    "passed": 169,
+    "failed": 14,
     "errors": 0,
     "skipped": 0,
-    "pass_rate": "83.6%"
+    "pass_rate": "92.3%"
   },
   "failures": [
     {
-      "group": "health",
-      "name": "Log entry",
-      "method": "POST",
-      "path": "/api/observability/log",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['body', 'timestamp'], 'msg': 'Field required', 'input': {'level': 'info', 'message': 'Automated test log entry', 'context': {'source': 'pytest'}}, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.262,
-      "request": {
-        "body": {
-          "level": "info",
-          "message": "Automated test log entry",
-          "context": {
-            "source": "pytest"
-          }
-        },
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "timestamp"
-            ],
-            "msg": "Field required",
-            "input": {
-              "level": "info",
-              "message": "Automated test log entry",
-              "context": {
-                "source": "pytest"
-              }
-            },
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
       "group": "auth",
-      "name": "Get auth sales",
-      "method": "GET",
-      "path": "/auth/sales",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.384,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "auth-hardened",
-      "name": "Hardened logout-all",
+      "name": "Post auth sales",
       "method": "POST",
-      "path": "/api/auth-hardened/logout-all",
-      "status": 422,
+      "path": "/auth/sales",
+      "status": 500,
       "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.284,
+      "reason": "Expected HTTP (200, 201, 401, 403, 422), got 500. Body: {'detail': \"Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice\"}",
+      "duration": 0.289,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "detail": "Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice"
       }
     },
     {
@@ -114,7 +35,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.593,
+      "duration": 0.269,
       "request": {
         "body": null,
         "params": null
@@ -131,7 +52,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.274,
+      "duration": 0.392,
       "request": {
         "body": null,
         "params": null
@@ -148,7 +69,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.411,
+      "duration": 0.31,
       "request": {
         "body": null,
         "params": null
@@ -165,153 +86,13 @@
       "status": 422,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 422. Body: {'detail': 'No UPI ID configured. Please update your shop profile.'}",
-      "duration": 0.329,
+      "duration": 0.29,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "detail": "No UPI ID configured. Please update your shop profile."
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Public shop profile",
-      "method": "GET",
-      "path": "/shop/public/shop_123",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 404), got 422. Body: {'detail': [{'type': 'int_parsing', 'loc': ['path', 'shop_id'], 'msg': 'Input should be a valid integer, unable to parse string as an integer', 'input': 'shop_123', 'url': 'https://errors.pydantic.dev/2.5/v/int_parsing'}]}",
-      "duration": 0.311,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "int_parsing",
-            "loc": [
-              "path",
-              "shop_id"
-            ],
-            "msg": "Input should be a valid integer, unable to parse string as an integer",
-            "input": "shop_123",
-            "url": "https://errors.pydantic.dev/2.5/v/int_parsing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "shop",
-      "name": "Toggle online store",
-      "method": "POST",
-      "path": "/shop/toggle-online-store",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 403), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'enable'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.331,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "enable"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Stock value analytics",
-      "method": "GET",
-      "path": "/api/inventory/analytics/stock-value",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.292,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-products",
-      "name": "Inventory status analytics",
-      "method": "GET",
-      "path": "/api/inventory/analytics/inventory-status",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.263,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "inventory-stock",
-      "name": "Expiring batches",
-      "method": "GET",
-      "path": "/api/inventory/expiring-batches",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.286,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
       }
     },
     {
@@ -322,7 +103,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Product not found'}",
-      "duration": 0.267,
+      "duration": 0.283,
       "request": {
         "body": {
           "product_id": 1,
@@ -336,106 +117,14 @@
       }
     },
     {
-      "group": "customers",
-      "name": "Search by phone",
-      "method": "GET",
-      "path": "/api/customers/search/by-phone",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 400, 401), got 404. Body: {'detail': 'Customer not found'}",
-      "duration": 0.381,
-      "request": {
-        "body": null,
-        "params": {
-          "phone": "9999999999"
-        }
-      },
-      "response": {
-        "detail": "Customer not found"
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "List workers",
-      "method": "GET",
-      "path": "/api/attendance/workers",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.278,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Manual attendance record",
-      "method": "POST",
-      "path": "/api/attendance/record-manual",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Employee not found'}",
-      "duration": 0.319,
-      "request": {
-        "body": {
-          "employee_id": 1,
-          "attendance_date": "2026-06-23",
-          "status": "present",
-          "notes": "Auto test"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Employee not found"
-      }
-    },
-    {
-      "group": "attendance",
-      "name": "Leave request",
-      "method": "POST",
-      "path": "/api/attendance/leave-request",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Employee not found'}",
-      "duration": 0.317,
-      "request": {
-        "body": {
-          "employee_id": 1,
-          "leave_type": "casual",
-          "from_date": "2026-06-28",
-          "to_date": "2026-06-29",
-          "reason": "Personal work"
-        },
-        "params": null
-      },
-      "response": {
-        "detail": "Employee not found"
-      }
-    },
-    {
       "group": "purchase-orders",
       "name": "Cancel PO",
       "method": "POST",
-      "path": "/purchase-orders/8/cancel",
+      "path": "/purchase-orders/12/cancel",
       "status": 409,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 404), got 409. Body: {'detail': 'Cannot cancel a delivered PO.'}",
-      "duration": 0.316,
+      "duration": 0.295,
       "request": {
         "body": null,
         "params": null
@@ -445,115 +134,20 @@
       }
     },
     {
-      "group": "workers",
-      "name": "Pay salary",
-      "method": "POST",
-      "path": "/workers/18/pay-salary",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 404), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'month'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.267,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "month"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "reports",
-      "name": "Today collections",
-      "method": "GET",
-      "path": "/api/collections/today-summary",
-      "status": 500,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 500. Body: {'error': 'Internal server error. Our team has been notified.', 'path': '/api/collections/today-summary'}",
-      "duration": 0.32,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "error": "Internal server error. Our team has been notified.",
-        "path": "/api/collections/today-summary"
-      }
-    },
-    {
       "group": "misc",
       "name": "Export GSTR1",
       "method": "GET",
-      "path": "/gst/export-gstr1",
-      "status": 422,
+      "path": "/gst/export-gstr1?month=6&year=2026",
+      "status": 400,
       "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'month'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}, {'type': 'missing', 'loc': ['query', 'year'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.273,
+      "reason": "Expected HTTP (200, 401), got 400. Body: {'detail': 'GST number not configured in Shop Settings.'}",
+      "duration": 0.286,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "month"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          },
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "year"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "store",
-      "name": "Shop products",
-      "method": "GET",
-      "path": "/store/shops/shop_123/products",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 404), got 422. Body: {'detail': [{'type': 'int_parsing', 'loc': ['path', 'shop_id'], 'msg': 'Input should be a valid integer, unable to parse string as an integer', 'input': 'shop_123', 'url': 'https://errors.pydantic.dev/2.5/v/int_parsing'}]}",
-      "duration": 0.321,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "int_parsing",
-            "loc": [
-              "path",
-              "shop_id"
-            ],
-            "msg": "Input should be a valid integer, unable to parse string as an integer",
-            "input": "shop_123",
-            "url": "https://errors.pydantic.dev/2.5/v/int_parsing"
-          }
-        ]
+        "detail": "GST number not configured in Shop Settings."
       }
     },
     {
@@ -564,10 +158,10 @@
       "status": 403,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 422), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.319,
+      "duration": 0.275,
       "request": {
         "body": {
-          "shop_id": "shop_123",
+          "shop_id": 1,
           "items": [
             {
               "product_id": 1,
@@ -589,7 +183,7 @@
       "status": 403,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.322,
+      "duration": 0.437,
       "request": {
         "body": null,
         "params": null
@@ -602,11 +196,11 @@
       "group": "batch",
       "name": "Export products batch",
       "method": "POST",
-      "path": "/batch/api/batch/products/export",
+      "path": "/batch/products/export",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.268,
+      "duration": 0.292,
       "request": {
         "body": null,
         "params": null
@@ -619,11 +213,11 @@
       "group": "batch",
       "name": "Import products batch",
       "method": "POST",
-      "path": "/batch/api/batch/products/import",
+      "path": "/batch/products/import",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.282,
+      "duration": 0.283,
       "request": {
         "body": null,
         "params": null
@@ -636,11 +230,11 @@
       "group": "batch",
       "name": "Import customers batch",
       "method": "POST",
-      "path": "/batch/api/batch/customers/import",
+      "path": "/batch/customers/import",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.319,
+      "duration": 0.3,
       "request": {
         "body": null,
         "params": null
@@ -653,72 +247,17 @@
       "group": "batch",
       "name": "Batch history",
       "method": "GET",
-      "path": "/batch/api/batch/history",
+      "path": "/batch/history",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.529,
+      "duration": 0.311,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "detail": "Not Found"
-      }
-    },
-    {
-      "group": "security",
-      "name": "SQL injection header check",
-      "method": "GET",
-      "path": "/api/security/check-sql-injection",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'query'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.277,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "query"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
-    },
-    {
-      "group": "security",
-      "name": "Sanitize batch",
-      "method": "POST",
-      "path": "/api/security/sanitize-batch",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.276,
-      "request": {
-        "body": null,
-        "params": null
-      },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
       }
     }
   ],
@@ -731,7 +270,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 1.092,
+      "duration": 0.827,
       "request": {
         "body": null,
         "params": null
@@ -739,7 +278,7 @@
       "response": {
         "status": "healthy",
         "database": "connected",
-        "timestamp": 1782213942.2691863
+        "timestamp": 1782216812.9143438
       }
     },
     {
@@ -750,16 +289,16 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.463,
+      "duration": 0.36,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "status": "degraded",
-        "timestamp": "2026-06-23T11:25:42.724666",
+        "timestamp": "2026-06-23T12:13:33.305675",
         "version": "3.0.0",
-        "uptime_seconds": 4219.964058,
+        "uptime_seconds": 151.015179,
         "components": {
           "database": {
             "status": "healthy",
@@ -768,7 +307,7 @@
           "memory": {
             "status": "healthy",
             "message": "Memory usage: 0.4%",
-            "rss_mb": 135.33984375
+            "rss_mb": 130.53125
           },
           "cpu": {
             "status": "healthy",
@@ -776,8 +315,8 @@
           },
           "disk": {
             "status": "degraded",
-            "message": "Disk usage: 84.0%",
-            "free_gb": 62.004371643066406
+            "message": "Disk usage: 83.3%",
+            "free_gb": 64.55276489257812
           }
         }
       }
@@ -790,7 +329,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.285,
+      "duration": 0.308,
       "request": {
         "body": null,
         "params": null
@@ -798,7 +337,7 @@
       "response": {
         "status": "ready",
         "message": "Application is ready to serve traffic",
-        "timestamp": "2026-06-23T11:25:43.114170"
+        "timestamp": "2026-06-23T12:13:33.596809"
       }
     },
     {
@@ -809,22 +348,22 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.37,
+      "duration": 0.373,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "users_total": 31,
+        "users_total": 39,
         "products_total": 19,
         "invoices_total": 72,
         "products_active": 11,
         "invoices_last_24h": 5,
-        "memory_rss_mb": 135.33984375,
-        "memory_percent": 0.4312018542911846,
+        "memory_rss_mb": 130.53125,
+        "memory_percent": 0.41588135085272104,
         "cpu_percent": 0.0,
-        "uptime_seconds": 4220.825269,
-        "timestamp": "2026-06-23T11:25:43.485325",
+        "uptime_seconds": 151.798752,
+        "timestamp": "2026-06-23T12:13:33.988768",
         "version": "3.0.0"
       }
     },
@@ -836,7 +375,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.27,
+      "duration": 0.306,
       "request": {
         "body": null,
         "params": null
@@ -849,7 +388,7 @@
         "total_products": 19,
         "low_stock_products": 1,
         "stock_health_percentage": 94.73684210526315,
-        "timestamp": "2026-06-23T11:25:43.757164"
+        "timestamp": "2026-06-23T12:13:34.269139"
       }
     },
     {
@@ -860,13 +399,13 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.278,
+      "duration": 0.285,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "db_query_time_ms": 3.707,
+        "db_query_time_ms": 4.032,
         "db_query_status": "healthy",
         "avg_response_time_ms": 0.0,
         "p95_response_time_ms": 0.0,
@@ -874,7 +413,7 @@
         "error_rate": 0.0,
         "total_requests": 0,
         "error_count": 0,
-        "timestamp": "2026-06-23T11:25:44.031391"
+        "timestamp": "2026-06-23T12:13:34.558123"
       }
     },
     {
@@ -885,18 +424,18 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.402,
+      "duration": 0.318,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "user_details_count": 31,
+        "user_details_count": 39,
         "products_count": 19,
         "invoices_count": 72,
-        "customers_count": 13,
+        "customers_count": 21,
         "connection_pool_status": "active",
-        "timestamp": "2026-06-23T11:25:44.301339"
+        "timestamp": "2026-06-23T12:13:34.852163"
       }
     },
     {
@@ -904,10 +443,10 @@
       "name": "Log entry",
       "method": "POST",
       "path": "/api/observability/log",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['body', 'timestamp'], 'msg': 'Field required', 'input': {'level': 'info', 'message': 'Automated test log entry', 'context': {'source': 'pytest'}}, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.262,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.321,
       "request": {
         "body": {
           "level": "info",
@@ -919,24 +458,8 @@
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "timestamp"
-            ],
-            "msg": "Field required",
-            "input": {
-              "level": "info",
-              "message": "Automated test log entry",
-              "context": {
-                "source": "pytest"
-              }
-            },
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "status": "logged",
+        "timestamp": "2026-06-23T12:13:35.171785"
       }
     },
     {
@@ -947,14 +470,14 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.707,
+      "duration": 0.28,
       "request": {
         "body": {},
         "params": null
       },
       "response": {
         "status": "logged",
-        "error_id": "ERR_20260623112545"
+        "error_id": "ERR_20260623121335"
       }
     },
     {
@@ -965,24 +488,24 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 1.723,
+      "duration": 1.663,
       "request": {
         "body": {
-          "username": "tester_1782213941",
+          "username": "tester_1782216812",
           "password": "Test@1234!",
-          "email": "tester_1782213941@example.com",
+          "email": "tester_1782216812@example.com",
           "user_type": "owner"
         },
         "params": null
       },
       "response": {
         "msg": "User registered successfully",
-        "user_id": 32,
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMiIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjE3NTQ3LCJpYXQiOjE3ODIyMTM5NDd9.Nx3YqDJ2ddL9r-o80dPJRZH1bJ8wnY015rG-90DHITg",
+        "user_id": 40,
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MCIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjIwNDE3LCJpYXQiOjE3ODIyMTY4MTd9.-youphMNxYzjXn1idmaYmHkokVjJihWsnisLNyyC0dk",
         "token_type": "bearer",
         "role": "OWNER",
         "user_type": "OWNER",
-        "username": "tester_1782213941"
+        "username": "tester_1782216812"
       }
     },
     {
@@ -993,21 +516,21 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 1.714,
+      "duration": 1.656,
       "request": {
         "body": {
-          "email": "tester_1782213941@example.com",
+          "email": "tester_1782216812@example.com",
           "password": "Test@1234!"
         },
         "params": null
       },
       "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMiIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjE3NTQ4LCJpYXQiOjE3ODIyMTM5NDh9.Bz-pBFuUkUM1C7I37edmjt2SvW7JWqLA7wkS8vbJNM0",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MCIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjIwNDE4LCJpYXQiOjE3ODIyMTY4MTh9.zfq_oupr9mcZg0qzTQjTWIpUscoaI5kMONUWt1yfXso",
         "token_type": "bearer",
         "role": "OWNER",
         "user_type": "OWNER",
-        "user_id": 32,
-        "username": "tester_1782213941"
+        "user_id": 40,
+        "username": "tester_1782216812"
       }
     },
     {
@@ -1015,55 +538,31 @@
       "name": "Get auth sales",
       "method": "GET",
       "path": "/auth/sales",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 403), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.384,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.327,
       "request": {
         "body": null,
         "params": null
       },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
+      "response": []
     },
     {
       "group": "auth",
       "name": "Post auth sales",
       "method": "POST",
       "path": "/auth/sales",
-      "status": 422,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.32,
+      "status": 500,
+      "result": "\u274c FAIL",
+      "reason": "Expected HTTP (200, 201, 401, 403, 422), got 500. Body: {'detail': \"Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice\"}",
+      "duration": 0.289,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "detail": "Failed to create sale: 'shop_id' is an invalid keyword argument for Invoice"
       }
     },
     {
@@ -1074,22 +573,22 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 1.926,
+      "duration": 1.861,
       "request": {
         "body": {
-          "email": "h_1782213949@example.com",
+          "email": "h_1782216819@example.com",
           "password": "HardPass@9!",
-          "user_name": "huser_1782213949"
+          "user_name": "huser_1782216819"
         },
         "params": null
       },
       "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMyIsImVtYWlsIjoiaF8xNzgyMjEzOTQ5QGV4YW1wbGUuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MjIxNTc1MX0.t89hOd8edWd95QL3FcSuyCvMb_xrPmBVEE4khIJPSBo",
-        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMyIsImVtYWlsIjoiaF8xNzgyMjEzOTQ5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MTg3NTEsImp0aSI6IllaZTR6VlhHclVDTFNtdFVuNS10NWR2Q2s2cFUyQlhjVC1aZjlpVTljWkkifQ.vynd76_JZRC6SCMRa0okE8hwHv0ZqidgCCSd9NW1ZKQ",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MjIxODYyMX0._VFrEj9h4Pp3NTM82yH1bQEgIJZf0RCskK0m_pbwwaY",
+        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MjE2MjEsImp0aSI6InNVSll2TVNNaHpUVnh0NlRKZmwwa2htdkcyNlBFZUQxY29XVm44QmRONlkifQ.g537bUyaqpQ3bV40wRDa9zGIYUTvWPjQ6H2tKKLlOdc",
         "token_type": "bearer",
-        "user_id": 33,
-        "email": "h_1782213949@example.com",
-        "user_name": "huser_1782213949"
+        "user_id": 41,
+        "email": "h_1782216819@example.com",
+        "user_name": "huser_1782216819"
       }
     },
     {
@@ -1100,21 +599,21 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 1.729,
+      "duration": 1.649,
       "request": {
         "body": {
-          "email": "h_1782213949@example.com",
+          "email": "h_1782216819@example.com",
           "password": "HardPass@9!"
         },
         "params": null
       },
       "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMyIsImVtYWlsIjoiaF8xNzgyMjEzOTQ5QGV4YW1wbGUuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MjIxNTc1M30.hcso4xfbsriqCOCBTO_EruWOUmOfvhZK5QK7Lh8VWfw",
-        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMyIsImVtYWlsIjoiaF8xNzgyMjEzOTQ5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MTg3NTMsImp0aSI6ImZCMWMyRE9HaFJnWnQ4ZFQweTlOS1hENDJTS2NXT0N3WS1rcDZfNU53VVEifQ.G1BNQ_kkQ0EfF0JBoB4Y3iOqQvjCt4-CpIKdMIX1VaM",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MjIxODYyMn0.jQ7Wofav0bhGAJiZMzmVSoXtYEyh2a5fwxn48FYCx_s",
+        "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MjE2MjIsImp0aSI6InBjdzQyT1ZPalFDcXB3RjlEanZobi1Kc05IS1p5NWUwMWJ5d1FjS2hoS2cifQ.hLR_zlVRo8Rxtf0c8XICG9yKPwsD_bKKJ5P6ieExzxI",
         "token_type": "bearer",
-        "user_id": 33,
-        "email": "h_1782213949@example.com",
-        "user_name": "huser_1782213949"
+        "user_id": 41,
+        "email": "h_1782216819@example.com",
+        "user_name": "huser_1782216819"
       }
     },
     {
@@ -1125,10 +624,10 @@
       "status": 401,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.273,
+      "duration": 0.295,
       "request": {
         "body": {
-          "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMyIsImVtYWlsIjoiaF8xNzgyMjEzOTQ5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MTg3NTMsImp0aSI6ImZCMWMyRE9HaFJnWnQ4ZFQweTlOS1hENDJTS2NXT0N3WS1rcDZfNU53VVEifQ.G1BNQ_kkQ0EfF0JBoB4Y3iOqQvjCt4-CpIKdMIX1VaM"
+          "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MSIsImVtYWlsIjoiaF8xNzgyMjE2ODE5QGV4YW1wbGUuY29tIiwidHlwZSI6InJlZnJlc2giLCJleHAiOjE3ODI4MjE2MjIsImp0aSI6InBjdzQyT1ZPalFDcXB3RjlEanZobi1Kc05IS1p5NWUwMWJ5d1FjS2hoS2cifQ.hLR_zlVRo8Rxtf0c8XICG9yKPwsD_bKKJ5P6ieExzxI"
         },
         "params": null
       },
@@ -1140,17 +639,17 @@
       "group": "auth-hardened",
       "name": "Active sessions (hardened)",
       "method": "GET",
-      "path": "/api/auth-hardened/active-sessions/33",
+      "path": "/api/auth-hardened/active-sessions/41",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.286,
+      "duration": 0.3,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "user_id": 33,
+        "user_id": 41,
         "active_sessions": 0,
         "sessions": []
       }
@@ -1163,7 +662,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.289,
+      "duration": 0.944,
       "request": {
         "body": null,
         "params": null
@@ -1178,27 +677,17 @@
       "name": "Hardened logout-all",
       "method": "POST",
       "path": "/api/auth-hardened/logout-all",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.284,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.488,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "message": "Logged out from all devices successfully",
+        "logged_out_devices": 0
       }
     },
     {
@@ -1209,7 +698,7 @@
       "status": 401,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.267,
+      "duration": 0.307,
       "request": {
         "body": {
           "refresh_token": "dummy",
@@ -1225,11 +714,11 @@
       "group": "session",
       "name": "Active sessions",
       "method": "GET",
-      "path": "/api/session/active/32",
+      "path": "/api/session/active/40",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.279,
+      "duration": 0.295,
       "request": {
         "body": null,
         "params": null
@@ -1246,10 +735,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.302,
+      "duration": 0.295,
       "request": {
         "body": {
-          "user_id": 32,
+          "user_id": 40,
           "data_type": "sale",
           "payload": {
             "test": true
@@ -1259,7 +748,7 @@
       },
       "response": {
         "queued": true,
-        "queue_id": 10,
+        "queue_id": 14,
         "type": "sale",
         "will_sync_when_online": true
       }
@@ -1272,10 +761,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.304,
+      "duration": 0.307,
       "request": {
         "body": {
-          "user_id": 32
+          "user_id": 40
         },
         "params": null
       },
@@ -1284,7 +773,7 @@
         "count": 1,
         "items": [
           {
-            "id": 10,
+            "id": 14,
             "type": "sale",
             "synced": true
           }
@@ -1300,10 +789,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.46,
+      "duration": 0.287,
       "request": {
         "body": {
-          "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzMiIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjE3NTQ4LCJpYXQiOjE3ODIyMTM5NDh9.Bz-pBFuUkUM1C7I37edmjt2SvW7JWqLA7wkS8vbJNM0"
+          "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MCIsInJvbGUiOiJPV05FUiIsInVzZXJfdHlwZSI6Ik9XTkVSIiwiZXhwIjoxNzgyMjIwNDE4LCJpYXQiOjE3ODIyMTY4MTh9.zfq_oupr9mcZg0qzTQjTWIpUscoaI5kMONUWt1yfXso"
         },
         "params": null
       },
@@ -1319,10 +808,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.277,
+      "duration": 0.264,
       "request": {
         "body": {
-          "user_id": 32
+          "user_id": 40
         },
         "params": null
       },
@@ -1338,7 +827,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.287,
+      "duration": 0.269,
       "request": {
         "body": null,
         "params": null
@@ -1365,7 +854,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.311,
+      "duration": 0.38,
       "request": {
         "body": null,
         "params": null
@@ -1382,15 +871,15 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.4,
+      "duration": 0.305,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "id": 23,
-        "shop_id": 32,
-        "shop_name": "tester_1782213941's Shop",
+        "id": 27,
+        "shop_id": 40,
+        "shop_name": "tester_1782216812's Shop",
         "address": null,
         "phone": null,
         "upi_id": null,
@@ -1410,7 +899,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.593,
+      "duration": 0.269,
       "request": {
         "body": null,
         "params": null
@@ -1427,7 +916,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Shop settings not found'}",
-      "duration": 0.274,
+      "duration": 0.392,
       "request": {
         "body": null,
         "params": null
@@ -1444,7 +933,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.411,
+      "duration": 0.31,
       "request": {
         "body": null,
         "params": null
@@ -1461,7 +950,7 @@
       "status": 422,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401, 403), got 422. Body: {'detail': 'No UPI ID configured. Please update your shop profile.'}",
-      "duration": 0.329,
+      "duration": 0.29,
       "request": {
         "body": null,
         "params": null
@@ -1474,56 +963,35 @@
       "group": "shop",
       "name": "Public shop profile",
       "method": "GET",
-      "path": "/shop/public/shop_123",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 404), got 422. Body: {'detail': [{'type': 'int_parsing', 'loc': ['path', 'shop_id'], 'msg': 'Input should be a valid integer, unable to parse string as an integer', 'input': 'shop_123', 'url': 'https://errors.pydantic.dev/2.5/v/int_parsing'}]}",
-      "duration": 0.311,
+      "path": "/shop/public/1",
+      "status": 404,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.359,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "int_parsing",
-            "loc": [
-              "path",
-              "shop_id"
-            ],
-            "msg": "Input should be a valid integer, unable to parse string as an integer",
-            "input": "shop_123",
-            "url": "https://errors.pydantic.dev/2.5/v/int_parsing"
-          }
-        ]
+        "detail": "Shop not found or online store is disabled."
       }
     },
     {
       "group": "shop",
       "name": "Toggle online store",
       "method": "POST",
-      "path": "/shop/toggle-online-store",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 403), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'enable'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.331,
+      "path": "/shop/toggle-online-store?enable=true",
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.281,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "enable"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "message": "Online store ENABLED successfully.",
+        "is_online_store_enabled": true
       }
     },
     {
@@ -1534,7 +1002,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.318,
+      "duration": 0.3,
       "request": {
         "body": {
           "shop_name": "Test Retail Shop",
@@ -1544,15 +1012,15 @@
         "params": null
       },
       "response": {
-        "id": 23,
-        "shop_id": 32,
+        "id": 27,
+        "shop_id": 40,
         "shop_name": "Test Retail Shop",
         "address": null,
         "phone": "9999999999",
         "upi_id": null,
         "gst_number": null,
         "logo_url": null,
-        "is_online_store_enabled": false,
+        "is_online_store_enabled": true,
         "latitude": null,
         "longitude": null,
         "city": "Hyderabad"
@@ -1566,7 +1034,7 @@
       "status": 400,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.282,
+      "duration": 0.305,
       "request": {
         "body": {},
         "params": null
@@ -1583,7 +1051,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.357,
+      "duration": 0.302,
       "request": {
         "body": null,
         "params": null
@@ -1610,7 +1078,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.265,
+      "duration": 0.4,
       "request": {
         "body": null,
         "params": null
@@ -1638,7 +1106,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.374,
+      "duration": 0.296,
       "request": {
         "body": null,
         "params": null
@@ -1665,10 +1133,10 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.28,
+      "duration": 0.298,
       "request": {
         "body": {
-          "product_name": "TestProduct_1782213961",
+          "product_name": "TestProduct_1782216831",
           "unit_price": "99.99",
           "category": "Test",
           "stock": 100,
@@ -1686,7 +1154,7 @@
             ],
             "msg": "Field required",
             "input": {
-              "product_name": "TestProduct_1782213961",
+              "product_name": "TestProduct_1782216831",
               "unit_price": "99.99",
               "category": "Test",
               "stock": 100,
@@ -1705,7 +1173,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.344,
+      "duration": 0.364,
       "request": {
         "body": null,
         "params": null
@@ -1720,7 +1188,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.278,
+      "duration": 0.3,
       "request": {
         "body": null,
         "params": null
@@ -1737,7 +1205,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.297,
+      "duration": 1.12,
       "request": {
         "body": {
           "unit_price": "109.99",
@@ -1757,7 +1225,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.337,
+      "duration": 0.296,
       "request": {
         "body": null,
         "params": null
@@ -1775,7 +1243,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.277,
+      "duration": 0.526,
       "request": {
         "body": null,
         "params": null
@@ -1790,27 +1258,18 @@
       "name": "Stock value analytics",
       "method": "GET",
       "path": "/api/inventory/analytics/stock-value",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.292,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.277,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "total_stock_value": 0,
+        "total_items": 0,
+        "total_products": 0
       }
     },
     {
@@ -1818,27 +1277,22 @@
       "name": "Inventory status analytics",
       "method": "GET",
       "path": "/api/inventory/analytics/inventory-status",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.263,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.36,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "total_products": 0,
+        "low_stock": 0,
+        "critical_stock": 0,
+        "optimal_stock": 0,
+        "overstocked": 0,
+        "total_items_in_stock": 0,
+        "total_stock_value": 0
       }
     },
     {
@@ -1849,7 +1303,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.361,
+      "duration": 0.321,
       "request": {
         "body": null,
         "params": null
@@ -1869,7 +1323,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.288,
+      "duration": 0.317,
       "request": {
         "body": {
           "product_id": 1,
@@ -1882,7 +1336,7 @@
       "response": {
         "message": "Stock movement recorded",
         "product_id": 1,
-        "current_stock": 118,
+        "current_stock": 158,
         "movement_type": "IN"
       }
     },
@@ -1894,7 +1348,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.309,
+      "duration": 0.32,
       "request": {
         "body": null,
         "params": null
@@ -1905,68 +1359,104 @@
           {
             "movement_type": "IN",
             "reason": "Test stock in",
-            "created_at": "2026-06-23T11:26:04.084355",
-            "quantity": 10,
-            "id": 39,
+            "created_at": "2026-06-23T12:13:55.349616",
             "product_id": 1,
+            "id": 43,
+            "quantity": 10,
+            "reference_id": null
+          },
+          {
+            "movement_type": "IN",
+            "reason": "Test stock in",
+            "created_at": "2026-06-23T12:12:41.315598",
+            "product_id": 1,
+            "id": 42,
+            "quantity": 10,
+            "reference_id": null
+          },
+          {
+            "movement_type": "IN",
+            "reason": "Test stock in",
+            "created_at": "2026-06-23T12:05:39.088460",
+            "product_id": 1,
+            "id": 41,
+            "quantity": 10,
+            "reference_id": null
+          },
+          {
+            "movement_type": "IN",
+            "reason": "Test stock in",
+            "created_at": "2026-06-23T12:02:44.599658",
+            "product_id": 1,
+            "id": 40,
+            "quantity": 10,
+            "reference_id": null
+          },
+          {
+            "movement_type": "IN",
+            "reason": "Test stock in",
+            "created_at": "2026-06-23T11:26:04.084355",
+            "product_id": 1,
+            "id": 39,
+            "quantity": 10,
             "reference_id": null
           },
           {
             "movement_type": "IN",
             "reason": "Test stock in",
             "created_at": "2026-06-23T11:23:55.914115",
-            "quantity": 10,
-            "id": 38,
             "product_id": 1,
+            "id": 38,
+            "quantity": 10,
             "reference_id": null
           },
           {
             "movement_type": "IN",
             "reason": "Purchase Order Delivery",
             "created_at": "2026-06-21T14:38:09.184460",
-            "quantity": 50,
-            "id": 5,
             "product_id": 1,
+            "id": 5,
+            "quantity": 50,
             "reference_id": "PO-1"
           },
           {
             "movement_type": "ADJUSTMENT",
             "reason": "MANUAL_CORRECTION: physical count",
             "created_at": "2026-06-21T14:36:21.982614",
-            "quantity": 9,
-            "id": 4,
             "product_id": 1,
+            "id": 4,
+            "quantity": 9,
             "reference_id": "RECONCILIATION_20260621143622"
           },
           {
             "movement_type": "OUT",
             "reason": "SALE",
             "created_at": "2026-06-21T14:36:16.207005",
-            "quantity": 1,
-            "id": 3,
             "product_id": 1,
+            "id": 3,
+            "quantity": 1,
             "reference_id": "B-1782052575"
           },
           {
             "movement_type": "OUT",
             "reason": "test sale",
             "created_at": "2026-06-21T14:36:12.474437",
-            "quantity": 2,
-            "id": 2,
             "product_id": 1,
+            "id": 2,
+            "quantity": 2,
             "reference_id": "REF-1782052572"
           },
           {
             "movement_type": "IN",
             "reason": "Test stock in",
             "created_at": "2026-06-21T14:35:46.444355",
-            "quantity": 10,
-            "id": 1,
             "product_id": 1,
+            "id": 1,
+            "quantity": 10,
             "reference_id": null
           }
         ],
-        "total_movements": 7
+        "total_movements": 11
       }
     },
     {
@@ -1977,11 +1467,11 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.339,
+      "duration": 0.319,
       "request": {
         "body": {
           "product_id": 1,
-          "batch_number": "BATCH-1782213963",
+          "batch_number": "BATCH-1782216835",
           "quantity": 50,
           "expiry_date": "2026-09-21",
           "purchase_price": "75.00"
@@ -1989,11 +1479,11 @@
         "params": null
       },
       "response": {
-        "batch_number": "BATCH-1782213963",
+        "batch_number": "BATCH-1782216835",
         "expiry_date": "2026-09-21",
-        "id": 9,
-        "product_id": 1,
         "manufacture_date": null,
+        "id": 13,
+        "product_id": 1,
         "quantity": 50
       }
     },
@@ -2005,7 +1495,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.399,
+      "duration": 0.268,
       "request": {
         "body": null,
         "params": null
@@ -2014,25 +1504,57 @@
         {
           "batch_number": "BATCH-1782052554",
           "expiry_date": "2026-12-18",
+          "manufacture_date": null,
           "id": 1,
           "product_id": 1,
-          "manufacture_date": null,
           "quantity": 20
         },
         {
           "batch_number": "BATCH-1782213835",
           "expiry_date": "2026-09-21",
+          "manufacture_date": null,
           "id": 8,
           "product_id": 1,
-          "manufacture_date": null,
           "quantity": 50
         },
         {
           "batch_number": "BATCH-1782213963",
           "expiry_date": "2026-09-21",
+          "manufacture_date": null,
           "id": 9,
           "product_id": 1,
+          "quantity": 50
+        },
+        {
+          "batch_number": "BATCH-1782216164",
+          "expiry_date": "2026-09-21",
           "manufacture_date": null,
+          "id": 10,
+          "product_id": 1,
+          "quantity": 50
+        },
+        {
+          "batch_number": "BATCH-1782216338",
+          "expiry_date": "2026-09-21",
+          "manufacture_date": null,
+          "id": 11,
+          "product_id": 1,
+          "quantity": 50
+        },
+        {
+          "batch_number": "BATCH-1782216761",
+          "expiry_date": "2026-09-21",
+          "manufacture_date": null,
+          "id": 12,
+          "product_id": 1,
+          "quantity": 50
+        },
+        {
+          "batch_number": "BATCH-1782216835",
+          "expiry_date": "2026-09-21",
+          "manufacture_date": null,
+          "id": 13,
+          "product_id": 1,
           "quantity": 50
         }
       ]
@@ -2042,27 +1564,17 @@
       "name": "Expiring batches",
       "method": "GET",
       "path": "/api/inventory/expiring-batches",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.286,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.291,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "expiring_batches": [],
+        "count": 0
       }
     },
     {
@@ -2073,7 +1585,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.288,
+      "duration": 0.324,
       "request": {
         "body": null,
         "params": null
@@ -2090,14 +1602,14 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.28,
+      "duration": 0.582,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "user_id": 32,
-        "timestamp": "2026-06-23T11:26:06.000938",
+        "user_id": 40,
+        "timestamp": "2026-06-23T12:13:57.371732",
         "total_products": 0,
         "products": []
       }
@@ -2110,13 +1622,13 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.515,
+      "duration": 0.454,
       "request": {
         "body": {
           "product_id": 1,
           "quantity": 2,
           "reason": "test sale",
-          "reference_id": "REF-1782213965"
+          "reference_id": "REF-1782216836"
         },
         "params": null
       },
@@ -2133,7 +1645,7 @@
               "product_id": 1,
               "quantity": 2,
               "reason": "test sale",
-              "reference_id": "REF-1782213965"
+              "reference_id": "REF-1782216836"
             },
             "url": "https://errors.pydantic.dev/2.5/v/missing"
           }
@@ -2148,14 +1660,14 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.279,
+      "duration": 0.319,
       "request": {
         "body": {
           "updates": [
             {
               "product_id": 1,
               "quantity": 1,
-              "reference_id": "B-1782213965"
+              "reference_id": "B-1782216836"
             }
           ]
         },
@@ -2175,7 +1687,7 @@
             "input": {
               "product_id": 1,
               "quantity": 1,
-              "reference_id": "B-1782213965"
+              "reference_id": "B-1782216836"
             },
             "url": "https://errors.pydantic.dev/2.5/v/missing"
           }
@@ -2190,7 +1702,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.279,
+      "duration": 0.321,
       "request": {
         "body": {
           "local_inventory": [
@@ -2226,14 +1738,14 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.291,
+      "duration": 0.29,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "user_id": 32,
-        "timestamp": "2026-06-23T11:26:07.365143",
+        "user_id": 40,
+        "timestamp": "2026-06-23T12:13:58.853956",
         "total_products": 0,
         "discrepancies_found": 0,
         "fixes_applied": 0,
@@ -2255,7 +1767,7 @@
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Product not found'}",
-      "duration": 0.267,
+      "duration": 0.283,
       "request": {
         "body": {
           "product_id": 1,
@@ -2276,7 +1788,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.277,
+      "duration": 0.296,
       "request": {
         "body": null,
         "params": null
@@ -2293,15 +1805,15 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.371,
+      "duration": 0.285,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "success": true,
-        "user_id": 32,
-        "timestamp": "2026-06-23T11:26:08.277229",
+        "user_id": 40,
+        "timestamp": "2026-06-23T12:13:59.715533",
         "total_products_corrected": 0,
         "corrected_inventory": [],
         "message": "Local cache should be replaced with this data"
@@ -2315,7 +1827,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.471,
+      "duration": 0.754,
       "request": {
         "body": null,
         "params": null
@@ -2332,7 +1844,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.273,
+      "duration": 0.295,
       "request": {
         "body": null,
         "params": null
@@ -2349,21 +1861,21 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.279,
+      "duration": 0.369,
       "request": {
         "body": {
-          "customer_name": "Test Customer 1782213969",
-          "phone": "9882213969",
-          "email": "cust_1782213969@test.com",
+          "customer_name": "Test Customer 1782216840",
+          "phone": "9882216840",
+          "email": "cust_1782216840@test.com",
           "city": "Hyderabad"
         },
         "params": null
       },
       "response": {
-        "id": 14,
-        "customer_name": "Test Customer 1782213969",
-        "email": "cust_1782213969@test.com",
-        "phone": "9882213969",
+        "id": 22,
+        "customer_name": "Test Customer 1782216840",
+        "email": "cust_1782216840@test.com",
+        "phone": "9882216840",
         "whatsapp_number": null,
         "address": null,
         "city": "Hyderabad",
@@ -2372,7 +1884,7 @@
         "credit_limit": 0.0,
         "payment_terms": null,
         "contact_preference": "EMAIL",
-        "created_at": "2026-06-23T11:26:09.300925"
+        "created_at": "2026-06-23T12:14:01.059637"
       }
     },
     {
@@ -2383,17 +1895,17 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.275,
+      "duration": 0.273,
       "request": {
         "body": null,
         "params": null
       },
       "response": [
         {
-          "id": 14,
-          "customer_name": "Test Customer 1782213969",
-          "email": "cust_1782213969@test.com",
-          "phone": "9882213969",
+          "id": 22,
+          "customer_name": "Test Customer 1782216840",
+          "email": "cust_1782216840@test.com",
+          "phone": "9882216840",
           "whatsapp_number": null,
           "address": null,
           "city": "Hyderabad",
@@ -2402,7 +1914,7 @@
           "credit_limit": 0.0,
           "payment_terms": null,
           "contact_preference": "EMAIL",
-          "created_at": "2026-06-23T11:26:09.300925"
+          "created_at": "2026-06-23T12:14:01.059637"
         }
       ]
     },
@@ -2410,20 +1922,20 @@
       "group": "customers",
       "name": "Get customer",
       "method": "GET",
-      "path": "/api/customers/14",
+      "path": "/api/customers/22",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.271,
+      "duration": 0.352,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "id": 14,
-        "customer_name": "Test Customer 1782213969",
-        "email": "cust_1782213969@test.com",
-        "phone": "9882213969",
+        "id": 22,
+        "customer_name": "Test Customer 1782216840",
+        "email": "cust_1782216840@test.com",
+        "phone": "9882216840",
         "whatsapp_number": null,
         "address": null,
         "city": "Hyderabad",
@@ -2432,18 +1944,18 @@
         "credit_limit": 0.0,
         "payment_terms": null,
         "contact_preference": "EMAIL",
-        "created_at": "2026-06-23T11:26:09.300925"
+        "created_at": "2026-06-23T12:14:01.059637"
       }
     },
     {
       "group": "customers",
       "name": "Update customer",
       "method": "PUT",
-      "path": "/api/customers/14",
+      "path": "/api/customers/22",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.495,
+      "duration": 0.296,
       "request": {
         "body": {
           "city": "Mumbai"
@@ -2451,10 +1963,10 @@
         "params": null
       },
       "response": {
-        "id": 14,
-        "customer_name": "Test Customer 1782213969",
-        "email": "cust_1782213969@test.com",
-        "phone": "9882213969",
+        "id": 22,
+        "customer_name": "Test Customer 1782216840",
+        "email": "cust_1782216840@test.com",
+        "phone": "9882216840",
         "whatsapp_number": null,
         "address": null,
         "city": "Mumbai",
@@ -2463,18 +1975,18 @@
         "credit_limit": 0.0,
         "payment_terms": null,
         "contact_preference": "EMAIL",
-        "created_at": "2026-06-23T11:26:09.300925"
+        "created_at": "2026-06-23T12:14:01.059637"
       }
     },
     {
       "group": "customers",
       "name": "Set contact preference",
       "method": "POST",
-      "path": "/api/customers/14/set-contact-preference",
+      "path": "/api/customers/22/set-contact-preference",
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.257,
+      "duration": 0.343,
       "request": {
         "body": null,
         "params": null
@@ -2499,19 +2011,17 @@
       "name": "Search by phone",
       "method": "GET",
       "path": "/api/customers/search/by-phone",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 400, 401), got 404. Body: {'detail': 'Customer not found'}",
-      "duration": 0.381,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.317,
       "request": {
         "body": null,
         "params": {
           "phone": "9999999999"
         }
       },
-      "response": {
-        "detail": "Customer not found"
-      }
+      "response": []
     },
     {
       "group": "customers",
@@ -2521,7 +2031,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.325,
+      "duration": 0.32,
       "request": {
         "body": null,
         "params": {
@@ -2532,17 +2042,17 @@
         "search_term": "Test",
         "results": [
           {
-            "id": 14,
-            "customer_name": "Test Customer 1782213969",
-            "phone": "9882213969",
+            "customer_name": "Test Customer 1782216840",
+            "phone": "9882216840",
             "address": null,
             "state": null,
             "credit_limit": 0.0,
             "contact_preference": "EMAIL",
-            "created_at": "2026-06-23T11:26:09.300925",
-            "updated_at": "2026-06-23T11:26:10.121200",
-            "user_id": 32,
-            "email": "cust_1782213969@test.com",
+            "created_at": "2026-06-23T12:14:01.059637",
+            "updated_at": "2026-06-23T12:14:02.053206",
+            "user_id": 40,
+            "id": 22,
+            "email": "cust_1782216840@test.com",
             "whatsapp_number": null,
             "city": "Mumbai",
             "postal_code": null,
@@ -2557,17 +2067,17 @@
       "group": "customers",
       "name": "Credit score",
       "method": "GET",
-      "path": "/api/credit-score/14",
+      "path": "/api/credit-score/22",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.314,
+      "duration": 0.32,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "customer_id": 14,
+        "customer_id": 22,
         "credit_score": 50,
         "badge": "REGULAR",
         "reason": "New customer"
@@ -2581,10 +2091,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.307,
+      "duration": 0.319,
       "request": {
         "body": {
-          "invoice_number": "INV-1782213971",
+          "invoice_number": "INV-1782216843",
           "customer_name": "Test Customer",
           "customer_phone": "1234567890",
           "total_amount": 500.0,
@@ -2604,9 +2114,9 @@
         "params": null
       },
       "response": {
-        "id": 80,
-        "invoice_id": 80,
-        "invoice_number": "INV-1782213971",
+        "id": 84,
+        "invoice_id": 84,
+        "invoice_number": "INV-1782216843",
         "total_amount": 500.0,
         "paid_amount": 500.0,
         "subtotal": 491.0,
@@ -2614,7 +2124,7 @@
         "status": "SENT",
         "payment_status": "PAID",
         "invoice_date": "2026-06-23",
-        "created_at": "2026-06-23T11:26:11.908919",
+        "created_at": "2026-06-23T12:14:03.659653",
         "message": "Invoice created successfully.",
         "line_items": [
           {
@@ -2635,10 +2145,10 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.266,
+      "duration": 0.29,
       "request": {
         "body": {
-          "invoice_number": "INV-OFF-1782213971",
+          "invoice_number": "INV-OFF-1782216843",
           "customer_name": "Offline Customer",
           "total_amount": 300.0,
           "paid_amount": 300.0,
@@ -2657,7 +2167,7 @@
             ],
             "msg": "Field required",
             "input": {
-              "invoice_number": "INV-OFF-1782213971",
+              "invoice_number": "INV-OFF-1782216843",
               "customer_name": "Offline Customer",
               "total_amount": 300.0,
               "paid_amount": 300.0,
@@ -2677,33 +2187,33 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.281,
+      "duration": 0.274,
       "request": {
         "body": null,
         "params": null
       },
       "response": [
         {
-          "total_amount": 500.0,
-          "updated_at": "2026-06-23T11:26:11.908919",
-          "user_id": 32,
-          "customer_phone": "1234567890",
-          "paid_amount": 500.0,
-          "invoice_number": "INV-1782213971",
+          "invoice_number": "INV-1782216843",
           "status": "SENT",
-          "payment_status": "PAID",
-          "id": 80,
+          "id": 84,
           "offline_id": null,
+          "payment_status": "PAID",
           "invoice_date": "2026-06-23",
           "payment_method": null,
           "due_date": "2026-06-23",
           "source": "MANUAL_ENTRY",
-          "customer_id": 15,
+          "customer_id": 23,
           "subtotal": 491.0,
           "notes": "",
           "customer_name": "Test Customer",
           "tax": 9.0,
-          "created_at": "2026-06-23T11:26:11.908919"
+          "created_at": "2026-06-23T12:14:03.659653",
+          "customer_phone": "1234567890",
+          "total_amount": 500.0,
+          "updated_at": "2026-06-23T12:14:03.659653",
+          "user_id": 40,
+          "paid_amount": 500.0
         }
       ]
     },
@@ -2711,18 +2221,18 @@
       "group": "invoices",
       "name": "Get invoice",
       "method": "GET",
-      "path": "/api/invoices/80",
+      "path": "/api/invoices/84",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.283,
+      "duration": 0.305,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "id": 80,
-        "invoice_number": "INV-1782213971",
+        "id": 84,
+        "invoice_number": "INV-1782216843",
         "total_amount": 500.0,
         "paid_amount": 500.0,
         "subtotal": 491.0,
@@ -2730,7 +2240,7 @@
         "status": "SENT",
         "payment_status": "PAID",
         "invoice_date": "2026-06-23",
-        "created_at": "2026-06-23T11:26:11.908919",
+        "created_at": "2026-06-23T12:14:03.659653",
         "line_items": [
           {
             "product_id": null,
@@ -2750,7 +2260,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.274,
+      "duration": 0.268,
       "request": {
         "body": null,
         "params": null
@@ -2769,7 +2279,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.256,
+      "duration": 0.462,
       "request": {
         "body": null,
         "params": null
@@ -2787,7 +2297,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.28,
+      "duration": 0.325,
       "request": {
         "body": null,
         "params": null
@@ -2821,7 +2331,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.262,
+      "duration": 0.314,
       "request": {
         "body": {
           "bill_type": "retail"
@@ -2871,7 +2381,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.262,
+      "duration": 0.319,
       "request": {
         "body": null,
         "params": null
@@ -2886,7 +2396,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.269,
+      "duration": 0.32,
       "request": {
         "body": null,
         "params": null
@@ -2905,32 +2415,31 @@
       "name": "Create worker",
       "method": "POST",
       "path": "/api/attendance/workers",
-      "status": 422,
+      "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.28,
+      "duration": 0.386,
       "request": {
         "body": {
-          "name": "Worker_1782213974",
-          "phone": "8782213974",
+          "name": "Worker_1782216846",
+          "phone": "8782216846",
           "position": "Cashier",
           "salary": "18000"
         },
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "name": "Worker_1782216846",
+        "phone": "8782216846",
+        "shopkeeper_id": 40,
+        "address": "",
+        "assigned_work": "",
+        "position": "Cashier",
+        "status": "active",
+        "id": 23,
+        "salary": 18000.0,
+        "join_date": "2026-06-23",
+        "pin": ""
       }
     },
     {
@@ -2938,38 +2447,39 @@
       "name": "List workers",
       "method": "GET",
       "path": "/api/attendance/workers",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'user_id'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.278,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.981,
       "request": {
         "body": null,
         "params": null
       },
-      "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "user_id"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
-      }
+      "response": [
+        {
+          "name": "Worker_1782216846",
+          "phone": "8782216846",
+          "shopkeeper_id": 40,
+          "address": "",
+          "assigned_work": "",
+          "position": "Cashier",
+          "status": "active",
+          "id": 23,
+          "salary": 18000.0,
+          "join_date": "2026-06-23",
+          "pin": ""
+        }
+      ]
     },
     {
       "group": "attendance",
       "name": "Update worker",
       "method": "PUT",
-      "path": "/api/attendance/workers/1",
-      "status": 404,
+      "path": "/api/attendance/workers/23",
+      "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.538,
+      "duration": 0.343,
       "request": {
         "body": {
           "salary": "22000",
@@ -2978,7 +2488,17 @@
         "params": null
       },
       "response": {
-        "detail": "Worker not found"
+        "name": "Worker_1782216846",
+        "phone": "8782216846",
+        "shopkeeper_id": 40,
+        "address": "",
+        "assigned_work": "",
+        "position": "Senior Cashier",
+        "status": "active",
+        "id": 23,
+        "salary": 22000.0,
+        "join_date": "2026-06-23",
+        "pin": ""
       }
     },
     {
@@ -2989,7 +2509,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.267,
+      "duration": 0.288,
       "request": {
         "body": null,
         "params": null
@@ -3017,7 +2537,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.288,
+      "duration": 0.266,
       "request": {
         "body": null,
         "params": null
@@ -3042,13 +2562,13 @@
       "name": "Manual attendance record",
       "method": "POST",
       "path": "/api/attendance/record-manual",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Employee not found'}",
-      "duration": 0.319,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.275,
       "request": {
         "body": {
-          "employee_id": 1,
+          "employee_id": 23,
           "attendance_date": "2026-06-23",
           "status": "present",
           "notes": "Auto test"
@@ -3056,37 +2576,59 @@
         "params": null
       },
       "response": {
-        "detail": "Employee not found"
+        "message": "Attendance recorded successfully",
+        "worker_id": 23,
+        "status": "PRESENT"
       }
     },
     {
       "group": "attendance",
       "name": "Employee attendance history",
       "method": "GET",
-      "path": "/api/attendance/employee/1",
+      "path": "/api/attendance/employee/23",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.32,
+      "duration": 0.274,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "employee_id": 1,
+        "employee_id": 23,
         "records": [
           {
-            "check_in_time": "2026-06-21T20:07:20.370070",
-            "attendance_date": "2026-06-21",
-            "check_out_time": "2026-06-21T20:07:23.890538",
-            "working_hours": 0.0009779077777777778,
-            "id": 1,
-            "employee_id": 1,
-            "status": "PRESENT",
+            "attendance_date": "2026-06-28",
+            "check_in_time": null,
+            "check_out_time": null,
+            "working_hours": 0.0,
+            "id": 27,
+            "employee_id": 23,
+            "status": "LEAVE",
             "notes": null
+          },
+          {
+            "attendance_date": "2026-06-27",
+            "check_in_time": null,
+            "check_out_time": null,
+            "working_hours": 0.0,
+            "id": 26,
+            "employee_id": 23,
+            "status": "LEAVE",
+            "notes": null
+          },
+          {
+            "attendance_date": "2026-06-22",
+            "check_in_time": null,
+            "check_out_time": null,
+            "working_hours": 0.0,
+            "id": 25,
+            "employee_id": 23,
+            "status": "PRESENT",
+            "notes": "Auto test"
           }
         ],
-        "total_records": 1
+        "total_records": 3
       }
     },
     {
@@ -3097,21 +2639,21 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.405,
+      "duration": 0.287,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "date": "2026-06-23",
-        "total_records": 2,
-        "present": 2,
+        "total_records": 4,
+        "present": 4,
         "absent": 0,
         "leave": 0,
         "records": [
           {
-            "check_in_time": "2026-06-23T03:56:16.042385",
             "attendance_date": "2026-06-23",
+            "check_in_time": "2026-06-23T03:56:16.042385",
             "check_out_time": null,
             "working_hours": 0.0,
             "id": 30,
@@ -3120,14 +2662,34 @@
             "notes": null
           },
           {
-            "check_in_time": "2026-06-23T10:18:35.795544",
             "attendance_date": "2026-06-23",
+            "check_in_time": "2026-06-23T10:18:35.795544",
             "check_out_time": "2026-06-23T10:18:43.610754",
             "working_hours": 0.0021708916666666666,
             "id": 31,
             "employee_id": 27,
             "status": "PRESENT",
             "notes": null
+          },
+          {
+            "attendance_date": "2026-06-23",
+            "check_in_time": null,
+            "check_out_time": null,
+            "working_hours": 0.0,
+            "id": 32,
+            "employee_id": 38,
+            "status": "PRESENT",
+            "notes": "Auto test"
+          },
+          {
+            "attendance_date": "2026-06-23",
+            "check_in_time": null,
+            "check_out_time": null,
+            "working_hours": 0.0,
+            "id": 35,
+            "employee_id": 40,
+            "status": "PRESENT",
+            "notes": "Auto test"
           }
         ]
       }
@@ -3137,13 +2699,13 @@
       "name": "Leave request",
       "method": "POST",
       "path": "/api/attendance/leave-request",
-      "status": 404,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 422), got 404. Body: {'detail': 'Employee not found'}",
-      "duration": 0.317,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.315,
       "request": {
         "body": {
-          "employee_id": 1,
+          "employee_id": 23,
           "leave_type": "casual",
           "from_date": "2026-06-28",
           "to_date": "2026-06-29",
@@ -3152,7 +2714,14 @@
         "params": null
       },
       "response": {
-        "detail": "Employee not found"
+        "to_date": "2026-06-29",
+        "leave_type": "PERSONAL",
+        "from_date": "2026-06-28",
+        "status": "PENDING",
+        "id": 9,
+        "employee_id": 40,
+        "reason": "Personal work",
+        "created_at": "2026-06-23T12:14:09.969124"
       }
     },
     {
@@ -3163,7 +2732,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.32,
+      "duration": 0.283,
       "request": {
         "body": null,
         "params": null
@@ -3171,9 +2740,29 @@
       "response": {
         "leave_requests": [
           {
+            "to_date": "2026-06-29",
+            "leave_type": "PERSONAL",
+            "from_date": "2026-06-28",
+            "status": "PENDING",
+            "id": 9,
+            "employee_id": 40,
+            "reason": "Personal work",
+            "created_at": "2026-06-23T12:14:09.969124"
+          },
+          {
+            "to_date": "2026-06-29",
+            "leave_type": "PERSONAL",
+            "from_date": "2026-06-28",
+            "status": "REJECTED",
+            "id": 8,
+            "employee_id": 38,
+            "reason": "Personal work",
+            "created_at": "2026-06-23T12:12:54.706304"
+          },
+          {
+            "to_date": "2026-06-28",
             "leave_type": "PERSONAL",
             "from_date": "2026-06-27",
-            "to_date": "2026-06-28",
             "status": "APPROVED",
             "id": 7,
             "employee_id": 23,
@@ -3181,9 +2770,9 @@
             "created_at": "2026-06-21T20:34:46.575108"
           },
           {
+            "to_date": "2026-06-27",
             "leave_type": "PERSONAL",
             "from_date": "2026-06-26",
-            "to_date": "2026-06-27",
             "status": "APPROVED",
             "id": 6,
             "employee_id": 19,
@@ -3191,9 +2780,9 @@
             "created_at": "2026-06-21T15:13:46.134638"
           },
           {
+            "to_date": "2026-06-27",
             "leave_type": "PERSONAL",
             "from_date": "2026-06-26",
-            "to_date": "2026-06-27",
             "status": "APPROVED",
             "id": 5,
             "employee_id": 16,
@@ -3201,9 +2790,9 @@
             "created_at": "2026-06-21T15:04:50.144520"
           },
           {
+            "to_date": "2026-06-27",
             "leave_type": "PERSONAL",
             "from_date": "2026-06-26",
-            "to_date": "2026-06-27",
             "status": "APPROVED",
             "id": 4,
             "employee_id": 11,
@@ -3211,9 +2800,9 @@
             "created_at": "2026-06-21T14:55:01.340774"
           },
           {
+            "to_date": "2026-06-27",
             "leave_type": "PERSONAL",
             "from_date": "2026-06-26",
-            "to_date": "2026-06-27",
             "status": "APPROVED",
             "id": 3,
             "employee_id": 9,
@@ -3221,9 +2810,9 @@
             "created_at": "2026-06-21T14:50:35.404097"
           },
           {
+            "to_date": "2026-06-27",
             "leave_type": "PERSONAL",
             "from_date": "2026-06-26",
-            "to_date": "2026-06-27",
             "status": "APPROVED",
             "id": 2,
             "employee_id": 7,
@@ -3231,9 +2820,9 @@
             "created_at": "2026-06-21T14:41:44.851022"
           },
           {
+            "to_date": "2026-06-27",
             "leave_type": "PERSONAL",
             "from_date": "2026-06-26",
-            "to_date": "2026-06-27",
             "status": "REJECTED",
             "id": 1,
             "employee_id": 5,
@@ -3241,18 +2830,18 @@
             "created_at": "2026-06-21T14:37:31.945183"
           }
         ],
-        "total": 7
+        "total": 9
       }
     },
     {
       "group": "attendance",
       "name": "Approve leave",
       "method": "PUT",
-      "path": "/api/attendance/leave-request/1/approve",
+      "path": "/api/attendance/leave-request/9/approve",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.319,
+      "duration": 0.293,
       "request": {
         "body": null,
         "params": null
@@ -3265,11 +2854,11 @@
       "group": "attendance",
       "name": "Reject leave",
       "method": "PUT",
-      "path": "/api/attendance/leave-request/1/reject",
+      "path": "/api/attendance/leave-request/9/reject",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.316,
+      "duration": 0.378,
       "request": {
         "body": null,
         "params": null
@@ -3286,42 +2875,42 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.275,
+      "duration": 0.343,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "period_days": 30,
-        "total_records": 31,
-        "present": 17,
+        "total_records": 37,
+        "present": 19,
         "absent": 0,
-        "leave": 14,
-        "total_employees": 33,
-        "attendance_percentage": 54.83870967741935
+        "leave": 18,
+        "total_employees": 41,
+        "attendance_percentage": 51.35135135135135
       }
     },
     {
       "group": "attendance",
       "name": "Employee analytics",
       "method": "GET",
-      "path": "/api/attendance/analytics/employee/1",
+      "path": "/api/attendance/analytics/employee/23",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.37,
+      "duration": 0.357,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "employee_id": 1,
+        "employee_id": 23,
         "period_days": 30,
         "present": 1,
         "absent": 0,
-        "leave": 0,
-        "total_working_hours": 0.0009779077777777778,
-        "attendance_percentage": 100.0
+        "leave": 2,
+        "total_working_hours": 0,
+        "attendance_percentage": 33.33333333333333
       }
     },
     {
@@ -3332,10 +2921,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.313,
+      "duration": 0.301,
       "request": {
         "body": {
-          "customer_phone": "9082213979",
+          "customer_phone": "9082216851",
           "customer_name": "Test Customer",
           "amount": 500.0,
           "description": "Test credit"
@@ -3344,7 +2933,7 @@
       },
       "response": {
         "message": "Khata credit recorded successfully",
-        "customer_phone": "9082213979",
+        "customer_phone": "9082216851",
         "amount_added": 500.0,
         "total_outstanding": 500.0
       }
@@ -3357,10 +2946,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.32,
+      "duration": 0.382,
       "request": {
         "body": {
-          "customer_phone": "9082213979",
+          "customer_phone": "9082216851",
           "amount": 100.0,
           "description": "Partial repay"
         },
@@ -3368,7 +2957,7 @@
       },
       "response": {
         "message": "Repayment recorded successfully",
-        "customer_phone": "9082213979",
+        "customer_phone": "9082216851",
         "amount_paid": 100.0,
         "remaining_balance": 400.0
       }
@@ -3381,7 +2970,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.284,
+      "duration": 0.441,
       "request": {
         "body": null,
         "params": null
@@ -3390,11 +2979,11 @@
         "total_outstanding": 400.0,
         "customers": [
           {
-            "id": 12,
+            "id": 16,
             "customer_name": "Test Customer",
-            "customer_phone": "9082213979",
+            "customer_phone": "9082216851",
             "khata_balance": 400.0,
-            "last_transaction": "2026-06-23T11:26:19.580587"
+            "last_transaction": "2026-06-23T12:14:12.228549"
           }
         ]
       }
@@ -3403,7 +2992,39 @@
       "group": "khata",
       "name": "Khata history",
       "method": "GET",
-      "path": "/khata/history/9082213979",
+      "path": "/khata/history/9082216851",
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.483,
+      "request": {
+        "body": null,
+        "params": null
+      },
+      "response": [
+        {
+          "id": 44,
+          "transaction_type": "PAYMENT",
+          "amount": 100.0,
+          "reference_id": "PAY-16-1782216852",
+          "description": "Partial repay",
+          "transaction_date": "2026-06-23T12:14:12.227925"
+        },
+        {
+          "id": 43,
+          "transaction_type": "INVOICE",
+          "amount": 500.0,
+          "reference_id": "KHATA-16-1782216851",
+          "description": "Test credit",
+          "transaction_date": "2026-06-23T12:14:11.929667"
+        }
+      ]
+    },
+    {
+      "group": "khata",
+      "name": "WhatsApp reminder",
+      "method": "GET",
+      "path": "/khata/whatsapp-reminder/9082216851",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
@@ -3412,43 +3033,11 @@
         "body": null,
         "params": null
       },
-      "response": [
-        {
-          "id": 32,
-          "transaction_type": "PAYMENT",
-          "amount": 100.0,
-          "reference_id": "PAY-12-1782213979",
-          "description": "Partial repay",
-          "transaction_date": "2026-06-23T11:26:19.583969"
-        },
-        {
-          "id": 31,
-          "transaction_type": "INVOICE",
-          "amount": 500.0,
-          "reference_id": "KHATA-12-1782213979",
-          "description": "Test credit",
-          "transaction_date": "2026-06-23T11:26:19.263640"
-        }
-      ]
-    },
-    {
-      "group": "khata",
-      "name": "WhatsApp reminder",
-      "method": "GET",
-      "path": "/khata/whatsapp-reminder/9082213979",
-      "status": 200,
-      "result": "\u2705 PASS",
-      "reason": null,
-      "duration": 0.278,
-      "request": {
-        "body": null,
-        "params": null
-      },
       "response": {
         "customer_name": "Test Customer",
-        "customer_phone": "9082213979",
+        "customer_phone": "9082216851",
         "outstanding_balance": 400.0,
-        "whatsapp_url": "https://wa.me/919082213979?text=Namaste%20Test%20Customer%20%F0%9F%99%8F%0A%0AAapka%20khata%20balance%20hai%3A%20%2A%E2%82%B9400.00%2A%0A%0AKripaya%20jaldi%20payment%20karein.%0A%0AShukriya%21%20%F0%9F%8F%AA",
+        "whatsapp_url": "https://wa.me/919082216851?text=Namaste%20Test%20Customer%20%F0%9F%99%8F%0A%0AAapka%20khata%20balance%20hai%3A%20%2A%E2%82%B9400.00%2A%0A%0AKripaya%20jaldi%20payment%20karein.%0A%0AShukriya%21%20%F0%9F%8F%AA",
         "message_preview": "Namaste Test Customer \ud83d\ude4f\n\nAapka khata balance hai: *\u20b9400.00*\n\nKripaya jaldi payment karein.\n\nShukriya! \ud83c\udfea"
       }
     },
@@ -3456,17 +3045,17 @@
       "group": "khata",
       "name": "API khata detail",
       "method": "GET",
-      "path": "/api/khata/9082213979",
+      "path": "/api/khata/9082216851",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.276,
+      "duration": 0.351,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "customer_phone": "9082213979",
+        "customer_phone": "9082216851",
         "khata_balance": 0,
         "status": "no_customer"
       }
@@ -3479,7 +3068,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.296,
+      "duration": 0.308,
       "request": {
         "body": null,
         "params": null
@@ -3498,67 +3087,67 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.3,
+      "duration": 0.306,
       "request": {
         "body": {
-          "customer_phone": "9082213979",
+          "customer_phone": "9082216851",
           "amount": 200.0,
           "transaction_type": "credit",
-          "reference_id": "KH-1782213979"
+          "reference_id": "KH-1782216851"
         },
         "params": null
       },
       "response": {
         "status": "success",
-        "customer_phone": "9082213979",
+        "customer_phone": "9082216851",
         "new_balance": 600.0,
         "transaction_type": "credit",
         "amount": 200.0,
-        "transaction_id": 33
+        "transaction_id": 45
       }
     },
     {
       "group": "khata",
       "name": "Khata history (api)",
       "method": "GET",
-      "path": "/api/khata-history/9082213979",
+      "path": "/api/khata-history/9082216851",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.288,
+      "duration": 0.311,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "status": "success",
-        "customer_phone": "9082213979",
+        "customer_phone": "9082216851",
         "current_balance": 600.0,
         "transaction_count": 3,
         "transactions": [
           {
-            "id": 33,
+            "id": 45,
             "type": "INVOICE",
             "amount": 200.0,
-            "reference_id": "KH-1782213979",
-            "description": "credit - KH-1782213979",
-            "date": "2026-06-23T11:26:21.392982"
+            "reference_id": "KH-1782216851",
+            "description": "credit - KH-1782216851",
+            "date": "2026-06-23T12:14:14.548176"
           },
           {
-            "id": 32,
+            "id": 44,
             "type": "PAYMENT",
             "amount": 100.0,
-            "reference_id": "PAY-12-1782213979",
+            "reference_id": "PAY-16-1782216852",
             "description": "Partial repay",
-            "date": "2026-06-23T11:26:19.583969"
+            "date": "2026-06-23T12:14:12.227925"
           },
           {
-            "id": 31,
+            "id": 43,
             "type": "INVOICE",
             "amount": 500.0,
-            "reference_id": "KHATA-12-1782213979",
+            "reference_id": "KHATA-16-1782216851",
             "description": "Test credit",
-            "date": "2026-06-23T11:26:19.263640"
+            "date": "2026-06-23T12:14:11.929667"
           }
         ]
       }
@@ -3571,7 +3160,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.275,
+      "duration": 0.301,
       "request": {
         "body": {
           "supplier_name": "ABC Suppliers",
@@ -3587,13 +3176,13 @@
         "params": null
       },
       "response": {
-        "id": 8,
+        "id": 12,
         "supplier_name": "ABC Suppliers",
         "status": "DRAFT",
         "total_cost": 4000.0,
         "expected_delivery": "2026-06-30",
         "items_json": "[{\"product_id\": 1, \"product_name\": null, \"quantity\": 50, \"unit_cost\": null, \"unit_price\": 80.0}]",
-        "created_at": "2026-06-23T11:26:21.979195"
+        "created_at": "2026-06-23T12:14:15.176251"
       }
     },
     {
@@ -3604,20 +3193,20 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.4,
+      "duration": 0.293,
       "request": {
         "body": null,
         "params": null
       },
       "response": [
         {
-          "id": 8,
+          "id": 12,
           "supplier_name": "ABC Suppliers",
           "status": "DRAFT",
           "total_cost": 4000.0,
           "expected_delivery": "2026-06-30",
           "items_json": "[{\"product_id\": 1, \"product_name\": null, \"quantity\": 50, \"unit_cost\": null, \"unit_price\": 80.0}]",
-          "created_at": "2026-06-23T11:26:21.979195"
+          "created_at": "2026-06-23T12:14:15.176251"
         }
       ]
     },
@@ -3625,17 +3214,17 @@
       "group": "purchase-orders",
       "name": "Mark PO delivered",
       "method": "POST",
-      "path": "/purchase-orders/8/mark-delivered",
+      "path": "/purchase-orders/12/mark-delivered",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.449,
+      "duration": 0.299,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "message": "PO #8 marked as delivered. Stock updated.",
+        "message": "PO #12 marked as delivered. Stock updated.",
         "stock_updates": [],
         "total_cost": 4000.0
       }
@@ -3644,11 +3233,11 @@
       "group": "purchase-orders",
       "name": "Cancel PO",
       "method": "POST",
-      "path": "/purchase-orders/8/cancel",
+      "path": "/purchase-orders/12/cancel",
       "status": 409,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 404), got 409. Body: {'detail': 'Cannot cancel a delivered PO.'}",
-      "duration": 0.316,
+      "duration": 0.295,
       "request": {
         "body": null,
         "params": null
@@ -3665,11 +3254,11 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.327,
+      "duration": 0.306,
       "request": {
         "body": {
-          "customer_id": 14,
-          "invoice_id": 80,
+          "customer_id": 22,
+          "invoice_id": 84,
           "delivery_address": "123 Test Street, Hyderabad",
           "delivery_date": "2026-06-24",
           "special_instructions": "Handle with care"
@@ -3677,7 +3266,7 @@
         "params": null
       },
       "response": {
-        "delivery_id": 8,
+        "delivery_id": 12,
         "status": "created",
         "delivery_date": "2026-06-24"
       }
@@ -3690,7 +3279,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.315,
+      "duration": 0.343,
       "request": {
         "body": null,
         "params": null
@@ -3703,11 +3292,11 @@
       "group": "delivery",
       "name": "Update delivery status",
       "method": "POST",
-      "path": "/api/delivery/8/update-status",
+      "path": "/api/delivery/12/update-status",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.286,
+      "duration": 0.31,
       "request": {
         "body": {
           "status": "delivered",
@@ -3716,9 +3305,9 @@
         "params": null
       },
       "response": {
-        "delivery_id": 8,
+        "delivery_id": 12,
         "status": "DELIVERED",
-        "timestamp": "2026-06-23T11:26:24.063740",
+        "timestamp": "2026-06-23T12:14:17.016459",
         "notes": "WhatsApp webhook: Send 'DELIVERED' notification to customer"
       }
     },
@@ -3730,11 +3319,11 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.35,
+      "duration": 0.408,
       "request": {
         "body": {
-          "customer_id": 14,
-          "invoice_id": 80,
+          "customer_id": 22,
+          "invoice_id": 84,
           "amount": 500.0
         },
         "params": null
@@ -3755,12 +3344,12 @@
       "status": 400,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.327,
+      "duration": 0.297,
       "request": {
         "body": {
-          "customer_id": 14,
+          "customer_id": 22,
           "points": 10,
-          "invoice_id": 80
+          "invoice_id": 84
         },
         "params": null
       },
@@ -3776,7 +3365,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.285,
+      "duration": 0.344,
       "request": {
         "body": {
           "category": "utilities",
@@ -3788,7 +3377,7 @@
       },
       "response": {
         "status": "success",
-        "expense_id": 13,
+        "expense_id": 22,
         "amount": 1500.0,
         "category": "utilities"
       }
@@ -3801,7 +3390,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.331,
+      "duration": 0.322,
       "request": {
         "body": null,
         "params": null
@@ -3810,7 +3399,7 @@
         "status": "success",
         "expenses": [
           {
-            "id": 13,
+            "id": 22,
             "category": "utilities",
             "amount": 1500.0,
             "description": "Electricity bill",
@@ -3827,7 +3416,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.264,
+      "duration": 0.316,
       "request": {
         "body": null,
         "params": null
@@ -3839,7 +3428,7 @@
         "count": 1,
         "expenses": [
           {
-            "id": 13,
+            "id": 22,
             "category": "utilities",
             "amount": 1500.0,
             "description": "Electricity bill",
@@ -3857,7 +3446,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.319,
+      "duration": 0.481,
       "request": {
         "body": {
           "category": "rent",
@@ -3881,7 +3470,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.399,
+      "duration": 0.289,
       "request": {
         "body": null,
         "params": null
@@ -3890,7 +3479,7 @@
         "total_expenses": 21500.0,
         "expenses": [
           {
-            "id": 13,
+            "id": 22,
             "category": "utilities",
             "amount": 1500.0,
             "description": "Electricity bill",
@@ -3898,7 +3487,7 @@
             "payment_method": null
           },
           {
-            "id": 14,
+            "id": 23,
             "category": "rent",
             "amount": 20000.0,
             "description": null,
@@ -3916,10 +3505,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.312,
+      "duration": 0.348,
       "request": {
         "body": {
-          "name": "Ent_Worker_1782213986",
+          "name": "Ent_Worker_1782216859",
           "position": "Manager",
           "salary": "30000"
         },
@@ -3927,8 +3516,8 @@
       },
       "response": {
         "message": "Worker added successfully.",
-        "worker_id": 18,
-        "name": "Ent_Worker_1782213986"
+        "worker_id": 24,
+        "name": "Ent_Worker_1782216859"
       }
     },
     {
@@ -3939,17 +3528,27 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.269,
+      "duration": 0.479,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "total_monthly_salary": 30000.0,
+        "total_monthly_salary": 52000.0,
         "workers": [
           {
-            "id": 18,
-            "name": "Ent_Worker_1782213986",
+            "id": 23,
+            "name": "Worker_1782216846",
+            "phone": "8782216846",
+            "position": "Senior Cashier",
+            "salary": 22000.0,
+            "assigned_work": "",
+            "status": "active",
+            "join_date": "2026-06-23"
+          },
+          {
+            "id": 24,
+            "name": "Ent_Worker_1782216859",
             "phone": null,
             "position": "Manager",
             "salary": 30000.0,
@@ -3964,11 +3563,11 @@
       "group": "workers",
       "name": "Update enterprise worker",
       "method": "PUT",
-      "path": "/workers/18",
+      "path": "/workers/24",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.279,
+      "duration": 0.293,
       "request": {
         "body": {
           "salary": "19000",
@@ -3978,35 +3577,26 @@
       },
       "response": {
         "message": "Worker updated.",
-        "worker_id": 18
+        "worker_id": 24
       }
     },
     {
       "group": "workers",
       "name": "Pay salary",
       "method": "POST",
-      "path": "/workers/18/pay-salary",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401, 404), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'month'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.267,
+      "path": "/workers/24/pay-salary?month=2026-06",
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.278,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "month"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "message": "Salary of \u20b919000.00 paid to Ent_Worker_1782216859 for 2026-06.",
+        "amount": 19000.0,
+        "worker_name": "Ent_Worker_1782216859"
       }
     },
     {
@@ -4017,7 +3607,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.277,
+      "duration": 0.279,
       "request": {
         "body": {
           "recon_date": "2026-06-23",
@@ -4043,7 +3633,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.274,
+      "duration": 0.27,
       "request": {
         "body": null,
         "params": null
@@ -4051,7 +3641,7 @@
       "response": {
         "records": [
           {
-            "id": 7,
+            "id": 11,
             "date": "2026-06-23",
             "expected_upi": 50000.0,
             "actual_bank": 49800.0,
@@ -4070,7 +3660,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.304,
+      "duration": 0.298,
       "request": {
         "body": null,
         "params": null
@@ -4081,9 +3671,9 @@
           "end": "2026-06-23"
         },
         "total_income": 1100.0,
-        "total_expenses": 24000.0,
-        "net_profit": -22900.0,
-        "profit_margin_pct": -2081.82,
+        "total_expenses": 43000.0,
+        "net_profit": -41900.0,
+        "profit_margin_pct": -3809.09,
         "status": "LOSS",
         "breakdown": [
           {
@@ -4111,6 +3701,12 @@
             "transactions": 1
           },
           {
+            "category": "SALARY",
+            "type": "EXPENSE",
+            "total": 19000.0,
+            "transactions": 1
+          },
+          {
             "category": "SALE",
             "type": "INCOME",
             "total": 500.0,
@@ -4127,7 +3723,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.278,
+      "duration": 0.499,
       "request": {
         "body": null,
         "params": null
@@ -4135,48 +3731,57 @@
       "response": {
         "transactions": [
           {
-            "id": 122,
+            "id": 144,
+            "type": "EXPENSE",
+            "category": "SALARY",
+            "amount": 19000.0,
+            "reference_id": "SALARY-W24-2026-06",
+            "description": "Salary: Ent_Worker_1782216859 (2026-06)",
+            "date": "2026-06-23T12:14:20.900329"
+          },
+          {
+            "id": 143,
             "type": "EXPENSE",
             "category": "RENT",
             "amount": 20000.0,
             "reference_id": null,
             "description": "rent expense",
-            "date": "2026-06-23T11:26:25.910894"
+            "date": "2026-06-23T12:14:19.198003"
           },
           {
-            "id": 121,
+            "id": 142,
             "type": "EXPENSE",
             "category": "PO_PAYMENT",
             "amount": 4000.0,
-            "reference_id": "PO-8",
+            "reference_id": "PO-12",
             "description": "Purchase Order from ABC Suppliers",
-            "date": "2026-06-23T11:26:22.656892"
+            "date": "2026-06-23T12:14:15.778581"
           },
           {
-            "id": 120,
+            "id": 141,
             "type": "INCOME",
             "category": "KHATA_REPAY",
             "amount": 100.0,
-            "reference_id": "KHATA-PAY-12",
-            "description": "Khata repayment from 9082213979",
-            "date": "2026-06-23T11:26:19.583969"
+            "reference_id": "KHATA-PAY-16",
+            "description": "Khata repayment from 9082216851",
+            "date": "2026-06-23T12:14:12.227925"
           },
           {
-            "id": 119,
+            "id": 140,
             "type": "INCOME",
             "category": "KHATA_CREDIT",
             "amount": 500.0,
-            "reference_id": "KHATA-12",
-            "description": "Khata credit for 9082213979",
-            "date": "2026-06-23T11:26:19.263640"
+            "reference_id": "KHATA-16",
+            "description": "Khata credit for 9082216851",
+            "date": "2026-06-23T12:14:11.929667"
           },
           {
-            "id": 118,
+            "id": 139,
             "type": "INCOME",
             "category": "SALE",
             "amount": 500.0,
-            "reference_id": "INV-1782213971",
-            "description": "Manual Invoice: INV-1782213971",
+            "reference_id": "INV-1782216843",
+            "description": "Manual Invoice: INV-1782216843",
             "date": "2026-06-23T00:00:00"
           }
         ]
@@ -4190,7 +3795,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.286,
+      "duration": 0.321,
       "request": {
         "body": null,
         "params": null
@@ -4214,14 +3819,14 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.318,
+      "duration": 0.297,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
         "report": {
-          "report_id": 10,
+          "report_id": 14,
           "report_date": "2026-06-23",
           "total_revenue": 0.0,
           "total_expenses": 0.0,
@@ -4242,22 +3847,14 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.319,
+      "duration": 0.29,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "at_risk_count": 1,
-        "customers": [
-          {
-            "customer_id": 15,
-            "name": "Test Customer",
-            "phone": "1234567890",
-            "last_visit": "2026-05-24T11:26:29.501305",
-            "recommended_action": "Send 10% Win-back WhatsApp Coupon"
-          }
-        ]
+        "at_risk_count": 0,
+        "customers": []
       }
     },
     {
@@ -4265,17 +3862,20 @@
       "name": "Today collections",
       "method": "GET",
       "path": "/api/collections/today-summary",
-      "status": 500,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 500. Body: {'error': 'Internal server error. Our team has been notified.', 'path': '/api/collections/today-summary'}",
-      "duration": 0.32,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.294,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "error": "Internal server error. Our team has been notified.",
-        "path": "/api/collections/today-summary"
+        "today_upi_total": 0.0,
+        "pending_transactions": 0,
+        "confirmed_transactions": 0,
+        "unmatched_count": 0,
+        "error": "(psycopg2.errors.InvalidTextRepresentation) invalid input value for enum order_status: \"CONFIRM\"\nLINE 3: ...06-23'::date AND upi_ledger.status IN ('PENDING', 'CONFIRM')\n                                                             ^\n\n[SQL: SELECT sum(upi_ledger.amount) AS sum_1 \nFROM upi_ledger \nWHERE upi_ledger.shop_id = %(shop_id_1)s AND date(upi_ledger.payment_date) = %(date_1)s AND upi_ledger.status IN (%(status_1_1)s, %(status_1_2)s)]\n[parameters: {'shop_id_1': 1, 'date_1': datetime.date(2026, 6, 23), 'status_1_1': 'PENDING', 'status_1_2': 'CONFIRM'}]\n(Background on this error at: https://sqlalche.me/e/20/9h9h)"
       }
     },
     {
@@ -4286,7 +3886,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.325,
+      "duration": 0.315,
       "request": {
         "body": null,
         "params": null
@@ -4300,8 +3900,8 @@
             "customer_name": "Test Customer",
             "customer_phone": "1234567890",
             "amount": 500.0,
-            "date": "2026-06-23T11:26:11.908919",
-            "reference_id": "INV-1782213971",
+            "date": "2026-06-23T12:14:03.659653",
+            "reference_id": "INV-1782216843",
             "payment_status": "PAID"
           },
           {
@@ -4756,7 +4356,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.294,
+      "duration": 0.295,
       "request": {
         "body": null,
         "params": null
@@ -4775,7 +4375,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.334,
+      "duration": 0.288,
       "request": {
         "body": {
           "billing_pin": "1234"
@@ -4798,7 +4398,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.331,
+      "duration": 0.306,
       "request": {
         "body": null,
         "params": null
@@ -4815,7 +4415,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.317,
+      "duration": 0.285,
       "request": {
         "body": null,
         "params": null
@@ -4832,7 +4432,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.315,
+      "duration": 0.286,
       "request": {
         "body": null,
         "params": null
@@ -4849,7 +4449,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.318,
+      "duration": 0.302,
       "request": {
         "body": {
           "template_name": "Quick Sale",
@@ -4877,7 +4477,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.318,
+      "duration": 0.3,
       "request": {
         "body": {
           "category": "Test",
@@ -4892,7 +4492,7 @@
         "discount": "10.0%",
         "duration": "2 hours",
         "products_affected": 0,
-        "expiry": "2026-06-23T13:26:32.378099"
+        "expiry": "2026-06-23T14:14:25.821228"
       }
     },
     {
@@ -4903,10 +4503,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.337,
+      "duration": 0.288,
       "request": {
         "body": {
-          "card_code": "GC-1782213990",
+          "card_code": "GC-1782216864",
           "initial_balance": 500.0,
           "issued_to": "Test User",
           "expiry_date": "2027-06-23"
@@ -4915,7 +4515,7 @@
       },
       "response": {
         "message": "Gift card issued successfully.",
-        "card_code": "GC-1782213990",
+        "card_code": "GC-1782216864",
         "balance": 500.0
       }
     },
@@ -4927,10 +4527,10 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.279,
+      "duration": 0.298,
       "request": {
         "body": {
-          "card_code": "GC-1782213990",
+          "card_code": "GC-1782216864",
           "amount_to_deduct": 100.0
         },
         "params": null
@@ -4944,38 +4544,17 @@
       "group": "misc",
       "name": "Export GSTR1",
       "method": "GET",
-      "path": "/gst/export-gstr1",
-      "status": 422,
+      "path": "/gst/export-gstr1?month=6&year=2026",
+      "status": 400,
       "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'month'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}, {'type': 'missing', 'loc': ['query', 'year'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.273,
+      "reason": "Expected HTTP (200, 401), got 400. Body: {'detail': 'GST number not configured in Shop Settings.'}",
+      "duration": 0.286,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "month"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          },
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "year"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "detail": "GST number not configured in Shop Settings."
       }
     },
     {
@@ -4986,22 +4565,22 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 1.68,
+      "duration": 1.626,
       "request": {
         "body": {
-          "name": "Store User 1782213993",
-          "email": "store_1782213993@example.com",
+          "name": "Store User 1782216866",
+          "email": "store_1782216866@example.com",
           "password": "StorePass@9!",
-          "phone": "9182213993"
+          "phone": "9182216866"
         },
         "params": null
       },
       "response": {
         "message": "Customer account created successfully.",
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMiIsInJvbGUiOiJDVVNUT01FUiIsImV4cCI6MTc4MjIxNzU5NCwiaWF0IjoxNzgyMjEzOTk0fQ.8SZCID_sBgc0g_TBj6T0q2DBku0RCTulDpfonhDtSl8",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNiIsInJvbGUiOiJDVVNUT01FUiIsImV4cCI6MTc4MjIyMDQ2OCwiaWF0IjoxNzgyMjE2ODY4fQ.fJQLM-7QwFqTb8rCZYvLwxNNvp3lUycXBedEkIU7POg",
         "token_type": "bearer",
-        "customer_id": 12,
-        "name": "Store User 1782213993"
+        "customer_id": 16,
+        "name": "Store User 1782216866"
       }
     },
     {
@@ -5012,19 +4591,19 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 1.909,
+      "duration": 1.68,
       "request": {
         "body": {
-          "email": "store_1782213993@example.com",
+          "email": "store_1782216866@example.com",
           "password": "StorePass@9!"
         },
         "params": null
       },
       "response": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMiIsInJvbGUiOiJDVVNUT01FUiIsImV4cCI6MTc4MjIxNzU5NiwiaWF0IjoxNzgyMjEzOTk2fQ.ctoKpV5--DuvdxfxvU0cWdIZx3Dvoj11Vv8lazAPLnY",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNiIsInJvbGUiOiJDVVNUT01FUiIsImV4cCI6MTc4MjIyMDQ2OSwiaWF0IjoxNzgyMjE2ODY5fQ.iYHckOiT0TneNbT-j3OBwWLKnE5M-2Ofdo1nYh2wwGY",
         "token_type": "bearer",
-        "customer_id": 12,
-        "name": "Store User 1782213993"
+        "customer_id": 16,
+        "name": "Store User 1782216866"
       }
     },
     {
@@ -5035,7 +4614,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.319,
+      "duration": 1.151,
       "request": {
         "body": null,
         "params": null
@@ -5132,37 +4711,40 @@
             "address": null,
             "phone": null,
             "logo_url": null
+          },
+          {
+            "shop_id": 38,
+            "shop_name": "Test Retail Shop",
+            "address": null,
+            "phone": "9999999999",
+            "logo_url": null
+          },
+          {
+            "shop_id": 40,
+            "shop_name": "Test Retail Shop",
+            "address": null,
+            "phone": "9999999999",
+            "logo_url": null
           }
         ],
-        "count": 13
+        "count": 15
       }
     },
     {
       "group": "store",
       "name": "Shop products",
       "method": "GET",
-      "path": "/store/shops/shop_123/products",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401, 404), got 422. Body: {'detail': [{'type': 'int_parsing', 'loc': ['path', 'shop_id'], 'msg': 'Input should be a valid integer, unable to parse string as an integer', 'input': 'shop_123', 'url': 'https://errors.pydantic.dev/2.5/v/int_parsing'}]}",
-      "duration": 0.321,
+      "path": "/store/shops/1/products",
+      "status": 404,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.294,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "int_parsing",
-            "loc": [
-              "path",
-              "shop_id"
-            ],
-            "msg": "Input should be a valid integer, unable to parse string as an integer",
-            "input": "shop_123",
-            "url": "https://errors.pydantic.dev/2.5/v/int_parsing"
-          }
-        ]
+        "detail": "Shop not found or online store disabled."
       }
     },
     {
@@ -5173,10 +4755,10 @@
       "status": 403,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 422), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.319,
+      "duration": 0.275,
       "request": {
         "body": {
-          "shop_id": "shop_123",
+          "shop_id": 1,
           "items": [
             {
               "product_id": 1,
@@ -5198,7 +4780,7 @@
       "status": 403,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401), got 403. Body: {'detail': \"Access denied. Required roles: ('CUSTOMER',). Your role: OWNER\"}",
-      "duration": 0.322,
+      "duration": 0.437,
       "request": {
         "body": null,
         "params": null
@@ -5215,7 +4797,7 @@
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.281,
+      "duration": 0.276,
       "request": {
         "body": null,
         "params": null
@@ -5232,7 +4814,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.357,
+      "duration": 0.362,
       "request": {
         "body": null,
         "params": null
@@ -5250,7 +4832,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.32,
+      "duration": 0.284,
       "request": {
         "body": null,
         "params": null
@@ -5278,7 +4860,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.322,
+      "duration": 0.286,
       "request": {
         "body": {
           "include_stock_impact": false
@@ -5286,17 +4868,17 @@
         "params": null
       },
       "response": {
-        "user_id": 32,
-        "timestamp": "2026-06-23T11:26:39.420795",
+        "user_id": 40,
+        "timestamp": "2026-06-23T12:14:33.372352",
         "total_invoices_restored": 1,
         "total_line_items_restored": 1,
         "customers_restored": 1,
         "stock_impact_applied": false,
         "invoices": [
           {
-            "id": 80,
-            "invoice_number": "INV-1782213971",
-            "customer_id": 15,
+            "id": 84,
+            "invoice_number": "INV-1782216843",
+            "customer_id": 23,
             "customer_name": "Test Customer",
             "customer_phone": "1234567890",
             "invoice_date": "2026-06-23",
@@ -5310,11 +4892,11 @@
             "payment_method": null,
             "source": "MANUAL_ENTRY",
             "notes": "",
-            "created_at": "2026-06-23T11:26:11.908919",
-            "updated_at": "2026-06-23T11:26:11.908919",
+            "created_at": "2026-06-23T12:14:03.659653",
+            "updated_at": "2026-06-23T12:14:03.659653",
             "line_items": [
               {
-                "id": 80,
+                "id": 84,
                 "product_id": null,
                 "description": "Widget",
                 "quantity": 2,
@@ -5348,13 +4930,13 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.322,
+      "duration": 0.309,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "user_id": 32,
+        "user_id": 40,
         "available_for_restore": true,
         "invoice_summary": {
           "total_invoices": 1,
@@ -5363,14 +4945,14 @@
           "partial": 0
         },
         "date_range": {
-          "oldest_invoice": "2026-06-23T11:26:11.908919",
-          "newest_invoice": "2026-06-23T11:26:11.908919"
+          "oldest_invoice": "2026-06-23T12:14:03.659653",
+          "newest_invoice": "2026-06-23T12:14:03.659653"
         },
         "financial_summary": {
           "total_revenue": 500.0,
           "customer_count": 2
         },
-        "timestamp": "2026-06-23T11:26:39.761721"
+        "timestamp": "2026-06-23T12:14:33.668447"
       }
     },
     {
@@ -5381,21 +4963,21 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.313,
+      "duration": 0.399,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "user_id": 32,
-        "timestamp": "2026-06-23T11:26:40.071688",
+        "user_id": 40,
+        "timestamp": "2026-06-23T12:14:33.975603",
         "total_customers_restored": 2,
         "customers": [
           {
-            "id": 14,
-            "customer_name": "Test Customer 1782213969",
-            "email": "cust_1782213969@test.com",
-            "phone": "9882213969",
+            "id": 22,
+            "customer_name": "Test Customer 1782216840",
+            "email": "cust_1782216840@test.com",
+            "phone": "9882216840",
             "whatsapp_number": null,
             "address": null,
             "city": "Mumbai",
@@ -5403,11 +4985,11 @@
             "payment_terms": null,
             "contact_preference": "EMAIL",
             "is_active": true,
-            "created_at": "2026-06-23T11:26:09.300925",
+            "created_at": "2026-06-23T12:14:01.059637",
             "invoice_count": 0
           },
           {
-            "id": 15,
+            "id": 23,
             "customer_name": "Test Customer",
             "email": null,
             "phone": "1234567890",
@@ -5418,7 +5000,7 @@
             "payment_terms": null,
             "contact_preference": "EMAIL",
             "is_active": true,
-            "created_at": "2026-06-23T11:26:11.908919",
+            "created_at": "2026-06-23T12:14:03.659653",
             "invoice_count": 1
           }
         ]
@@ -5432,7 +5014,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.317,
+      "duration": 0.32,
       "request": {
         "body": null,
         "params": null
@@ -5440,11 +5022,11 @@
       "response": {
         "status": "success",
         "backup_summary": {
-          "backup_timestamp": "2026-06-23T11:26:40.395719",
-          "user_id": 32,
+          "backup_timestamp": "2026-06-23T12:14:34.370495",
+          "user_id": 40,
           "invoices": 1,
           "khata_customers": 1,
-          "expenses": 2,
+          "expenses": 3,
           "products": 0
         }
       }
@@ -5457,7 +5039,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.642,
+      "duration": 0.452,
       "request": {
         "body": null,
         "params": null
@@ -5478,7 +5060,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.323,
+      "duration": 0.307,
       "request": {
         "body": {},
         "params": null
@@ -5486,7 +5068,7 @@
       "response": {
         "status": "success",
         "synced_count": 0,
-        "user_id": 32
+        "user_id": 40
       }
     },
     {
@@ -5497,7 +5079,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.321,
+      "duration": 0.293,
       "request": {
         "body": {},
         "params": null
@@ -5515,7 +5097,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.311,
+      "duration": 0.304,
       "request": {
         "body": {},
         "params": null
@@ -5533,7 +5115,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.27,
+      "duration": 0.269,
       "request": {
         "body": {},
         "params": null
@@ -5551,7 +5133,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.298,
+      "duration": 0.272,
       "request": {
         "body": {},
         "params": null
@@ -5569,11 +5151,11 @@
       "group": "batch",
       "name": "Export products batch",
       "method": "POST",
-      "path": "/batch/api/batch/products/export",
+      "path": "/batch/products/export",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.268,
+      "duration": 0.292,
       "request": {
         "body": null,
         "params": null
@@ -5586,11 +5168,11 @@
       "group": "batch",
       "name": "Import products batch",
       "method": "POST",
-      "path": "/batch/api/batch/products/import",
+      "path": "/batch/products/import",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.282,
+      "duration": 0.283,
       "request": {
         "body": null,
         "params": null
@@ -5603,11 +5185,11 @@
       "group": "batch",
       "name": "Import customers batch",
       "method": "POST",
-      "path": "/batch/api/batch/customers/import",
+      "path": "/batch/customers/import",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 201, 400, 401, 415), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.319,
+      "duration": 0.3,
       "request": {
         "body": null,
         "params": null
@@ -5620,11 +5202,11 @@
       "group": "batch",
       "name": "Batch status",
       "method": "GET",
-      "path": "/batch/api/batch/status/1",
+      "path": "/batch/status/1",
       "status": 404,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.273,
+      "duration": 0.422,
       "request": {
         "body": null,
         "params": null
@@ -5637,11 +5219,11 @@
       "group": "batch",
       "name": "Batch history",
       "method": "GET",
-      "path": "/batch/api/batch/history",
+      "path": "/batch/history",
       "status": 404,
       "result": "\u274c FAIL",
       "reason": "Expected HTTP (200, 401), got 404. Body: {'detail': 'Not Found'}",
-      "duration": 0.529,
+      "duration": 0.311,
       "request": {
         "body": null,
         "params": null
@@ -5658,7 +5240,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.322,
+      "duration": 0.276,
       "request": {
         "body": null,
         "params": null
@@ -5673,7 +5255,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.32,
+      "duration": 0.364,
       "request": {
         "body": null,
         "params": null
@@ -5691,7 +5273,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.284,
+      "duration": 0.272,
       "request": {
         "body": null,
         "params": null
@@ -5708,7 +5290,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.281,
+      "duration": 0.366,
       "request": {
         "body": null,
         "params": null
@@ -5726,7 +5308,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.386,
+      "duration": 0.321,
       "request": {
         "body": null,
         "params": null
@@ -5744,7 +5326,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.319,
+      "duration": 0.303,
       "request": {
         "body": null,
         "params": null
@@ -5761,7 +5343,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.264,
+      "duration": 0.338,
       "request": {
         "body": null,
         "params": null
@@ -5783,7 +5365,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.375,
+      "duration": 0.271,
       "request": {
         "body": null,
         "params": null
@@ -5804,13 +5386,13 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.279,
+      "duration": 0.367,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "csrf_token": "zxKyo49uh68aVk6vGE4gv2I-7YS9IpcxiZ_Xlof9KiQ",
+        "csrf_token": "C0ZwzLTYoQpKj6owHuXzrMfcVzzvmlaVxKNiBOU62o4",
         "expires_in": 3600,
         "usage": "Include this token in your forms as a hidden field and validate on submission"
       }
@@ -5823,7 +5405,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.274,
+      "duration": 0.319,
       "request": {
         "body": null,
         "params": null
@@ -5849,7 +5431,7 @@
       "status": 422,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.268,
+      "duration": 0.285,
       "request": {
         "body": null,
         "params": null
@@ -5877,7 +5459,7 @@
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.274,
+      "duration": 0.284,
       "request": {
         "body": {
           "input_data": "SELECT * FROM users",
@@ -5896,28 +5478,24 @@
       "group": "security",
       "name": "SQL injection header check",
       "method": "GET",
-      "path": "/api/security/check-sql-injection",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['query', 'query'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.277,
+      "path": "/api/security/check-sql-injection?query=select * from users",
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.283,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "query",
-              "query"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
-          }
-        ]
+        "is_suspicious": true,
+        "detected_patterns": [
+          [
+            "select",
+            "select"
+          ]
+        ],
+        "recommendation": "Use parameterized queries to prevent SQL injection"
       }
     },
     {
@@ -5925,37 +5503,37 @@
       "name": "Sanitize batch",
       "method": "POST",
       "path": "/api/security/sanitize-batch",
-      "status": 422,
-      "result": "\u274c FAIL",
-      "reason": "Expected HTTP (200, 201, 400, 401), got 422. Body: {'detail': [{'type': 'missing', 'loc': ['body'], 'msg': 'Field required', 'input': None, 'url': 'https://errors.pydantic.dev/2.5/v/missing'}]}",
-      "duration": 0.276,
+      "status": 200,
+      "result": "\u2705 PASS",
+      "reason": null,
+      "duration": 0.428,
       "request": {
-        "body": null,
+        "body": {
+          "inputs": {
+            "test": "value"
+          }
+        },
         "params": null
       },
       "response": {
-        "detail": [
-          {
-            "type": "missing",
-            "loc": [
-              "body"
-            ],
-            "msg": "Field required",
-            "input": null,
-            "url": "https://errors.pydantic.dev/2.5/v/missing"
+        "success": true,
+        "sanitized": {
+          "inputs": {
+            "test": "value"
           }
-        ]
+        },
+        "errors": []
       }
     },
     {
       "group": "cleanup",
       "name": "Delete invoice",
       "method": "DELETE",
-      "path": "/api/invoices/80",
+      "path": "/api/invoices/84",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.375,
+      "duration": 0.317,
       "request": {
         "body": null,
         "params": null
@@ -5968,34 +5546,35 @@
       "group": "cleanup",
       "name": "Delete customer",
       "method": "DELETE",
-      "path": "/api/customers/14",
+      "path": "/api/customers/22",
       "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.272,
+      "duration": 0.319,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "message": "Customer 'Test Customer 1782213969' archived. Khata and invoice history preserved."
+        "message": "Customer 'Test Customer 1782216840' archived. Khata and invoice history preserved."
       }
     },
     {
       "group": "cleanup",
       "name": "Delete attendance worker",
       "method": "DELETE",
-      "path": "/api/attendance/workers/1",
-      "status": 404,
+      "path": "/api/attendance/workers/23",
+      "status": 200,
       "result": "\u2705 PASS",
       "reason": null,
-      "duration": 0.59,
+      "duration": 0.294,
       "request": {
         "body": null,
         "params": null
       },
       "response": {
-        "detail": "Worker not found"
+        "message": "Worker deleted successfully",
+        "worker_id": 23
       }
     }
   ]
