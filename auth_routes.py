@@ -199,6 +199,7 @@ def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(ge
                 # If there are no line items, just create a placeholder
                 sales_record = {
                     'id': invoice.id,
+                    'sale_id': invoice.invoice_number,
                     'invoice_id': invoice.id,
                     'invoice_number': invoice.invoice_number,
                     'customer_name': invoice.customer_name,
@@ -217,6 +218,7 @@ def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(ge
                 for idx, item in enumerate(line_items):
                     sales_record = {
                         'id': f"{invoice.id}_{idx}", # Unique ID for the flattened item
+                        'sale_id': invoice.invoice_number, # CRUCIAL: Frontend groups bills using sale_id!
                         'invoice_id': invoice.id,
                         'invoice_number': invoice.invoice_number,
                         'customer_name': invoice.customer_name,
@@ -251,6 +253,7 @@ def create_sale_legacy(
     quantity: int = Form(1),
     total: float = Form(0.0),
     date: str = Form(None),
+    sale_id: str = Form(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -271,15 +274,69 @@ def create_sale_legacy(
         actual_product_name = product_name or product or item or itemName or "Unknown Product"
                 
         # Also create an Invoice so it shows up correctly in the new system
-        invoice_number = f"INV-{int(time.time())}"
+        invoice_number = sale_id if sale_id else f"INV-{int(time.time())}"
         
         from models import ShopProfile
         shop = db.query(ShopProfile).filter(ShopProfile.shop_id == user_id).first()
         shop_id = shop.id if shop else None
         
+        # Check if invoice already exists to deduplicate
+        existing_invoice = db.query(Invoice).filter(
+            Invoice.user_id == user_id, 
+            Invoice.invoice_number == str(invoice_number)
+        ).first()
+        
+        if existing_invoice:
+            # Check if this exact line item is already in the invoice
+            existing_line = db.query(InvoiceLineItem).filter(
+                InvoiceLineItem.invoice_id == existing_invoice.id,
+                InvoiceLineItem.description == actual_product_name,
+                InvoiceLineItem.unit_price == price,
+                InvoiceLineItem.quantity == quantity
+            ).first()
+            
+            if not existing_line:
+                # Add new line item to existing invoice
+                new_line = InvoiceLineItem(
+                    invoice_id=existing_invoice.id,
+                    description=actual_product_name,
+                    quantity=quantity,
+                    unit_price=price,
+                    line_total=total
+                )
+                db.add(new_line)
+                
+                # Update invoice total
+                existing_invoice.total_amount = float(existing_invoice.total_amount) + total
+                existing_invoice.paid_amount = float(existing_invoice.paid_amount) + total
+                
+                # Deduct inventory based on product name
+                from models import Product, StockMovement
+                from sqlalchemy import func
+                product_match = db.query(Product).filter(
+                    Product.user_id == user_id,
+                    func.lower(Product.product_name) == actual_product_name.lower()
+                ).first()
+                
+                if product_match:
+                    product_match.current_stock -= quantity
+                    movement = StockMovement(
+                        product_id=product_match.id,
+                        movement_type="OUT",
+                        quantity=quantity,
+                        reason="Sale via Sync (Merged)",
+                        reference_id=str(invoice_number)
+                    )
+                    db.add(movement)
+                
+                db.commit()
+            
+            return {"msg": "Sale synced (merged into existing invoice)", "invoice_id": existing_invoice.id}
+        
+        # Otherwise, create a new invoice
         new_invoice = Invoice(
             user_id=user_id,
-            invoice_number=invoice_number,
+            invoice_number=str(invoice_number),
             total_amount=total,
             paid_amount=total,
             payment_status="PAID",
@@ -297,6 +354,26 @@ def create_sale_legacy(
             line_total=total
         )
         db.add(new_line)
+        
+        # Deduct inventory based on product name
+        from models import Product, StockMovement
+        from sqlalchemy import func
+        product_match = db.query(Product).filter(
+            Product.user_id == user_id,
+            func.lower(Product.product_name) == actual_product_name.lower()
+        ).first()
+        
+        if product_match:
+            product_match.current_stock -= quantity
+            movement = StockMovement(
+                product_id=product_match.id,
+                movement_type="OUT",
+                quantity=quantity,
+                reason="Sale via Sync",
+                reference_id=str(invoice_number)
+            )
+            db.add(movement)
+        
         db.commit()
         
         return {"msg": "Sale saved successfully", "invoice_id": new_invoice.id}
