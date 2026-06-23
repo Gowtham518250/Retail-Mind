@@ -40,7 +40,7 @@ class WorkerUpdate(BaseModel):
 @router.post("/workers")
 def create_worker(
     worker_data: WorkerCreate,
-    user_id: int = Query(...),
+    user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
     """Create a new worker for a shopkeeper"""
@@ -55,7 +55,7 @@ def create_worker(
 
 @router.get("/workers")
 def get_workers(
-    user_id: int = Query(...),
+    user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
     """Get all workers for a shopkeeper"""

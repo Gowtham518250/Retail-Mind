@@ -220,9 +220,9 @@ def search_by_phone(
     ).first()
     
     if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        return []
     
-    return customer
+    return [customer]
 
 @router.get("/search/by-name")
 def search_by_name(

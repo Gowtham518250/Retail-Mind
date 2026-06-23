@@ -17,7 +17,7 @@ import logging
 
 from db import get_db
 from models import User, RefreshToken, SessionToken
-from security import verify_password, hash_password
+from security import verify_password, hash_password, get_current_user
 
 router = APIRouter(prefix="/api/auth-hardened", tags=["authentication hardened"])
 logger = logging.getLogger(__name__)
@@ -298,7 +298,7 @@ def logout_user(
 
 @router.post("/logout-all", response_model=LogoutResponse)
 def logout_all_devices(
-    user_id: int,
+    user_id: int = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """

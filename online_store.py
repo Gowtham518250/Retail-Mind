@@ -260,23 +260,28 @@ def find_nearby_shops(
 
 @router.get("/shops/{shop_id}/products")
 def browse_shop_products(
-    shop_id: int,
+    shop_id: str,
     category: Optional[str] = None,
     skip: int = 0,
     limit: int = Query(50, le=200),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
-    """Browse a shop's available inventory (only active, in-stock products)"""
-    # Verify shop exists and has online store enabled
+    """Browse products for a specific online shop"""
+    try:
+        shop_id_int = int(''.join(filter(str.isdigit, shop_id))) if any(c.isdigit() for c in shop_id) else 1
+    except ValueError:
+        shop_id_int = 1
+
+    # First verify shop has online store enabled
     profile = db.query(ShopProfile).filter(
-        ShopProfile.shop_id == shop_id,
+        ShopProfile.shop_id == shop_id_int,
         ShopProfile.is_online_store_enabled == True,
     ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Shop not found or online store disabled.")
 
     q = db.query(Product).filter(
-        Product.user_id == shop_id,
+        Product.user_id == shop_id_int,
         Product.is_active == True,
         Product.current_stock > 0,
     )

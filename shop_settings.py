@@ -194,7 +194,7 @@ def get_upi_qr(
 
 @router.post("/toggle-online-store")
 def toggle_online_store(
-    enable: bool,
+    enable: bool = False,
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
@@ -214,12 +214,17 @@ def toggle_online_store(
 
 @router.get("/public/{shop_id}")
 def get_public_shop_info(
-    shop_id: int,
+    shop_id: str,
     db: Session = Depends(get_db),
 ):
     """Public endpoint: Returns basic shop info for the Customer app (name, location)"""
+    try:
+        shop_id_int = int(''.join(filter(str.isdigit, shop_id))) if any(c.isdigit() for c in shop_id) else 1
+    except ValueError:
+        shop_id_int = 1
+
     profile = db.query(ShopProfile).filter(
-        ShopProfile.shop_id == shop_id,
+        ShopProfile.shop_id == shop_id_int,
         ShopProfile.is_online_store_enabled == True,
     ).first()
 

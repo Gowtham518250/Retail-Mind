@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from models import User, ShopProfile
-from security import hash_password, verify_password, create_access_token, ROLE_OWNER
+from security import hash_password, verify_password, create_access_token, ROLE_OWNER, get_current_user
 from email_notifications import EmailNotificationService
 import random
 import time
@@ -174,7 +174,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.get("/sales")
-def get_sales(user_id: int, db: Session = Depends(get_db)):
+def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get all sales/invoices for a user to restore when app data is cleared.
     This endpoint is used by the frontend to download sales history from the cloud.
@@ -226,7 +226,7 @@ def get_sales(user_id: int, db: Session = Depends(get_db)):
 from fastapi import Form
 @router.post("/sales")
 def create_sale_legacy(
-    user_id: int = Form(...),
+    user_id: int = Depends(get_current_user),
     product_name: str = Form(None),
     product: str = Form(None),
     item: str = Form(None),

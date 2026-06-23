@@ -105,12 +105,17 @@ def redeem_gift_card(
 # =====================
 @router.get("/gst/export-gstr1", tags=["GST"])
 def export_gstr1(
-    month: int = Query(..., ge=1, le=12),
-    year: int = Query(..., ge=2000),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None, ge=2000),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Aggregate all sales for a month and generate GSTR-1 JSON schema"""
+    """Export GSTR-1 formatted sales data for a specific month"""
+    if month is None:
+        month = datetime.now().month
+    if year is None:
+        year = datetime.now().year
+    
     shop_id = current_user
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
 

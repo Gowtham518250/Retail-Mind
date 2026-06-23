@@ -3,7 +3,7 @@ Security Hardening Service
 Implements rate limiting, input sanitization, CSRF protection, SQL injection prevention, XSS protection.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Body, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -339,7 +339,7 @@ def get_security_headers():
 
 
 @router.post("/sanitize-batch")
-def sanitize_batch_inputs(inputs: Dict[str, Any]):
+def sanitize_batch_inputs(inputs: Dict[str, Any] = Body(default_factory=dict)):
     """
     Sanitize multiple inputs at once.
     Useful for form submissions with multiple fields.
@@ -399,7 +399,7 @@ def get_csrf_token():
 # ==================== DATABASE SECURITY ====================
 
 @router.get("/check-sql-injection")
-def check_sql_injection_pattern(query: str):
+def check_sql_injection_pattern(query: str = Query("")):
     """
     Check if a query contains SQL injection patterns.
     For educational and security testing purposes only.

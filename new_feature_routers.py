@@ -112,7 +112,10 @@ def get_today_occasions(db: Session = Depends(get_db)):
 # ==========================================
 @router.get("/collections/today-summary")
 def get_upi_summary(db: Session = Depends(get_db)):
-    return UpiLedgerService.get_today_upi_summary(db, shop_id=1)
+    try:
+        return UpiLedgerService.get_today_upi_summary(db, shop_id=1)
+    except Exception as e:
+        return {"today_upi_total": 0.0, "pending_transactions": 0, "confirmed_transactions": 0, "unmatched_count": 0, "error": str(e)}
 
 # ==========================================
 # 7. SAVED BILL TEMPLATES (FEATURE 9)

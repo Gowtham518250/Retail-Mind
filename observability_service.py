@@ -244,7 +244,7 @@ class LogEntry(BaseModel):
     level: str
     message: str
     context: Optional[Dict[str, Any]] = None
-    timestamp: datetime
+    timestamp: Optional[datetime] = None
 
 
 @router.post("/log")

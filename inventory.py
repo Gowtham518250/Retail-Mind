@@ -366,7 +366,7 @@ def get_batches(
 
 @router.get("/expiring-batches")
 def get_expiring_batches(
-    user_id: int = Query(...),
+    user_id: int = Depends(check_current_user),
     days: int = Query(30),
     db: Session = Depends(get_db)
 ):
@@ -390,7 +390,7 @@ def get_expiring_batches(
 
 @router.get("/analytics/stock-value")
 def get_stock_value(
-    user_id: int = Query(...),
+    user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
     """Get total stock value"""
@@ -406,7 +406,7 @@ def get_stock_value(
 
 @router.get("/analytics/inventory-status")
 def get_inventory_status(
-    user_id: int = Query(...),
+    user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
     """Get complete inventory status summary"""

@@ -1,4 +1,4 @@
-﻿"""
+"""
 🚀 AI Shop Pro Enterprise Backend — Main Application
 ====================================================
 Fully secured FastAPI app with:
@@ -175,7 +175,7 @@ api.include_router(new_features_router, tags=["Legacy Features"])
 
 # Advanced System Features
 api.include_router(caching_router, prefix="/cache", tags=["Caching System"])
-api.include_router(batch_operations_router, prefix="/batch", tags=["Batch Operations"])
+api.include_router(batch_operations_router, tags=["Batch Operations"])
 api.include_router(rate_limiting_router, tags=["Rate Limiting"])
 api.include_router(security_hardening_router, tags=["Security Hardening"])
 api.include_router(observability_router, tags=["Observability"])

@@ -213,11 +213,15 @@ def update_worker(
 @router.post("/workers/{worker_id}/pay-salary", tags=["Worker Management"])
 def pay_worker_salary(
     worker_id: int,
-    month: str = Query(..., description="Format: YYYY-MM"),
+    month: str = Query(None, description="Format: YYYY-MM"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
     """Mark salary as paid for a specific month and record in expenses"""
+    if not month:
+        from datetime import datetime
+        month = datetime.now().strftime("%Y-%m")
+        
     shop_id = current_user
     worker = db.query(Worker).filter(
         Worker.id == worker_id,
