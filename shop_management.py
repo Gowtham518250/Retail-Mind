@@ -112,7 +112,7 @@ class ShopService:
                 if key in ["shop_phone", "phone_number"]: key = "phone"
                 if key in ["shop_gst", "gstin"]: key = "gst_number"
                 if key == "shop_email": key = "email"
-                if key == "upi_id": key = "primary_upi_id"
+                if key == "primary_upi_id": key = "upi_id"
                 
                 if hasattr(shop_profile, key):
                     setattr(shop_profile, key, value)
@@ -246,12 +246,13 @@ def get_profile(user_id: int = Depends(check_current_user), db: Session = Depend
                 "email": profile.email,
                 "website": profile.website,
                 "gst_number": profile.gst_number,
-                "primary_upi_id": profile.primary_upi_id,
+                "primary_upi_id": profile.upi_id,
                 "upi_ids": upi_ids,
                 "shop_categories": categories,
                 "logo_url": profile.logo_url,
                 "color_primary": profile.color_primary,
                 "color_secondary": profile.color_secondary,
+                "is_online_store_enabled": profile.is_online_store_enabled or False,
                 "created_at": profile.created_at,
                 "updated_at": profile.updated_at
             },
@@ -295,11 +296,61 @@ def update_profile(data: dict, user_id: int = Depends(check_current_user), db: S
     
     try:
         profile = ShopService.update_shop_profile(db, user_id, data)
+        settings = ShopService.get_shop_settings(db, profile.id)
+        
+        # Parse JSON fields
+        categories = json.loads(profile.shop_categories) if profile.shop_categories else []
+        upi_ids = json.loads(profile.upi_ids) if profile.upi_ids else []
         
         return {
             "status": "success",
             "message": "Shop profile updated successfully",
-            "shop_id": profile.id
+            "shop_id": profile.id,
+            "profile": {
+                "id": profile.id,
+                "shop_name": profile.shop_name,
+                "shop_type": profile.shop_type,
+                "phone": profile.phone,
+                "phone_number": profile.phone,
+                "location": profile.location,
+                "email": profile.email,
+                "website": profile.website,
+                "gst_number": profile.gst_number,
+                "primary_upi_id": profile.upi_id,
+                "upi_ids": upi_ids,
+                "shop_categories": categories,
+                "logo_url": profile.logo_url,
+                "color_primary": profile.color_primary,
+                "color_secondary": profile.color_secondary,
+                "is_online_store_enabled": profile.is_online_store_enabled or False,
+                "created_at": profile.created_at,
+                "updated_at": profile.updated_at
+            },
+            "settings": {
+                "business_hours": {
+                    "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
+                    "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
+                    "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
+                    "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
+                    "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
+                    "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
+                    "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed}
+                },
+                "receipt_settings": {
+                    "header": settings.receipt_header,
+                    "footer": settings.receipt_footer,
+                    "show_tax": settings.show_tax_on_receipt,
+                    "print_size": settings.default_print_size
+                },
+                "taxes": {
+                    "default_rate": settings.default_tax_rate,
+                    "is_inclusive": settings.tax_inclusive
+                },
+                "loyalty": {
+                    "enabled": settings.loyalty_enabled,
+                    "points_per_amount": settings.points_per_amount
+                }
+            }
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -421,4 +472,71 @@ def get_tax_config(user_id: int = Depends(check_current_user), db: Session = Dep
         }
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/publish-status")
+def get_publish_status(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Get the shop's online store publishing status"""
+    try:
+        profile = ShopService.get_shop_profile(db, user_id)
+        return {"is_published": profile.is_online_store_enabled or False}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.put("/publish-status")
+def set_publish_status(data: dict, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Set the shop's online store publishing status"""
+    try:
+        is_published = data.get("is_published", False)
+        profile = ShopService.get_shop_profile(db, user_id)
+        profile.is_online_store_enabled = is_published
+        db.commit()
+        return {
+            "success": True, 
+            "is_published": is_published, 
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/publish-marketplace")
+def publish_marketplace(data: dict, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Publish the shop to marketplace with coordinates"""
+    try:
+        profile = ShopService.get_shop_profile(db, user_id)
+        profile.latitude = data.get("latitude")
+        profile.longitude = data.get("longitude")
+        profile.is_online_store_enabled = True
+        
+        if data.get("address_nickname"):
+            profile.location = data.get("address_nickname")
+            
+        db.commit()
+        slug = profile.shop_name.lower().replace(" ", "-")
+        return {
+            "success": True,
+            "shop_id": profile.id,
+            "marketplace_url": f"https://shop.retailmind.com/{slug}",
+            "published_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/publish-marketplace")
+def unpublish_marketplace(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Unpublish the shop from marketplace"""
+    try:
+        profile = ShopService.get_shop_profile(db, user_id)
+        profile.is_online_store_enabled = False
+        db.commit()
+        return {
+            "success": True,
+            "message": "Your shop is no longer visible to customers."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
 
