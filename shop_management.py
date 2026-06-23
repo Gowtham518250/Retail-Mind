@@ -96,11 +96,24 @@ class ShopService:
     
     @staticmethod
     def update_shop_profile(db: Session, user_id: int, data: Dict[str, Any]) -> ShopProfile:
-        """Update existing shop profile"""
+        """Update existing shop profile or create if missing"""
         
         shop_profile = db.query(ShopProfile).filter_by(shop_id=user_id).first()
         if not shop_profile:
-            raise ValueError("Shop profile not found")
+            # Auto-create profile if missing instead of failing
+            shop_profile = ShopProfile(
+                shop_id=user_id,
+                shop_name=data.get("shop_name", "My Shop")
+            )
+            db.add(shop_profile)
+            db.flush()
+            
+            # Also ensure default settings are created
+            from models import ShopSettings
+            settings = ShopSettings(shop_id=shop_profile.id)
+            db.add(settings)
+            db.commit()
+            db.refresh(shop_profile)
         
         # Update fields
         for key, value in data.items():
@@ -125,12 +138,22 @@ class ShopService:
     
     @staticmethod
     def get_shop_profile(db: Session, user_id: int) -> ShopProfile:
-        """Get shop profile by user_id"""
+        """Get shop profile by user_id or create default if missing"""
         
         profile = db.query(ShopProfile).filter_by(shop_id=user_id).first()
         if not profile:
-            raise ValueError("Shop profile not found")
-        
+            # Auto-create default profile
+            profile = ShopProfile(shop_id=user_id, shop_name="My Shop")
+            db.add(profile)
+            db.flush()
+            
+            # Auto-create settings
+            from models import ShopSettings
+            settings = ShopSettings(shop_id=profile.id)
+            db.add(settings)
+            db.commit()
+            db.refresh(profile)
+            
         return profile
     
     @staticmethod
