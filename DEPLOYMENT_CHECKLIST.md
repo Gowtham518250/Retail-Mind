@@ -64,9 +64,9 @@
 
 ### Step 1: Database Migration
 - [ ] Take database backup: `pg_dump $DATABASE_URL > backup_pre_migration.sql`
-- [ ] Run migration script:
+- [ ] Run Alembic migration for performance indexes:
   ```bash
-  psql $DATABASE_URL < migration_production_v1.sql
+  alembic upgrade head
   ```
 - [ ] Verify migration completed without errors
 - [ ] Check tables created:
@@ -74,10 +74,11 @@
   psql $DATABASE_URL -c "SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema='public';"
   ```
 - [ ] Expected: ~45+ tables (system + custom)
-- [ ] Verify `shop_profiles` has `gst_number` column:
+- [ ] Verify performance indexes created:
   ```bash
-  psql $DATABASE_URL -c "SELECT column_name FROM information_schema.columns WHERE table_name='shop_profiles' AND column_name='gst_number';"
+  psql $DATABASE_URL -c "SELECT indexname FROM pg_indexes WHERE tablename='invoices';"
   ```
+- [ ] Expected indexes: ix_invoices_user_payment, ix_invoices_user_date, ix_invoices_customer_id
 
 ### Step 2: Repository Update
 - [ ] Pull latest code: `git pull origin main`
@@ -112,6 +113,8 @@
 - [ ] Test auth endpoint: `curl -X POST $API_URL/auth/register -H "Content-Type: application/json" -d '{"email":"test@test.com","password":"Test123!"}'`
 - [ ] Test inventory endpoint
 - [ ] Test invoices endpoint
+- [ ] Test JWT refresh endpoint: `curl -X POST $API_URL/auth/refresh -H "Content-Type: application/json" -d '{"refresh_token":"..."}'`
+- [ ] Run backend test suite: `pytest test_backend_endpoints.py -v`
 - [ ] At least 10 different endpoints tested
 - [ ] All return proper responses (200/201 for success)
 
@@ -167,12 +170,14 @@
 ### Security Audit
 - [ ] HTTPS enforced (no HTTP)
 - [ ] JWT tokens working correctly
-- [ ] Rate limiting active
+- [ ] JWT refresh tokens working correctly
+- [ ] Rate limiting active (100 req/60s)
 - [ ] CORS properly configured
 - [ ] SQL injection protected
 - [ ] XSS protection active
 - [ ] No credentials in logs
 - [ ] Audit logs recording changes
+- [ ] User isolation verified (no data leakage)
 
 ---
 

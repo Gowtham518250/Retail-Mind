@@ -347,7 +347,7 @@ class Invoice(Base):
     customer_name = Column(String(100), nullable=True)
     customer_phone = Column(String(20), nullable=True)
     invoice_number = Column(String(50), nullable=False, index=True)
-    offline_id = Column(String(50), nullable=True, index=True, unique=True)
+    offline_id = Column(String(50), nullable=True, index=True)  # 🔧 FIX: Removed global unique, will add per-user constraint
     invoice_date = Column(Date, server_default=func.now(), index=True)
     due_date = Column(Date, nullable=False)
     subtotal = Column(Numeric(10, 2), default=0)
@@ -362,7 +362,11 @@ class Invoice(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
-    __table_args__ = (UniqueConstraint('user_id', 'invoice_number', name='uix_user_invoice_number'),)
+    # 🔧 FIX: Added unique constraint on (user_id, offline_id) for idempotency
+    __table_args__ = (
+        UniqueConstraint('user_id', 'invoice_number', name='uix_user_invoice_number'),
+        UniqueConstraint('user_id', 'offline_id', name='uix_user_offline_id'),
+    )
     
     # Relationships
     user = relationship("User", back_populates="invoices")

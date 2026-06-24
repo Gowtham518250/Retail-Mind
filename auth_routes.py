@@ -27,6 +27,9 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
 @router.post("/register")
 def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # Check username uniqueness
@@ -163,14 +166,74 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
     )
     
+    # 🔧 PHASE 4 FIX: Create refresh token for secure token renewal
+    from security import create_refresh_token
+    refresh_token = create_refresh_token(db_user.id, user_role)
+    
     return {
         "access_token": access_token, 
+        "refresh_token": refresh_token,
         "token_type": "bearer", 
         "role": user_role,
         "user_type": user_role,
         "user_id": db_user.id,
         "username": db_user.user_name
     }
+
+@router.post("/refresh")
+def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
+    """
+    Refresh access token using refresh token.
+    This implements secure token renewal without requiring re-login.
+    """
+    try:
+        from security import decode_token, create_access_token, create_refresh_token
+        
+        # Decode refresh token
+        payload = decode_token(request.refresh_token)
+        
+        # Validate it's a refresh token
+        if payload.get("type") != "refresh":
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token type. Expected refresh token."
+            )
+        
+        # Extract user_id and role
+        user_id = int(payload.get("sub"))
+        role = payload.get("role")
+        
+        # Verify user still exists and is active
+        db_user = db.query(User).filter(User.id == user_id).first()
+        if not db_user or not db_user.is_active:
+            raise HTTPException(
+                status_code=401,
+                detail="User not found or inactive"
+            )
+        
+        # Create new access token
+        new_access_token = create_access_token(
+            data={"sub": str(db_user.id), "role": role, "user_type": role}
+        )
+        
+        # Create new refresh token (rotate refresh tokens for security)
+        new_refresh_token = create_refresh_token(db_user.id, role)
+        
+        return {
+            "access_token": new_access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "bearer",
+            "role": role,
+            "user_type": role,
+            "user_id": db_user.id
+        }
+        
+    except Exception as e:
+        logger.error(f"Token refresh failed: {e}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired refresh token"
+        )
 
 
 @router.get("/sales")

@@ -1,0 +1,482 @@
+{
+  "sales": {
+    "detail": "Invalid or expired token. Please login again."
+  },
+  "products": {
+    "detail": "Invalid or expired token. Please login again."
+  },
+  "customers": {
+    "detail": "Invalid or expired token. Please login again."
+  },
+  "invoices": {
+    "detail": "Invalid or expired token. Please login again."
+  },
+  "expenses": {
+    "detail": "Invalid or expired token. Please login again."
+  },
+  "transactions": {
+    "status": "success",
+    "count": 50,
+    "transactions": [
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 124.0,
+        "date": "2026-06-24T04:44:24.814448",
+        "reference_id": "SALE_1782276263920868",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 1200.0,
+        "date": "2026-06-24T04:40:34.454639",
+        "reference_id": "SALE_1782276033590075",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 2000.0,
+        "date": "2026-06-24T04:39:02.186718",
+        "reference_id": "SALE_1782275941295601",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 35.0,
+        "date": "2026-06-24T04:33:41.485862",
+        "reference_id": "SALE_1782275620609664",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 25.0,
+        "date": "2026-06-24T04:33:06.434365",
+        "reference_id": "SALE_1782275585576911",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-24T04:32:46.595124",
+        "reference_id": "SALE_1782275565721754",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-24T04:32:31.249509",
+        "reference_id": "SALE_1782275550367852",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-24T04:29:12.629161",
+        "reference_id": "SALE_1782275351778138",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 258.0,
+        "date": "2026-06-24T03:56:28.860499",
+        "reference_id": "SALE_1782273387877718",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-24T03:56:03.169659",
+        "reference_id": "SALE_1782273362198237",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 25.0,
+        "date": "2026-06-24T03:52:30.213108",
+        "reference_id": "SALE_1782273149215430",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 25.0,
+        "date": "2026-06-24T03:51:27.789455",
+        "reference_id": "SALE_1782273086820023",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 25.0,
+        "date": "2026-06-24T03:51:04.401833",
+        "reference_id": "SALE_1782273063018999",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 500.0,
+        "date": "2026-06-24T03:49:37.981173",
+        "reference_id": "SALE_1782272967746084",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-24T03:12:11.350337",
+        "reference_id": "SALE_1782270730405869",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 25.0,
+        "date": "2026-06-24T02:03:20.112615",
+        "reference_id": "SALE_1782266599167281",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Test",
+        "customer_phone": null,
+        "amount": 100.0,
+        "date": "2026-06-24T01:23:31.578030",
+        "reference_id": "TEST_SYNC_ERR_1",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-23T16:41:26.325971",
+        "reference_id": "SALE_LOCAL_SYNC_TEST",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-23T16:33:34.277711",
+        "reference_id": "INV-OFF-1782232413",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-23T16:32:28.378475",
+        "reference_id": "INV-OFF-1782232347",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-23T16:32:09.553071",
+        "reference_id": "INV-OFF-1782232329",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-23T14:59:00.376120",
+        "reference_id": "SALE_1782226739586497",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-23T14:54:38.811237",
+        "reference_id": "SALE_1782226478071345",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-23T14:43:54.144618",
+        "reference_id": "SALE_1782225833398486",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 500.0,
+        "date": "2026-06-23T14:10:57.424280",
+        "reference_id": "SALE_1782223856640103",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-23T14:10:21.969832",
+        "reference_id": "SALE_1782223821240203",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 20.0,
+        "date": "2026-06-23T13:36:36.976982",
+        "reference_id": "SALE_1782221796257308",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-23T13:36:04.518999",
+        "reference_id": "SALE_1782221763760106",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-23T13:10:34.038682",
+        "reference_id": "SALE_1782220233291967",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-23T12:36:19.909474",
+        "reference_id": "INV-OFF-1782218178",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 1180.0,
+        "date": "2026-06-23T12:33:41.356740",
+        "reference_id": "INV-GST-1782217965",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 118.0,
+        "date": "2026-06-23T12:33:34.501742",
+        "reference_id": "INV-SCHEMA-1782217965",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 300.0,
+        "date": "2026-06-23T12:33:31.067516",
+        "reference_id": "INV-OFF-1782217965-DEDUP",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:28.286529",
+        "reference_id": "CONC-1782217965-0",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:28.086506",
+        "reference_id": "CONC-1782217965-6",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.986143",
+        "reference_id": "CONC-1782217965-5",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.983128",
+        "reference_id": "CONC-1782217965-9",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.889416",
+        "reference_id": "CONC-1782217965-8",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.782125",
+        "reference_id": "CONC-1782217965-3",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.761758",
+        "reference_id": "CONC-1782217965-4",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.662323",
+        "reference_id": "CONC-1782217965-7",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.581545",
+        "reference_id": "CONC-1782217965-1",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 50.0,
+        "date": "2026-06-23T12:33:27.539542",
+        "reference_id": "CONC-1782217965-2",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 200.0,
+        "date": "2026-06-23T12:32:57.269548",
+        "reference_id": "INV-PNAME-1782217965",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 100.0,
+        "date": "2026-06-23T12:32:54.958914",
+        "reference_id": "INV-DUP-1782217965",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 250.0,
+        "date": "2026-06-23T12:32:52.239259",
+        "reference_id": "INV-DEDUCT-1782217965",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 25.0,
+        "date": "2026-06-23T06:10:19.477854",
+        "reference_id": "SALE_1782195018799996_799",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 10.0,
+        "date": "2026-06-23T03:50:06.670106",
+        "reference_id": "SALE_1782186606047712_47",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 150.0,
+        "date": "2026-06-23T03:12:23.729070",
+        "reference_id": "SALE_1782179149230434_230",
+        "payment_status": "PAID"
+      },
+      {
+        "type": "CASH",
+        "customer_name": "Cash Customer",
+        "customer_phone": null,
+        "amount": 10.0,
+        "date": "2026-06-22T15:22:55.995930",
+        "reference_id": "SALE_1782141776313307_313",
+        "payment_status": "PAID"
+      }
+    ]
+  },
+  "shop_profile": {
+    "detail": "Invalid or expired token. Please login again."
+  },
+  "workers": {
+    "detail": "Invalid or expired token. Please login again."
+  },
+  "khata_customers": {
+    "detail": "Invalid or expired token. Please login again."
+  }
+}

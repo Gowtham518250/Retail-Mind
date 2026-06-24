@@ -13,7 +13,7 @@ from datetime import datetime, date, timedelta
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
@@ -47,6 +47,26 @@ class InvoiceSyncCreate(BaseModel):
     line_items: List[InvoiceLineItemCreate]
     invoice_date: str  # YYYY-MM-DD
     notes: Optional[str] = None
+    
+    @validator('line_items')
+    def validate_line_items(cls, v):
+        if not v or len(v) == 0:
+            raise ValueError('At least one line item is required')
+        for item in v:
+            if not item.product_name or item.product_name.strip().lower() in ['unknown', 'unknown item', '??']:
+                raise ValueError(f'Invalid product name: {item.product_name}')
+        return v
+
+class InvoiceLineItemResponse(BaseModel):
+    id: int
+    product_id: Optional[int]
+    description: Optional[str]
+    quantity: int
+    unit_price: float
+    line_total: float
+    
+    class Config:
+        from_attributes = True
 
 class InvoiceResponse(BaseModel):
     id: int
@@ -57,6 +77,7 @@ class InvoiceResponse(BaseModel):
     payment_status: str
     invoice_date: date
     created_at: datetime
+    line_items: List[InvoiceLineItemResponse] = []
 
     class Config:
         from_attributes = True
@@ -74,24 +95,28 @@ def sync_offline_invoice(
     """
     Accept an invoice generated while the app was offline.
     This creates the invoice, deducts inventory, and logs revenue.
+    Uses transaction-based approach for data integrity.
     """
     shop_id = current_user
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
-    # Check for duplicate sync (idempotency)
+    # Check for duplicate sync (idempotency) - check both offline_id and invoice_number
     if data.offline_id:
         existing = db.query(Invoice).filter(
             Invoice.user_id == shop_id,
             Invoice.offline_id == data.offline_id
         ).first()
-    else:
-        existing = db.query(Invoice).filter(
-            Invoice.user_id == shop_id,
-            Invoice.invoice_number == invoice_number
-        ).first()
+        if existing:
+            return {"message": "Invoice already synced (offline_id).", "invoice_id": existing.id, "status": "DUPLICATE"}
+    
+    # Always check invoice_number as fallback
+    existing = db.query(Invoice).filter(
+        Invoice.user_id == shop_id,
+        Invoice.invoice_number == invoice_number
+    ).first()
 
     if existing:
-        return {"message": "Invoice already synced.", "invoice_id": existing.id}
+        return {"message": "Invoice already synced (invoice_number).", "invoice_id": existing.id, "status": "DUPLICATE"}
 
     # Find/Create Customer
     customer_id = None
@@ -116,73 +141,88 @@ def sync_offline_invoice(
     except ValueError:
         inv_date = date.today()
 
-    # Create Invoice
-    invoice = Invoice(
-        user_id=shop_id,
-        customer_id=customer_id,
-        customer_name=sanitize_input(data.customer_name or "Cash Customer", "customer_name"),
-        customer_phone=data.customer_phone,
-        invoice_number=invoice_number,
-        offline_id=data.offline_id,
-        invoice_date=inv_date,
-        due_date=inv_date,
-        subtotal=data.total_amount - data.tax,
-        tax=data.tax,
-        total_amount=data.total_amount,
-        paid_amount=data.paid_amount,
-        status="SENT",
-        payment_status=data.payment_status.upper() if data.payment_status else "PAID",
-        source="OFFLINE_SYNC",
-        notes=sanitize_input(data.notes or "", "notes"),
-    )
-    db.add(invoice)
-    db.flush()
-
-    # Process Line Items & Deduct Inventory
-    for item in data.line_items:
-        line_total = item.quantity * item.unit_price
-        db_line = InvoiceLineItem(
-            invoice_id=invoice.id,
-            product_id=item.product_id,
-            description=sanitize_input(item.product_name, "product_name"),
-            quantity=item.quantity,
-            unit_price=item.unit_price,
-            line_total=line_total,
+    # TRANSACTION-BASED APPROACH: All operations in single transaction
+    try:
+        # Create Invoice
+        invoice = Invoice(
+            user_id=shop_id,
+            customer_id=customer_id,
+            customer_name=sanitize_input(data.customer_name or "Cash Customer", "customer_name"),
+            customer_phone=data.customer_phone,
+            invoice_number=invoice_number,
+            offline_id=data.offline_id,
+            invoice_date=inv_date,
+            due_date=inv_date,
+            subtotal=data.total_amount - data.tax,
+            tax=data.tax,
+            total_amount=data.total_amount,
+            paid_amount=data.paid_amount,
+            status="SENT",
+            payment_status=data.payment_status.upper() if data.payment_status else "PAID",
+            source="OFFLINE_SYNC",
+            notes=sanitize_input(data.notes or "", "notes"),
         )
-        db.add(db_line)
+        db.add(invoice)
+        db.flush()
 
-        # Inventory Auto-Deduction
-        if item.product_id:
-            product = db.query(Product).filter(
-                Product.id == item.product_id,
-                Product.user_id == shop_id
-            ).first()
-            if product:
-                product.current_stock = max(0, (product.current_stock or 0) - item.quantity)
-                # Log stock movement
-                mov = StockMovement(
-                    product_id=product.id,
-                    movement_type="OUT",
-                    quantity=item.quantity,
-                    reason="Sales Sync",
-                    reference_id=invoice_number,
-                )
-                db.add(mov)
+        # Process Line Items & Deduct Inventory
+        for item in data.line_items:
+            line_total = item.quantity * item.unit_price
+            db_line = InvoiceLineItem(
+                invoice_id=invoice.id,
+                product_id=item.product_id,
+                description=sanitize_input(item.product_name, "product_name"),
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                line_total=line_total,
+            )
+            db.add(db_line)
 
-    # Universal Journal Entry
-    tx = UniversalTransaction(
-        shop_id=shop_id,
-        tx_type="INCOME",
-        category="SALE",
-        amount=data.paid_amount,
-        reference_id=invoice_number,
-        description=f"Sales Sync: {invoice_number}",
-        tx_date=datetime.combine(inv_date, datetime.min.time()),
-    )
-    db.add(tx)
+            # Inventory Auto-Deduction with validation
+            if item.product_id:
+                product = db.query(Product).filter(
+                    Product.id == item.product_id,
+                    Product.user_id == shop_id
+                ).with_for_update().first()  # Row-level lock for concurrency
+                if product:
+                    # Validate stock availability
+                    current_stock = product.current_stock or 0
+                    if current_stock < item.quantity:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
+                        )
+                    product.current_stock = max(0, current_stock - item.quantity)
+                    # Log stock movement
+                    mov = StockMovement(
+                        product_id=product.id,
+                        movement_type="OUT",
+                        quantity=item.quantity,
+                        reason="Sales Sync",
+                        reference_id=invoice_number,
+                    )
+                    db.add(mov)
 
-    db.commit()
-    return {"message": "Invoice synced and inventory deducted.", "invoice_id": invoice.id}
+        # Universal Journal Entry
+        tx = UniversalTransaction(
+            shop_id=shop_id,
+            tx_type="INCOME",
+            category="SALE",
+            amount=data.paid_amount,
+            reference_id=invoice_number,
+            description=f"Sales Sync: {invoice_number}",
+            tx_date=datetime.combine(inv_date, datetime.min.time()),
+        )
+        db.add(tx)
+
+        # Commit transaction - all operations succeed or all fail
+        db.commit()
+        return {"message": "Invoice synced and inventory deducted.", "invoice_id": invoice.id, "status": "SUCCESS"}
+
+    except Exception as e:
+        # Rollback on any error
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Transaction failed: {str(e)}")
 
 
 @router.get("/")
