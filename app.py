@@ -97,18 +97,12 @@ except Exception as e:
 # ========================
 
 # 1. CORS — Restrict to known origins only (no wildcard *)
-ALLOWED_ORIGINS = [
-    os.getenv("FRONTEND_URL", "https://your-online-store.com"),
-    "http://localhost:3000",
-    "http://localhost:8080",
-    "http://127.0.0.1:8000",
-]
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # 2. Trusted Host — prevent Host header injection attacks
