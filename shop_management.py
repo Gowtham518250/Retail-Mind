@@ -157,12 +157,14 @@ class ShopService:
         return profile
     
     @staticmethod
-    def update_shop_settings(db: Session, shop_id: int, data: Dict[str, Any]) -> ShopSettings:
+    def update_shop_settings(db: Session, shop_id: int, data: dict) -> ShopSettings:
         """Update shop settings"""
-        
         settings = db.query(ShopSettings).filter_by(shop_id=shop_id).first()
         if not settings:
-            raise ValueError("Shop settings not found")
+            settings = ShopSettings(shop_id=shop_id)
+            db.add(settings)
+            db.commit()
+            db.refresh(settings)
         
         # Update fields
         for key, value in data.items():
@@ -177,12 +179,13 @@ class ShopService:
     
     @staticmethod
     def get_shop_settings(db: Session, shop_id: int) -> ShopSettings:
-        """Get shop settings"""
-        
+        """Get shop settings, auto-create if missing"""
         settings = db.query(ShopSettings).filter_by(shop_id=shop_id).first()
         if not settings:
-            raise ValueError("Shop settings not found")
-        
+            settings = ShopSettings(shop_id=shop_id)
+            db.add(settings)
+            db.commit()
+            db.refresh(settings)
         return settings
     
     @staticmethod
