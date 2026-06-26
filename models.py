@@ -590,6 +590,10 @@ class ShopSettings(Base):
     enable_multi_branch = Column(Boolean, default=False)
     
     
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
     # Relationships
     shop_profile = relationship("ShopProfile", back_populates="shop_settings")
 
@@ -944,6 +948,7 @@ class ShopProfile(Base):
     logo_version = Column(Integer, default=0)
     
     # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships

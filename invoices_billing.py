@@ -225,7 +225,7 @@ def sync_offline_invoice(
         raise HTTPException(status_code=500, detail=f"Transaction failed: {str(e)}")
 
 
-@router.get("/")
+@router.get("/", response_model=List[InvoiceResponse])
 def get_invoices(
     status: Optional[str] = None,
     payment_status: Optional[str] = None,
