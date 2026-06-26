@@ -12,7 +12,7 @@ from datetime import datetime
 
 # revision identifiers, used by Alembic.
 revision = '004'
-down_revision = 'e7a9054db41d'
+down_revision = '003'
 branch_labels = None
 depends_on = None
 
