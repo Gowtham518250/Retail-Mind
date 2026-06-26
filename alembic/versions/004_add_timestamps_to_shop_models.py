@@ -18,19 +18,33 @@ depends_on = None
 
 
 def upgrade():
-    # Add created_at and updated_at to shop_profiles
-    op.add_column('shop_profiles', sa.Column('created_at', sa.DateTime(), nullable=True))
-    op.add_column('shop_profiles', sa.Column('updated_at', sa.DateTime(), nullable=True))
-    
-    # Add created_at and updated_at to shop_settings
-    op.add_column('shop_settings', sa.Column('created_at', sa.DateTime(), nullable=True))
-    op.add_column('shop_settings', sa.Column('updated_at', sa.DateTime(), nullable=True))
-    
-    # Set default values for existing records
+    # Get bind and metadata
     bind = op.get_bind()
     metadata = sa.MetaData()
     metadata.reflect(bind=bind, only=['shop_profiles', 'shop_settings'])
     
+    shop_profiles = metadata.tables['shop_profiles']
+    shop_settings = metadata.tables['shop_settings']
+    
+    # Add created_at to shop_profiles if not exists
+    if 'created_at' not in shop_profiles.columns:
+        op.add_column('shop_profiles', sa.Column('created_at', sa.DateTime(), nullable=True))
+    
+    # Add updated_at to shop_profiles if not exists
+    if 'updated_at' not in shop_profiles.columns:
+        op.add_column('shop_profiles', sa.Column('updated_at', sa.DateTime(), nullable=True))
+    
+    # Add created_at to shop_settings if not exists
+    if 'created_at' not in shop_settings.columns:
+        op.add_column('shop_settings', sa.Column('created_at', sa.DateTime(), nullable=True))
+    
+    # Add updated_at to shop_settings if not exists
+    if 'updated_at' not in shop_settings.columns:
+        op.add_column('shop_settings', sa.Column('updated_at', sa.DateTime(), nullable=True))
+    
+    # Refresh metadata to get new columns
+    metadata.clear()
+    metadata.reflect(bind=bind, only=['shop_profiles', 'shop_settings'])
     shop_profiles = metadata.tables['shop_profiles']
     shop_settings = metadata.tables['shop_settings']
     
