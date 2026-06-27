@@ -72,7 +72,7 @@ def get_whatsapp_orders(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    \"\"\"Get all WhatsApp orders for the shop (Pending Queue).\"\"\"
+    """Get all WhatsApp orders for the shop (Pending Queue)."""
     shop_id = current_user
     
     q = db.query(WhatsappOrder).filter(WhatsappOrder.shop_id == shop_id)
@@ -100,7 +100,7 @@ def update_whatsapp_order_status(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    \"\"\"Update the status of a WhatsApp order.\"\"\"
+    """Update the status of a WhatsApp order."""
     shop_id = current_user
     
     order = db.query(WhatsappOrder).filter(
