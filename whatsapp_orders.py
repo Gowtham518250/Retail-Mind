@@ -44,7 +44,7 @@ def create_whatsapp_order(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    \"\"\"Save a pending WhatsApp order received from the app's sharing intent.\"\"\"
+    """Save a pending WhatsApp order received from the app's sharing intent."""
     shop_id = current_user
     
     order = WhatsappOrder(
