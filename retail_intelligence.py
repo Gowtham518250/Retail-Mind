@@ -22,7 +22,7 @@ from sqlalchemy import func, and_
 from db import get_db
 from models import (
     BankReconciliation, UniversalTransaction, ShopExpense,
-    Worker, Product, sales, Invoice
+    Worker, Product, sales, Invoice, Customer, InvoiceLineItem
 )
 from security import owner_only, worker_or_owner, sanitize_input
 
@@ -501,3 +501,98 @@ def stock_analysis(
             "out_of_stock_count": len(dead_stock),
         },
     }
+
+# =====================================
+# WHATSAPP SMART REMARKETING
+# =====================================
+class RemarketingOpportunity(BaseModel):
+    customer_id: int
+    name: str
+    phone: str
+    favorite_item: str
+    days_since_last_purchase: int
+    suggested_message: str
+
+@router.get("/remarketing", response_model=List[RemarketingOpportunity], tags=["Smart Remarketing"])
+def get_remarketing_opportunities(
+    threshold_days: int = Query(30, description="Number of days of inactivity to trigger remarketing"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    """
+    Find customers who haven't purchased in `threshold_days`,
+    determine their favorite item, and generate a WhatsApp message.
+    """
+    shop_id = current_user
+    threshold_date = datetime.now(timezone.utc) - timedelta(days=threshold_days)
+    
+    # 1. Get all customers for this shop
+    customers = db.query(Customer).filter(Customer.shop_id == shop_id).all()
+    
+    opportunities = []
+    
+    for customer in customers:
+        if not customer.phone:
+            continue
+            
+        # Get latest invoice
+        latest_invoice = db.query(Invoice).filter(
+            Invoice.shop_id == shop_id,
+            Invoice.customer_id == customer.id
+        ).order_by(Invoice.created_at.desc()).first()
+        
+        # If no invoice or they bought recently, skip
+        if not latest_invoice:
+            continue
+            
+        # Ensure latest_invoice.created_at is aware or compare naively
+        invoice_date = latest_invoice.created_at
+        if invoice_date.tzinfo is None:
+            invoice_date = invoice_date.replace(tzinfo=timezone.utc)
+            
+        days_since = (datetime.now(timezone.utc) - invoice_date).days
+        if days_since < threshold_days:
+            continue
+            
+        # 2. Find favorite item
+        # Get all invoices for this customer
+        invoices = db.query(Invoice).filter(
+            Invoice.shop_id == shop_id, 
+            Invoice.customer_id == customer.id
+        ).all()
+        invoice_ids = [inv.id for inv in invoices]
+        
+        if not invoice_ids:
+            continue
+            
+        # Get all line items for these invoices
+        line_items = db.query(InvoiceLineItem).filter(
+            InvoiceLineItem.invoice_id.in_(invoice_ids)
+        ).all()
+        
+        if not line_items:
+            continue
+            
+        # Tally item frequency
+        item_counts = {}
+        for item in line_items:
+            item_counts[item.product_name] = item_counts.get(item.product_name, 0) + 1
+            
+        # Get item with max frequency
+        favorite_item = max(item_counts, key=item_counts.get)
+        
+        name = customer.name or "Customer"
+        msg = f"Hi {name}! You usually buy {favorite_item} from us, but we haven't seen you in a while. Reply to this message to order now and get a 5% discount on your next purchase!"
+        
+        opportunities.append(RemarketingOpportunity(
+            customer_id=customer.id,
+            name=name,
+            phone=customer.phone,
+            favorite_item=favorite_item,
+            days_since_last_purchase=days_since,
+            suggested_message=msg
+        ))
+        
+    # Sort by days_since descending (most dormant first)
+    opportunities.sort(key=lambda x: x.days_since_last_purchase, reverse=True)
+    return opportunities

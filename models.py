@@ -147,6 +147,12 @@ class OnlineOrderStatus(str, enum.Enum):
     DELIVERED = "DELIVERED"
     REJECTED = "REJECTED"
 
+class WhatsappOrderStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
+
 class PurchaseOrderStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     SENT = "SENT"
@@ -966,6 +972,20 @@ class OnlineOrder(Base):
     delivery_address = Column(Text)
     items_json = Column(Text, nullable=False) # JSON: [{product_id, name, qty, price}, ...]
     created_at = Column(DateTime, server_default=func.now())
+
+class WhatsappOrder(Base):
+    """Customer orders placed via WhatsApp and shared to the app"""
+    __tablename__ = "whatsapp_orders"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    sender_number = Column(String(20), nullable=True)
+    raw_text = Column(Text, nullable=False)
+    parsed_items_json = Column(Text, nullable=True)
+    status = Column(Enum(WhatsappOrderStatus, name="whatsapp_order_status"), default=WhatsappOrderStatus.PENDING)
+    total_amount = Column(Numeric(10, 2), default=0.00)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 # ==================== PURCHASE ORDERS & INVENTORY ====================
 
