@@ -769,8 +769,19 @@
         <span class="field-error" id="err-address"></span>
       </div>
 
+      <div id="otp-section" style="display:none; margin-top:0.5rem; padding-top:0.5rem; border-top:1px dashed var(--border);">
+        <p style="font-size:0.8rem; color:var(--slate); margin-bottom:0.5rem;">We've sent a 6-digit code to your phone.</p>
+        <div class="form-field">
+          <label for="f-otp">Enter OTP *</label>
+          <input type="number" id="f-otp" placeholder="123456" />
+          <span class="field-error" id="err-otp"></span>
+        </div>
+        <button id="verify-otp-btn" type="button" style="width:100%; padding:0.75rem; margin-top:0.5rem; background:var(--mint); color:#fff; border:none; border-radius:var(--radius-md); font-weight:bold; cursor:pointer;">Verify & Place Order</button>
+      </div>
+
       <div id="order-error-msg"></div>
-      <button id="place-order-btn" onclick="placeOrder()">Place Order →</button>
+      <div id="recaptcha-container"></div>
+      <button id="place-order-btn" type="button">Send OTP & Continue →</button>
     </div>
   </div>
 </aside>
@@ -1027,7 +1038,7 @@
   }
 
   // ── Checkout ──
-  function placeOrder() {
+  window.placeOrder = function() {
     clearErrors();
     const name = $('f-name').value.trim();
     const phone = $('f-phone').value.trim();
@@ -1051,15 +1062,28 @@
       }))
     };
 
-    submitOrder(payload);
-  }
+    // Trigger Firebase Phone Verification (handled in module script)
+    if (window.sendFirebaseOtp) {
+      window.sendFirebaseOtp(phone, payload);
+    } else {
+      showOrderError('Firebase auth not initialized.');
+    }
+  };
 
-  async function submitOrder(payload) {
-    const btn = $('place-order-btn');
-    btn.disabled = true;
-    btn.textContent = 'Placing order…';
+  window.submitOrder = async function(payload, firebaseIdToken) {
+    const btn = $('verify-otp-btn');
+    if(btn) {
+      btn.disabled = true;
+      btn.textContent = 'Placing order…';
+    }
+    // Also update main button if OTP step is skipped somehow
+    const mainBtn = $('place-order-btn');
+    if(mainBtn) {
+      mainBtn.disabled = true;
+    }
 
     try {
+      payload.firebase_id_token = firebaseIdToken;
       const res = await fetch('/store/guest-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1086,10 +1110,16 @@
     } catch (err) {
       showOrderError(err.message || 'Something went wrong. Please try again.');
     } finally {
-      btn.disabled = false;
-      btn.textContent = 'Place Order →';
+      if(btn) {
+        btn.disabled = false;
+        btn.textContent = 'Verify & Place Order';
+      }
+      if(mainBtn) {
+        mainBtn.disabled = false;
+        mainBtn.textContent = 'Send OTP & Continue →';
+      }
     }
-  }
+  };
 
   function showFieldError(fieldId, errId, msg) {
     $(fieldId).classList.add('error');
@@ -1197,6 +1227,103 @@
 
   // ── Boot ──
   loadCatalog();
+</script>
+
+<!-- Firebase Modular SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBj-WtEZjfGTP4wIC-1jifnpyVKAW3wGCM",
+    authDomain: "retail-d0ec5.firebaseapp.com",
+    projectId: "retail-d0ec5",
+    storageBucket: "retail-d0ec5.firebasestorage.app",
+    messagingSenderId: "995318418973",
+    appId: "1:995318418973:web:7efd9caa2ccd20183d00f4",
+    measurementId: "G-HFCZRXNPL7"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  let confirmationResult = null;
+  let orderPayload = null;
+
+  function initRecaptcha() {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible',
+        'callback': (response) => {
+          // reCAPTCHA solved
+        }
+      });
+    }
+  }
+
+  window.sendFirebaseOtp = async (phone, payload) => {
+    const btn = document.getElementById('place-order-btn');
+    const errorMsg = document.getElementById('order-error-msg');
+    btn.disabled = true;
+    btn.textContent = 'Sending OTP...';
+    errorMsg.style.display = 'none';
+
+    try {
+      initRecaptcha();
+      // Format to E.164 (Assuming +91 for India by default if 10 digits provided)
+      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      
+      confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier);
+      
+      orderPayload = payload;
+      
+      // Hide send button, show OTP section
+      btn.style.display = 'none';
+      document.getElementById('otp-section').style.display = 'block';
+      
+    } catch (error) {
+      console.error("SMS sent error:", error);
+      errorMsg.textContent = "Failed to send OTP: " + error.message;
+      errorMsg.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Send OTP & Continue →';
+    }
+  };
+
+  // Bind verify logic to button
+  document.getElementById('verify-otp-btn').addEventListener('click', async () => {
+    const otpInput = document.getElementById('f-otp').value.trim();
+    const btn = document.getElementById('verify-otp-btn');
+    const errorMsg = document.getElementById('err-otp');
+    
+    if (otpInput.length !== 6) {
+      errorMsg.textContent = 'Enter a valid 6-digit OTP';
+      document.getElementById('f-otp').classList.add('error');
+      return;
+    }
+    
+    document.getElementById('f-otp').classList.remove('error');
+    errorMsg.textContent = '';
+    
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+
+    try {
+      const result = await confirmationResult.confirm(otpInput);
+      const idToken = await result.user.getIdToken();
+      // Proceed to submit order
+      window.submitOrder(orderPayload, idToken);
+    } catch (error) {
+      console.error("OTP verification error:", error);
+      errorMsg.textContent = "Invalid OTP. Please try again.";
+      document.getElementById('f-otp').classList.add('error');
+      btn.disabled = false;
+      btn.textContent = 'Verify & Place Order';
+    }
+  });
+
+  // Export placeOrder so it can be called from standard onclick
+  document.getElementById('place-order-btn').onclick = window.placeOrder;
+
 </script>
 </body>
 </html>

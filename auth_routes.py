@@ -236,6 +236,20 @@ def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
         )
 
 
+class FCMTokenRequest(BaseModel):
+    fcm_token: str
+
+@router.post("/fcm-token")
+def register_fcm_token(request: FCMTokenRequest, user_id: int = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Register device FCM token for push notifications"""
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    db_user.fcm_token = request.fcm_token
+    db.commit()
+    
+    return {"msg": "FCM token registered successfully"}
 @router.get("/sales")
 def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(get_db)):
     """

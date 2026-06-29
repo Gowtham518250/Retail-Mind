@@ -85,6 +85,7 @@ class GuestOrder(BaseModel):
     phone: str = Field(..., min_length=10, max_length=15)
     delivery_address: str = Field(..., min_length=5)
     items: List[OrderItem] = Field(..., min_length=1)
+    firebase_id_token: str = Field(..., description="Firebase Auth ID token for phone verification")
 
 
 # =====================
@@ -400,7 +401,26 @@ def place_guest_order(
     db: Session = Depends(get_db),
 ):
     """Place an online order as a guest (no auth required)"""
-    # 1. Validate shop
+    # 1. Verify Firebase Phone Auth Token
+    try:
+        from firebase_admin import auth
+        decoded_token = auth.verify_id_token(data.firebase_id_token)
+        phone_number = decoded_token.get('phone_number')
+        
+        if not phone_number:
+            raise HTTPException(status_code=400, detail="Invalid token: No phone number associated with this login.")
+            
+        # Ensure the verified phone matches the one provided (stripping non-digits for comparison if needed, or exact match)
+        # Firebase phone numbers include country code (e.g., +919876543210).
+        # We check if the provided phone is a substring of the verified phone to allow local format (e.g., 9876543210)
+        if data.phone not in phone_number:
+            raise HTTPException(status_code=400, detail="Verified phone number does not match the provided phone number.")
+            
+    except Exception as e:
+        logger.error(f"Firebase token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Phone verification failed. Please try again.")
+
+    # 2. Validate shop
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == data.shop_id,
         ShopProfile.is_online_store_enabled == True,
@@ -408,7 +428,7 @@ def place_guest_order(
     if not profile:
         raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
 
-    # 2. Find or create guest customer in OnlineCustomerAuth
+    # 3. Find or create guest customer in OnlineCustomerAuth
     customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
     if not customer:
         customer = OnlineCustomerAuth(
@@ -464,6 +484,27 @@ def place_guest_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+    
+    # 5. Send FCM Push Notification to Shop Owner
+    try:
+        from firebase_admin import messaging
+        shop_owner = db.query(User).filter(User.id == data.shop_id).first()
+        if shop_owner and shop_owner.fcm_token:
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title="New Online Order! 🎉",
+                    body=f"You received a new order for ₹{total_amount:.2f} from {customer.user_name}.",
+                ),
+                data={
+                    "order_id": str(order.id),
+                    "type": "NEW_ORDER"
+                },
+                token=shop_owner.fcm_token,
+            )
+            messaging.send(message)
+            logger.info(f"FCM notification sent to shop owner {shop_owner.id}")
+    except Exception as e:
+        logger.error(f"Failed to send FCM notification: {e}")
 
     return {
         "message": "Guest order placed successfully!",

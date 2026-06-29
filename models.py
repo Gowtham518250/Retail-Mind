@@ -199,6 +199,7 @@ class User(Base):
     password = Column(String(100), nullable=False)
     user_type = Column(String(50), default="OWNER", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    fcm_token = Column(String(255), nullable=True) # Added for Firebase Push Notifications
     
     # Relationships
     products = relationship("Product", back_populates="owner")

@@ -27,6 +27,23 @@ logging.basicConfig(
 logger = logging.getLogger("ai_shop_pro")
 
 # ========================
+# FIREBASE ADMIN SETUP
+# ========================
+import firebase_admin
+from firebase_admin import credentials
+try:
+    if not firebase_admin._apps:
+        # Check if the service account file exists, if not it will error out and we catch it
+        if os.path.exists("firebase-adminsdk.json"):
+            cred = credentials.Certificate("firebase-adminsdk.json")
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDK initialized successfully.")
+        else:
+            logger.warning("firebase-adminsdk.json not found! Push notifications will not work.")
+except Exception as e:
+    logger.error(f"Failed to initialize Firebase Admin SDK: {e}")
+
+# ========================
 # IMPORT ALL ROUTERS
 # ========================
 # Core Auth & Session
