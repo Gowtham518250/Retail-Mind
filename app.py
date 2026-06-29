@@ -119,6 +119,46 @@ except Exception as e:
     logger.warning(f"⚠️ Database initialization deferred: {e}")
 
 # ========================
+# SAFE COLUMN MIGRATIONS
+# Run ALTER TABLE for any columns added after initial DB creation.
+# Uses IF NOT EXISTS — safe to run on every startup, never crashes.
+# ========================
+try:
+    from sqlalchemy import text
+    from db import sessionLocal
+    _db = sessionLocal()
+    safe_migrations = [
+        # user_details table — new columns added after initial deploy
+        "ALTER TABLE user_details ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(255)",
+        "ALTER TABLE user_details ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+        # invoices table — due_date made nullable
+        "ALTER TABLE invoices ALTER COLUMN due_date DROP NOT NULL",
+        # invoice offline_id index
+        "CREATE INDEX IF NOT EXISTS ix_invoices_offline_id ON invoices(offline_id)",
+        # products — purchase_price added later
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(10,2) DEFAULT 0",
+        # customers — state/postal_code added later
+        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS state VARCHAR(50)",
+        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)",
+        # shop_profiles — ensure table exists before settings
+        # online_customers — extra fields for delivery
+        "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+        "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
+        "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS address TEXT",
+    ]
+    for migration_sql in safe_migrations:
+        try:
+            _db.execute(text(migration_sql))
+            _db.commit()
+        except Exception as col_err:
+            _db.rollback()
+            logger.warning(f"Migration skipped (non-critical): {col_err}")
+    _db.close()
+    logger.info("✅ Safe column migrations applied successfully.")
+except Exception as migration_err:
+    logger.error(f"❌ Migration block failed: {migration_err}")
+
+# ========================
 # SECURITY MIDDLEWARE
 # ========================
 
