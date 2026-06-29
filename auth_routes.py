@@ -148,37 +148,52 @@ def verify_otp(request: VerifyOTPRequest):
 
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
-    # Case-insensitive email lookup
-    db_user = db.query(User).filter(User.email.ilike(user.email)).first()
-    
-    if not db_user or not verify_password(user.password, db_user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        # Case-insensitive email lookup
+        db_user = db.query(User).filter(User.email.ilike(user.email)).first()
+        
+        if not db_user or not verify_password(user.password, db_user.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        if not db_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is deactivated. Please contact support.",
+            )
+
+        # Get user role from database
+        user_role = getattr(db_user, 'user_type', ROLE_OWNER) or ROLE_OWNER
+
+        # Create access token with user role
+        access_token = create_access_token(
+            data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
         )
-    
-    # Get user role from database
-    user_role = getattr(db_user, 'user_type', ROLE_OWNER)  # Default to OWNER if user_type doesn't exist
-    
-    # Create access token with user role
-    access_token = create_access_token(
-        data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
-    )
-    
-    # 🔧 PHASE 4 FIX: Create refresh token for secure token renewal
-    from security import create_refresh_token
-    refresh_token = create_refresh_token(db_user.id, user_role)
-    
-    return {
-        "access_token": access_token, 
-        "refresh_token": refresh_token,
-        "token_type": "bearer", 
-        "role": user_role,
-        "user_type": user_role,
-        "user_id": db_user.id,
-        "username": db_user.user_name
-    }
+        
+        # Create refresh token for secure token renewal
+        from security import create_refresh_token
+        refresh_token = create_refresh_token(db_user.id, user_role)
+        
+        return {
+            "access_token": access_token, 
+            "refresh_token": refresh_token,
+            "token_type": "bearer", 
+            "role": user_role,
+            "user_type": user_role,
+            "user_id": db_user.id,
+            "username": db_user.user_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login failed unexpectedly for {user.email}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login error: {str(e)}"
+        )
 
 @router.post("/refresh")
 def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):

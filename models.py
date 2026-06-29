@@ -356,7 +356,7 @@ class Invoice(Base):
     invoice_number = Column(String(50), nullable=False, index=True)
     offline_id = Column(String(50), nullable=True, index=True)  # 🔧 FIX: Removed global unique, will add per-user constraint
     invoice_date = Column(Date, server_default=func.now(), index=True)
-    due_date = Column(Date, nullable=False)
+    due_date = Column(Date, nullable=True, default=None)  # FIX: was NOT NULL causing 500 errors on invoice creation
     subtotal = Column(Numeric(10, 2), default=0)
     tax = Column(Numeric(10, 2), default=0)
     total_amount = Column(Numeric(10, 2), nullable=False)

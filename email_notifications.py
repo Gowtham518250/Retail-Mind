@@ -18,8 +18,8 @@ import asyncio
 from enum import Enum as PythonEnum
 
 
-class NotificationType(str, PythonEnum):
-    """Types of notifications"""
+class EmailNotificationType(str, PythonEnum):
+    """Types of email notifications — renamed from NotificationType to avoid conflict with models.py"""
     STOCK_ALERT = "STOCK_ALERT"
     PAYMENT_RECEIVED = "PAYMENT_RECEIVED"
     INVOICE_GENERATED = "INVOICE_GENERATED"
@@ -119,7 +119,7 @@ class EmailNotificationService:
         db: Session,
         user_id: int,
         recipient_email: str,
-        notification_type: NotificationType,
+        notification_type: EmailNotificationType,
         subject: str,
         body: str,
         html_body: str = None,

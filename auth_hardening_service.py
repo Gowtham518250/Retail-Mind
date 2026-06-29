@@ -22,9 +22,9 @@ from security import verify_password, hash_password, get_current_user
 router = APIRouter(prefix="/api/auth-hardened", tags=["authentication hardened"])
 logger = logging.getLogger(__name__)
 
-# Security configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = secrets.token_urlsafe(32)
+# Security configuration — use same SECRET_KEY as main security.py to avoid token invalidation on restart
+import os as _os
+SECRET_KEY = _os.getenv("SECRET_KEY", "CHANGE-ME-IN-PRODUCTION-SECRET-KEY-MIN-32-CHARS")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
