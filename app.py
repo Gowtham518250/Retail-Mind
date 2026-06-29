@@ -33,13 +33,21 @@ import firebase_admin
 from firebase_admin import credentials
 try:
     if not firebase_admin._apps:
-        # Check if the service account file exists, if not it will error out and we catch it
-        if os.path.exists("firebase-adminsdk.json"):
+        # 1. Try reading from Environment Variable (Render / Prod)
+        firebase_env_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
+        if firebase_env_json:
+            import json
+            cred_dict = json.loads(firebase_env_json)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDK initialized successfully from ENV VAR.")
+        # 2. Fallback to local file (Local Testing or Render Secret File)
+        elif os.path.exists("firebase-adminsdk.json"):
             cred = credentials.Certificate("firebase-adminsdk.json")
             firebase_admin.initialize_app(cred)
-            logger.info("Firebase Admin SDK initialized successfully.")
+            logger.info("Firebase Admin SDK initialized successfully from file.")
         else:
-            logger.warning("firebase-adminsdk.json not found! Push notifications will not work.")
+            logger.warning("No Firebase credentials found! Push notifications will not work.")
 except Exception as e:
     logger.error(f"Failed to initialize Firebase Admin SDK: {e}")
 
