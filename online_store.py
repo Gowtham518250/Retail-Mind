@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db import get_db
-from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction, OnlineCustomerAuth
+from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction, OnlineCustomerAuth, sales
 from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
@@ -78,6 +78,14 @@ class PlaceOrder(BaseModel):
     shop_id: int
     items: List[OrderItem] = Field(..., min_length=1)
     delivery_address: str = Field(..., min_length=5)
+
+class GuestOrder(BaseModel):
+    shop_id: int
+    customer_name: str = Field(..., min_length=2)
+    phone: str = Field(..., min_length=10, max_length=15)
+    delivery_address: str = Field(..., min_length=5)
+    items: List[OrderItem] = Field(..., min_length=1)
+
 
 # =====================
 # CUSTOMER AUTH
@@ -272,18 +280,23 @@ def browse_shop_products(
     except ValueError:
         shop_id_int = 1
 
-    # First verify shop has online store enabled
+    # Try online-enabled first, fallback to any shop profile
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == shop_id_int,
         ShopProfile.is_online_store_enabled == True,
     ).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Shop not found or online store disabled.")
+        # Fallback: show products even if online store flag not set
+        profile = db.query(ShopProfile).filter(
+            ShopProfile.shop_id == shop_id_int,
+        ).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Shop not found.")
 
+    # Show ALL active products (even if stock is 0 — shopkeeper may not have updated)
     q = db.query(Product).filter(
         Product.user_id == shop_id_int,
         Product.is_active == True,
-        Product.current_stock > 0,
     )
     if category:
         q = q.filter(Product.category == category)
@@ -292,14 +305,18 @@ def browse_shop_products(
 
     return {
         "shop_name": profile.shop_name,
+        "shop_tagline": profile.shop_tagline or "",
+        "shop_phone": profile.phone or "",
+        "shop_address": profile.address or "",
         "products": [
             {
                 "id": p.id,
                 "name": p.product_name,
                 "category": p.category,
                 "price": float(p.unit_price),
-                "stock_available": p.current_stock,
+                "stock_available": p.current_stock if p.current_stock else 999,
                 "description": p.description,
+
             }
             for p in products
         ],
@@ -373,6 +390,86 @@ def place_order(
         "shop_name": profile.shop_name,
         "total_amount": total_amount,
         "items": order_items,
+        "status": "PENDING",
+    }
+
+
+@router.post("/guest-order")
+def place_guest_order(
+    data: GuestOrder,
+    db: Session = Depends(get_db),
+):
+    """Place an online order as a guest (no auth required)"""
+    # 1. Validate shop
+    profile = db.query(ShopProfile).filter(
+        ShopProfile.shop_id == data.shop_id,
+        ShopProfile.is_online_store_enabled == True,
+    ).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+
+    # 2. Find or create guest customer in OnlineCustomerAuth
+    customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
+    if not customer:
+        customer = OnlineCustomerAuth(
+            user_name=sanitize_input(data.customer_name, "name"),
+            email=f"guest_{data.phone}@example.com",
+            phone=data.phone,
+            address=sanitize_input(data.delivery_address, "address"),
+            password=hash_password(f"guest_{data.phone}"),
+            is_active=False  # Mark as guest/inactive
+        )
+        db.add(customer)
+        db.commit()
+        db.refresh(customer)
+        
+    customer_id = customer.id
+
+    # 3. Validate items and calculate total
+    order_items = []
+    total_amount = 0.0
+
+    for item in data.items:
+        product = db.query(Product).filter(
+            Product.id == item.product_id,
+            Product.user_id == data.shop_id,
+            Product.is_active == True,
+        ).first()
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Product ID {item.product_id} not found.")
+        if product.current_stock < item.quantity:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
+            )
+        line_total = float(product.unit_price) * item.quantity
+        total_amount += line_total
+        order_items.append({
+            "product_id": product.id,
+            "product_name": product.product_name,
+            "quantity": item.quantity,
+            "unit_price": float(product.unit_price),
+            "line_total": line_total,
+        })
+
+    # 4. Create Order
+    order = OnlineOrder(
+        shop_id=data.shop_id,
+        customer_id=customer_id,
+        total_amount=total_amount,
+        delivery_address=sanitize_input(data.delivery_address, "address"),
+        items_json=json.dumps(order_items),
+        order_status="PENDING",
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "message": "Guest order placed successfully!",
+        "order_id": order.id,
+        "shop_name": profile.shop_name,
+        "total_amount": total_amount,
         "status": "PENDING",
     }
 
@@ -455,21 +552,27 @@ def get_incoming_orders(
         q = q.filter(OnlineOrder.order_status == status.upper())
     orders = q.order_by(OnlineOrder.created_at.desc()).offset(skip).limit(limit).all()
 
+    # Build response with customer info joined
+    result = []
+    for o in orders:
+        customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == o.customer_id).first()
+        result.append({
+            "order_id": o.id,
+            "customer_id": o.customer_id,
+            "customer_name": customer.user_name if customer else "Guest",
+            "customer_phone": customer.phone if customer else "",
+            "status": o.order_status,
+            "total_amount": float(o.total_amount),
+            "delivery_address": o.delivery_address,
+            "items": json.loads(o.items_json),
+            "created_at": str(o.created_at),
+        })
+
     return {
-        "orders": [
-            {
-                "order_id": o.id,
-                "customer_id": o.customer_id,
-                "status": o.order_status,
-                "total_amount": float(o.total_amount),
-                "delivery_address": o.delivery_address,
-                "items": json.loads(o.items_json),
-                "created_at": o.created_at,
-            }
-            for o in orders
-        ],
-        "total": len(orders),
+        "orders": result,
+        "total": len(result),
     }
+
 
 
 @router.post("/owner/orders/{order_id}/action")
@@ -501,33 +604,73 @@ def update_order_status(
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
 
-    # If delivered, deduct stock and create official invoice
-    if new_status == "DELIVERED":
+    # ── On ACCEPT: record sales immediately in dashboard ──────────────────
+    if new_status == "ACCEPTED":
         items = json.loads(order.items_json)
-        
-        # Get customer details
         customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == order.customer_id).first()
         customer_name = customer.user_name if customer else "Online Customer"
-        
-        # Create Invoice
+        customer_phone = customer.phone if customer else ""
+
+        # 1. Write one sales row per item → appears in Sales Dashboard
+        for item in items:
+            sale_entry = sales(
+                shopkeeper_id=shop_id,
+                product_name=item.get("product_name", "Online Item"),
+                price=item.get("unit_price", 0),
+                quantity=item.get("quantity", 1),
+                total=item.get("line_total", 0),
+                sale_date=date.today(),
+            )
+            db.add(sale_entry)
+
+        # 2. Create Invoice (ACCEPTED = COD/pending payment)
+        invoice_num = f"ONL-{order.id}-{int(datetime.now().timestamp())}"
         invoice = Invoice(
             user_id=shop_id,
             customer_name=customer_name,
-            invoice_number=f"ONL-{order.id}-{int(datetime.now().timestamp())}",
+            customer_phone=customer_phone,
+            invoice_number=invoice_num,
             invoice_date=date.today(),
             due_date=date.today(),
-            subtotal=float(order.total_amount), # Assuming no tax for MVP
+            subtotal=float(order.total_amount),
             tax=0,
             total_amount=float(order.total_amount),
-            paid_amount=float(order.total_amount),
+            paid_amount=0,
             status="SENT",
-            payment_status="PAID",
+            payment_status="UNPAID",
             source="ONLINE_ORDER",
-            notes=f"Online Order Delivery to: {order.delivery_address}"
+            notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}"
         )
         db.add(invoice)
         db.flush()
 
+        # 3. Create InvoiceLineItems
+        for item in items:
+            db_line = InvoiceLineItem(
+                invoice_id=invoice.id,
+                product_id=item.get("product_id"),
+                description=item.get("product_name", "Item"),
+                quantity=item.get("quantity", 1),
+                unit_price=item.get("unit_price", 0),
+                line_total=item.get("line_total", 0),
+            )
+            db.add(db_line)
+
+        # 4. Write to universal P&L journal
+        tx = UniversalTransaction(
+            shop_id=shop_id,
+            tx_type="INCOME",
+            category="SALE",
+            amount=float(order.total_amount),
+            reference_id=f"ONL-{order.id}",
+            description=f"Online Order Accepted: #{order.id} | {customer_name}",
+            tx_date=datetime.now(),
+        )
+        db.add(tx)
+
+    # ── On DELIVER: deduct stock only (sale already recorded at ACCEPT) ───
+    if new_status == "DELIVERED":
+        items = json.loads(order.items_json)
         for item in items:
             if item.get("product_id"):
                 product = db.query(Product).filter(
@@ -536,29 +679,17 @@ def update_order_status(
                 ).first()
                 if product:
                     product.current_stock = max(0, (product.current_stock or 0) - item["quantity"])
-            
-            # Create InvoiceLineItem
-            db_line = InvoiceLineItem(
-                invoice_id=invoice.id,
-                product_id=item.get("product_id"),
-                description=item.get("product_name", "Item"),
-                quantity=item.get("quantity", 1),
-                unit_price=item.get("unit_price", item.get("line_total", 0) / max(1, item.get("quantity", 1))),
-                line_total=item.get("line_total", 0),
-            )
-            db.add(db_line)
-            
-        # Write to universal journal
-        tx = UniversalTransaction(
-            shop_id=shop_id,
-            tx_type="INCOME",
-            category="SALE",
-            amount=float(order.total_amount),
-            reference_id=f"ONL-{order.id}",
-            description=f"Online Order Delivered: #{order.id}",
-            tx_date=datetime.now(),
-        )
-        db.add(tx)
+
+        # Mark the linked invoice as PAID
+        linked_invoice = db.query(Invoice).filter(
+            Invoice.source == "ONLINE_ORDER",
+            Invoice.notes.like(f"%Online Order #{order.id}%"),
+            Invoice.user_id == shop_id,
+        ).first()
+        if linked_invoice:
+            linked_invoice.payment_status = "PAID"
+            linked_invoice.paid_amount = float(order.total_amount)
+            linked_invoice.status = "PAID"
 
     order.order_status = new_status
     db.commit()

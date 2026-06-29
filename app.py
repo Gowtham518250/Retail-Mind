@@ -12,7 +12,7 @@ Fully secured FastAPI app with:
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 import os
 import time
 import logging
@@ -228,4 +228,13 @@ async def health_check():
         "database": "connected" if db_ok else "unreachable",
         "timestamp": time.time(),
     }
+
+@api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
+async def serve_shop_frontend(shop_id: str):
+    file_path = "D:/deploy-retail-mind/shop_frontend.html"
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>Shop frontend not found.</h1>", status_code=404)
+    with open(file_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
+    return HTMLResponse(content=html_content)
 
