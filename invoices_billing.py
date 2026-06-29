@@ -38,23 +38,23 @@ class InvoiceLineItemCreate(BaseModel):
 class InvoiceSyncCreate(BaseModel):
     invoice_number: str
     offline_id: Optional[str] = None
-    customer_phone: Optional[str] = Field(None, min_length=10, max_length=10, pattern=r"^\d{10}$")
+    customer_phone: Optional[str] = None  # Removed min_length/max_length restriction for flexibility
     customer_name: Optional[str] = None
     total_amount: float
     paid_amount: float = 0
     tax: float = 0
     payment_status: str = "PAID"
-    line_items: List[InvoiceLineItemCreate]
-    invoice_date: str  # YYYY-MM-DD
+    line_items: Optional[List[InvoiceLineItemCreate]] = None  # Made optional
+    invoice_date: Optional[str] = None  # YYYY-MM-DD
+    due_date: Optional[str] = None  # Added due_date
     notes: Optional[str] = None
     
     @validator('line_items')
     def validate_line_items(cls, v):
-        if not v or len(v) == 0:
-            raise ValueError('At least one line item is required')
-        for item in v:
-            if not item.product_name or item.product_name.strip().lower() in ['unknown', 'unknown item', '??']:
-                raise ValueError(f'Invalid product name: {item.product_name}')
+        if v is not None and len(v) > 0:
+            for item in v:
+                if not item.product_name or item.product_name.strip().lower() in ['unknown', 'unknown item', '??']:
+                    raise ValueError(f'Invalid product name: {item.product_name}')
         return v
 
 class InvoiceLineItemResponse(BaseModel):
@@ -137,9 +137,14 @@ def sync_offline_invoice(
         customer_id = cust.id
 
     try:
-        inv_date = datetime.strptime(data.invoice_date, "%Y-%m-%d").date()
+        inv_date = datetime.strptime(data.invoice_date, "%Y-%m-%d").date() if data.invoice_date else date.today()
     except ValueError:
         inv_date = date.today()
+    
+    try:
+        due_date = datetime.strptime(data.due_date, "%Y-%m-%d").date() if data.due_date else inv_date
+    except ValueError:
+        due_date = inv_date
 
     # TRANSACTION-BASED APPROACH: All operations in single transaction
     try:
@@ -152,56 +157,57 @@ def sync_offline_invoice(
             invoice_number=invoice_number,
             offline_id=data.offline_id,
             invoice_date=inv_date,
-            due_date=inv_date,
+            due_date=due_date,
             subtotal=data.total_amount - data.tax,
             tax=data.tax,
             total_amount=data.total_amount,
             paid_amount=data.paid_amount,
             status="SENT",
-            payment_status=data.payment_status.upper() if data.payment_status else "PAID",
+            payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
             source="OFFLINE_SYNC",
             notes=sanitize_input(data.notes or "", "notes"),
         )
         db.add(invoice)
         db.flush()
 
-        # Process Line Items & Deduct Inventory
-        for item in data.line_items:
-            line_total = item.quantity * item.unit_price
-            db_line = InvoiceLineItem(
-                invoice_id=invoice.id,
-                product_id=item.product_id,
-                description=sanitize_input(item.product_name, "product_name"),
-                quantity=item.quantity,
-                unit_price=item.unit_price,
-                line_total=line_total,
-            )
-            db.add(db_line)
+        # Process Line Items & Deduct Inventory (if any)
+        if data.line_items and len(data.line_items) > 0:
+            for item in data.line_items:
+                line_total = item.quantity * item.unit_price
+                db_line = InvoiceLineItem(
+                    invoice_id=invoice.id,
+                    product_id=item.product_id,
+                    description=sanitize_input(item.product_name, "product_name"),
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    line_total=line_total,
+                )
+                db.add(db_line)
 
-            # Inventory Auto-Deduction with validation
-            if item.product_id:
-                product = db.query(Product).filter(
-                    Product.id == item.product_id,
-                    Product.user_id == shop_id
-                ).with_for_update().first()  # Row-level lock for concurrency
-                if product:
-                    # Validate stock availability
-                    current_stock = product.current_stock or 0
-                    if current_stock < item.quantity:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
+                # Inventory Auto-Deduction with validation
+                if item.product_id:
+                    product = db.query(Product).filter(
+                        Product.id == item.product_id,
+                        Product.user_id == shop_id
+                    ).with_for_update().first()  # Row-level lock for concurrency
+                    if product:
+                        # Validate stock availability
+                        current_stock = product.current_stock or 0
+                        if current_stock < item.quantity:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
+                            )
+                        product.current_stock = max(0, current_stock - item.quantity)
+                        # Log stock movement
+                        mov = StockMovement(
+                            product_id=product.id,
+                            movement_type="OUT",
+                            quantity=item.quantity,
+                            reason="Sales Sync",
+                            reference_id=invoice_number,
                         )
-                    product.current_stock = max(0, current_stock - item.quantity)
-                    # Log stock movement
-                    mov = StockMovement(
-                        product_id=product.id,
-                        movement_type="OUT",
-                        quantity=item.quantity,
-                        reason="Sales Sync",
-                        reference_id=invoice_number,
-                    )
-                    db.add(mov)
+                        db.add(mov)
 
         # Universal Journal Entry
         tx = UniversalTransaction(
@@ -281,9 +287,14 @@ def create_invoice(
         customer_id = cust.id
 
     try:
-        inv_date = datetime.strptime(data.invoice_date, "%Y-%m-%d").date()
+        inv_date = datetime.strptime(data.invoice_date, "%Y-%m-%d").date() if data.invoice_date else date.today()
     except ValueError:
         inv_date = date.today()
+    
+    try:
+        due_date = datetime.strptime(data.due_date, "%Y-%m-%d").date() if data.due_date else inv_date
+    except ValueError:
+        due_date = inv_date
 
     invoice = Invoice(
         user_id=shop_id,
@@ -292,51 +303,52 @@ def create_invoice(
         customer_phone=data.customer_phone,
         invoice_number=invoice_number,
         invoice_date=inv_date,
-        due_date=inv_date,
+        due_date=due_date,
         subtotal=data.total_amount - data.tax,
         tax=data.tax,
         total_amount=data.total_amount,
         paid_amount=data.paid_amount,
         status="SENT",
-        payment_status=data.payment_status.upper() if data.payment_status else "PAID",
+        payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
         source="MANUAL_ENTRY",
         notes=sanitize_input(data.notes or "", "notes"),
     )
     db.add(invoice)
     db.flush()
 
-    for item in data.line_items:
-        line_total = item.quantity * item.unit_price
-        db_line = InvoiceLineItem(
-            invoice_id=invoice.id,
-            product_id=item.product_id,
-            description=sanitize_input(item.product_name, "product_name"),
-            quantity=item.quantity,
-            unit_price=item.unit_price,
-            line_total=line_total,
-        )
-        db.add(db_line)
+    if data.line_items and len(data.line_items) > 0:
+        for item in data.line_items:
+            line_total = item.quantity * item.unit_price
+            db_line = InvoiceLineItem(
+                invoice_id=invoice.id,
+                product_id=item.product_id,
+                description=sanitize_input(item.product_name, "product_name"),
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                line_total=line_total,
+            )
+            db.add(db_line)
 
-        if item.product_id:
-            product = db.query(Product).filter(
-                Product.id == item.product_id,
-                Product.user_id == shop_id
-            ).first()
-            if product:
-                if (product.current_stock or 0) < item.quantity:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Insufficient stock for product ID {product.id}. Available: {product.current_stock or 0}, Requested: {item.quantity}"
+            if item.product_id:
+                product = db.query(Product).filter(
+                    Product.id == item.product_id,
+                    Product.user_id == shop_id
+                ).first()
+                if product:
+                    if (product.current_stock or 0) < item.quantity:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Insufficient stock for product ID {product.id}. Available: {product.current_stock or 0}, Requested: {item.quantity}"
+                        )
+                    product.current_stock = (product.current_stock or 0) - item.quantity
+                    mov = StockMovement(
+                        product_id=product.id,
+                        movement_type="OUT",
+                        quantity=item.quantity,
+                        reason="Manual Sale",
+                        reference_id=invoice_number,
                     )
-                product.current_stock = (product.current_stock or 0) - item.quantity
-                mov = StockMovement(
-                    product_id=product.id,
-                    movement_type="OUT",
-                    quantity=item.quantity,
-                    reason="Manual Sale",
-                    reference_id=invoice_number,
-                )
-                db.add(mov)
+                    db.add(mov)
 
     tx = UniversalTransaction(
         shop_id=shop_id,
@@ -364,6 +376,7 @@ def create_invoice(
         "status":         invoice.status,
         "payment_status": invoice.payment_status,
         "invoice_date":   str(invoice.invoice_date),
+        "due_date":       str(invoice.due_date) if invoice.due_date else None,
         "created_at":     invoice.created_at.isoformat(),
         "message":        "Invoice created successfully.",
         "line_items": [
@@ -513,6 +526,78 @@ def get_invoice(
         ],
     }
 
+
+class InvoiceUpdate(BaseModel):
+    paid_amount: Optional[float] = None
+    payment_status: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+@router.put("/{invoice_id}")
+def update_invoice(
+    invoice_id: int,
+    data: InvoiceUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    shop_id = current_user
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.user_id == shop_id
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Update fields
+    if data.paid_amount is not None:
+        invoice.paid_amount = data.paid_amount
+        # Auto-set payment status based on paid_amount vs total_amount
+        if invoice.paid_amount >= invoice.total_amount:
+            invoice.payment_status = "PAID"
+        elif invoice.paid_amount > 0:
+            invoice.payment_status = "PARTIAL"
+        else:
+            invoice.payment_status = "UNPAID"
+    
+    if data.payment_status is not None:
+        invoice.payment_status = data.payment_status.upper()
+    
+    if data.status is not None:
+        invoice.status = data.status.upper()
+    
+    if data.notes is not None:
+        invoice.notes = data.notes
+    
+    db.commit()
+    db.refresh(invoice)
+    
+    # Get line items
+    line_items = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice_id).all()
+    
+    return {
+        "id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "total_amount": float(invoice.total_amount),
+        "paid_amount": float(invoice.paid_amount),
+        "subtotal": float(invoice.subtotal),
+        "tax": float(invoice.tax),
+        "status": invoice.status,
+        "payment_status": invoice.payment_status,
+        "invoice_date": str(invoice.invoice_date),
+        "due_date": str(invoice.due_date) if invoice.due_date else None,
+        "created_at": invoice.created_at.isoformat(),
+        "updated_at": invoice.updated_at.isoformat() if invoice.updated_at else None,
+        "line_items": [
+            {
+                "product_id": li.product_id,
+                "product_name": li.description,
+                "quantity": li.quantity,
+                "unit_price": float(li.unit_price),
+                "total": float(li.line_total),
+            }
+            for li in line_items
+        ],
+    }
 
 @router.delete("/{invoice_id}")
 def delete_invoice(

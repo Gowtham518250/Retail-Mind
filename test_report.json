@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-06-23T12:39:25.538213Z",
+  "run_at": "2026-06-29T08:15:45.045387Z",
   "base_url": "https://retail-mind-vkbp.onrender.com",
   "summary": {
     "total": 186,
@@ -144,19 +144,19 @@
     {
       "label": "Get Shop Profile (/api/shop)",
       "status": "PASS",
-      "code": 404,
+      "code": 200,
       "detail": ""
     },
     {
       "label": "Get Business Hours",
       "status": "PASS",
-      "code": 404,
+      "code": 200,
       "detail": ""
     },
     {
       "label": "Get Tax Config",
       "status": "PASS",
-      "code": 404,
+      "code": 200,
       "detail": ""
     },
     {
@@ -174,7 +174,7 @@
     {
       "label": "Get Public Shop Info",
       "status": "PASS",
-      "code": 404,
+      "code": 200,
       "detail": ""
     },
     {
@@ -192,7 +192,7 @@
     {
       "label": "Update API Shop Settings",
       "status": "PASS",
-      "code": 400,
+      "code": 200,
       "detail": ""
     },
     {
@@ -846,14 +846,14 @@
     {
       "label": "Browse Shop Products",
       "status": "PASS",
-      "code": 404,
+      "code": 200,
       "detail": ""
     },
     {
       "label": "Place Order",
       "status": "FAIL",
       "code": 404,
-      "detail": "{'detail': 'Shop not found or not accepting online orders.'}"
+      "detail": "{'detail': 'Product ID 5 not found in this shop.'}"
     },
     {
       "label": "Get My Orders",
