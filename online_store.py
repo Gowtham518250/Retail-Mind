@@ -85,7 +85,7 @@ class GuestOrder(BaseModel):
     phone: str = Field(..., min_length=10, max_length=15)
     delivery_address: str = Field(..., min_length=5)
     items: List[OrderItem] = Field(..., min_length=1)
-    firebase_id_token: str = Field(..., description="Firebase Auth ID token for phone verification")
+    firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
 
 
 # =====================
@@ -401,30 +401,33 @@ def place_guest_order(
     db: Session = Depends(get_db),
 ):
     """Place an online order as a guest (no auth required)"""
-    # 1. Verify Firebase Phone Auth Token
-    try:
-        import firebase_admin
-        if not firebase_admin._apps:
-            raise HTTPException(status_code=503, detail="Firebase not configured. Please contact support.")
+    # 1. Verify Firebase Phone Auth Token (if provided)
+    if data.firebase_id_token:
+        try:
+            import firebase_admin
+            if not firebase_admin._apps:
+                raise HTTPException(status_code=503, detail="Firebase not configured. Please contact support.")
+                
+            from firebase_admin import auth
+            decoded_token = auth.verify_id_token(data.firebase_id_token)
+            phone_number = decoded_token.get('phone_number')
             
-        from firebase_admin import auth
-        decoded_token = auth.verify_id_token(data.firebase_id_token)
-        phone_number = decoded_token.get('phone_number')
-        
-        if not phone_number:
-            raise HTTPException(status_code=400, detail="Invalid token: No phone number associated with this login.")
-            
-        # Ensure the verified phone matches the one provided (stripping non-digits for comparison if needed, or exact match)
-        # Firebase phone numbers include country code (e.g., +919876543210).
-        # We check if the provided phone is a substring of the verified phone to allow local format (e.g., 9876543210)
-        if data.phone not in phone_number:
-            raise HTTPException(status_code=400, detail="Verified phone number does not match the provided phone number.")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Firebase token verification failed: {e}")
-        raise HTTPException(status_code=401, detail="Phone verification failed. Please try again.")
+            if not phone_number:
+                raise HTTPException(status_code=400, detail="Invalid token: No phone number associated with this login.")
+                
+            # Ensure the verified phone matches the one provided (stripping non-digits for comparison if needed, or exact match)
+            # Firebase phone numbers include country code (e.g., +919876543210).
+            # We check if the provided phone is a substring of the verified phone to allow local format (e.g., 9876543210)
+            if data.phone not in phone_number:
+                raise HTTPException(status_code=400, detail="Verified phone number does not match the provided phone number.")
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Firebase token verification failed: {e}")
+            raise HTTPException(status_code=401, detail="Phone verification failed. Please try again.")
+    else:
+        logger.info("Skipping phone verification - no Firebase token provided")
 
     # 2. Validate shop
     profile = db.query(ShopProfile).filter(
