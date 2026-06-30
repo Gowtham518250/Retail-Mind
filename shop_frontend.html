@@ -1048,7 +1048,8 @@
       items: Object.values(cart).map(({ product, qty }) => ({
         product_id: product.id,
         quantity: qty
-      }))
+      })),
+      firebase_id_token: null // No phone verification
     };
 
     // Direct order submission without phone verification
@@ -1063,6 +1064,8 @@
     }
 
     try {
+      console.log('Submitting order payload:', payload);
+      
       const res = await fetch('/store/guest-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1070,6 +1073,7 @@
       });
 
       const data = await res.json().catch(() => ({}));
+      console.log('Order response:', res.status, data);
 
       if (!res.ok) {
         throw new Error(data.message || data.error || `Error ${res.status}`);

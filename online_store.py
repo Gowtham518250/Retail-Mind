@@ -86,6 +86,15 @@ class GuestOrder(BaseModel):
     delivery_address: str = Field(..., min_length=5)
     items: List[OrderItem] = Field(..., min_length=1)
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
+    
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        # Remove any non-digit characters
+        cleaned = ''.join(c for c in v if c.isdigit())
+        if len(cleaned) < 10:
+            raise ValueError('Phone number must be at least 10 digits')
+        return cleaned
 
 
 # =====================
