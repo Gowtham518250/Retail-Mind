@@ -198,6 +198,8 @@ def sync_offline_invoice(
                                 status_code=400,
                                 detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
                             )
+                        # 🔧 FIX: Debug logging for quantity deduction
+                        print(f"🔍 [Backend] Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
                         product.current_stock = max(0, current_stock - item.quantity)
                         # Log stock movement
                         mov = StockMovement(
@@ -208,6 +210,28 @@ def sync_offline_invoice(
                             reference_id=invoice_number,
                         )
                         db.add(mov)
+                        print(f"✅ [Backend] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
+                else:
+                    # 🔧 FIX: Deduct by product name when product_id is missing
+                    product = db.query(Product).filter(
+                        Product.product_name.ilike(f"%{item.product_name}%"),
+                        Product.user_id == shop_id
+                    ).with_for_update().first()
+                    if product:
+                        current_stock = product.current_stock or 0
+                        if current_stock >= item.quantity:
+                            # 🔧 FIX: Debug logging for quantity deduction
+                            print(f"🔍 [Backend] Deducting {item.quantity} from {item.product_name} by name (current: {current_stock})")
+                            product.current_stock = max(0, current_stock - item.quantity)
+                            mov = StockMovement(
+                                product_id=product.id,
+                                movement_type="OUT",
+                                quantity=item.quantity,
+                                reason="Sales Sync (by name)",
+                                reference_id=invoice_number,
+                            )
+                            db.add(mov)
+                            print(f"✅ [Backend] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
 
         # Universal Journal Entry
         tx = UniversalTransaction(
@@ -340,6 +364,8 @@ def create_invoice(
                             status_code=400,
                             detail=f"Insufficient stock for product ID {product.id}. Available: {product.current_stock or 0}, Requested: {item.quantity}"
                         )
+                    # 🔧 FIX: Debug logging for quantity deduction
+                    print(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} (current: {product.current_stock or 0})")
                     product.current_stock = (product.current_stock or 0) - item.quantity
                     mov = StockMovement(
                         product_id=product.id,
@@ -349,6 +375,28 @@ def create_invoice(
                         reference_id=invoice_number,
                     )
                     db.add(mov)
+                    print(f"✅ [Backend Create] Stock updated: {item.product_name} ({product.current_stock or 0 + item.quantity} → {product.current_stock})")
+            else:
+                # 🔧 FIX: Deduct by product name when product_id is missing
+                product = db.query(Product).filter(
+                    Product.product_name.ilike(f"%{item.product_name}%"),
+                    Product.user_id == shop_id
+                ).first()
+                if product:
+                    current_stock = product.current_stock or 0
+                    if current_stock >= item.quantity:
+                        # 🔧 FIX: Debug logging for quantity deduction
+                        print(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} by name (current: {current_stock})")
+                        product.current_stock = max(0, current_stock - item.quantity)
+                        mov = StockMovement(
+                            product_id=product.id,
+                            movement_type="OUT",
+                            quantity=item.quantity,
+                            reason="Manual Sale (by name)",
+                            reference_id=invoice_number,
+                        )
+                        db.add(mov)
+                        print(f"✅ [Backend Create] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
 
     tx = UniversalTransaction(
         shop_id=shop_id,
