@@ -296,7 +296,8 @@ async def health_check():
 
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
 async def serve_shop_frontend(shop_id: str):
-    file_path = "D:/deploy-retail-mind/shop_frontend.html"
+    # Use relative path that works in both local and production environments
+    file_path = os.path.join(os.path.dirname(__file__), "shop_frontend.html")
     if not os.path.exists(file_path):
         return HTMLResponse(content="<h1>Shop frontend not found.</h1>", status_code=404)
     with open(file_path, "r", encoding="utf-8") as f:
