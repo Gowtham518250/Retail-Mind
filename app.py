@@ -31,6 +31,7 @@ logger = logging.getLogger("ai_shop_pro")
 # ========================
 import firebase_admin
 from firebase_admin import credentials
+firebase_initialized = False
 try:
     if not firebase_admin._apps:
         # 1. Try reading from Environment Variable (Render / Prod)
@@ -40,16 +41,22 @@ try:
             cred_dict = json.loads(firebase_env_json)
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
+            firebase_initialized = True
             logger.info("Firebase Admin SDK initialized successfully from ENV VAR.")
         # 2. Fallback to local file (Local Testing or Render Secret File)
         elif os.path.exists("firebase-adminsdk.json"):
             cred = credentials.Certificate("firebase-adminsdk.json")
             firebase_admin.initialize_app(cred)
+            firebase_initialized = True
             logger.info("Firebase Admin SDK initialized successfully from file.")
         else:
-            logger.warning("No Firebase credentials found! Push notifications will not work.")
+            logger.warning("No Firebase credentials found! Phone authentication and push notifications will not work.")
+    else:
+        firebase_initialized = True
+        logger.info("Firebase Admin SDK already initialized.")
 except Exception as e:
     logger.error(f"Failed to initialize Firebase Admin SDK: {e}")
+    firebase_initialized = False
 
 # ========================
 # IMPORT ALL ROUTERS

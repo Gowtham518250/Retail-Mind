@@ -1066,7 +1066,7 @@
     if (window.sendFirebaseOtp) {
       window.sendFirebaseOtp(phone, payload);
     } else {
-      showOrderError('Firebase auth not initialized.');
+      showOrderError('Firebase auth not initialized. Please refresh the page and try again.');
     }
   };
 
@@ -1244,8 +1244,16 @@
     measurementId: "G-HFCZRXNPL7"
   };
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
+  let app, auth;
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    console.log("Firebase initialized successfully");
+  } catch (error) {
+    console.error("Firebase initialization error:", error);
+    alert("Firebase configuration error. Please contact support.");
+  }
+  
   let confirmationResult = null;
   let orderPayload = null;
 
@@ -1268,6 +1276,10 @@
     errorMsg.style.display = 'none';
 
     try {
+      if (!auth) {
+        throw new Error("Firebase auth not initialized");
+      }
+      
       initRecaptcha();
       // Format to E.164 (Assuming +91 for India by default if 10 digits provided)
       const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;

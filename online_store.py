@@ -403,6 +403,10 @@ def place_guest_order(
     """Place an online order as a guest (no auth required)"""
     # 1. Verify Firebase Phone Auth Token
     try:
+        import firebase_admin
+        if not firebase_admin._apps:
+            raise HTTPException(status_code=503, detail="Firebase not configured. Please contact support.")
+            
         from firebase_admin import auth
         decoded_token = auth.verify_id_token(data.firebase_id_token)
         phone_number = decoded_token.get('phone_number')
@@ -416,6 +420,8 @@ def place_guest_order(
         if data.phone not in phone_number:
             raise HTTPException(status_code=400, detail="Verified phone number does not match the provided phone number.")
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Firebase token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Phone verification failed. Please try again.")
