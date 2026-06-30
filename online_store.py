@@ -81,20 +81,11 @@ class PlaceOrder(BaseModel):
 
 class GuestOrder(BaseModel):
     shop_id: int
-    customer_name: str = Field(..., min_length=2)
-    phone: str = Field(..., min_length=10, max_length=15)
-    delivery_address: str = Field(..., min_length=5)
+    customer_name: str = Field(..., min_length=1)
+    phone: str = Field(..., min_length=10)
+    delivery_address: str = Field(..., min_length=1)
     items: List[OrderItem] = Field(..., min_length=1)
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
-    
-    @field_validator('phone')
-    @classmethod
-    def validate_phone(cls, v):
-        # Remove any non-digit characters
-        cleaned = ''.join(c for c in v if c.isdigit())
-        if len(cleaned) < 10:
-            raise ValueError('Phone number must be at least 10 digits')
-        return cleaned
 
 
 # =====================
@@ -410,6 +401,8 @@ def place_guest_order(
     db: Session = Depends(get_db),
 ):
     """Place an online order as a guest (no auth required)"""
+    logger.info(f"Received guest order: shop_id={data.shop_id}, customer={data.customer_name}, phone={data.phone}, items_count={len(data.items)}")
+    
     # 1. Verify Firebase Phone Auth Token (if provided)
     if data.firebase_id_token:
         try:
@@ -439,12 +432,17 @@ def place_guest_order(
         logger.info("Skipping phone verification - no Firebase token provided")
 
     # 2. Validate shop
-    profile = db.query(ShopProfile).filter(
-        ShopProfile.shop_id == data.shop_id,
-        ShopProfile.is_online_store_enabled == True,
-    ).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+    try:
+        profile = db.query(ShopProfile).filter(
+            ShopProfile.shop_id == data.shop_id,
+            ShopProfile.is_online_store_enabled == True,
+        ).first()
+        if not profile:
+            logger.error(f"Shop not found: shop_id={data.shop_id}")
+            raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+    except Exception as e:
+        logger.error(f"Error validating shop: {e}")
+        raise HTTPException(status_code=500, detail="Error validating shop.")
 
     # 3. Find or create guest customer in OnlineCustomerAuth
     customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
