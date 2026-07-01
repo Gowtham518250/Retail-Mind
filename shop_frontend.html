@@ -1209,8 +1209,10 @@
   }
 
   function showLoginGate() {
-    document.getElementById('login-gate').style.display = 'grid';
-    document.getElementById('main-app').style.display = 'none';
+    // Show login prompt as an overlay but keep main storefront visible
+    const gate = document.getElementById('login-gate');
+    if (gate) gate.style.display = 'grid';
+    // do not hide #main-app so customers can browse products without logging in
   }
 
   function showMainApp() {
@@ -1507,8 +1509,19 @@
   async function loadCatalog() {
     try {
       const res = await fetch(`/store/shops/${SHOP_ID}/products`);
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      const data = await res.json();
+      const text = await res.text();
+      if (!res.ok) {
+        console.error('Catalog load failed', res.status, text);
+        // show friendly error with details for debugging
+        const errEl = document.getElementById('error-state');
+        if (errEl) {
+          errEl.innerHTML = `<h3>Could not load shop catalog</h3><p>Status: ${res.status}</p><pre style="white-space:pre-wrap;max-height:240px;overflow:auto;background:#111;color:#fff;padding:8px;border-radius:8px">${escHtml(text)}</pre>`;
+          document.getElementById('main-app').style.display = 'none';
+          errEl.style.display = 'block';
+        }
+        throw new Error(`Server error: ${res.status}`);
+      }
+      const data = JSON.parse(text);
 
       // Set shop name dynamically
       const name = data.shop_name || 'Our Shop';
