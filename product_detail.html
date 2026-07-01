@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Product</title>
+  <style>body{font-family:Inter,Arial;padding:24px;background:#f7fafc} .wrap{max-width:920px;margin:24px auto;background:#fff;padding:20px;border-radius:12px} img{max-width:360px;object-fit:contain}</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="content">Loading product…</div>
+  </div>
+  <script>
+    const productId = '{{PRODUCT_ID}}';
+    async function load(){
+      try{
+        const res = await fetch(`/products/${productId}`);
+        if(!res.ok){document.getElementById('content').innerHTML='Product not found';return}
+        const p = await res.json(); document.getElementById('content').innerHTML = `<div style="display:flex;gap:18px"><div><img src='${p.image_url||p.logo_url||''}' alt=''></div><div><h2>${p.product_name||p.name}</h2><div class=muted>${p.category||''}</div><p>${p.description||''}</p><div style="font-weight:800">₹${p.unit_price||p.price||0}</div></div></div>`;
+      }catch(e){document.getElementById('content').textContent='Failed to load product'}
+    }
+    load();
+  </script>
+</body>
+</html>

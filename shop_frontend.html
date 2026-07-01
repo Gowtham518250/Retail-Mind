@@ -1,3 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shop Front</title>
+  <style>
+    :root{--accent:#ff6f00;--muted:#6b7280;--card:#fff;--bg:#f5f7fb}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{background:var(--bg);color:#111}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:#fff;border-bottom:1px solid #e6e9ee}
+    .brand{display:flex;align-items:center;gap:12px}
+    .brand img{height:44px;width:44px;object-fit:cover;border-radius:6px}
+    .brand h1{font-size:18px;margin:0}
+    .search{flex:1;max-width:720px;margin:0 24px}
+    .search input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid #e2e8f0}
+    .container{max-width:1200px;margin:20px auto;padding:0 16px}
+    .hero{display:flex;gap:20px;align-items:center;background:linear-gradient(90deg,#fff,#f9fafb);padding:20px;border-radius:12px}
+    .hero .left{flex:1}
+    .hero h2{margin:0 0 8px 0}
+    .hero p{margin:0;color:var(--muted)}
+    .hero .cta{margin-top:12px;padding:10px 14px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:18px}
+    .card{background:var(--card);border-radius:10px;padding:12px;box-shadow:0 1px 3px rgba(16,24,40,0.04);display:flex;flex-direction:column}
+    .card img{height:160px;object-fit:contain;border-radius:6px;background:#fafafa}
+    .card h3{font-size:15px;margin:10px 0 6px 0;min-height:36px}
+    .price{font-weight:700;color:#0f172a}
+    .muted{color:var(--muted);font-size:13px}
+    .actions{margin-top:auto;display:flex;gap:8px}
+    .btn{flex:1;padding:8px;border-radius:8px;border:1px solid #e6e9ee;background:#fff;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#fff;border:none}
+    .cart-drawer{position:fixed;right:20px;bottom:20px;background:var(--card);padding:12px;border-radius:10px;box-shadow:0 8px 24px rgba(2,6,23,0.08);width:320px;max-height:70vh;overflow:auto}
+    .cart-header{display:flex;justify-content:space-between;align-items:center}
+    .empty{padding:40px;text-align:center;color:var(--muted)}
+    @media (max-width:640px){.search{margin:8px 0}} 
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <img id="shopLogo" src="" alt="logo" onerror="this.style.display='none'"/>
+      <div>
+        <h1 id="shopName">Shop</h1>
+        <div class="muted" id="shopTag">Local store</div>
+      </div>
+    </div>
+    <div class="search">
+      <input id="searchBox" placeholder="Search products, e.g. 'rice, 5kg'" />
+    </div>
+    <div style="width:72px;text-align:right">
+      <button id="openCart" class="btn">Cart</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="hero">
+      <div class="left">
+        <h2 id="heroTitle">Welcome to the shop</h2>
+        <p id="heroDesc">Browse products, add to cart, and checkout. This UI uses your live backend endpoints—no sample data.</p>
+        <button class="cta" id="viewProducts">Browse Products</button>
+      </div>
+      <div class="right" style="width:320px;text-align:right">
+        <img id="heroImg" src="" alt="hero" style="max-width:100%;border-radius:8px;display:none"/>
+      </div>
+    </div>
+
+    <div id="productGrid" class="grid" aria-live="polite"></div>
+    <div id="loading" class="muted" style="margin-top:12px">Loading products…</div>
+  </div>
+
+  <div id="cart" class="cart-drawer" style="display:none">
+    <div class="cart-header"><strong>Cart</strong><button id="closeCart" class="btn">Close</button></div>
+    <div id="cartItems"></div>
+    <div style="margin-top:12px;display:flex;gap:8px"><button id="checkoutBtn" class="btn primary">Checkout</button><button id="clearCart" class="btn">Clear</button></div>
+  </div>
+
+  <script>
+    // Extract shop_id from path /shop/{shop_id}
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const shopId = pathParts.length ? pathParts[pathParts.length-1] : '1';
+
+    const apiBase = '';
+    const productsEndpoint = `/store/shops/${shopId}/products`;
+    const shopProfileEndpoint = `/shop/profile/${shopId}`;
+    const inventoryProductEndpoint = (id)=>`/products/${id}`;
+
+    let PRODUCTS = [];
+    let CART = {};
+
+    function formatCurrency(v){ try{ return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(v); }catch(e){return '₹'+v}}
+
+    async function fetchShopProfile(){
+      try{
+        const res = await fetch(shopProfileEndpoint);
+        if(!res.ok) return;
+        const data = await res.json();
+        document.getElementById('shopName').textContent = data.shop_name || data.name || 'Shop';
+        document.getElementById('shopTag').textContent = data.city || data.address || '';
+        if(data.logo_url) document.getElementById('shopLogo').src = data.logo_url;
+      }catch(e){console.warn('shop profile',e)}
+    }
+
+    async function loadProducts(){
+      document.getElementById('loading').style.display='block';
+      try{
+        const res = await fetch(productsEndpoint);
+        if(!res.ok){document.getElementById('loading').textContent='Products unavailable.';return}
+        const json = await res.json();
+        PRODUCTS = Array.isArray(json)?json:(json.products||[]);
+        renderProducts(PRODUCTS);
+      }catch(e){document.getElementById('loading').textContent='Failed to load products';console.error(e)}
+      finally{document.getElementById('loading').style.display='none'}
+    }
+
+    function guessImage(p){
+      if(p.image_url) return p.image_url;
+      if(p.images && p.images.length) return p.images[0];
+      if(p.logo_url) return p.logo_url;
+      return '';
+    }
+
+    function renderProducts(items){
+      const g = document.getElementById('productGrid'); g.innerHTML='';
+      if(!items.length){g.innerHTML='<div class="empty">No products found.</div>';return}
+      items.forEach(p=>{
+        const div = document.createElement('div'); div.className='card';
+        const img = document.createElement('img'); img.src = guessImage(p) || '';
+        img.alt = p.product_name || p.name || 'product';
+        const title = document.createElement('h3'); title.textContent = p.product_name || p.name || '—';
+        const desc = document.createElement('div'); desc.className='muted'; desc.textContent = p.category || p.description || '';
+        const price = document.createElement('div'); price.className='price'; price.textContent = formatCurrency(p.unit_price||p.price||p.sale_price||0);
+        const actions = document.createElement('div'); actions.className='actions';
+        const add = document.createElement('button'); add.className='btn primary'; add.textContent='Add'; add.onclick = ()=>{ addToCart(p,1) };
+        const view = document.createElement('button'); view.className='btn'; view.textContent='View'; view.onclick = ()=>{ openProductDetail(p) };
+        actions.appendChild(add); actions.appendChild(view);
+        div.appendChild(img); div.appendChild(title); div.appendChild(desc); div.appendChild(price); div.appendChild(actions);
+        g.appendChild(div);
+      })
+    }
+
+    function openProductDetail(p){
+      // lightweight detail: fetch fresh product data if id present
+      if(p.id){
+        fetch(inventoryProductEndpoint(p.id)).then(r=>r.ok?r.json():null).then(full=>{
+          if(full) p = {...p,...full}; showDetailModal(p)
+        }).catch(()=>showDetailModal(p));
+      }else showDetailModal(p);
+    }
+
+    function showDetailModal(p){
+      const modal = document.createElement('div'); modal.style.position='fixed';modal.style.inset=0;modal.style.background='rgba(0,0,0,0.4)';modal.style.display='flex';modal.style.alignItems='center';modal.style.justifyContent='center';
+      const card = document.createElement('div'); card.style.width='720px'; card.style.maxWidth='95%'; card.style.background='#fff'; card.style.borderRadius='10px'; card.style.padding='18px';
+      card.innerHTML = `<div style="display:flex;gap:18px"><img src="${guessImage(p)||''}" style="width:280px;height:240px;object-fit:contain;background:#fafafa;border-radius:8px"/><div style="flex:1"><h2>${p.product_name||p.name||''}</h2><div class=muted>${p.category||''}</div><p style="margin-top:12px">${p.description||''}</p><div style="margin-top:8px;font-weight:700">${formatCurrency(p.unit_price||p.price||0)}</div><div style="margin-top:12px"><button id="detailAdd" class="btn primary">Add to cart</button> <button id="detailClose" class="btn">Close</button></div></div></div>`;
+      modal.appendChild(card); document.body.appendChild(modal);
+      document.getElementById('detailClose').onclick = ()=>modal.remove();
+      document.getElementById('detailAdd').onclick = ()=>{ addToCart(p,1); modal.remove(); }
+    }
+
+    function addToCart(p,qty){
+      const key = p.id||p.sku||p.product_name;
+      if(!CART[key]) CART[key] = {product:p,qty:0};
+      CART[key].qty += qty;
+      showCart();
+    }
+
+    function showCart(){
+      document.getElementById('cart').style.display = 'block';
+      renderCartItems();
+    }
+
+    function renderCartItems(){
+      const container = document.getElementById('cartItems'); container.innerHTML='';
+      const keys = Object.keys(CART); if(!keys.length){container.innerHTML='<div class="empty">Cart is empty</div>';return}
+      let total = 0;
+      keys.forEach(k=>{
+        const it = CART[k]; const p = it.product; const row = document.createElement('div'); row.style.display='flex';row.style.gap='8px';row.style.padding='8px 0';
+        row.innerHTML = `<div style="flex:1"><div style="font-weight:600">${p.product_name||p.name||''}</div><div class="muted">${formatCurrency(p.unit_price||p.price||0)} × ${it.qty}</div></div><div style="text-align:right"><div style="font-weight:700">${formatCurrency((p.unit_price||p.price||0)*it.qty)}</div><div style="margin-top:6px"><button class=btn style='padding:6px' data-key='${k}' data-action='inc'>+</button><button class=btn style='padding:6px;margin-left:6px' data-key='${k}' data-action='dec'>-</button></div></div>`;
+        container.appendChild(row);
+        total += Number(p.unit_price||p.price||0)*it.qty;
+      });
+      const totalDiv = document.createElement('div'); totalDiv.style.marginTop='12px'; totalDiv.style.fontWeight='800'; totalDiv.textContent = 'Total: '+formatCurrency(total);
+      container.appendChild(totalDiv);
+      container.querySelectorAll('button[data-action]').forEach(b=>b.addEventListener('click',e=>{
+        const key = e.currentTarget.getAttribute('data-key'); const action = e.currentTarget.getAttribute('data-action');
+        if(action==='inc') CART[key].qty++; else { CART[key].qty--; if(CART[key].qty<=0) delete CART[key]; }
+        renderCartItems();
+      }));
+    }
+
+    document.getElementById('openCart').onclick = ()=>showCart();
+    document.getElementById('closeCart').onclick = ()=>document.getElementById('cart').style.display='none';
+    document.getElementById('clearCart').onclick = ()=>{ CART={}; renderCartItems(); }
+    document.getElementById('viewProducts').onclick = ()=>window.scrollTo({top:document.getElementById('productGrid').offsetTop-20,behavior:'smooth'});
+    document.getElementById('searchBox').addEventListener('input',e=>{
+      const q = e.target.value.trim().toLowerCase(); if(!q) return renderProducts(PRODUCTS);
+      const filtered = PRODUCTS.filter(p=> (p.product_name||p.name||'').toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q)); renderProducts(filtered);
+    });
+
+    // Initialize
+    fetchShopProfile();
+    loadProducts();
+  </script>
+</body>
+</html>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1165,13 +1369,13 @@
   <h2>Order Placed! 🎉</h2>
   <p>Your order has been received. The shop will confirm shortly.</p>
   <div id="success-order-id"></div>
-  <button id="success-continue-btn" onclick="closeSuccess()">Continue Shopping</button>
+  <div class="success-actions">
+    <button id="success-track-btn" type="button" onclick="trackLastOrder()" style="display:none">Track Order</button>
+    <button id="success-continue-btn" type="button" onclick="closeSuccess()">Continue Shopping</button>
+  </div>
 </div>
 
 <script>
-  // ── Helpers ──
-  const $ = id => document.getElementById(id);
-
   // ── Extract shop_id from URL path (e.g. /shop/123) ──
   function getShopId() {
     const parts = location.pathname.split('/').filter(Boolean);
@@ -1190,6 +1394,8 @@
   let cart = {}; // { product_id: { product, qty } }
   let activeCategory = 'All';
   let authToken = localStorage.getItem('customerToken') || '';
+  let customerEmail = localStorage.getItem('customerEmail') || '';
+  let customerPhone = localStorage.getItem('customerPhone') || '';
   let loggedInCustomer = null;
   let authMode = 'login';
 
@@ -1199,7 +1405,7 @@
     document.getElementById('logout-btn').style.display = isLoggedIn ? 'inline-flex' : 'none';
     document.getElementById('orders-btn').style.display = isLoggedIn ? 'inline-flex' : 'none';
     document.getElementById('customer-label').style.display = isLoggedIn ? 'block' : 'none';
-    document.getElementById('customer-label').textContent = isLoggedIn ? `Hello, ${loggedInCustomer?.name || 'Customer'}` : '';
+    document.getElementById('customer-label').textContent = isLoggedIn ? `Hello, ${loggedInCustomer?.name || localStorage.getItem('customerName') || 'Customer'}` : '';
     const placeOrderBtn = document.getElementById('place-order-btn');
     if (placeOrderBtn) {
       placeOrderBtn.textContent = isLoggedIn ? 'Place Order →' : 'Verify & Place Order';
@@ -1216,12 +1422,57 @@
     document.getElementById('main-app').style.display = 'block';
   }
 
-  function initAuthState() {
-    const name = localStorage.getItem('customerName');
-    if (authToken) {
-      loggedInCustomer = { name: name || '' };
+  async function restoreCustomerProfile() {
+    if (!authToken) return false;
+
+    try {
+      const res = await fetch('/store/customer/profile', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (!res.ok) {
+        logoutCustomer();
+        return false;
+      }
+      const data = await res.json().catch(() => ({}));
+      loggedInCustomer = {
+        name: data.name || localStorage.getItem('customerName') || '',
+        email: data.email || localStorage.getItem('customerEmail') || '',
+        phone: data.phone || localStorage.getItem('customerPhone') || ''
+      };
+      localStorage.setItem('customerName', loggedInCustomer.name || '');
+      localStorage.setItem('customerEmail', loggedInCustomer.email || '');
+      localStorage.setItem('customerPhone', loggedInCustomer.phone || '');
+      return true;
+    } catch (error) {
+      console.warn('Customer profile restore failed', error);
+      logoutCustomer();
+      return false;
     }
+  }
+
+  async function initAuthState() {
+    const storedName = localStorage.getItem('customerName') || '';
+    const storedEmail = localStorage.getItem('customerEmail') || '';
+    const storedPhone = localStorage.getItem('customerPhone') || '';
+
+    if (authToken) {
+      loggedInCustomer = { name: storedName };
+      const valid = await restoreCustomerProfile();
+      if (!valid) return;
+    }
+
     updateAuthUi();
+
+    if (storedEmail && document.getElementById('auth-email')) {
+      document.getElementById('auth-email').value = storedEmail;
+    }
+    if (storedPhone && document.getElementById('f-phone')) {
+      document.getElementById('f-phone').value = storedPhone;
+    }
+    if (storedName && document.getElementById('f-name')) {
+      document.getElementById('f-name').value = storedName;
+    }
+
     if (authToken) {
       showMainApp();
     } else {
@@ -1277,9 +1528,11 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw { field: 'auth-general-error', message: data.detail || data.message || 'Login failed' };
         authToken = data.access_token;
-        loggedInCustomer = { name: data.name || '' };
+        loggedInCustomer = { name: data.name || '', email: data.email || '', phone: data.phone || '' };
         localStorage.setItem('customerToken', authToken);
         localStorage.setItem('customerName', loggedInCustomer.name);
+        localStorage.setItem('customerEmail', loggedInCustomer.email || '');
+        localStorage.setItem('customerPhone', loggedInCustomer.phone || '');
         updateAuthUi();
         closeAuthModal();
         showMainApp();
@@ -1306,9 +1559,11 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw { field: 'reg-general-error', message: data.detail || data.message || 'Registration failed' };
         authToken = data.access_token;
-        loggedInCustomer = { name: data.name || name };
+        loggedInCustomer = { name: data.name || name, email: data.email || email, phone: data.phone || phone };
         localStorage.setItem('customerToken', authToken);
         localStorage.setItem('customerName', loggedInCustomer.name);
+        localStorage.setItem('customerEmail', loggedInCustomer.email || '');
+        localStorage.setItem('customerPhone', loggedInCustomer.phone || '');
         updateAuthUi();
         closeAuthModal();
         showMainApp();
@@ -1346,6 +1601,9 @@
     loggedInCustomer = null;
     localStorage.removeItem('customerToken');
     localStorage.removeItem('customerName');
+    localStorage.removeItem('customerEmail');
+    localStorage.removeItem('customerPhone');
+    localStorage.removeItem('lastOrderId');
     updateAuthUi();
     closeOrders();
     showLoginGate();
@@ -1738,8 +1996,18 @@
       renderGrid(allProducts); // reset buttons
 
       const orderId = data.order_id || data.id;
-      $('success-order-id').textContent = orderId ? `Order #${orderId}` : '';
-      $('success-order-id').style.display = orderId ? 'block' : 'none';
+      if (orderId) {
+        localStorage.setItem('lastOrderId', orderId.toString());
+        $('success-order-id').textContent = `Order #${orderId}`;
+        $('success-order-id').style.display = 'block';
+        const trackBtn = document.getElementById('success-track-btn');
+        if (trackBtn) {
+          trackBtn.style.display = 'inline-flex';
+          trackBtn.dataset.orderId = orderId.toString();
+        }
+      } else {
+        $('success-order-id').style.display = 'none';
+      }
       $('success-screen').classList.add('show');
 
       if (authToken) {
@@ -1778,7 +2046,18 @@
     $('success-screen').classList.remove('show');
     // Reset form
     ['f-name','f-phone','f-address'].forEach(id => $(id).value = '');
+    const trackBtn = document.getElementById('success-track-btn');
+    if (trackBtn) trackBtn.style.display = 'none';
     refreshCartDrawer();
+  }
+
+  function trackLastOrder() {
+    const trackBtn = document.getElementById('success-track-btn');
+    const orderId = trackBtn?.dataset.orderId;
+    if (orderId) {
+      openOrders();
+      openTrack(orderId);
+    }
   }
 
   // ── Utils ──

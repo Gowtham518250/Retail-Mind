@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Signup</title>
+  <style>body{font-family:Inter,Arial;padding:24px;background:#f7fafc} .box{max-width:520px;margin:40px auto;background:#fff;padding:20px;border-radius:10px;box-shadow:0 6px 18px rgba(2,6,23,0.06)} input{width:100%;padding:10px;margin:8px 0;border:1px solid #e6e9ee;border-radius:8px} button{padding:10px 14px;border-radius:8px;background:#06b6d4;color:#fff;border:none;cursor:pointer}</style>
+</head>
+<body>
+  <div class="box">
+    <h2>Signup</h2>
+    <input id="name" placeholder="Full name" />
+    <input id="phone" placeholder="Phone" />
+    <input id="password" type="password" placeholder="Password" />
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="signupBtn">Create account</button>
+      <button id="toLogin" style="background:#fff;border:1px solid #e6e9ee;color:#111">Login</button>
+    </div>
+  </div>
+  <script>
+    document.getElementById('toLogin').onclick = ()=>location.href='/login';
+    document.getElementById('signupBtn').onclick = async ()=>{
+      const name=document.getElementById('name').value; const phone=document.getElementById('phone').value; const password=document.getElementById('password').value;
+      try{
+        const res = await fetch('/auth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,phone,password})});
+        if(res.ok){alert('Account created'); location.href='/login'} else {const j=await res.json(); alert(j.detail||'Signup failed')}
+      }catch(e){alert('Network error')}
+    }
+  </script>
+</body>
+</html>

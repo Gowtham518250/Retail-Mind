@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login</title>
+  <style>body{font-family:Inter,Arial;padding:24px;background:#f7fafc} .box{max-width:420px;margin:40px auto;background:#fff;padding:20px;border-radius:10px;box-shadow:0 6px 18px rgba(2,6,23,0.06)} input{width:100%;padding:10px;margin:8px 0;border:1px solid #e6e9ee;border-radius:8px} button{padding:10px 14px;border-radius:8px;background:#0f172a;color:#fff;border:none;cursor:pointer}</style>
+</head>
+<body>
+  <div class="box">
+    <h2>Login</h2>
+    <input id="phone" placeholder="Phone or email" />
+    <input id="password" type="password" placeholder="Password" />
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="loginBtn">Login</button>
+      <button id="toSignup" style="background:#fff;border:1px solid #e6e9ee;color:#111">Signup</button>
+    </div>
+    <div style="margin-top:12px"><a href="/reset-password">Forgot password?</a></div>
+  </div>
+  <script>
+    document.getElementById('toSignup').onclick = ()=>location.href='/signup';
+    document.getElementById('loginBtn').onclick = async ()=>{
+      const phone = document.getElementById('phone').value; const password = document.getElementById('password').value;
+      try{
+        const res = await fetch('/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:phone,password})});
+        if(res.ok) { alert('Logged in'); location.href='/'; } else { const j=await res.json(); alert(j.detail||'Login failed') }
+      }catch(e){alert('Network error')}
+    }
+  </script>
+</body>
+</html>

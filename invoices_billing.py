@@ -13,6 +13,7 @@ from datetime import datetime, date, timedelta
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -247,7 +248,34 @@ def sync_offline_invoice(
 
         # Commit transaction - all operations succeed or all fail
         db.commit()
-        return {"message": "Invoice synced and inventory deducted.", "invoice_id": invoice.id, "status": "SUCCESS"}
+        # Build consistent response payload
+        line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
+        payload = {
+            "id": invoice.id,
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "total_amount": float(invoice.total_amount),
+            "paid_amount": float(invoice.paid_amount),
+            "subtotal": float(invoice.subtotal),
+            "tax": float(invoice.tax),
+            "status": invoice.status,
+            "payment_status": invoice.payment_status,
+            "invoice_date": str(invoice.invoice_date),
+            "due_date": str(invoice.due_date) if invoice.due_date else None,
+            "created_at": invoice.created_at.isoformat(),
+            "message": "Invoice synced and inventory deducted.",
+            "line_items": [
+                {
+                    "product_id": li.product_id,
+                    "product_name": li.description,
+                    "quantity": li.quantity,
+                    "unit_price": float(li.unit_price),
+                    "total": float(li.line_total),
+                }
+                for li in line_items_out
+            ],
+        }
+        return JSONResponse(status_code=201, content=payload)
 
     except Exception as e:
         # Rollback on any error
@@ -413,31 +441,32 @@ def create_invoice(
     db.refresh(invoice)
 
     line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
-    return {
-        "id":             invoice.id,
-        "invoice_id":     invoice.id,
+    payload = {
+        "id": invoice.id,
+        "invoice_id": invoice.id,
         "invoice_number": invoice.invoice_number,
-        "total_amount":   float(invoice.total_amount),
-        "paid_amount":    float(invoice.paid_amount),
-        "subtotal":       float(invoice.subtotal),
-        "tax":            float(invoice.tax),
-        "status":         invoice.status,
+        "total_amount": float(invoice.total_amount),
+        "paid_amount": float(invoice.paid_amount),
+        "subtotal": float(invoice.subtotal),
+        "tax": float(invoice.tax),
+        "status": invoice.status,
         "payment_status": invoice.payment_status,
-        "invoice_date":   str(invoice.invoice_date),
-        "due_date":       str(invoice.due_date) if invoice.due_date else None,
-        "created_at":     invoice.created_at.isoformat(),
-        "message":        "Invoice created successfully.",
+        "invoice_date": str(invoice.invoice_date),
+        "due_date": str(invoice.due_date) if invoice.due_date else None,
+        "created_at": invoice.created_at.isoformat(),
+        "message": "Invoice created successfully.",
         "line_items": [
             {
-                "product_id":   li.product_id,
+                "product_id": li.product_id,
                 "product_name": li.description,
-                "quantity":     li.quantity,
-                "unit_price":   float(li.unit_price),
-                "total":        float(li.line_total),
+                "quantity": li.quantity,
+                "unit_price": float(li.unit_price),
+                "total": float(li.line_total),
             }
             for li in line_items_out
         ],
     }
+    return JSONResponse(status_code=201, content=payload)
 
 
 # ── These MUST come before /{invoice_id} ──────────────────────────────

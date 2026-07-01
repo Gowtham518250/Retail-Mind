@@ -9,7 +9,8 @@ Fully secured FastAPI app with:
 - All ERP modules registered
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
+from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -99,6 +100,8 @@ from observability_service import router as observability_router
 # DB initialization
 from db import engine, get_db
 from models import Base
+from sqlalchemy.orm import Session
+from models import ShopProfile, Product
 
 # ========================
 # APP CREATION
@@ -310,4 +313,80 @@ async def serve_shop_frontend(shop_id: str):
     with open(file_path, "r", encoding="utf-8") as f:
         html_content = f.read()
     return HTMLResponse(content=html_content)
+
+
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+
+
+@api.get("/shop/{shop_id}/ssr", tags=["Online Store Frontend"])
+def serve_shop_frontend_ssr(request: Request, shop_id: int, db: Session = Depends(get_db)):
+    # Server-side render using Jinja2 templates and internal DB queries
+    profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
+    if not profile:
+        return HTMLResponse(content="<h1>Shop not found.</h1>", status_code=404)
+
+    products = db.query(Product).filter(Product.user_id == shop_id, Product.is_active == True).limit(200).all()
+
+    context = {
+        "request": request,
+        "shop": profile,
+        "products": products,
+    }
+    return templates.TemplateResponse("shop_home.html", context)
+
+
+@api.get("/login", tags=["Web UI"])
+async def serve_login_page():
+    file_path = os.path.join(os.path.dirname(__file__), "login.html")
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>Login page not found.</h1>", status_code=404)
+    with open(file_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@api.get("/signup", tags=["Web UI"])
+async def serve_signup_page():
+    file_path = os.path.join(os.path.dirname(__file__), "signup.html")
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>Signup page not found.</h1>", status_code=404)
+    with open(file_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@api.get("/reset-password", tags=["Web UI"])
+async def serve_reset_password_page():
+    file_path = os.path.join(os.path.dirname(__file__), "reset_password.html")
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>Reset password page not found.</h1>", status_code=404)
+    with open(file_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@api.get("/orders", tags=["Web UI"])
+async def serve_orders_page():
+    file_path = os.path.join(os.path.dirname(__file__), "orders.html")
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>Orders page not found.</h1>", status_code=404)
+    with open(file_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@api.get("/cart", tags=["Web UI"])
+async def serve_cart_page():
+    file_path = os.path.join(os.path.dirname(__file__), "cart.html")
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>Cart page not found.</h1>", status_code=404)
+    with open(file_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@api.get("/product/{product_id}", tags=["Web UI"])
+async def serve_product_detail_page(product_id: str):
+    file_path = os.path.join(os.path.dirname(__file__), "product_detail.html")
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>Product detail page not found.</h1>", status_code=404)
+    with open(file_path, "r", encoding="utf-8") as f:
+        # inject product_id into HTML for client-side fetch
+        content = f.read().replace("{{PRODUCT_ID}}", str(product_id))
+    return HTMLResponse(content=content)
 

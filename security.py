@@ -113,13 +113,13 @@ def get_current_user_dict(
 # =====================
 def require_role(*allowed_roles: str):
     """Factory: creates a dependency that blocks any role NOT in allowed_roles"""
-    def _check(current_user: dict = Depends(get_current_user_dict)) -> int:
+    def _check(current_user: dict = Depends(get_current_user_dict)) -> dict:
         if current_user["role"] not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required roles: {allowed_roles}. Your role: {current_user['role']}"
             )
-        return current_user["user_id"]
+        return current_user
     return _check
 
 # Convenience guards
