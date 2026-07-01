@@ -193,6 +193,66 @@
     padding: 1.5rem;
     animation: modalPop 0.25s ease;
   }
+
+  #login-gate {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 2rem;
+    background: linear-gradient(180deg, #EAF2FF 0%, #F8FBFF 100%);
+  }
+  #login-gate .gate-card {
+    width: min(100%, 520px);
+    background: #fff;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(26,26,46,0.08);
+    box-shadow: var(--shadow-lg);
+    padding: 2rem;
+    text-align: center;
+  }
+  #login-gate h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+    color: var(--navy);
+  }
+  #login-gate p {
+    color: var(--muted);
+    margin-bottom: 1.75rem;
+    line-height: 1.6;
+  }
+  #login-gate .gate-actions {
+    display: grid;
+    gap: 0.85rem;
+  }
+  #login-gate .gate-btn {
+    padding: 0.95rem 1.1rem;
+    border-radius: var(--radius-md);
+    border: none;
+    font-family: var(--font-display);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  #login-gate .gate-btn.primary {
+    background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+    color: #fff;
+  }
+  #login-gate .gate-btn.secondary {
+    background: var(--surface-alt);
+    color: var(--brand-dark);
+    border: 1px solid rgba(40,116,240,0.18);
+  }
+  #login-gate .gate-link {
+    background: transparent;
+    border: none;
+    color: var(--brand);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  #main-app { display: none; }
   @keyframes modalPop {
     from { transform: translateY(12px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
@@ -902,6 +962,19 @@
 </head>
 <body>
 
+<div id="login-gate">
+  <div class="gate-card">
+    <h1>Welcome back!</h1>
+    <p>Sign in to continue shopping, track your orders, and manage your order history.</p>
+    <div class="gate-actions">
+      <button class="gate-btn primary" onclick="openAuthTab('login')">Login</button>
+      <button class="gate-btn secondary" onclick="openAuthTab('register')">Create account</button>
+      <button class="gate-link" onclick="openAuthTab('forgot')">Reset password</button>
+    </div>
+  </div>
+</div>
+
+<div id="main-app">
 <!-- ── Sticky Header ── -->
 <header id="site-header">
   <div id="shop-name-header">Loading…</div>
@@ -1072,6 +1145,10 @@
   </div>
 </div>
 
+</div>
+
+</div>
+
 <div id="orders-overlay" class="modal-overlay" onclick="closeOverlay(event)">
   <div class="modal-card" onclick="event.stopPropagation()">
     <div class="modal-header">
@@ -1132,18 +1209,37 @@
     }
   }
 
+  function showLoginGate() {
+    document.getElementById('login-gate').style.display = 'grid';
+    document.getElementById('main-app').style.display = 'none';
+  }
+
+  function showMainApp() {
+    document.getElementById('login-gate').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+  }
+
   function initAuthState() {
     const name = localStorage.getItem('customerName');
     if (authToken) {
       loggedInCustomer = { name: name || '' };
     }
     updateAuthUi();
+    if (authToken) {
+      showMainApp();
+    } else {
+      showLoginGate();
+    }
   }
 
   function openAuthModal() {
-    authMode = 'login';
-    switchAuthTab('login');
     document.getElementById('auth-overlay').classList.add('open');
+  }
+
+  function openAuthTab(tab) {
+    authMode = tab;
+    switchAuthTab(tab);
+    openAuthModal();
   }
 
   function closeAuthModal() {
@@ -1186,6 +1282,7 @@
         localStorage.setItem('customerName', loggedInCustomer.name);
         updateAuthUi();
         closeAuthModal();
+        showMainApp();
         openOrders();
         return;
       }
@@ -1214,6 +1311,7 @@
         localStorage.setItem('customerName', loggedInCustomer.name);
         updateAuthUi();
         closeAuthModal();
+        showMainApp();
         openOrders();
         return;
       }
@@ -1250,6 +1348,7 @@
     localStorage.removeItem('customerName');
     updateAuthUi();
     closeOrders();
+    showLoginGate();
   }
 
   function openOrders() {
