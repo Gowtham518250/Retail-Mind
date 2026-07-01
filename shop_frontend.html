@@ -1172,6 +1172,9 @@
 </div>
 
 <script>
+  // Small DOM helper used throughout the script
+  function $(id) { return document.getElementById(id); }
+
   // ── Extract shop_id from URL path (e.g. /shop/123) ──
   function getShopId() {
     const parts = location.pathname.split('/').filter(Boolean);
@@ -1209,10 +1212,8 @@
   }
 
   function showLoginGate() {
-    // Show login prompt as an overlay but keep main storefront visible
-    const gate = document.getElementById('login-gate');
-    if (gate) gate.style.display = 'grid';
-    // do not hide #main-app so customers can browse products without logging in
+    document.getElementById('login-gate').style.display = 'grid';
+    document.getElementById('main-app').style.display = 'none';
   }
 
   function showMainApp() {
