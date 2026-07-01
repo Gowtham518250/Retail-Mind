@@ -981,7 +981,7 @@
   <div id="header-actions">
     <span id="customer-label" class="customer-label" style="display:none; margin-right:1rem; font-weight:600; color:var(--slate);">Hello, Customer</span>
     <button id="orders-btn" class="secondary-btn" onclick="openOrders()" style="display:none">My Orders</button>
-    <button id="login-btn" class="secondary-btn" onclick="openAuthModal()">Login</button>
+    <button id="login-btn" class="secondary-btn" onclick="openAuthTab('login')">Login</button>
     <button id="logout-btn" class="secondary-btn" onclick="logoutCustomer()" style="display:none">Logout</button>
     <button id="cart-btn" onclick="openDrawer()">
       🛒 Cart
@@ -1147,8 +1147,6 @@
 
 </div>
 
-</div>
-
 <div id="orders-overlay" class="modal-overlay" onclick="closeOverlay(event)">
   <div class="modal-card" onclick="event.stopPropagation()">
     <div class="modal-header">
@@ -1250,6 +1248,9 @@
     authMode = tab;
     document.querySelectorAll('.tab-btn').forEach(button => button.classList.toggle('active', button.id === `tab-${tab}`));
     document.querySelectorAll('.modal-section').forEach(section => section.classList.toggle('active', section.id === `auth-${tab}`));
+    const title = tab === 'login' ? 'Customer Login' : tab === 'register' ? 'Create Account' : 'Reset Password';
+    const titleEl = document.getElementById('auth-title');
+    if (titleEl) titleEl.textContent = title;
     ['auth-general-error','reg-general-error','forgot-general-error','forgot-success'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
   }
 
