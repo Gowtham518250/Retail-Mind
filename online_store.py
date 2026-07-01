@@ -340,10 +340,10 @@ def browse_shop_products(
 def place_order(
     data: PlaceOrder,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(customer_only),
+    current_user: int = Depends(customer_only),
 ):
     """Place an online order at a specific shop"""
-    customer_id = current_user["user_id"]
+    customer_id = current_user
 
     # Validate shop
     profile = db.query(ShopProfile).filter(
@@ -553,10 +553,10 @@ def place_guest_order(
 @router.get("/my-orders")
 def get_my_orders(
     db: Session = Depends(get_db),
-    current_user: dict = Depends(customer_only),
+    current_user: int = Depends(customer_only),
 ):
     """Customer: View all their orders"""
-    customer_id = current_user["user_id"]
+    customer_id = current_user
     orders = db.query(OnlineOrder).filter(
         OnlineOrder.customer_id == customer_id
     ).order_by(OnlineOrder.created_at.desc()).all()
