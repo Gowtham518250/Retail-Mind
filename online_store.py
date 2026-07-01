@@ -70,6 +70,15 @@ class CustomerLoginPhone(BaseModel):
     phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     password: str
 
+class CustomerForgot(BaseModel):
+    email: str
+
+    @field_validator("email")
+    def validate_email(cls, v):
+        if "@" not in v or "." not in v.split("@")[ -1]:
+            raise ValueError("value is not a valid email address")
+        return v.lower().strip()
+
 class OrderItem(BaseModel):
     product_id: int
     quantity: int = Field(..., gt=0)
@@ -194,11 +203,11 @@ def customer_login_phone(
 
 @router.post("/customer/forgot-password")
 def forgot_password(
-    email: str,
+    data: CustomerForgot,
     db: Session = Depends(get_db),
 ):
     """Send password reset link — always 200 to prevent email enumeration"""
-    db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == email).first()
+    db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
     return {"message": "If this email is registered, a reset link has been sent."}
 
 
@@ -334,7 +343,7 @@ def place_order(
     current_user: dict = Depends(customer_only),
 ):
     """Place an online order at a specific shop"""
-    customer_id = current_user
+    customer_id = current_user["user_id"]
 
     # Validate shop
     profile = db.query(ShopProfile).filter(
@@ -382,8 +391,13 @@ def place_order(
         order_status="PENDING",
     )
     db.add(order)
-    db.commit()
-    db.refresh(order)
+    try:
+        db.commit()
+        db.refresh(order)
+    except Exception as e:
+        logger.error(f"Failed to save online order (shop_id={data.shop_id}, customer_id={customer_id}): {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
     return {
         "message": "Order placed successfully! The shop will confirm shortly.",
@@ -498,8 +512,13 @@ def place_guest_order(
         order_status="PENDING",
     )
     db.add(order)
-    db.commit()
-    db.refresh(order)
+    try:
+        db.commit()
+        db.refresh(order)
+    except Exception as e:
+        logger.error(f"Failed to save guest order (shop_id={data.shop_id}, phone={data.phone}): {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to place your order right now. Please try again later.")
     
     # 5. Send FCM Push Notification to Shop Owner
     try:
@@ -537,7 +556,7 @@ def get_my_orders(
     current_user: dict = Depends(customer_only),
 ):
     """Customer: View all their orders"""
-    customer_id = current_user
+    customer_id = current_user["user_id"]
     orders = db.query(OnlineOrder).filter(
         OnlineOrder.customer_id == customer_id
     ).order_by(OnlineOrder.created_at.desc()).all()
