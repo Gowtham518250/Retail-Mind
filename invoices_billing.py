@@ -15,7 +15,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 
 from db import get_db
@@ -23,7 +23,7 @@ from models import (
     Invoice, InvoiceLineItem, Product, Customer,
     UniversalTransaction, StockMovement
 )
-from security import owner_only, worker_or_owner, sanitize_input
+from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
 
@@ -98,7 +98,7 @@ def sync_offline_invoice(
     This creates the invoice, deducts inventory, and logs revenue.
     Uses transaction-based approach for data integrity.
     """
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
     # Check for duplicate sync (idempotency) - check both offline_id and invoice_number
@@ -294,8 +294,8 @@ def get_invoices(
     current_user: dict = Depends(owner_only),
 ):
     """Get all invoices for the shop"""
-    shop_id = current_user
-    query = db.query(Invoice).filter(Invoice.user_id == shop_id)
+    shop_id = resolve_shop_id(current_user)
+    query = db.query(Invoice).options(joinedload(Invoice.line_items)).filter(Invoice.user_id == shop_id)
     if status:
         query = query.filter(Invoice.status == status.upper())
     if payment_status:
@@ -311,7 +311,7 @@ def create_invoice(
     db: Session = Depends(get_db),
     current_user: dict = Depends(worker_or_owner),
 ):
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
     existing = db.query(Invoice).filter(
@@ -479,7 +479,7 @@ def get_overdue_invoices(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     cutoff_date = date.today() - timedelta(days=days_overdue)
     overdue_invoices = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
@@ -501,7 +501,7 @@ def get_invoice_payments(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     from models import Payment
     query = db.query(Payment).join(Invoice).filter(Invoice.user_id == shop_id)
     if invoice_id:
@@ -531,7 +531,7 @@ def get_invoice_analytics(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     if not start_date:
         start_date = date.today().replace(day=1)
     if not end_date:
@@ -572,7 +572,7 @@ def get_invoice(
     db: Session = Depends(get_db),
     current_user: dict = Depends(worker_or_owner),
 ):
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
         Invoice.user_id == shop_id
@@ -617,7 +617,7 @@ def update_invoice(
     db: Session = Depends(get_db),
     current_user: dict = Depends(worker_or_owner),
 ):
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
         Invoice.user_id == shop_id
@@ -682,7 +682,7 @@ def delete_invoice(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
         Invoice.user_id == shop_id

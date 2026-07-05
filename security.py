@@ -132,6 +132,15 @@ def customer_only(current_user: dict = Depends(require_role(ROLE_CUSTOMER))):
 def worker_or_owner(current_user: dict = Depends(require_role(ROLE_OWNER, ROLE_WORKER))):
     return current_user
 
+def resolve_shop_id(current_user) -> int:
+    """Extract integer shop/user id from RBAC dependency result."""
+    if isinstance(current_user, dict):
+        uid = current_user.get("user_id") or current_user.get("sub")
+        if uid is None:
+            raise HTTPException(status_code=401, detail="Invalid user context")
+        return int(uid)
+    return int(current_user)
+
 # =====================
 # RATE LIMITER (In-Memory)
 # =====================
