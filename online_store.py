@@ -146,8 +146,6 @@ def register_customer(
         "token_type": "bearer",
         "customer_id": customer.id,
         "name": customer.user_name,
-        "email": customer.email,
-        "phone": customer.phone,
     }
 
 
@@ -173,27 +171,6 @@ def customer_login(
         "token_type": "bearer",
         "customer_id": user.id,
         "name": user.user_name,
-        "email": user.email,
-        "phone": user.phone,
-    }
-
-
-@router.get("/customer/profile")
-def customer_profile(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(customer_only),
-):
-    """Return the authenticated customer profile."""
-    user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == current_user["user_id"]).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Customer not found.")
-    return {
-        "customer_id": user.id,
-        "name": user.user_name,
-        "email": user.email,
-        "phone": user.phone,
-        "address": user.address or "",
-        "city": user.city or "",
     }
 
 
@@ -659,15 +636,12 @@ def get_incoming_orders(
             "order_id": o.id,
             "customer_id": o.customer_id,
             "customer_name": customer.user_name if customer else "Guest",
-            "customer_email": customer.email if customer else "",
             "customer_phone": customer.phone if customer else "",
-            "customer_address": customer.address if customer else "",
             "status": o.order_status,
             "total_amount": float(o.total_amount),
             "delivery_address": o.delivery_address,
             "items": json.loads(o.items_json),
             "created_at": str(o.created_at),
-            "updated_at": str(o.updated_at),
         })
 
     return {

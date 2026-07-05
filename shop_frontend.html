@@ -1165,15 +1165,12 @@
   <h2>Order Placed! 🎉</h2>
   <p>Your order has been received. The shop will confirm shortly.</p>
   <div id="success-order-id"></div>
-  <div class="success-actions">
-    <button id="success-track-btn" type="button" onclick="trackLastOrder()" style="display:none">Track Order</button>
-    <button id="success-continue-btn" type="button" onclick="closeSuccess()">Continue Shopping</button>
-  </div>
+  <button id="success-continue-btn" onclick="closeSuccess()">Continue Shopping</button>
 </div>
 
 <script>
-  // Small DOM helper used throughout the script
-  function $(id) { return document.getElementById(id); }
+  // ── Helpers ──
+  const $ = id => document.getElementById(id);
 
   // ── Extract shop_id from URL path (e.g. /shop/123) ──
   function getShopId() {
@@ -1193,8 +1190,6 @@
   let cart = {}; // { product_id: { product, qty } }
   let activeCategory = 'All';
   let authToken = localStorage.getItem('customerToken') || '';
-  let customerEmail = localStorage.getItem('customerEmail') || '';
-  let customerPhone = localStorage.getItem('customerPhone') || '';
   let loggedInCustomer = null;
   let authMode = 'login';
 
@@ -1204,7 +1199,7 @@
     document.getElementById('logout-btn').style.display = isLoggedIn ? 'inline-flex' : 'none';
     document.getElementById('orders-btn').style.display = isLoggedIn ? 'inline-flex' : 'none';
     document.getElementById('customer-label').style.display = isLoggedIn ? 'block' : 'none';
-    document.getElementById('customer-label').textContent = isLoggedIn ? `Hello, ${loggedInCustomer?.name || localStorage.getItem('customerName') || 'Customer'}` : '';
+    document.getElementById('customer-label').textContent = isLoggedIn ? `Hello, ${loggedInCustomer?.name || 'Customer'}` : '';
     const placeOrderBtn = document.getElementById('place-order-btn');
     if (placeOrderBtn) {
       placeOrderBtn.textContent = isLoggedIn ? 'Place Order →' : 'Verify & Place Order';
@@ -1221,57 +1216,12 @@
     document.getElementById('main-app').style.display = 'block';
   }
 
-  async function restoreCustomerProfile() {
-    if (!authToken) return false;
-
-    try {
-      const res = await fetch('/store/customer/profile', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-      if (!res.ok) {
-        logoutCustomer();
-        return false;
-      }
-      const data = await res.json().catch(() => ({}));
-      loggedInCustomer = {
-        name: data.name || localStorage.getItem('customerName') || '',
-        email: data.email || localStorage.getItem('customerEmail') || '',
-        phone: data.phone || localStorage.getItem('customerPhone') || ''
-      };
-      localStorage.setItem('customerName', loggedInCustomer.name || '');
-      localStorage.setItem('customerEmail', loggedInCustomer.email || '');
-      localStorage.setItem('customerPhone', loggedInCustomer.phone || '');
-      return true;
-    } catch (error) {
-      console.warn('Customer profile restore failed', error);
-      logoutCustomer();
-      return false;
-    }
-  }
-
-  async function initAuthState() {
-    const storedName = localStorage.getItem('customerName') || '';
-    const storedEmail = localStorage.getItem('customerEmail') || '';
-    const storedPhone = localStorage.getItem('customerPhone') || '';
-
+  function initAuthState() {
+    const name = localStorage.getItem('customerName');
     if (authToken) {
-      loggedInCustomer = { name: storedName };
-      const valid = await restoreCustomerProfile();
-      if (!valid) return;
+      loggedInCustomer = { name: name || '' };
     }
-
     updateAuthUi();
-
-    if (storedEmail && document.getElementById('auth-email')) {
-      document.getElementById('auth-email').value = storedEmail;
-    }
-    if (storedPhone && document.getElementById('f-phone')) {
-      document.getElementById('f-phone').value = storedPhone;
-    }
-    if (storedName && document.getElementById('f-name')) {
-      document.getElementById('f-name').value = storedName;
-    }
-
     if (authToken) {
       showMainApp();
     } else {
@@ -1327,11 +1277,9 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw { field: 'auth-general-error', message: data.detail || data.message || 'Login failed' };
         authToken = data.access_token;
-        loggedInCustomer = { name: data.name || '', email: data.email || '', phone: data.phone || '' };
+        loggedInCustomer = { name: data.name || '' };
         localStorage.setItem('customerToken', authToken);
         localStorage.setItem('customerName', loggedInCustomer.name);
-        localStorage.setItem('customerEmail', loggedInCustomer.email || '');
-        localStorage.setItem('customerPhone', loggedInCustomer.phone || '');
         updateAuthUi();
         closeAuthModal();
         showMainApp();
@@ -1358,11 +1306,9 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw { field: 'reg-general-error', message: data.detail || data.message || 'Registration failed' };
         authToken = data.access_token;
-        loggedInCustomer = { name: data.name || name, email: data.email || email, phone: data.phone || phone };
+        loggedInCustomer = { name: data.name || name };
         localStorage.setItem('customerToken', authToken);
         localStorage.setItem('customerName', loggedInCustomer.name);
-        localStorage.setItem('customerEmail', loggedInCustomer.email || '');
-        localStorage.setItem('customerPhone', loggedInCustomer.phone || '');
         updateAuthUi();
         closeAuthModal();
         showMainApp();
@@ -1400,9 +1346,6 @@
     loggedInCustomer = null;
     localStorage.removeItem('customerToken');
     localStorage.removeItem('customerName');
-    localStorage.removeItem('customerEmail');
-    localStorage.removeItem('customerPhone');
-    localStorage.removeItem('lastOrderId');
     updateAuthUi();
     closeOrders();
     showLoginGate();
@@ -1510,19 +1453,8 @@
   async function loadCatalog() {
     try {
       const res = await fetch(`/store/shops/${SHOP_ID}/products`);
-      const text = await res.text();
-      if (!res.ok) {
-        console.error('Catalog load failed', res.status, text);
-        // show friendly error with details for debugging
-        const errEl = document.getElementById('error-state');
-        if (errEl) {
-          errEl.innerHTML = `<h3>Could not load shop catalog</h3><p>Status: ${res.status}</p><pre style="white-space:pre-wrap;max-height:240px;overflow:auto;background:#111;color:#fff;padding:8px;border-radius:8px">${escHtml(text)}</pre>`;
-          document.getElementById('main-app').style.display = 'none';
-          errEl.style.display = 'block';
-        }
-        throw new Error(`Server error: ${res.status}`);
-      }
-      const data = JSON.parse(text);
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const data = await res.json();
 
       // Set shop name dynamically
       const name = data.shop_name || 'Our Shop';
@@ -1806,18 +1738,8 @@
       renderGrid(allProducts); // reset buttons
 
       const orderId = data.order_id || data.id;
-      if (orderId) {
-        localStorage.setItem('lastOrderId', orderId.toString());
-        $('success-order-id').textContent = `Order #${orderId}`;
-        $('success-order-id').style.display = 'block';
-        const trackBtn = document.getElementById('success-track-btn');
-        if (trackBtn) {
-          trackBtn.style.display = 'inline-flex';
-          trackBtn.dataset.orderId = orderId.toString();
-        }
-      } else {
-        $('success-order-id').style.display = 'none';
-      }
+      $('success-order-id').textContent = orderId ? `Order #${orderId}` : '';
+      $('success-order-id').style.display = orderId ? 'block' : 'none';
       $('success-screen').classList.add('show');
 
       if (authToken) {
@@ -1856,18 +1778,7 @@
     $('success-screen').classList.remove('show');
     // Reset form
     ['f-name','f-phone','f-address'].forEach(id => $(id).value = '');
-    const trackBtn = document.getElementById('success-track-btn');
-    if (trackBtn) trackBtn.style.display = 'none';
     refreshCartDrawer();
-  }
-
-  function trackLastOrder() {
-    const trackBtn = document.getElementById('success-track-btn');
-    const orderId = trackBtn?.dataset.orderId;
-    if (orderId) {
-      openOrders();
-      openTrack(orderId);
-    }
   }
 
   // ── Utils ──
