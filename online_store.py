@@ -42,26 +42,36 @@ router = APIRouter(prefix="/store", tags=["Online Store"])
 # =====================
 class CustomerRegister(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    email: str
+    # email is optional — Flutter app registers with phone only
+    email: Optional[str] = None
     phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     password: str = Field(..., min_length=6)
     city: Optional[str] = None
     address: Optional[str] = None
     role: Optional[str] = "CUSTOMER"
     is_active: Optional[bool] = True
+    # accept shop_id and firebase_id_token sent by Flutter/web but not strictly required
+    shop_id: Optional[int] = None
+    firebase_id_token: Optional[str] = None
 
     @field_validator("email")
     def validate_email(cls, v):
+        if v is None or v.strip() == "":
+            return None
         if "@" not in v or "." not in v.split("@")[-1]:
             raise ValueError("value is not a valid email address")
         return v.lower().strip()
 
 class CustomerLogin(BaseModel):
-    email: str
+    # Support login by email OR phone
+    email: Optional[str] = None
+    phone: Optional[str] = None
     password: str
 
     @field_validator("email")
     def validate_email(cls, v):
+        if v is None or v.strip() == "":
+            return None
         if "@" not in v or "." not in v.split("@")[-1]:
             raise ValueError("value is not a valid email address")
         return v.lower().strip()
@@ -71,11 +81,15 @@ class CustomerLoginPhone(BaseModel):
     password: str
 
 class CustomerForgot(BaseModel):
-    email: str
+    # Support forgot by email or phone
+    email: Optional[str] = None
+    phone: Optional[str] = None
 
     @field_validator("email")
     def validate_email(cls, v):
-        if "@" not in v or "." not in v.split("@")[ -1]:
+        if v is None or v.strip() == "":
+            return None
+        if "@" not in v or "." not in v.split("@")[-1]:
             raise ValueError("value is not a valid email address")
         return v.lower().strip()
 
@@ -106,15 +120,27 @@ def register_customer(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Register a new customer account"""
-    existing = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="Email already registered.")
+    """Register a new customer account — supports phone-only (no email required)"""
+
+    # ── Uniqueness check by PHONE (primary) ──────────────────────────────
+    existing_phone = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.phone == data.phone
+    ).first()
+    if existing_phone:
+        raise HTTPException(status_code=409, detail="Phone number already registered. Please login instead.")
+
+    # ── Uniqueness check by EMAIL only when email is provided ────────────
+    if data.email:
+        existing_email = db.query(OnlineCustomerAuth).filter(
+            OnlineCustomerAuth.email == data.email
+        ).first()
+        if existing_email:
+            raise HTTPException(status_code=409, detail="Email already registered.")
 
     name = sanitize_input(data.name, "name")
     customer = OnlineCustomerAuth(
         user_name=name,
-        email=data.email,
+        email=data.email,  # may be None if not provided
         phone=data.phone,
         city=data.city,
         address=data.address,
@@ -125,9 +151,9 @@ def register_customer(
     db.commit()
     db.refresh(customer)
 
-    # Send Welcome Email with Credentials
+    # Send Welcome Email with Credentials (only if email provided)
     try:
-        if EmailNotificationService:
+        if EmailNotificationService and data.email:
             subject, body = EmailNotificationService.welcome_credentials_template(data.name, data.password, "Customer")
             EmailNotificationService.create_notification(
                 db=db,
@@ -155,14 +181,23 @@ def customer_login(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Customer login — returns JWT with CUSTOMER role"""
+    """Customer login — supports login by email OR phone"""
     ip = request.client.host
     check_login_lockout(ip)
 
-    user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
+    if not data.email and not data.phone:
+        raise HTTPException(status_code=422, detail="Provide either email or phone to login.")
+
+    # Look up by phone first (Flutter app), then fall back to email
+    user = None
+    if data.phone:
+        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
+    if not user and data.email:
+        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
+
     if not user or not verify_password(data.password, user.password):
         record_login_failure(ip)
-        raise HTTPException(status_code=401, detail="Invalid email or password.")
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
 
     record_login_success(ip)
     token = create_access_token({"sub": str(user.id), "role": ROLE_CUSTOMER})
@@ -171,6 +206,7 @@ def customer_login(
         "token_type": "bearer",
         "customer_id": user.id,
         "name": user.user_name,
+        "customer": {"id": user.id, "name": user.user_name, "phone": user.phone},
     }
 
 

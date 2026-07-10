@@ -32,17 +32,17 @@ class RefreshTokenRequest(BaseModel):
 
 @router.post("/register")
 def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    # Check username uniqueness
+    # Check username uniqueness — return 409 Conflict (not 400) so clients can distinguish
     if db.query(User).filter(User.user_name == user.username).first():
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise HTTPException(status_code=409, detail="Username already registered. Please choose a different name.")
     
     if not user.email or user.email.strip() == "":
         raise HTTPException(status_code=400, detail="Email is required")
 
     from sqlalchemy import func
-    # Check email uniqueness (case-insensitive)
+    # Check email uniqueness (case-insensitive) — return 409 Conflict
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
-        raise HTTPException(status_code=400, detail="This email already has an account")
+        raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
     
     # Hash password securely
     hashed_password = hash_password(user.password)
