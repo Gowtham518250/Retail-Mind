@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useCart } from '../context/CartContext';
+import confetti from 'canvas-confetti';
 
 export default function CartDrawer() {
   const { cartItems, isCartOpen, toggleCart, updateQuantity, cartTotal, clearCart } = useCart();
@@ -84,6 +85,15 @@ export default function CartDrawer() {
       }
 
       setSuccessMessage('Order placed successfully!');
+      
+      // Trigger confetti micro-interaction!
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#6366f1', '#22d3ee', '#facc15', '#ffffff']
+      });
+
       clearCart();
       setTimeout(() => {
         setSuccessMessage('');

@@ -1,13 +1,27 @@
+import withPWAInit from 'next-pwa';
+
+const withPWA = withPWAInit({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  async rewrites() {
-    return [
+  images: {
+    remotePatterns: [
       {
-        source: '/store/:path*',
-        destination: 'https://retail-mind-vkbp.onrender.com/store/:path*', 
+        protocol: 'https',
+        hostname: '**',
       },
-    ]
+      {
+        protocol: 'http',
+        hostname: '**',
+      }
+    ],
   },
+  turbopack: {},
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);

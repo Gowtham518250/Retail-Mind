@@ -5,8 +5,19 @@ import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
 
 export const metadata: Metadata = {
-  title: 'Retail Shop',
-  description: 'Premium customer shopping experience',
+  title: "RetailShop",
+  description: "Your ultimate shopping destination",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "RetailShop",
+  },
+  themeColor: "#050816",
+};
+
+export const viewport = {
+  themeColor: '#050816',
 };
 
 export default function RootLayout({
