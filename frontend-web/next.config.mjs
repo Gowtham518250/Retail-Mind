@@ -22,6 +22,14 @@ const nextConfig = {
     ],
   },
   turbopack: {},
+  async rewrites() {
+    return [
+      {
+        source: '/store/:path*',
+        destination: 'https://retail-mind-vkbp.onrender.com/store/:path*', 
+      },
+    ]
+  },
 };
 
 export default withPWA(nextConfig);
