@@ -11,8 +11,7 @@ export default function CartDrawer() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  if (!isCartOpen) return null;
-
+  // Removed early return so CSS transitions can play
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by your browser');
@@ -102,7 +101,9 @@ export default function CartDrawer() {
       <div className="drawer-overlay" onClick={toggleCart} style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 999, backdropFilter: 'blur(4px)',
-        transition: 'opacity 0.3s'
+        transition: 'opacity 0.4s ease, visibility 0.4s ease',
+        opacity: isCartOpen ? 1 : 0,
+        visibility: isCartOpen ? 'visible' : 'hidden'
       }} />
       <div className={`cart-drawer-container ${isCartOpen ? 'open' : ''}`}>
         

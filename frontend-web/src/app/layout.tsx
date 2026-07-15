@@ -19,7 +19,7 @@ export default function RootLayout({
       <body>
         <CartProvider>
           <Navbar />
-          <main className="main-content">
+          <main className="page-transition">
             {children}
           </main>
           <CartDrawer />
