@@ -305,15 +305,14 @@ async def health_check():
         "timestamp": time.time(),
     }
 
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
 async def serve_shop_frontend(shop_id: str):
-    # Serve the original storefront HTML file as requested
-    file_path = os.path.join(os.path.dirname(__file__), "shop_frontend.html")
-    if not os.path.exists(file_path):
-        return HTMLResponse(content="<h1>Shop frontend not found.</h1>", status_code=404)
-    with open(file_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
-    return HTMLResponse(content=html_content)
+    # Redirect to the new Next.js storefront
+    # Uses NEXT_PUBLIC_FRONTEND_URL environment variable if deployed, otherwise falls back to localhost
+    frontend_url = os.getenv("NEXTJS_FRONTEND_URL", "http://localhost:3000")
+    return RedirectResponse(url=f"{frontend_url}/?shop_id={shop_id}")
 
 # Mount the new React Web Dashboard
 frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend", "dist")
