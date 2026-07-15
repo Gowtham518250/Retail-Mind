@@ -4,7 +4,7 @@ const nextConfig = {
     return [
       {
         source: '/store/:path*',
-        destination: 'http://localhost:8000/store/:path*', 
+        destination: 'https://retail-mind-vkbp.onrender.com/store/:path*', 
       },
     ]
   },

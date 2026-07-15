@@ -72,6 +72,8 @@ class InvoiceLineItemResponse(BaseModel):
 class InvoiceResponse(BaseModel):
     id: int
     invoice_number: str
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
     total_amount: float
     paid_amount: float
     status: str
@@ -583,6 +585,8 @@ def get_invoice(
     return {
         "id":             invoice.id,
         "invoice_number": invoice.invoice_number,
+        "customer_name":  invoice.customer_name,
+        "customer_phone": invoice.customer_phone,
         "total_amount":   float(invoice.total_amount),
         "paid_amount":    float(invoice.paid_amount),
         "subtotal":       float(invoice.subtotal),

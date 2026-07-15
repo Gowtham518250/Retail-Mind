@@ -607,7 +607,6 @@ def get_my_orders(
                 "delivery_address": o.delivery_address,
                 "items": json.loads(o.items_json),
                 "created_at": o.created_at,
-                "updated_at": o.updated_at,
             }
             for o in orders
         ]
@@ -642,7 +641,6 @@ def track_order(
         "delivery_address": order.delivery_address,
         "items": json.loads(order.items_json),
         "created_at": order.created_at,
-        "updated_at": order.updated_at,
     }
 
 

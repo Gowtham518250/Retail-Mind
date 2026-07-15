@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, HTMLResponse
 import os
 import time
@@ -306,13 +307,25 @@ async def health_check():
 
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
 async def serve_shop_frontend(shop_id: str):
-    # Use relative path that works in both local and production environments
+    # Serve the original storefront HTML file as requested
     file_path = os.path.join(os.path.dirname(__file__), "shop_frontend.html")
     if not os.path.exists(file_path):
         return HTMLResponse(content="<h1>Shop frontend not found.</h1>", status_code=404)
     with open(file_path, "r", encoding="utf-8") as f:
         html_content = f.read()
     return HTMLResponse(content=html_content)
+
+# Mount the new React Web Dashboard
+frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+if os.path.exists(frontend_dist_path):
+    api.mount("/dashboard", StaticFiles(directory=frontend_dist_path, html=True), name="dashboard")
+
+# Mount the React assets directory directly for CSS/JS
+frontend_assets_path = os.path.join(os.path.dirname(__file__), "frontend", "dist", "assets")
+if os.path.exists(frontend_assets_path):
+    api.mount("/assets", StaticFiles(directory=frontend_assets_path), name="frontend_assets")
+
+# (Previous dashboard mount replaced by root assets mount above)
 
 
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))

@@ -3,20 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-interface Product {
-  id: string | number;
-  name: string;
-  price: number;
-  image_url?: string;
-  category?: string;
-  stock?: number;
-}
+import { useCart, Product } from '../context/CartContext';
+
+// We'll use the Product interface from CartContext
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
+  const { addToCart, cartItems } = useCart();
   
   // Defaulting to shop_id = 1 as per original implementation fallback
   const SHOP_ID = 1;
@@ -51,7 +47,8 @@ export default function Home() {
         }
 
         const data = await response.json();
-        setProducts(data);
+        // The API returns an object with shop details and a 'products' array
+        setProducts(data.products || []);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -88,22 +85,30 @@ export default function Home() {
               <h3>No products found for this shop.</h3>
             </div>
           ) : (
-            products.map((product) => (
-              <div key={product.id} className="product-card hover-card">
-                <div className="product-image-skeleton" style={{ background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                   {product.image_url ? (
-                     <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                   ) : (
-                     <span style={{ fontSize: '48px' }}>📦</span>
-                   )}
+            products.map((product) => {
+              const inCart = cartItems.find(item => item.product.id === product.id);
+              
+              return (
+                <div key={product.id} className="product-card hover-card">
+                  <div className="product-image-skeleton" style={{ background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                     {product.image_url ? (
+                       <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                     ) : (
+                       <span style={{ fontSize: '48px' }}>📦</span>
+                     )}
+                  </div>
+                  <h3 className="product-title">{product.name}</h3>
+                  <div className="product-price">₹{Number(product.price).toFixed(2)}</div>
+                  <button 
+                    className="btn-primary" 
+                    style={{ width: '100%', marginTop: 'auto', background: inCart ? 'var(--fk-yellow)' : 'var(--fk-blue)', color: inCart ? '#000' : '#fff' }}
+                    onClick={() => addToCart(product)}
+                  >
+                    {inCart ? `Add More (${inCart.quantity} in cart)` : 'Add to Cart'}
+                  </button>
                 </div>
-                <h3 className="product-title">{product.name}</h3>
-                <div className="product-price">₹{Number(product.price).toFixed(2)}</div>
-                <button className="btn-primary" style={{ width: '100%', marginTop: 'auto' }}>
-                  Add to Cart
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>
