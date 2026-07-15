@@ -102,109 +102,20 @@ export default function AuthPage() {
 
   return (
     <main className={styles.authMain}>
-      {/* Global Interactive Cursor Glow */}
-      <motion.div 
-        className={styles.cursorGlow}
-        style={{ x: springX, y: springY }}
-      />
-
-      {/* Left Column: Visual 3D Animation */}
-      <div className={styles.authLeftCol}>
-        <div className={styles.ambienceRight} />
-        <div className={styles.ambienceLeft} />
-        <div className={styles.stardustBg} />
-        <div className={styles.perspectiveGrid} />
-
-        <div className={styles.backBtn} onClick={() => router.push('/')}>
-          <ArrowLeft size={16} /> Back to Home
-        </div>
-
-        <motion.div 
-          animate={{ y: [-20, 20, -20], rotateX: [0, 5, -5, 0], rotateY: [0, -5, 5, 0] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className={styles.abstractElement}
-        >
-          {/* Advanced Animated 3D Core */}
-          <div className={styles.core3D}>
-            <motion.div 
-              animate={{ rotate: 360, rotateX: 45, rotateY: 45 }}
-              transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-              className={styles.outerRing1}
-            />
-            <motion.div 
-              animate={{ rotate: -360, rotateX: 60, rotateY: 20 }}
-              transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-              className={styles.outerRing2}
-            />
-            <motion.div 
-              animate={{ rotate: 360, rotateX: 20, rotateY: 80 }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-              className={styles.outerRing3}
-            />
-            <motion.div 
-              animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className={styles.innerCore}
-            />
-            <div className={styles.atomIcon}>
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 8, repeat: Infinity, ease: "linear" }}>
-                <Atom size={48} color="white" />
-              </motion.div>
-            </div>
-            
-            {/* Orbiting Particles */}
-            {Array.from({ length: 8 }).map((_, i) => (
-              <motion.div
-                key={i}
-                className={styles.orbitParticleContainer}
-                animate={{ rotate: 360 }}
-                transition={{ duration: 4 + i * 0.5, repeat: Infinity, ease: "linear", delay: i * 0.2 }}
-              >
-                <div className={`${styles.orbitParticle} ${i % 2 === 0 ? styles.particlePrimary : styles.particleSecondary}`} />
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Floating Badges */}
-        <motion.div 
-          initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5, type: "spring" }}
-          className={styles.glassBadgeLeft}
-        >
-          <div className={styles.pulseIcon}><div className={styles.pulseDot} /></div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>System Status</div>
-            <div style={{ color: 'white', fontWeight: 'bold' }}>Online & Ready</div>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.7, type: "spring" }}
-          className={styles.glassBadgeRight}
-        >
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(124, 92, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Atom size={20} color="#7c5cff" />
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>Secure Network</div>
-            <div style={{ color: 'white', fontWeight: 'bold' }}>End-to-End Encrypted</div>
-          </div>
-        </motion.div>
+      
+      {/* Background Layers */}
+      <div className={styles.spaceBackground}>
+        <div className={styles.spaceImage} />
+        <div className={styles.spaceGradientTop} />
+        <div className={styles.spaceGradientBottom} />
       </div>
 
-      {/* Right Column: Form */}
+      {/* Centered Form Column */}
       <div className={styles.authRightCol}>
         
-        {/* Mobile Nav */}
-        <div style={{ display: 'block' }} className="lg:hidden">
-          <div className={styles.backBtn} onClick={() => router.push('/')}>
-            <ArrowLeft size={16} /> Back
-          </div>
-        </div>
-
         <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, type: "spring" }}
           className={styles.authFormContainer}
         >
@@ -214,13 +125,8 @@ export default function AuthPage() {
             className={styles.brandLogo}
             onClick={() => router.push("/")}
           >
-            <div className={styles.brandIcon}>
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 10, repeat: Infinity, ease: "linear" }}>
-                <Atom size={28} color="white" />
-              </motion.div>
-            </div>
             <span className={styles.brandText}>
-              Retail<span style={{ color: '#7c5cff' }}>Shop</span>
+              RetailShop
             </span>
           </motion.div>
 

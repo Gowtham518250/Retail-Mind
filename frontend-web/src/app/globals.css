@@ -1,20 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --fk-blue: #2874F0;
-  --fk-blue-dark: #1B4AD8;
-  --fk-blue-light: #E8F2FF;
-  --fk-yellow: #FFC200;
-  --fk-yellow-light: #FFF8DB;
+  --fk-blue: #7c5cff;
+  --fk-blue-dark: #6366f1;
+  --fk-blue-light: #22d3ee;
+  --fk-yellow: #facc15;
+  --fk-red: #ef4444;
+  --fk-green: #10b981;
   
-  --bg-primary: #F1F3F6;
-  --bg-secondary: #FFFFFF;
+  --bg-color: #050816;
+  --bg-secondary: rgba(255, 255, 255, 0.03);
+  --card-bg: rgba(255, 255, 255, 0.03);
   
-  --text-primary: #212121;
-  --text-secondary: #878787;
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
   --text-inverse: #FFFFFF;
   
-  --border-color: #F0F0F0;
+  --border-color: rgba(255, 255, 255, 0.1);
   
   --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.1);
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
@@ -22,7 +24,7 @@
   --shadow-hover: 0 12px 24px rgba(40,116,240,0.15);
   
   --radius-sm: 4px;
-  --radius-md: 8px;
+  --radius-md: 16px;
   --radius-lg: 16px;
   --radius-full: 9999px;
   
@@ -41,7 +43,12 @@
 }
 
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-color);
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), 
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
@@ -102,10 +109,10 @@ button {
 
 /* Glassmorphism */
 .glass {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Modern Card Hover Effects */
@@ -119,8 +126,8 @@ button {
 
 /* Buttons */
 .btn-primary {
-  background-color: var(--fk-blue);
-  color: var(--text-inverse);
+  background: linear-gradient(to right, #6366f1, #22d3ee);
+  color: #fff;
   padding: 12px 24px;
   border-radius: var(--radius-sm);
   font-weight: 600;
@@ -129,28 +136,30 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  border: none;
 }
 .btn-primary:hover {
-  background-color: var(--fk-blue-dark);
-  box-shadow: 0 4px 12px rgba(40,116,240,0.3);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
   transform: translateY(-1px);
 }
 .btn-primary:active {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
 .btn-secondary {
-  background-color: var(--bg-secondary);
-  color: var(--fk-blue);
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 12px 24px;
   border-radius: var(--radius-sm);
   font-weight: 600;
   transition: all var(--transition-normal);
 }
 .btn-secondary:hover {
-  border-color: var(--fk-blue);
-  color: var(--fk-blue-dark);
+  background: rgba(255, 255, 255, 0.15);
+}
+.btn-secondary:active {
+  transform: scale(0.96);
 }
 
 /* Input Fields */
@@ -158,14 +167,17 @@ button {
   width: 100%;
   padding: 12px 16px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.05);
   font-family: var(--font-body);
-  transition: all var(--transition-normal);
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: all 0.3s;
   outline: none;
 }
 .input-field:focus {
-  border-color: var(--fk-blue);
-  box-shadow: 0 0 0 3px rgba(40,116,240,0.1);
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.2);
 }
 
 /* Navbar */
@@ -174,6 +186,8 @@ button {
   top: 0;
   z-index: 100;
   border-bottom: 1px solid var(--border-color);
+  background: rgba(5, 8, 22, 0.8);
+  backdrop-filter: blur(10px);
 }
 .nav-content {
   display: flex;
@@ -211,21 +225,29 @@ button {
 }
 
 .product-card {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   padding: 16px;
-  border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  height: 100%;
   gap: 12px;
   position: relative;
   overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+.product-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .product-image-skeleton {
   width: 100%;
   aspect-ratio: 1;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, #1f1f1f 25%, #2a2a2a 50%, #1f1f1f 75%);
   background-size: 200% 100%;
   animation: loading 1.5s infinite;
   border-radius: var(--radius-sm);
@@ -247,10 +269,13 @@ button {
 }
 
 .product-price {
-  font-family: var(--font-display);
   font-size: 20px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #fff;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Hero Section */
@@ -282,9 +307,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(-45deg, #E8F2FF, #FFFFFF, #FFF8DB, #E8F2FF);
-  background-size: 400% 400%;
-  animation: gradientBG 15s ease infinite;
+  background: #050816;
   position: relative;
   overflow: hidden;
 }
@@ -327,12 +350,12 @@ button {
 .auth-card {
   width: 100%;
   max-width: 440px;
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-lg);
-  box-shadow: 0 24px 48px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+  box-shadow: 0 24px 48px rgba(0,0,0,0.3);
   position: relative;
   overflow: hidden;
   z-index: 10;
@@ -352,7 +375,7 @@ button {
 }
 
 .auth-header h1 {
-  color: var(--fk-blue);
+  color: #fff;
   font-size: 28px;
   margin-bottom: 8px;
 }
@@ -410,25 +433,25 @@ button {
 }
 
 .auth-link {
-  color: var(--fk-blue);
+  color: var(--fk-blue-light);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
   transition: color var(--transition-fast);
 }
 .auth-link:hover {
-  color: var(--fk-blue-dark);
+  color: var(--fk-blue);
   text-decoration: underline;
 }
 
 .auth-error {
-  background: #FFF0F0;
-  color: #D32F2F;
+  background: rgba(220, 38, 38, 0.1);
+  color: #f87171;
   padding: 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
   margin-bottom: 20px;
-  border-left: 4px solid #D32F2F;
+  border-left: 4px solid #ef4444;
   animation: popIn 0.3s ease;
 }
 
@@ -442,8 +465,8 @@ button {
   right: 0;
   bottom: 0;
   width: 100%;
-  max-width: 450px; /* limits width on desktop */
-  background: rgba(18, 18, 18, 0.85);
+  max-width: 450px;
+  background: rgba(5, 8, 22, 0.95);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   z-index: 1000;
@@ -466,10 +489,9 @@ button {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     border-top-left-radius: 24px;
     border-top-right-radius: 24px;
-    /* Bottom sheet animation on mobile */
     transform: translateY(100%);
-    top: auto; /* Allow it to come from bottom */
-    height: 90vh; /* Don't cover entire screen */
+    top: auto;
+    height: 90vh;
   }
   .cart-drawer-container.open {
     transform: translateY(0);
@@ -487,9 +509,7 @@ button {
 .cart-title {
   font-size: 1.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, var(--fk-blue) 0%, #a8c0ff 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #fff;
   margin: 0;
 }
 
@@ -499,7 +519,7 @@ button {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  color: var(--text-primary);
+  color: #fff;
   font-size: 20px;
   display: flex;
   align-items: center;
