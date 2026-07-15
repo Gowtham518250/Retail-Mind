@@ -8,16 +8,10 @@ engine = create_engine(DB_URL)
 
 with engine.connect() as conn:
     try:
-        conn.execute(text("ALTER TABLE invoices ADD COLUMN offline_id VARCHAR(50);"))
-        print("✅ Successfully added offline_id column to invoices table.")
+        conn.execute(text("ALTER TABLE online_customers ALTER COLUMN email DROP NOT NULL;"))
+        print("✅ Successfully made email optional in online_customers table.")
     except Exception as e:
-        print(f"⚠️ Warning adding offline_id (might already exist): {e}")
-        
-    try:
-        conn.execute(text("CREATE UNIQUE INDEX ix_invoices_offline_id ON invoices (offline_id);"))
-        print("✅ Successfully added unique index on offline_id.")
-    except Exception as e:
-        print(f"⚠️ Warning adding index (might already exist): {e}")
+        print(f"⚠️ Warning altering online_customers (might already be optional): {e}")
         
     conn.commit()
 

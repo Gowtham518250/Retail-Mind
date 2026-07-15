@@ -182,7 +182,7 @@ class OnlineCustomerAuth(Base):
     
     id = Column(Integer, primary_key=True, nullable=False)
     user_name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=True)
     phone = Column(String(20), nullable=True)     # Added for online store orders
     city = Column(String(100), nullable=True)     # Added for location filtering
     address = Column(Text, nullable=True)         # Added for delivery
