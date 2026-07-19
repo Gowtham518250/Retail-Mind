@@ -20,10 +20,10 @@ from models import Base
 target_metadata = Base.metadata
 
 # Ensure DATABASE_URL is always used — never fall back to alembic.ini host
-database_url = os.environ.get('DATABASE_URL')
+database_url = os.environ.get("DATABASE_URL")
 if database_url:
-    # Render sometimes gives postgres:// which SQLAlchemy 2.x rejects
-    config.set_main_option('sqlalchemy.url', database_url.replace('postgres://', 'postgresql://'))
+    from db import normalize_database_url
+    config.set_main_option("sqlalchemy.url", normalize_database_url(database_url))
 
 
 def run_migrations_offline() -> None:

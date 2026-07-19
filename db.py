@@ -10,11 +10,22 @@ def normalize_database_url(url: str) -> str:
     Normalize Render database URL:
     - Convert postgres:// scheme to postgresql://
     - Add sslmode=require parameter if not present
+    - Add full .oregon-postgres.render.com suffix to short Render hostnames
     """
     if not url:
         return url
     
     parsed = urlparse(url)
+    
+    # Handle Render short hostnames like dpg-xxx-a
+    netloc = parsed.netloc
+    if parsed.hostname and parsed.hostname.startswith("dpg-") and "." not in parsed.hostname:
+        new_hostname = f"{parsed.hostname}.oregon-postgres.render.com"
+        # Reconstruct netloc with new hostname and existing port/userinfo
+        if parsed.port:
+            netloc = f"{parsed.username}:{parsed.password}@{new_hostname}:{parsed.port}" if parsed.username else f"{new_hostname}:{parsed.port}"
+        else:
+            netloc = f"{parsed.username}:{parsed.password}@{new_hostname}" if parsed.username else new_hostname
     
     # Handle scheme conversion first
     scheme = parsed.scheme
@@ -29,9 +40,10 @@ def normalize_database_url(url: str) -> str:
     # Convert params back to query string
     query = urlencode(params, doseq=True)
     
-    # Rebuild URL - leave netloc as is!
+    # Rebuild URL
     new_parsed = parsed._replace(
         scheme=scheme,
+        netloc=netloc,
         query=query
     )
     
