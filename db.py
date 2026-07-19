@@ -5,16 +5,21 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
 
-# Load environment - try .env.local first (SQLite dev), then .env.production, then .env
+# Load environment vars from .env files ONLY if not already set in the environment.
+# CRITICAL: override=False ensures that real env vars (set by Render/Railway/etc.)
+# always take priority over any .env files committed to the repo.
+# Without this, a stale DATABASE_URL in a .env file silently overwrites
+# Render's injected DATABASE_URL causing "host not found" errors.
 if os.path.exists('.env.local'):
-    load_dotenv('.env.local')
-    print("Using LOCAL environment (.env.local - SQLite)")
+    load_dotenv('.env.local', override=False)
+    print("Loaded .env.local (override=False — real env vars take priority)")
 elif os.path.exists('.env.production'):
-    load_dotenv('.env.production')
-    print("Using PRODUCTION environment (.env.production)")
+    load_dotenv('.env.production', override=False)
+    print("Loaded .env.production (override=False — real env vars take priority)")
 else:
-    load_dotenv()
-    print("Using DEFAULT environment (.env)")
+    load_dotenv(override=False)
+    print("Loaded .env (override=False — real env vars take priority)")
+
 
 # Get database configuration from environment variables
 # Render/Railway typically provides 'DATABASE_URL' automatically
