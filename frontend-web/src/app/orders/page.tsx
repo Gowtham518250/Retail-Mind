@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Package, MapPin, Clock, CheckCircle, Truck, ArrowLeft } from 'lucide-react';
+import { API_BASE } from '../../lib/api';
 
 interface OrderItem {
   product_id: number;
@@ -33,7 +35,7 @@ export default function MyOrdersPage() {
 
     const fetchOrders = async () => {
       try {
-        const response = await fetch('/store/my-orders', {
+        const response = await fetch(`${API_BASE}/store/my-orders`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -60,9 +62,22 @@ export default function MyOrdersPage() {
     fetchOrders();
   }, [router]);
 
+  const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
+    PENDING:   { color: '#facc15', bg: 'rgba(250,204,21,0.12)', icon: <Clock size={14} /> },
+    CONFIRMED: { color: '#22d3ee', bg: 'rgba(34,211,238,0.12)', icon: <CheckCircle size={14} /> },
+    SHIPPED:   { color: '#818cf8', bg: 'rgba(129,140,248,0.12)', icon: <Truck size={14} /> },
+    DELIVERED: { color: '#10b981', bg: 'rgba(16,185,129,0.12)', icon: <CheckCircle size={14} /> },
+    CANCELLED: { color: '#f87171', bg: 'rgba(248,113,113,0.12)', icon: <Package size={14} /> },
+  };
+
   return (
     <div className="container" style={{ padding: '40px 20px' }}>
-      <h1 style={{ marginBottom: '32px', fontSize: '2rem' }}>My Orders</h1>
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:32 }}>
+        <button onClick={() => router.back()} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'8px 12px', color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+          <ArrowLeft size={16} /> Back
+        </button>
+        <h1 style={{ fontSize:'1.75rem', fontWeight:700 }}>My Orders</h1>
+      </div>
 
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -82,57 +97,59 @@ export default function MyOrdersPage() {
           <button className="btn-primary" onClick={() => router.push('/')}>Start Shopping</button>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {orders.map(order => (
-            <div key={order.order_id} style={{ 
-              background: 'rgba(255,255,255,0.03)', 
-              border: '1px solid rgba(255,255,255,0.05)', 
-              borderRadius: '20px', 
-              padding: '24px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px', marginBottom: '16px' }}>
-                <div>
-                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Order #{order.order_id}</div>
-                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>{new Date(order.created_at).toLocaleString()}</div>
-                </div>
-                <div style={{ 
-                  background: order.status === 'DELIVERED' ? 'rgba(0,200,83,0.1)' : 'rgba(40,116,240,0.1)',
-                  color: order.status === 'DELIVERED' ? '#00C853' : 'var(--fk-blue)',
-                  padding: '6px 12px',
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  {order.status}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-                {order.items.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px' }}>
-                    <span>Product #{item.product_id} <span style={{ color: 'var(--text-secondary)' }}>x{item.quantity}</span></span>
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          {orders.map(order => {
+            const sc = statusConfig[order.status] || statusConfig['PENDING'];
+            return (
+              <div key={order.order_id} style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: 20,
+                padding: 24,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+                transition: 'border-color 0.2s',
+              }}>
+                {/* Order header */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', borderBottom:'1px solid rgba(255,255,255,0.08)', paddingBottom:16, marginBottom:16 }}>
+                  <div>
+                    <div style={{ fontWeight:700, fontSize:16 }}>Order #{order.order_id}</div>
+                    <div style={{ fontSize:13, color:'var(--text-secondary)', marginTop:4 }}>
+                      <Clock size={12} style={{ display:'inline', verticalAlign:'middle', marginRight:4 }} />
+                      {new Date(order.created_at).toLocaleString()}
+                    </div>
                   </div>
-                ))}
-              </div>
+                  <span style={{ display:'flex', alignItems:'center', gap:6, background:sc.bg, color:sc.color, padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:700, letterSpacing:'0.5px' }}>
+                    {sc.icon} {order.status}
+                  </span>
+                </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Delivery Address</div>
-                  <div style={{ fontSize: '14px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fk-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '2px' }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                    <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{order.delivery_address}</span>
+                {/* Items */}
+                <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
+                  {order.items.map((item, idx) => (
+                    <div key={idx} style={{ display:'flex', justifyContent:'space-between', fontSize:14, color:'var(--text-secondary)' }}>
+                      <span><Package size={13} style={{ display:'inline', verticalAlign:'middle', marginRight:6 }} />Product #{item.product_id}</span>
+                      <span style={{ color:'#fff', fontWeight:600 }}>× {item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:16 }}>
+                  <div style={{ flex:1, marginRight:16 }}>
+                    <div style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.5px' }}>Delivery Address</div>
+                    <div style={{ fontSize:13, display:'flex', alignItems:'flex-start', gap:6 }}>
+                      <MapPin size={14} style={{ color:'var(--fk-blue)', flexShrink:0, marginTop:1 }} />
+                      <span style={{ display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' as const, overflow:'hidden' }}>{order.delivery_address}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.5px' }}>Total</div>
+                    <div style={{ fontSize:22, fontWeight:800, color:'var(--fk-blue)' }}>₹{order.total_amount.toFixed(2)}</div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', marginLeft: '24px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Total Amount</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--fk-blue)' }}>₹{order.total_amount.toFixed(2)}</div>
-                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <style>{`

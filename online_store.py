@@ -26,7 +26,7 @@ from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
     check_login_lockout, record_login_failure, record_login_success,
-    owner_only, customer_only, get_current_user, sanitize_input
+    owner_only, customer_only, get_current_user, get_current_user_dict, sanitize_input
 )
 try:
     from email_notifications import EmailNotificationService
@@ -154,7 +154,7 @@ def register_customer(
     # Send Welcome Email with Credentials (only if email provided)
     try:
         if EmailNotificationService and data.email:
-            subject, body = EmailNotificationService.welcome_credentials_template(data.name, data.password, "Customer")
+            subject, body = EmailNotificationService.welcome_credentials_template(data.name, "[HIDDEN FOR SECURITY]", "Customer")
             EmailNotificationService.create_notification(
                 db=db,
                 recipient_email=data.email,
@@ -273,27 +273,33 @@ def find_nearby_shops(
         city_clean = sanitize_input(city, "city")
         query = query.filter(ShopProfile.address.ilike(f"%{city_clean}%"))
 
+    if lat is not None and lng is not None:
+        # Bounding box pre-filter for DB speed (BUG-B12)
+        # 1 degree lat is approx 111 km
+        lat_delta = radius_km / 111.0
+        lng_delta = radius_km / (111.0 * math.cos(math.radians(lat))) if math.cos(math.radians(lat)) != 0 else 0
+        
+        query = query.filter(
+            ShopProfile.latitude != None,
+            ShopProfile.longitude != None,
+            ShopProfile.latitude.between(lat - lat_delta, lat + lat_delta),
+            ShopProfile.longitude.between(lng - lng_delta, lng + lng_delta)
+        )
+        
     all_shops = query.all()
 
     if lat is not None and lng is not None:
-        # Filter by Haversine distance
-        def haversine(lat1, lon1, lat2_str, lon2_str):
+        # Filter exact distance by Haversine
+        def haversine(lat1, lon1, lat2, lon2):
             """Calculate distance in km between two lat/lng points"""
-            try:
-                # We store location as "lat,lng" in address if GPS mode used
-                parts = str(lat2_str).split(",")
-                if len(parts) != 2:
-                    return float("inf")
-                lat2, lon2 = float(parts[0]), float(parts[1])
-            except Exception:
-                return float("inf")
+            if lat2 is None or lon2 is None: return float("inf")
             R = 6371  # Earth radius in km
             dlat = math.radians(lat2 - lat1)
             dlon = math.radians(lon2 - lon1)
             a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
             return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-        all_shops = [s for s in all_shops if haversine(lat, lng, s.address, s.address) <= radius_km]
+        all_shops = [s for s in all_shops if haversine(lat, lng, s.latitude, s.longitude) <= radius_km]
 
     all_shops = all_shops[skip:skip + limit]
 
@@ -360,7 +366,7 @@ def browse_shop_products(
                 "name": p.product_name,
                 "category": p.category,
                 "price": float(p.unit_price),
-                "stock_available": p.current_stock if p.current_stock else 999,
+                "stock_available": p.current_stock if p.current_stock is not None else 999,
                 "description": p.description,
 
             }
@@ -394,7 +400,7 @@ def place_order(
     total_amount = 0.0
 
     for item in data.items:
-        product = db.query(Product).filter(
+        product = db.query(Product).with_for_update().filter(
             Product.id == item.product_id,
             Product.user_id == data.shop_id,
             Product.is_active == True,
@@ -406,6 +412,7 @@ def place_order(
                 status_code=400,
                 detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
             )
+        product.current_stock -= item.quantity
         line_total = float(product.unit_price) * item.quantity
         total_amount += line_total
         order_items.append({
@@ -479,7 +486,7 @@ def place_guest_order(
             logger.error(f"Firebase token verification failed: {e}")
             raise HTTPException(status_code=401, detail="Phone verification failed. Please try again.")
     else:
-        logger.info("Skipping phone verification - no Firebase token provided")
+        raise HTTPException(status_code=401, detail="Phone verification failed. No Firebase token provided.")
 
     # 2. Validate shop
     try:
@@ -497,12 +504,13 @@ def place_guest_order(
     # 3. Find or create guest customer in OnlineCustomerAuth
     customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
     if not customer:
+        import secrets
         customer = OnlineCustomerAuth(
             user_name=sanitize_input(data.customer_name, "name"),
             email=f"guest_{data.phone}@example.com",
             phone=data.phone,
             address=sanitize_input(data.delivery_address, "address"),
-            password=hash_password(f"guest_{data.phone}"),
+            password=hash_password(secrets.token_urlsafe(32)),
             is_active=False  # Mark as guest/inactive
         )
         db.add(customer)
@@ -516,7 +524,7 @@ def place_guest_order(
     total_amount = 0.0
 
     for item in data.items:
-        product = db.query(Product).filter(
+        product = db.query(Product).with_for_update().filter(
             Product.id == item.product_id,
             Product.user_id == data.shop_id,
             Product.is_active == True,
@@ -528,6 +536,7 @@ def place_guest_order(
                 status_code=400,
                 detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
             )
+        product.current_stock -= item.quantity
         line_total = float(product.unit_price) * item.quantity
         total_amount += line_total
         order_items.append({
@@ -617,7 +626,7 @@ def get_my_orders(
 def track_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_dict),
 ):
     """Track a specific order by ID"""
     order = db.query(OnlineOrder).filter(OnlineOrder.id == order_id).first()
@@ -625,8 +634,11 @@ def track_order(
         raise HTTPException(status_code=404, detail="Order not found.")
 
     # Security: only the customer who placed the order or the shop owner can view it
-    uid = current_user
-    if order.customer_id != uid and order.shop_id != uid:
+    uid = current_user["user_id"]
+    role = current_user.get("role", ROLE_OWNER)
+    if role == ROLE_CUSTOMER and order.customer_id != uid:
+        raise HTTPException(status_code=403, detail="You do not have access to this order.")
+    if role == ROLE_OWNER and order.shop_id != uid:
         raise HTTPException(status_code=403, detail="You do not have access to this order.")
 
     STATUS_STEPS = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
@@ -656,7 +668,7 @@ def get_incoming_orders(
     current_user: dict = Depends(owner_only),
 ):
     """Owner: View all incoming online orders for their shop"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]
     q = db.query(OnlineOrder).filter(OnlineOrder.shop_id == shop_id)
     if status:
         q = q.filter(OnlineOrder.order_status == status.upper())
@@ -693,8 +705,8 @@ def update_order_status(
     current_user: dict = Depends(owner_only),
 ):
     """Owner: Accept, Dispatch, Deliver, or Reject an order"""
-    shop_id = current_user
-    order = db.query(OnlineOrder).filter(
+    shop_id = current_user["user_id"]
+    order = db.query(OnlineOrder).with_for_update().filter(
         OnlineOrder.id == order_id,
         OnlineOrder.shop_id == shop_id,
     ).first()
@@ -713,8 +725,11 @@ def update_order_status(
 
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
+        
+    if order.order_status != "PENDING" and new_status == "ACCEPTED":
+        raise HTTPException(status_code=409, detail="Order is already accepted or finalized.")
 
-    # ── On ACCEPT: record sales immediately in dashboard ──────────────────
+    # 🟢 On ACCEPT: record sales immediately in dashboard 🟢──────────────────
     if new_status == "ACCEPTED":
         items = json.loads(order.items_json)
         customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == order.customer_id).first()
@@ -778,17 +793,8 @@ def update_order_status(
         )
         db.add(tx)
 
-    # ── On DELIVER: deduct stock only (sale already recorded at ACCEPT) ───
+    # 🟢 On DELIVER: only mark invoice as PAID (stock deducted at order placement) 🟢
     if new_status == "DELIVERED":
-        items = json.loads(order.items_json)
-        for item in items:
-            if item.get("product_id"):
-                product = db.query(Product).filter(
-                    Product.id == item["product_id"],
-                    Product.user_id == shop_id,
-                ).first()
-                if product:
-                    product.current_stock = max(0, (product.current_stock or 0) - item["quantity"])
 
         # Mark the linked invoice as PAID
         linked_invoice = db.query(Invoice).filter(
@@ -800,6 +806,18 @@ def update_order_status(
             linked_invoice.payment_status = "PAID"
             linked_invoice.paid_amount = float(order.total_amount)
             linked_invoice.status = "PAID"
+            
+    # 🟢 On REJECT: restore reserved stock 🟢
+    if new_status == "REJECTED":
+        items = json.loads(order.items_json)
+        for item in items:
+            if item.get("product_id"):
+                product = db.query(Product).with_for_update().filter(
+                    Product.id == item["product_id"],
+                    Product.user_id == shop_id,
+                ).first()
+                if product:
+                    product.current_stock = (product.current_stock or 0) + item["quantity"]
 
     order.order_status = new_status
     db.commit()

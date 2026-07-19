@@ -1,104 +1,80 @@
 'use client';
 
 import React, { useState } from 'react';
+import { MapPin, Loader2, ShoppingCart, X, Minus, Plus, CheckCircle, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { API_BASE } from '../lib/api';
 import confetti from 'canvas-confetti';
 
 export default function CartDrawer() {
   const { cartItems, isCartOpen, toggleCart, updateQuantity, cartTotal, clearCart } = useCart();
-  const [address, setAddress] = useState('');
+  const [address, setAddress]         = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLocating, setIsLocating] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [isLocating, setIsLocating]   = useState(false);
+  const [error, setError]             = useState('');
+  const [success, setSuccess]         = useState('');
 
-  // Removed early return so CSS transitions can play
+  // ── Geolocation ────────────────────────────────────────────────────────────
   const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser');
-      return;
-    }
-    
+    if (!navigator.geolocation) { setError('Geolocation not supported by your browser'); return; }
     setIsLocating(true);
     setError('');
-
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
+      async ({ coords }) => {
         try {
-          const { latitude, longitude } = position.coords;
-          // Reverse geocode using OpenStreetMap Nominatim API
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}`
+          );
           const data = await res.json();
-          if (data && data.display_name) {
-            setAddress(data.display_name);
-          } else {
-            // Fallback if reverse geocoding fails
-            setAddress(`Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`);
-          }
-        } catch (err) {
-          setError('Failed to fetch address from coordinates');
+          setAddress(data?.display_name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
+        } catch {
+          setAddress(`${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
         } finally {
           setIsLocating(false);
         }
       },
-      (err) => {
+      () => {
         setIsLocating(false);
-        setError('Failed to get location. Please allow location permissions.');
+        setError('Location permission denied. Please enter address manually.');
       }
     );
   };
 
+  // ── Place Order ────────────────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
-    if (!address.trim()) {
-      setError('Delivery address is required');
-      return;
-    }
-    
+    if (!address.trim()) { setError('Delivery address is required'); return; }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('customerToken') : null;
+    if (!token) { setError('You must be logged in to place an order.'); return; }
+
     setError('');
     setIsSubmitting(true);
-    
-    const token = localStorage.getItem('customerToken');
-    // Using default shop_id=1 as per current frontend implementation
+
     const payload = {
       shop_id: 1,
       items: cartItems.map(item => ({
         product_id: item.product.id,
-        quantity: item.quantity
+        quantity: item.quantity,
       })),
-      delivery_address: address
+      delivery_address: address.trim(),
     };
 
     try {
-      const response = await fetch('/store/order', {
+      const res = await fetch(`${API_BASE}/store/order`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.message || 'Failed to place order. Please try again.');
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || 'Failed to place order');
-      }
-
-      setSuccessMessage('Order placed successfully!');
-      
-      // Trigger confetti micro-interaction!
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#6366f1', '#22d3ee', '#facc15', '#ffffff']
-      });
-
+      setSuccess('🎉 Order placed successfully!');
+      confetti({ particleCount: 160, spread: 75, origin: { y: 0.55 }, colors: ['#6366f1', '#22d3ee', '#facc15'] });
       clearCart();
-      setTimeout(() => {
-        setSuccessMessage('');
-        toggleCart();
-      }, 2000);
+      setTimeout(() => { setSuccess(''); toggleCart(); }, 2500);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -108,87 +84,129 @@ export default function CartDrawer() {
 
   return (
     <>
-      <div className="drawer-overlay" onClick={toggleCart} style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 999, backdropFilter: 'blur(4px)',
-        transition: 'opacity 0.4s ease, visibility 0.4s ease',
-        opacity: isCartOpen ? 1 : 0,
-        visibility: isCartOpen ? 'visible' : 'hidden'
-      }} />
-      <div className={`cart-drawer-container ${isCartOpen ? 'open' : ''}`}>
-        
+      {/* Overlay */}
+      <div
+        className="drawer-overlay"
+        onClick={toggleCart}
+        aria-hidden="true"
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 998,
+          transition: 'opacity 0.35s ease, visibility 0.35s ease',
+          opacity: isCartOpen ? 1 : 0,
+          visibility: isCartOpen ? 'visible' : 'hidden',
+        }}
+      />
+
+      {/* Drawer */}
+      <aside
+        className={`cart-drawer ${isCartOpen ? 'open' : ''}`}
+        aria-label="Shopping cart"
+        role="dialog"
+        aria-modal="true"
+      >
         {/* Header */}
-        <div className="cart-header">
-          <h2 className="cart-title">Your Cart</h2>
-          <button className="cart-close-btn" onClick={toggleCart}>✕</button>
+        <div className="cart-head">
+          <div className="cart-head-left">
+            <ShoppingCart size={20} />
+            <h2 className="cart-head-title">Your Cart</h2>
+            {cartItems.length > 0 && (
+              <span className="cart-count-pill">{cartItems.reduce((s, i) => s + i.quantity, 0)}</span>
+            )}
+          </div>
+          <button className="cart-close" onClick={toggleCart} aria-label="Close cart">
+            <X size={20} />
+          </button>
         </div>
-        
-        {/* Body (Scrollable Items) */}
-        <div className="cart-body">
+
+        {/* Body */}
+        <div className="cart-scroll">
           {cartItems.length === 0 ? (
-            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '40px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>🛒</div>
+            <div className="cart-empty">
+              <ShoppingCart size={52} style={{ opacity: 0.2 }} />
               <p>Your cart is empty</p>
+              <small>Add items from the store to get started</small>
             </div>
           ) : (
-            cartItems.map(item => (
-              <div key={item.product.id} className="cart-item-card">
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '600', fontSize: '16px' }}>{item.product.name}</div>
-                  <div style={{ color: 'var(--fk-blue)', fontSize: '14px', marginTop: '6px', fontWeight: '500' }}>₹{item.product.price.toFixed(2)}</div>
+            <div className="cart-items-list">
+              {cartItems.map(item => (
+                <div key={item.product.id} className="cart-item">
+                  <div className="cart-item-info">
+                    <div className="cart-item-name">{item.product.name}</div>
+                    <div className="cart-item-price">₹{(item.product.price * item.quantity).toFixed(2)}</div>
+                    <div className="cart-item-unit-price">₹{Number(item.product.price).toFixed(2)} each</div>
+                  </div>
+                  <div className="qty-controls">
+                    <button className="qty-btn" onClick={() => updateQuantity(item.product.id, -1)} aria-label="Decrease">
+                      <Minus size={14} />
+                    </button>
+                    <span className="qty-val">{item.quantity}</span>
+                    <button className="qty-btn" onClick={() => updateQuantity(item.product.id, 1)} aria-label="Increase">
+                      <Plus size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '24px' }}>
-                  <button onClick={() => updateQuantity(item.product.id, -1)} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '16px' }}>−</button>
-                  <span style={{ width: '20px', textAlign: 'center', fontWeight: '600' }}>{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.product.id, 1)} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '16px' }}>+</button>
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Footer (Fixed at bottom) */}
+        {/* Footer */}
         {cartItems.length > 0 && (
-          <div className="cart-footer">
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', fontWeight: 'bold', fontSize: '20px' }}>
-              <span>Total:</span>
-              <span style={{ color: 'var(--fk-blue)' }}>₹{cartTotal.toFixed(2)}</span>
+          <div className="cart-foot">
+            {/* Total */}
+            <div className="cart-total-row">
+              <span className="cart-total-label">Order Total</span>
+              <span className="cart-total-val">₹{cartTotal.toFixed(2)}</span>
             </div>
-            
-            <button className="btn-exact-location" onClick={handleGetLocation} disabled={isLocating}>
-              {isLocating ? (
-                <svg className="spin-animation" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-              )}
-              {isLocating ? 'Locating...' : 'Use Exact Location'}
+
+            {/* Location button */}
+            <button className="locate-btn" onClick={handleGetLocation} disabled={isLocating}>
+              {isLocating
+                ? <><Loader2 size={16} className="spin" />Locating…</>
+                : <><MapPin size={16} />Use My Location</>
+              }
             </button>
 
-            <div className="location-input-group">
-              <svg className="location-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              <textarea 
-                className="location-input" 
-                value={address} 
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Or enter delivery address manually..."
+            {/* Address textarea */}
+            <div className="addr-wrap">
+              <MapPin size={15} className="addr-icon" />
+              <textarea
+                className="addr-input"
+                value={address}
+                onChange={e => setAddress(e.target.value)}
+                placeholder="Delivery address (required)…"
                 rows={2}
+                aria-label="Delivery address"
               />
             </div>
 
-            {error && <div style={{ color: '#ff4444', marginBottom: '16px', fontSize: '14px', background: 'rgba(255,0,0,0.1)', padding: '10px', borderRadius: '8px' }}>{error}</div>}
-            {successMessage && <div style={{ color: '#00C853', marginBottom: '16px', fontSize: '14px', background: 'rgba(0,200,83,0.1)', padding: '10px', borderRadius: '8px', fontWeight: '500' }}>{successMessage}</div>}
+            {/* Error / Success */}
+            {error && (
+              <div className="cart-banner error">
+                <AlertCircle size={15} style={{ flexShrink: 0 }} /> {error}
+              </div>
+            )}
+            {success && (
+              <div className="cart-banner success">
+                <CheckCircle size={15} style={{ flexShrink: 0 }} /> {success}
+              </div>
+            )}
 
-            <button 
-              className="btn-primary" 
-              style={{ width: '100%', padding: '16px', fontSize: '16px', borderRadius: '12px', fontWeight: '700', letterSpacing: '0.5px' }}
+            {/* Place order */}
+            <button
+              className="place-order-btn"
               onClick={handlePlaceOrder}
-              disabled={isSubmitting || !!successMessage}
+              disabled={isSubmitting || !!success}
+              id="place-order-btn"
             >
-              {isSubmitting ? 'Processing...' : 'Place Order'}
+              {isSubmitting ? <><span className="btn-spinner" /> Processing…</> : '🛍️ Place Order'}
             </button>
           </div>
         )}
-      </div>
+      </aside>
     </>
   );
 }

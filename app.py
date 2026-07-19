@@ -173,18 +173,19 @@ except Exception as migration_err:
 # SECURITY MIDDLEWARE
 # ========================
 
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,retail-mind-vkbp.onrender.com").split(",")
+
 # 1. CORS — Restrict to known origins only (no wildcard *)
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_HOSTS,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # 2. Trusted Host — prevent Host header injection attacks
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,*.railway.app").split(",")
-api.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])  # Set to ALLOWED_HOSTS in production
+api.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)  # Set to ALLOWED_HOSTS in production
 
 # 3. Request Logging & Timing Middleware
 @api.middleware("http")
@@ -204,12 +205,14 @@ async def log_requests(request: Request, call_next):
 # 4. Global Exception Handler — never leak stack traces to clients
 @api.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception on {request.url.path}: {exc}", exc_info=True)
+    # TODO: Integrate sentry_sdk.capture_exception(exc) here
+    logger.error(f"CRITICAL: Unhandled exception on {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error. Our team has been notified.",
             "path": request.url.path,
+            "incident_id": str(time.time())  # Provide a trace ID for support
         }
     )
 

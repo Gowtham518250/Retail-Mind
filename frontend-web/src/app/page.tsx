@@ -1,53 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-
+import { ShoppingCart, Star, Package, Search } from 'lucide-react';
 import { useCart, Product } from '../context/CartContext';
+import { API_BASE } from '../lib/api';
 
-// We'll use the Product interface from CartContext
+const SHOP_ID = 1;
 
 export default function Home() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [products, setProducts]     = useState<Product[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
+  const [search, setSearch]         = useState('');
+  const [addedId, setAddedId]       = useState<number | null>(null);
   const router = useRouter();
   const { addToCart, cartItems } = useCart();
-  
-  // Defaulting to shop_id = 1 as per original implementation fallback
-  const SHOP_ID = 1;
 
   useEffect(() => {
-    // 1. Check Auth State
-    const token = localStorage.getItem('customerToken');
-    if (!token) {
-      // Redirect to Auth Gate
-      router.push('/auth');
-      return;
-    }
+    const token = typeof window !== 'undefined' ? localStorage.getItem('customerToken') : null;
+    if (!token) { router.replace('/auth'); return; }
 
-    // 2. Fetch Products for this specific owner's shop
     const fetchProducts = async () => {
       try {
-        const response = await fetch(`/store/shops/${SHOP_ID}/products`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const res = await fetch(`${API_BASE}/store/shops/${SHOP_ID}/products`, {
+          headers: { 'Authorization': `Bearer ${token}` },
         });
-        
-        if (!response.ok) {
-          // If unauthorized, token might be expired
-          if (response.status === 401 || response.status === 403) {
-            localStorage.removeItem('customerToken');
-            localStorage.removeItem('customerName');
-            router.push('/auth');
-            return;
-          }
-          throw new Error('Failed to load products');
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('customerToken');
+          localStorage.removeItem('customerName');
+          router.replace('/auth');
+          return;
         }
-
-        const data = await response.json();
-        // The API returns an object with shop details and a 'products' array
+        if (!res.ok) throw new Error('Failed to load products');
+        const data = await res.json();
         setProducts(data.products || []);
       } catch (err: any) {
         setError(err.message);
@@ -55,63 +41,127 @@ export default function Home() {
         setLoading(false);
       }
     };
-
     fetchProducts();
   }, [router]);
 
-  // If loading or error, we might still show skeleton or message
+  const filtered = useMemo(() =>
+    products.filter(p =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.category || '').toLowerCase().includes(search.toLowerCase())
+    ),
+    [products, search]
+  );
+
+  const handleAddToCart = (product: Product) => {
+    addToCart(product);
+    setAddedId(product.id);
+    setTimeout(() => setAddedId(null), 1200);
+  };
+
   return (
-    <div className="container">
-      <section className="hero">
-        <h1>Welcome to RetailShop</h1>
-        <p>Discover the best products at unbeatable prices.</p>
+    <div>
+      {/* Hero Banner */}
+      <section className="hero-banner">
+        <div className="hero-content container">
+          <div className="hero-badge">🛍️ New Arrivals Every Day</div>
+          <h1 className="hero-title">Shop the Best,<br />At Your Doorstep</h1>
+          <p className="hero-sub">Discover hand-picked products from your trusted local store.</p>
+        </div>
+        <div className="hero-gradient-ring" />
       </section>
 
-      <section>
-        <div className="product-grid">
+      {/* Search bar */}
+      <div className="container">
+        <div className="search-container">
+          <Search size={18} className="search-icon" />
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search products by name or category..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+
+        {/* Stats strip */}
+        {!loading && !error && (
+          <div className="stats-strip">
+            <span><Package size={14} style={{ display:'inline', verticalAlign:'middle', marginRight:4 }} />{filtered.length} products</span>
+            <span><Star size={14} style={{ display:'inline', verticalAlign:'middle', marginRight:4 }} />Top quality</span>
+            <span>🚚 Fast delivery</span>
+          </div>
+        )}
+
+        {/* Product grid */}
+        <section className="product-grid" aria-label="Product listing">
           {loading ? (
-            // Skeleton loaders
             Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="product-card hover-card">
-                <div className="product-image-skeleton"></div>
-                <div style={{ height: '20px', background: '#eee', borderRadius: '4px', width: '80%' }}></div>
-                <div style={{ height: '24px', background: '#eee', borderRadius: '4px', width: '40%' }}></div>
+              <div key={i} className="product-card skeleton-card">
+                <div className="skeleton-img" />
+                <div className="skeleton-line short" />
+                <div className="skeleton-line" />
+                <div className="skeleton-line shorter" />
               </div>
             ))
           ) : error ? (
-            <div style={{ color: 'red', padding: '20px' }}>{error}</div>
-          ) : products.length === 0 ? (
-            <div style={{ padding: '20px', textAlign: 'center', gridColumn: '1 / -1' }}>
-              <h3>No products found for this shop.</h3>
+            <div className="state-message error-state" style={{ gridColumn: '1 / -1' }}>
+              ⚠️ {error}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="state-message" style={{ gridColumn: '1 / -1' }}>
+              <Package size={48} style={{ opacity: 0.3, marginBottom: 12 }} />
+              <h3>No products found</h3>
+              <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>Try a different search</p>
             </div>
           ) : (
-            products.map((product) => {
+            filtered.map(product => {
               const inCart = cartItems.find(item => item.product.id === product.id);
-              
+              const justAdded = addedId === product.id;
               return (
-                <div key={product.id} className="product-card hover-card">
-                  <div className="product-image-skeleton" style={{ background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                     {product.image_url ? (
-                       <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                     ) : (
-                       <span style={{ fontSize: '48px' }}>📦</span>
-                     )}
+                <div key={product.id} className={`product-card hover-card ${justAdded ? 'just-added' : ''}`}>
+                  {/* Image */}
+                  <div className="product-img-wrap">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name} className="product-img" />
+                    ) : (
+                      <div className="product-img-placeholder">
+                        <Package size={40} style={{ opacity: 0.3 }} />
+                      </div>
+                    )}
+                    {product.stock_available !== undefined && product.stock_available <= 5 && product.stock_available > 0 && (
+                      <div className="stock-badge">Only {product.stock_available} left</div>
+                    )}
+                    {product.stock_available === 0 && (
+                      <div className="stock-badge out">Out of Stock</div>
+                    )}
                   </div>
-                  <h3 className="product-title">{product.name}</h3>
-                  <div className="product-price">₹{Number(product.price).toFixed(2)}</div>
-                  <button 
-                    className="btn-primary" 
-                    style={{ width: '100%', marginTop: 'auto', background: inCart ? 'var(--fk-yellow)' : 'var(--fk-blue)', color: inCart ? '#000' : '#fff' }}
-                    onClick={() => addToCart(product)}
+
+                  {/* Info */}
+                  <div className="product-info">
+                    {product.category && (
+                      <span className="product-category">{product.category}</span>
+                    )}
+                    <h3 className="product-title">{product.name}</h3>
+                    <div className="product-price-row">
+                      <span className="product-price">₹{Number(product.price).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* CTA */}
+                  <button
+                    className={`add-cart-btn ${inCart ? 'in-cart' : ''}`}
+                    onClick={() => handleAddToCart(product)}
+                    disabled={product.stock_available === 0}
                   >
-                    {inCart ? `Add More (${inCart.quantity} in cart)` : 'Add to Cart'}
+                    <ShoppingCart size={16} />
+                    {justAdded ? '✓ Added!' : inCart ? `In Cart (${inCart.quantity})` : 'Add to Cart'}
                   </button>
                 </div>
               );
             })
           )}
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

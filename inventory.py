@@ -212,10 +212,14 @@ def delete_product(
 @router.post("/stock-movement", response_model=dict)
 def create_stock_movement(
     movement: StockMovementCreate,
+    user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
     """Record stock movement (IN/OUT/ADJUSTMENT)"""
-    product = db.query(Product).filter(Product.id == movement.product_id).first()
+    product = db.query(Product).with_for_update().filter(
+        Product.id == movement.product_id,
+        Product.user_id == user_id
+    ).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     

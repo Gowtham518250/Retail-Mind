@@ -183,7 +183,7 @@ class OnlineCustomerAuth(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     user_name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=True)
-    phone = Column(String(20), nullable=True)     # Added for online store orders
+    phone = Column(String(20), nullable=True, unique=True, index=True)     # Added for online store orders
     city = Column(String(100), nullable=True)     # Added for location filtering
     address = Column(Text, nullable=True)         # Added for delivery
     password = Column(String(100), nullable=False)
@@ -716,7 +716,7 @@ class BillingCounter(Base):
     user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
     staff_name = Column(String(100), nullable=False)
     counter_number = Column(Integer, nullable=False)
-    billing_pin = Column(String(4), nullable=False)  # 4-digit PIN
+    billing_pin = Column(String(255), nullable=False)  # Hashed PIN
     is_active = Column(Boolean, default=True)
 
 
@@ -922,6 +922,10 @@ class ShopProfile(Base):
     website = Column(String(200))
     gst_number = Column(String(50))
     logo_url = Column(String(500))
+    
+    # Geographic Location (BUG-B12)
+    latitude = Column(Float, index=True, nullable=True)
+    longitude = Column(Float, index=True, nullable=True)
     
     # Location Information
     address = Column(Text)

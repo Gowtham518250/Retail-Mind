@@ -1,12 +1,12 @@
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
 from models import User, ShopProfile
-from security import hash_password, verify_password, create_access_token, ROLE_OWNER, get_current_user
+from security import hash_password, verify_password, create_access_token, ROLE_OWNER, get_current_user, check_login_lockout, record_login_failure, record_login_success
 from email_notifications import EmailNotificationService
 import random
 import time
@@ -67,7 +67,7 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
 
     # Send Welcome Email with Credentials in the background
     try:
-        subject, body = EmailNotificationService.welcome_credentials_template(user.username, user.password, "Shop Owner")
+        subject, body = EmailNotificationService.welcome_credentials_template(user.username, "[HIDDEN FOR SECURITY]", "Shop Owner")
         background_tasks.add_task(
             EmailNotificationService.send_email,
             recipient_email=user.email,
@@ -121,7 +121,7 @@ def send_otp(request: SendOTPRequest, background_tasks: BackgroundTasks, db: Ses
             subject=subject,
             body=body
         )
-        print(f" OTP generation request for {request.email}: {otp_code}") # Log OTP for debugging/Render logs
+        logger.info(f"OTP generation request for {request.email}") # Log event, NOT the OTP code
     except Exception as e:
         logger.error(f"Failed to queue OTP email: {e}")
         
@@ -147,23 +147,29 @@ def verify_otp(request: VerifyOTPRequest):
     return {"msg": "OTP verified successfully"}
 
 @router.post("/login")
-def login(user: UserLogin, db: Session = Depends(get_db)):
+def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
     try:
+        ip = request.client.host
+        check_login_lockout(ip)
+        
         # Case-insensitive email lookup
         db_user = db.query(User).filter(User.email.ilike(user.email)).first()
         
         if not db_user or not verify_password(user.password, db_user.password):
+            record_login_failure(ip)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+            
         if not db_user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is deactivated. Please contact support.",
             )
+            
+        record_login_success(ip)
 
         # Get user role from database
         user_role = getattr(db_user, 'user_type', ROLE_OWNER) or ROLE_OWNER
@@ -192,7 +198,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         logger.error(f"Login failed unexpectedly for {user.email}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login error: {str(e)}"
+            detail="An internal error occurred. Please try again."
         )
 
 @router.post("/refresh")
@@ -243,11 +249,17 @@ def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
             "user_id": db_user.id
         }
         
-    except Exception as e:
-        logger.error(f"Token refresh failed: {e}")
+    except JWTError as e:
+        logger.error(f"JWTError on refresh: {e}")
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired refresh token"
+        )
+    except Exception as e:
+        logger.error(f"Token refresh failed unexpectedly: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
         )
 
 
@@ -405,12 +417,15 @@ def create_sale_legacy(
                 # Deduct inventory based on product name
                 from models import Product, StockMovement
                 from sqlalchemy import func
-                product_match = db.query(Product).filter(
+                product_match = db.query(Product).with_for_update().filter(
                     Product.user_id == user_id,
                     func.lower(Product.product_name) == actual_product_name.lower()
                 ).first()
                 
                 if product_match:
+                    if (product_match.current_stock or 0) < quantity:
+                        db.rollback()
+                        raise HTTPException(400, f"Insufficient stock for {actual_product_name}")
                     product_match.current_stock -= quantity
                     movement = StockMovement(
                         product_id=product_match.id,
@@ -450,12 +465,15 @@ def create_sale_legacy(
         # Deduct inventory based on product name
         from models import Product, StockMovement
         from sqlalchemy import func
-        product_match = db.query(Product).filter(
+        product_match = db.query(Product).with_for_update().filter(
             Product.user_id == user_id,
             func.lower(Product.product_name) == actual_product_name.lower()
         ).first()
         
         if product_match:
+            if (product_match.current_stock or 0) < quantity:
+                db.rollback()
+                raise HTTPException(400, f"Insufficient stock for {actual_product_name}")
             product_match.current_stock -= quantity
             movement = StockMovement(
                 product_id=product_match.id,

@@ -43,8 +43,8 @@ class CounterAuthRequest(BaseModel):
     billing_pin: str
 
 @router.post("/counter/authenticate")
-def authenticate_counter(req: CounterAuthRequest, db: Session = Depends(get_db)):
-    result = CounterService.authenticate_counter(db, req.billing_pin)
+def authenticate_counter(req: CounterAuthRequest, db: Session = Depends(get_db), current_user: int = Depends(check_current_user)):
+    result = CounterService.authenticate_counter(db, req.billing_pin, current_user)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid PIN")
     return {"status": "success", "staff": result}
@@ -60,18 +60,17 @@ class DeliveryCreateReq(BaseModel):
     special_instructions: Optional[str] = None
 
 @router.post("/delivery/create")
-def create_delivery(req: DeliveryCreateReq, db: Session = Depends(get_db)):
+def create_delivery(req: DeliveryCreateReq, db: Session = Depends(get_db), current_user: int = Depends(check_current_user)):
     d_date = date.fromisoformat(req.delivery_date) if req.delivery_date else None
     return DeliveryService.create_delivery(
-        db, shop_id=1, customer_id=req.customer_id, invoice_id=req.invoice_id,
+        db, shop_id=current_user, customer_id=req.customer_id, invoice_id=req.invoice_id,
         delivery_address=req.delivery_address, delivery_date=d_date,
         special_instructions=req.special_instructions
     )
 
 @router.get("/delivery/today")
-def get_today_deliveries(db: Session = Depends(get_db)):
-    # Assuming Shop ID 1 for now
-    return {"deliveries": DeliveryService.get_today_deliveries(db, shop_id=1)}
+def get_today_deliveries(db: Session = Depends(get_db), current_user: int = Depends(check_current_user)):
+    return {"deliveries": DeliveryService.get_today_deliveries(db, shop_id=current_user)}
 
 @router.post("/delivery/{delivery_id}/update-status")
 def update_delivery(delivery_id: int, status: str = Body(embed=True), notes: Optional[str] = Body(default=None, embed=True), db: Session = Depends(get_db)):
@@ -104,16 +103,16 @@ def get_upcoming_festivals(db: Session = Depends(get_db)):
 # 5. OCCASIONS & BIRTHDAYS (FEATURE 14)
 # ==========================================
 @router.get("/occasions/today")
-def get_today_occasions(db: Session = Depends(get_db)):
-    return {"occasions": OccasionService.get_today_occasions(db, user_id=1)}
+def get_today_occasions(db: Session = Depends(get_db), current_user: int = Depends(check_current_user)):
+    return {"occasions": OccasionService.get_today_occasions(db, user_id=current_user)}
 
 # ==========================================
 # 6. UPI LEDGER (FEATURE 8)
 # ==========================================
 @router.get("/collections/today-summary")
-def get_upi_summary(db: Session = Depends(get_db)):
+def get_upi_summary(db: Session = Depends(get_db), current_user: int = Depends(check_current_user)):
     try:
-        return UpiLedgerService.get_today_upi_summary(db, shop_id=1)
+        return UpiLedgerService.get_today_upi_summary(db, shop_id=current_user)
     except Exception as e:
         return {"today_upi_total": 0.0, "pending_transactions": 0, "confirmed_transactions": 0, "unmatched_count": 0, "error": str(e)}
 
@@ -123,12 +122,12 @@ def get_upi_summary(db: Session = Depends(get_db)):
 from template_service import TemplateService
 
 @router.get("/templates")
-def get_templates(db: Session = Depends(get_db)):
-    return {"templates": TemplateService.get_all_templates(db, user_id=1)}
+def get_templates(db: Session = Depends(get_db), current_user: int = Depends(check_current_user)):
+    return {"templates": TemplateService.get_all_templates(db, user_id=current_user)}
 
 @router.post("/templates/save")
-def save_template(template_name: str = Body(...), template_items: list = Body(...), db: Session = Depends(get_db)):
-    return TemplateService.save_template(db, user_id=1, template_name=template_name, template_items=template_items)
+def save_template(template_name: str = Body(...), template_items: list = Body(...), db: Session = Depends(get_db), current_user: int = Depends(check_current_user)):
+    return TemplateService.save_template(db, user_id=current_user, template_name=template_name, template_items=template_items)
 
 # ==========================================
 # 8. CUSTOMER CREDIT SCORING (FEATURE 13)
@@ -662,9 +661,9 @@ async def sync_invoices_batch(payload: dict = Body(...), user_id: int = Depends(
                 if product_id:
                     from models import Product
                     product = db.query(Product).filter(Product.id == product_id, Product.user_id == user_id).with_for_update().first()
-                    if product and product.stock_quantity is not None:
+                    if product and product.current_stock is not None:
                         qty = float(item.get('qty', item.get('quantity', 1)))
-                        product.stock_quantity = max(0, float(product.stock_quantity) - qty)
+                        product.current_stock = max(0, int(product.current_stock) - int(qty))
                 
             synced_count += 1
             
@@ -808,9 +807,9 @@ async def sync_invoices_chunked(
                 if product_id:
                     from models import Product
                     product = db.query(Product).filter(Product.id == product_id, Product.user_id == user_id).with_for_update().first()
-                    if product and product.stock_quantity is not None:
+                    if product and product.current_stock is not None:
                         qty = float(item.get('qty', item.get('quantity', 1)))
-                        product.stock_quantity = max(0, float(product.stock_quantity) - qty)
+                        product.current_stock = max(0, int(product.current_stock) - int(qty))
             synced_count += 1
 
         db.commit()

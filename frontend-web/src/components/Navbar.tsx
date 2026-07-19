@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
+import { ShoppingBag, User, Package } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function Navbar() {
@@ -8,25 +9,57 @@ export default function Navbar() {
   const router = useRouter();
   const { toggleCart, itemCount } = useCart();
 
-  // Hide Navbar on the Auth page
-  if (pathname === '/auth') {
-    return null;
-  }
+  if (pathname === '/auth') return null;
 
   return (
-    <nav className="navbar glass">
+    <nav className="navbar">
       <div className="container nav-content">
-        <div className="nav-brand" onClick={() => router.push('/')} style={{cursor: 'pointer'}}>Retail<span className="brand-accent">Shop</span></div>
-        <div className="nav-search">
-          <input type="text" className="input-field" placeholder="Search for products, brands and more" />
+        {/* Brand */}
+        <div
+          className="nav-brand"
+          onClick={() => router.push('/')}
+          role="button"
+          aria-label="Go to home"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && router.push('/')}
+        >
+          <span className="nav-brand-icon"><ShoppingBag size={18} /></span>
+          Retail<span className="brand-accent">Shop</span>
         </div>
+
+        {/* Nav actions */}
         <div className="nav-actions">
-          <button className="btn-secondary nav-login" onClick={() => router.push('/profile')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '6px'}}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            Profile
+          <button
+            className="nav-icon-btn"
+            onClick={() => router.push('/orders')}
+            aria-label="My orders"
+            title="My Orders"
+          >
+            <Package size={20} />
+            <span className="nav-icon-label">Orders</span>
           </button>
-          <button className="btn-primary cart-btn" onClick={toggleCart}>
-            <span className="cart-icon">🛒</span> Cart {itemCount > 0 && `(${itemCount})`}
+
+          <button
+            className="nav-icon-btn"
+            onClick={() => router.push('/profile')}
+            aria-label="Profile"
+            title="Profile"
+          >
+            <User size={20} />
+            <span className="nav-icon-label">Profile</span>
+          </button>
+
+          <button
+            className="cart-toggle-btn"
+            onClick={toggleCart}
+            aria-label={`Open cart, ${itemCount} items`}
+            id="navbar-cart-btn"
+          >
+            <ShoppingBag size={19} />
+            <span>Cart</span>
+            {itemCount > 0 && (
+              <span className="cart-badge" aria-live="polite">{itemCount}</span>
+            )}
           </button>
         </div>
       </div>

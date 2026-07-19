@@ -15,16 +15,15 @@ class CounterService:
     def create_billing_counter(db: Session, user_id: int, staff_name: str, 
                               counter_number: int, billing_pin: str) -> dict:
         """Create new billing counter for staff"""
-        # Check if PIN already exists
-        existing_pin = db.query(BillingCounter).filter_by(billing_pin=billing_pin).first()
-        if existing_pin:
-            return {"error": "PIN already in use"}
+        from security import hash_password
+        # Check if PIN already exists for this shop (prevent duplicate plaintext pins if we were migrating)
+        # Actually since it's hashed, we can't easily check for exact duplicate PINs without verifying all of them.
         
         counter = BillingCounter(
             user_id=user_id,
             staff_name=staff_name,
             counter_number=counter_number,
-            billing_pin=billing_pin
+            billing_pin=hash_password(billing_pin)
         )
         db.add(counter)
         db.commit()
@@ -37,10 +36,18 @@ class CounterService:
         }
     
     @staticmethod
-    def authenticate_counter(db: Session, billing_pin: str) -> dict:
+    def authenticate_counter(db: Session, billing_pin: str, user_id: int) -> dict:
         """Authenticate staff with PIN"""
-        counter = db.query(BillingCounter).filter_by(billing_pin=billing_pin).first()
+        from security import verify_password
         
+        counters = db.query(BillingCounter).filter_by(user_id=user_id).all()
+        
+        counter = None
+        for c in counters:
+            if verify_password(billing_pin, c.billing_pin):
+                counter = c
+                break
+                
         if not counter:
             return {"authenticated": False, "error": "Invalid PIN"}
         
