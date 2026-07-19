@@ -1,9 +1,53 @@
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse, urlunparse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
+
+def normalize_database_url(url: str) -> str:
+    """
+    Normalize Render database URL:
+    - Add full .oregon-postgres.render.com suffix to short Render hostnames
+    - Add sslmode=require parameter
+    """
+    if not url:
+        return url
+    
+    parsed = urlparse(url)
+    
+    # Handle Render short hostnames like dpg-xxx-a
+    if parsed.hostname and parsed.hostname.startswith("dpg-") and "." not in parsed.hostname:
+        new_hostname = f"{parsed.hostname}.oregon-postgres.render.com"
+        # Reconstruct netloc with new hostname and existing port/userinfo
+        if parsed.port:
+            netloc = f"{parsed.username}:{parsed.password}@{new_hostname}:{parsed.port}" if parsed.username else f"{new_hostname}:{parsed.port}"
+        else:
+            netloc = f"{parsed.username}:{parsed.password}@{new_hostname}" if parsed.username else new_hostname
+    else:
+        netloc = parsed.netloc
+    
+    # Handle scheme conversion first
+    scheme = parsed.scheme
+    if scheme == "postgres":
+        scheme = "postgresql"
+    
+    # Handle sslmode
+    query = parsed.query
+    if "sslmode" not in query.lower():
+        if query:
+            query += "&sslmode=require"
+        else:
+            query = "sslmode=require"
+    
+    # Rebuild URL
+    new_parsed = parsed._replace(
+        scheme=scheme,
+        netloc=netloc,
+        query=query
+    )
+    
+    return urlunparse(new_parsed)
 
 # Load environment vars from .env files ONLY if not already set in the environment.
 # CRITICAL: override=False ensures that real env vars (set by Render/Railway/etc.)
@@ -26,9 +70,7 @@ else:
 database_url = os.getenv("DATABASE_URL")
 
 if database_url:
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-    
+    database_url = normalize_database_url(database_url)
     print(f" Using provided DATABASE_URL for PostgreSQL connection.")
     engine = create_engine(
         database_url,

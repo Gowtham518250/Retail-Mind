@@ -6,7 +6,54 @@ Run this before 'alembic upgrade head' to start with a clean database.
 
 import os
 import sys
+from urllib.parse import urlparse, urlunparse
 from sqlalchemy import create_engine, text
+
+
+def normalize_database_url(url: str) -> str:
+    """
+    Normalize Render database URL:
+    - Add full .oregon-postgres.render.com suffix to short Render hostnames
+    - Add sslmode=require parameter
+    """
+    if not url:
+        return url
+    
+    parsed = urlparse(url)
+    
+    # Handle Render short hostnames like dpg-xxx-a
+    if parsed.hostname and parsed.hostname.startswith("dpg-") and "." not in parsed.hostname:
+        new_hostname = f"{parsed.hostname}.oregon-postgres.render.com"
+        # Reconstruct netloc with new hostname and existing port/userinfo
+        if parsed.port:
+            netloc = f"{parsed.username}:{parsed.password}@{new_hostname}:{parsed.port}" if parsed.username else f"{new_hostname}:{parsed.port}"
+        else:
+            netloc = f"{parsed.username}:{parsed.password}@{new_hostname}" if parsed.username else new_hostname
+    else:
+        netloc = parsed.netloc
+    
+    # Handle scheme conversion first
+    scheme = parsed.scheme
+    if scheme == "postgres":
+        scheme = "postgresql"
+    
+    # Handle sslmode
+    query = parsed.query
+    if "sslmode" not in query.lower():
+        if query:
+            query += "&sslmode=require"
+        else:
+            query = "sslmode=require"
+    
+    # Rebuild URL
+    new_parsed = parsed._replace(
+        scheme=scheme,
+        netloc=netloc,
+        query=query
+    )
+    
+    return urlunparse(new_parsed)
+
 
 # Get database URL from environment
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -14,8 +61,8 @@ if not DATABASE_URL:
     print("ERROR: DATABASE_URL environment variable not set")
     sys.exit(1)
 
-# Replace postgres:// with postgresql:// for SQLAlchemy
-DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
+# Normalize the database URL for Render
+DATABASE_URL = normalize_database_url(DATABASE_URL)
 
 print(f"Connecting to database...")
 engine = create_engine(DATABASE_URL)
