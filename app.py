@@ -308,11 +308,11 @@ async def health_check():
         "timestamp": time.time(),
     }
 
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 
 def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
-    """Resolve the public URL used when a shop page is opened."""
+    """Resolve the frontend URL that should render the public shop page."""
     configured_frontend_url = (
         os.getenv("NEXTJS_FRONTEND_URL")
         or os.getenv("FRONTEND_URL")
@@ -322,24 +322,21 @@ def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
     if configured_frontend_url:
         return f"{configured_frontend_url.rstrip('/')}/?shop_id={shop_id}"
 
-    # Use forwarded host headers set by Render's proxy
-    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-    forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
-
-    # Only use host header if it looks like a real external host (not localhost/internal)
-    if forwarded_host and "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
-        base_url = f"{forwarded_proto}://{forwarded_host}".rstrip("/")
-        return f"{base_url}/?shop_id={shop_id}"
-
-    # Final fallback: use the known production deployment URL
-    production_url = os.getenv("RENDER_EXTERNAL_URL", "https://retail-mind-vkbp.onrender.com")
-    return f"{production_url.rstrip('/')}/?shop_id={shop_id}"
+    # Prefer a same-origin frontend route so we never redirect users to the backend host.
+    return f"/?shop_id={shop_id}"
 
 
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
 async def serve_shop_frontend(request: Request, shop_id: str):
-    redirect_url = build_shop_frontend_redirect_url(request, shop_id)
-    return RedirectResponse(url=redirect_url)
+    frontend_url = build_shop_frontend_redirect_url(request, shop_id)
+    return JSONResponse(
+        status_code=200,
+        content={
+            "shop_id": shop_id,
+            "message": "Use the frontend application to render this shop page.",
+            "frontend_url": frontend_url,
+        },
+    )
 
 # Mount the new React Web Dashboard
 frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend", "dist")
@@ -359,19 +356,16 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 @api.get("/shop/{shop_id}/ssr", tags=["Online Store Frontend"])
 def serve_shop_frontend_ssr(request: Request, shop_id: int, db: Session = Depends(get_db)):
-    # Server-side render using Jinja2 templates and internal DB queries
-    profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
-    if not profile:
-        return HTMLResponse(content="<h1>Shop not found.</h1>", status_code=404)
-
-    products = db.query(Product).filter(Product.user_id == shop_id, Product.is_active == True).limit(200).all()
-
-    context = {
-        "request": request,
-        "shop": profile,
-        "products": products,
-    }
-    return templates.TemplateResponse("shop_home.html", context)
+    # The backend serves APIs only; the frontend should render shop pages directly.
+    frontend_url = build_shop_frontend_redirect_url(request, str(shop_id))
+    return JSONResponse(
+        status_code=200,
+        content={
+            "shop_id": shop_id,
+            "message": "SSR rendering is disabled for this route; use the frontend application.",
+            "frontend_url": frontend_url,
+        },
+    )
 
 
 @api.get("/login", tags=["Web UI"])
