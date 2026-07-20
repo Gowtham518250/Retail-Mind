@@ -310,12 +310,36 @@ async def health_check():
 
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+
+def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
+    """Resolve the public URL used when a shop page is opened."""
+    configured_frontend_url = (
+        os.getenv("NEXTJS_FRONTEND_URL")
+        or os.getenv("FRONTEND_URL")
+        or os.getenv("PUBLIC_BASE_URL")
+    )
+
+    if configured_frontend_url:
+        return f"{configured_frontend_url.rstrip('/')}/?shop_id={shop_id}"
+
+    # Use forwarded host headers set by Render's proxy
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+
+    # Only use host header if it looks like a real external host (not localhost/internal)
+    if forwarded_host and "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
+        base_url = f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+        return f"{base_url}/?shop_id={shop_id}"
+
+    # Final fallback: use the known production deployment URL
+    production_url = os.getenv("RENDER_EXTERNAL_URL", "https://retail-mind-vkbp.onrender.com")
+    return f"{production_url.rstrip('/')}/?shop_id={shop_id}"
+
+
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
-async def serve_shop_frontend(shop_id: str):
-    # Redirect to the new Next.js storefront
-    # Uses NEXT_PUBLIC_FRONTEND_URL environment variable if deployed, otherwise falls back to localhost
-    frontend_url = os.getenv("NEXTJS_FRONTEND_URL", "http://localhost:3000")
-    return RedirectResponse(url=f"{frontend_url}/?shop_id={shop_id}")
+async def serve_shop_frontend(request: Request, shop_id: str):
+    redirect_url = build_shop_frontend_redirect_url(request, shop_id)
+    return RedirectResponse(url=redirect_url)
 
 # Mount the new React Web Dashboard
 frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend", "dist")
