@@ -43,6 +43,7 @@ export default function CartDrawer() {
   // ── Place Order ────────────────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
     if (!address.trim()) { setError('Delivery address is required'); return; }
+    if (address.trim().length < 5) { setError('Delivery address must be at least 5 characters long.'); return; }
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('customerToken') : null;
     if (!token) { setError('You must be logged in to place an order.'); return; }

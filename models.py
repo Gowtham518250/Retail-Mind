@@ -1082,4 +1082,16 @@ class BatchOperation(Base):
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
         }
 
+class FlashSale(Base):
+    __tablename__ = "flash_sales"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    category = Column(String(50), nullable=False)
+    discount_pct = Column(Float, nullable=False)
+    hours_duration = Column(Integer, nullable=False)
+    start_time = Column(DateTime, default=func.now())
+    end_time = Column(DateTime, nullable=False)
+    is_active = Column(Boolean, default=True)
+
 # ==================== END OF MODELS ====================

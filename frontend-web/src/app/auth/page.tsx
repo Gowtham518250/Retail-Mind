@@ -36,6 +36,10 @@ export default function AuthPage() {
   // ── Login ────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^\d{10}$/.test(phone)) {
+      setError('Please enter a valid 10-digit phone number.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -60,6 +64,18 @@ export default function AuthPage() {
   // ── Register ─────────────────────────────────────────────────────────────
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (name.trim().length < 2) {
+      setError('Name must be at least 2 characters long.');
+      return;
+    }
+    if (!/^\d{10}$/.test(phone)) {
+      setError('Please enter a valid 10-digit phone number.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {

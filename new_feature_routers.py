@@ -158,6 +158,14 @@ def setup_flash_sale(category: str = Body(...), discount_pct: float = Body(...),
     """Feature 17: Set up a timed flash sale across an entire category"""
     return AdvancedRetailServices.setup_flash_sale(db, category, discount_pct, hours, user_id)
 
+@router.get("/flash-sale/active")
+def get_active_flash_sale(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Feature 17b: Get active timed flash sale details"""
+    res = AdvancedRetailServices.get_active_flash_sale(db, user_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail="No active flash sale found")
+    return res
+
 @router.get("/analytics/churn-risk")
 def get_churn_risk(days: int = 30, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Feature 18: Identify customers who haven't returned recently so you can send them WhatsApp coupons"""

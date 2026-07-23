@@ -308,7 +308,7 @@ async def health_check():
         "timestamp": time.time(),
     }
 
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 
 def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
@@ -329,14 +329,7 @@ def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
 async def serve_shop_frontend(request: Request, shop_id: str):
     frontend_url = build_shop_frontend_redirect_url(request, shop_id)
-    return JSONResponse(
-        status_code=200,
-        content={
-            "shop_id": shop_id,
-            "message": "Use the frontend application to render this shop page.",
-            "frontend_url": frontend_url,
-        },
-    )
+    return RedirectResponse(url=frontend_url)
 
 # Mount the new React Web Dashboard
 frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend", "dist")
@@ -355,17 +348,9 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 
 @api.get("/shop/{shop_id}/ssr", tags=["Online Store Frontend"])
-def serve_shop_frontend_ssr(request: Request, shop_id: int, db: Session = Depends(get_db)):
+async def serve_shop_frontend_ssr(request: Request, shop_id: str, db: Session = Depends(get_db)):
     # The backend serves APIs only; the frontend should render shop pages directly.
-    frontend_url = build_shop_frontend_redirect_url(request, str(shop_id))
-    return JSONResponse(
-        status_code=200,
-        content={
-            "shop_id": shop_id,
-            "message": "SSR rendering is disabled for this route; use the frontend application.",
-            "frontend_url": frontend_url,
-        },
-    )
+    return RedirectResponse(url=build_shop_frontend_redirect_url(request, shop_id))
 
 
 @api.get("/login", tags=["Web UI"])
