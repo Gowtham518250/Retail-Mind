@@ -323,7 +323,7 @@ def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
         return f"{configured_frontend_url.rstrip('/')}/?shop_id={shop_id}"
 
     # Prefer a same-origin frontend route so we never redirect users to the backend host.
-    return f"/?shop_id={shop_id}"
+    return f"/dashboard?shop_id={shop_id}"
 
 
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
