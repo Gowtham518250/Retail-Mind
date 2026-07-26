@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import Navbar from '../components/Navbar';
 import { CartProvider } from '../context/CartContext';
@@ -31,7 +32,9 @@ export default function RootLayout({
         <CartProvider>
           <Navbar />
           <main className="page-transition">
-            {children}
+            <Suspense fallback={<div className="page-loading">Loading...</div>}>
+              {children}
+            </Suspense>
           </main>
           <CartDrawer />
         </CartProvider>
