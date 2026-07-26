@@ -1,3 +1,4 @@
+import path from 'path';
 import withPWAInit from 'next-pwa';
 
 const withPWA = withPWAInit({
@@ -15,7 +16,9 @@ const nextConfig = {
       { protocol: 'http',  hostname: '**' },
     ],
   },
-  turbopack: {},
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   output: 'export',
   // NOTE: The API proxy is removed.
   // All API calls now use absolute URLs via src/lib/api.ts
