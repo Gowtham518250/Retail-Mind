@@ -241,6 +241,15 @@ async def seo_headers_middleware(request: Request, call_next):
         pass
     return response
 
+# Redirect dashboard links with shop_id to the public storefront.
+@api.middleware("http")
+async def dashboard_storefront_redirect(request: Request, call_next):
+    if request.url.path in {"/dashboard", "/dashboard/"}:
+        shop_id = request.query_params.get("shop_id")
+        if shop_id:
+            return RedirectResponse(url=f"/store?shop_id={shop_id}")
+    return await call_next(request)
+
 # ========================
 # REGISTER ALL ROUTERS
 # ========================
