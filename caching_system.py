@@ -21,15 +21,29 @@ class CacheManager:
     
     def __init__(self):
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        self.redis_client = redis.from_url(redis_url, decode_responses=False)
+        self.redis_client = None
         self.prefix = "app_cache:"
-    
+        self.enabled = False
+
+        try:
+            self.redis_client = redis.from_url(redis_url, decode_responses=False)
+            self.enabled = True
+        except Exception as e:
+            logger.warning(
+                f"Redis initialization failed for REDIS_URL={redis_url}: {e}. "
+                "Cache functionality is disabled until a valid Redis URL is provided."
+            )
+            self.redis_client = None
+            self.enabled = False
+
     def _get_key(self, key: str) -> str:
         """Generate cache key with prefix"""
         return f"{self.prefix}{key}"
     
     def get(self, key: str) -> Optional[Any]:
         """Get value from cache"""
+        if not self.enabled or self.redis_client is None:
+            return None
         try:
             value = self.redis_client.get(self._get_key(key))
             if value:
@@ -52,6 +66,9 @@ class CacheManager:
             value: Value to cache
             ttl: Time to live in seconds
         """
+        if not self.enabled or self.redis_client is None:
+            return False
+
         try:
             # Try JSON first, fall back to pickle
             try:
@@ -71,6 +88,9 @@ class CacheManager:
     
     def delete(self, key: str) -> bool:
         """Delete cache entry"""
+        if not self.enabled or self.redis_client is None:
+            return False
+
         try:
             self.redis_client.delete(self._get_key(key))
             return True
@@ -80,6 +100,9 @@ class CacheManager:
     
     def delete_pattern(self, pattern: str) -> int:
         """Delete all keys matching pattern"""
+        if not self.enabled or self.redis_client is None:
+            return 0
+
         try:
             keys = self.redis_client.keys(f"{self.prefix}{pattern}*")
             if keys:
@@ -91,6 +114,9 @@ class CacheManager:
     
     def clear_all(self) -> bool:
         """Clear all cache entries"""
+        if not self.enabled or self.redis_client is None:
+            return False
+
         try:
             keys = self.redis_client.keys(f"{self.prefix}*")
             if keys:
@@ -102,6 +128,9 @@ class CacheManager:
     
     def get_stats(self) -> dict:
         """Get cache statistics"""
+        if not self.enabled or self.redis_client is None:
+            return {}
+
         try:
             info = self.redis_client.info()
             keys = self.redis_client.keys(f"{self.prefix}*")
