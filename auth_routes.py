@@ -22,6 +22,7 @@ class UserCreate(BaseModel):
     user_type: Optional[str] = "OWNER"
     role: Optional[str] = "OWNER"
     is_active: Optional[bool] = True
+    shop_name: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
@@ -40,30 +41,45 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         raise HTTPException(status_code=400, detail="Email is required")
 
     from sqlalchemy import func
+    from sqlalchemy.exc import SQLAlchemyError
+
     # Check email uniqueness (case-insensitive) — return 409 Conflict
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
         raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
-    
+
+    # If a shop_name is provided, ensure it's available (case-insensitive)
+    if user.shop_name and user.shop_name.strip():
+        existing_shop = db.query(ShopProfile).filter(func.lower(ShopProfile.shop_name) == user.shop_name.strip().lower()).first()
+        if existing_shop:
+            raise HTTPException(status_code=409, detail="Shop name already taken. Please choose a different shop name.")
+
     # Hash password securely
     hashed_password = hash_password(user.password)
-    
-    # Create new user
-    new_user = User(
-        user_name=user.username,
-        email=user.email.strip().lower(),  # Store email in lowercase for consistency
-        password=hashed_password,
-        user_type=user.user_type.upper() if user.user_type else "OWNER",
-        is_active=user.is_active if user.is_active is not None else True
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
 
-    # Auto-create Shop Profile only if they are an OWNER
-    if new_user.user_type == "OWNER":
-        shop_profile = ShopProfile(shop_id=new_user.id, shop_name=f"{user.username}'s Shop")
-        db.add(shop_profile)
-        db.commit()
+    # Create new user AND shop profile atomically to avoid partial registration
+    try:
+        with db.begin():
+            new_user = User(
+                user_name=user.username,
+                email=user.email.strip().lower(),  # Store email in lowercase for consistency
+                password=hashed_password,
+                user_type=user.user_type.upper() if user.user_type else "OWNER",
+                is_active=user.is_active if user.is_active is not None else True
+            )
+            db.add(new_user)
+            db.flush()  # ensure new_user.id is populated
+
+            # Auto-create Shop Profile only if they are an OWNER
+            if (new_user.user_type or user.user_type or "OWNER").upper() == "OWNER":
+                shop_name_value = user.shop_name.strip() if user.shop_name and user.shop_name.strip() else f"{user.username}'s Shop"
+                shop_profile = ShopProfile(shop_id=new_user.id, shop_name=shop_name_value)
+                db.add(shop_profile)
+
+        # Refresh to load generated fields
+        db.refresh(new_user)
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
     # Send Welcome Email with Credentials in the background
     try:
