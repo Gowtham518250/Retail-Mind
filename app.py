@@ -217,6 +217,30 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
+
+# Simple SEO header middleware for storefront pages
+@api.middleware("http")
+async def seo_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        path = request.url.path or ""
+        host = request.headers.get("host", "")
+        shop_id = request.query_params.get("shop_id")
+        if path.startswith("/store") or shop_id:
+            # canonical link header
+            if shop_id:
+                canonical = f"https://{host}/store?shop_id={shop_id}"
+            else:
+                canonical = f"https://{host}{path}"
+            # only set if not present
+            if "Link" not in response.headers:
+                response.headers["Link"] = f'<{canonical}>; rel="canonical"'
+            response.headers.setdefault("X-RetailShop-Storefront", "1")
+            response.headers.setdefault("X-Robots-Tag", "index, follow")
+    except Exception:
+        pass
+    return response
+
 # ========================
 # REGISTER ALL ROUTERS
 # ========================
@@ -261,7 +285,27 @@ api.include_router(observability_router, tags=["Observability"])
 # ROOT & HEALTH ENDPOINTS
 # ========================
 @api.get("/", tags=["System"])
-async def root():
+async def root(request: Request):
+    shop_id = request.query_params.get("shop_id")
+    if shop_id:
+        web_out_index = os.path.join(os.path.dirname(__file__), "frontend-web", "out", "index.html")
+        vite_dist_index = os.path.join(os.path.dirname(__file__), "frontend", "dist", "index.html")
+
+        target_index = None
+        if os.path.exists(web_out_index):
+            target_index = web_out_index
+        elif os.path.exists(vite_dist_index):
+            target_index = vite_dist_index
+
+        if target_index and os.path.exists(target_index):
+            with open(target_index, "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
+
+        return HTMLResponse(
+            content="<h1>Storefront frontend not found. Please build the web frontend.</h1>",
+            status_code=404
+        )
+
     return {
         "status": "operational",
         "app": "AI Shop Pro Enterprise Backend",
@@ -324,14 +368,36 @@ def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
     if configured_frontend_url:
         return f"{configured_frontend_url.rstrip('/')}/?shop_id={shop_id}"
 
-    # Prefer a same-origin frontend route so we never redirect users to the backend host.
-    return f"/dashboard?shop_id={shop_id}"
+    # Prefer a same-origin storefront route for public shop links.
+    return f"/store?shop_id={shop_id}"
 
 
 @api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
 async def serve_shop_frontend(request: Request, shop_id: str):
-    frontend_url = build_shop_frontend_redirect_url(request, shop_id)
-    return RedirectResponse(url=frontend_url)
+    """Return shop data as JSON - frontend handles rendering."""
+    from db import sessionLocal
+    from models import ShopProfile
+    from sqlalchemy import text
+    
+    try:
+        db = sessionLocal()
+        shop = db.query(ShopProfile).filter(ShopProfile.id == int(shop_id)).first()
+        db.close()
+        
+        if shop:
+            return {
+                "shop_id": shop.id,
+                "shop_name": shop.shop_name,
+                "address": shop.address,
+                "phone": shop.phone,
+                "upi_id": shop.upi_id,
+                "is_online": shop.is_online,
+                "message": "Shop data retrieved successfully"
+            }
+        else:
+            return {"error": "Shop not found", "shop_id": shop_id}, 404
+    except Exception as e:
+        return {"error": "Failed to retrieve shop data", "details": str(e)}, 500
 
 # Mount static asset folders for both Next.js (_next) and Vite (assets)
 frontend_web_out = os.path.join(os.path.dirname(__file__), "frontend-web", "out")
@@ -349,6 +415,10 @@ if os.path.exists(vite_assets_path):
 @api.get("/dashboard", tags=["Web UI"])
 async def serve_dashboard(request: Request):
     """Serve the React Web Dashboard index.html directly."""
+    shop_id = request.query_params.get("shop_id")
+    if shop_id:
+        return RedirectResponse(url=f"/store?shop_id={shop_id}")
+
     web_out_index = os.path.join(frontend_web_out, "index.html")
     vite_dist_index = os.path.join(frontend_vite_dist, "index.html")
 
@@ -368,6 +438,90 @@ async def serve_dashboard(request: Request):
     )
 
 
+store_web_out = os.path.join(os.path.dirname(__file__), "frontend-web", "out")
+store_vite_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+
+
+# Serve storefront index at /store and inject per-shop metadata for SEO when `?shop_id=` is present.
+@api.get("/store", tags=["Storefront"])
+async def serve_storefront(request: Request):
+    from db import sessionLocal
+    from models import ShopProfile
+    import html as _html
+
+    shop_id = request.query_params.get("shop_id")
+    # Choose built index (Vite dist preferred)
+    index_path = None
+    if os.path.exists(store_vite_dist):
+        index_path = os.path.join(store_vite_dist, "index.html")
+    elif os.path.exists(store_web_out):
+        index_path = os.path.join(store_web_out, "index.html")
+
+    if not index_path or not os.path.exists(index_path):
+        return HTMLResponse(content="<h1>Storefront not found. Please build the web frontend.</h1>", status_code=404)
+
+    try:
+        with open(index_path, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # initialize cache container if missing
+        try:
+            _storefront_cache
+        except NameError:
+            _storefront_cache = {}
+        CACHE_TTL = int(os.getenv('STOREFRONT_CACHE_TTL', '60'))
+
+        # Serve cached HTML when available and fresh
+        if shop_id:
+            cache_key = f"store:{shop_id}"
+            cached = _storefront_cache.get(cache_key)
+            now = time.time()
+            if cached and cached[1] > now:
+                resp = HTMLResponse(content=cached[0])
+                resp.headers['X-Cache'] = 'HIT'
+                return resp
+
+        if shop_id:
+            try:
+                db = sessionLocal()
+                from sqlalchemy import text
+                row = db.execute(text("SELECT id, shop_name, shop_description, logo_url FROM shop_profiles WHERE id = :id LIMIT 1"), {"id": int(shop_id)}).fetchone()
+                db.close()
+            except Exception:
+                row = None
+
+            if row:
+                shop_name = row[1] or ''
+                shop_description = row[2] or ''
+                logo = row[3] or None
+                title = _html.escape(f"{shop_name} — RetailShop")
+                description = _html.escape(shop_description or shop_name)
+                canonical = f"https://{request.headers.get('host', '')}/store?shop_id={shop_id}"
+                meta = (
+                    f"<title>{title}</title>\n"
+                    f"<meta name=\"description\" content=\"{description}\"/>\n"
+                    f"<meta property=\"og:title\" content=\"{title}\"/>\n"
+                    f"<meta property=\"og:description\" content=\"{description}\"/>\n"
+                    f"<meta property=\"og:url\" content=\"{canonical}\"/>\n"
+                )
+                if logo:
+                    meta += f"<meta property=\"og:image\" content=\"{_html.escape(logo)}\"/>\n"
+
+                # inject meta into <head>
+                import re
+                html = re.sub(r"(<head[^>]*>)([\s\S]*?)", lambda m: m.group(1) + "\n" + meta + m.group(2), html, count=1)
+
+                # cache the rendered HTML
+                _storefront_cache[cache_key] = (html, time.time() + CACHE_TTL)
+
+        resp = HTMLResponse(content=html)
+        if shop_id:
+            resp.headers['X-Cache'] = 'MISS'
+        return resp
+    except Exception as e:
+        return HTMLResponse(content=f"<h1>Failed to render storefront: {e}</h1>", status_code=500)
+
+# Keep existing /dashboard static mount for owner admin UI if present
 if os.path.exists(frontend_web_out):
     api.mount("/dashboard", StaticFiles(directory=frontend_web_out, html=True), name="dashboard")
 elif os.path.exists(frontend_vite_dist):
@@ -380,8 +534,26 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 @api.get("/shop/{shop_id}/ssr", tags=["Online Store Frontend"])
 async def serve_shop_frontend_ssr(request: Request, shop_id: str, db: Session = Depends(get_db)):
-    # The backend serves APIs only; the frontend should render shop pages directly.
-    return RedirectResponse(url=build_shop_frontend_redirect_url(request, shop_id))
+    """Return shop data as JSON - frontend handles rendering (SSR endpoint)."""
+    from models import ShopProfile
+    
+    try:
+        shop = db.query(ShopProfile).filter(ShopProfile.id == int(shop_id)).first()
+        
+        if shop:
+            return {
+                "shop_id": shop.id,
+                "shop_name": shop.shop_name,
+                "address": shop.address,
+                "phone": shop.phone,
+                "upi_id": shop.upi_id,
+                "is_online": shop.is_online,
+                "message": "Shop data retrieved successfully"
+            }
+        else:
+            return {"error": "Shop not found", "shop_id": shop_id}, 404
+    except Exception as e:
+        return {"error": "Failed to retrieve shop data", "details": str(e)}, 500
 
 
 @api.get("/login", tags=["Web UI"])

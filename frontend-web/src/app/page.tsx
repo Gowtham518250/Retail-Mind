@@ -1,12 +1,13 @@
-'use client';
+"use client";
 
 import { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ShoppingCart, Star, Package, Search } from 'lucide-react';
 import { useCart, Product } from '../context/CartContext';
 import { API_BASE } from '../lib/api';
 
-const SHOP_ID = 1;
+// Read `shop_id` from URL query params so the storefront is public-linkable
+// (fallback to 1 if not present)
 
 export default function Home() {
   const [products, setProducts]     = useState<Product[]>([]);
@@ -15,17 +16,20 @@ export default function Home() {
   const [search, setSearch]         = useState('');
   const [addedId, setAddedId]       = useState<number | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const SHOP_ID = Number(searchParams?.get('shop_id') || 1);
   const { addToCart, cartItems } = useCart();
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('customerToken') : null;
-    if (!token) { router.replace('/auth'); return; }
+    // If customer token missing, allow browsing as guest but redirect to auth on checkout
+    // (Keep existing behavior for protected flows)
 
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`${API_BASE}/store/shops/${SHOP_ID}/products`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const headers: Record<string,string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(`${API_BASE}/store/shops/${SHOP_ID}/products`, { headers });
         if (res.status === 401 || res.status === 403) {
           localStorage.removeItem('customerToken');
           localStorage.removeItem('customerName');
@@ -35,6 +39,20 @@ export default function Home() {
         if (!res.ok) throw new Error('Failed to load products');
         const data = await res.json();
         setProducts(data.products || []);
+        // Update document title/meta for basic SEO (client-side enhancement)
+        try {
+          if (typeof window !== 'undefined' && data.shop_name) {
+            document.title = `${data.shop_name} — RetailShop`;
+            const desc = document.querySelector('meta[name="description"]');
+            if (desc) desc.setAttribute('content', data.shop_description || 'Shop from your local store');
+            else {
+              const m = document.createElement('meta');
+              m.name = 'description';
+              m.content = data.shop_description || 'Shop from your local store';
+              document.head.appendChild(m);
+            }
+          }
+        } catch (e) {}
       } catch (err: any) {
         setError(err.message);
       } finally {

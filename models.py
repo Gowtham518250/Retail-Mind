@@ -290,6 +290,7 @@ class Attendance(Base):
     
     id = Column(Integer, primary_key=True)
     employee_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    worker_id = Column(Integer, ForeignKey("workers.id", ondelete="SET NULL"), nullable=True)  # Track which worker (if any)
     attendance_date = Column(Date, nullable=False)
     check_in_time = Column(DateTime)
     check_out_time = Column(DateTime)
@@ -297,7 +298,7 @@ class Attendance(Base):
     working_hours = Column(Float, default=0.0)  # Calculated automatically
     notes = Column(Text)
     
-    __table_args__ = (UniqueConstraint('employee_id', 'attendance_date', name='uix_employee_date'),)
+    __table_args__ = (UniqueConstraint('employee_id', 'attendance_date', 'worker_id', name='uix_employee_date_worker'),)
     
     # Relationship
     employee = relationship("User", back_populates="attendance")

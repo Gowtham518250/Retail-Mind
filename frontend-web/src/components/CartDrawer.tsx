@@ -51,8 +51,9 @@ export default function CartDrawer() {
     setError('');
     setIsSubmitting(true);
 
+    const shopId = typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get('shop_id') || 1) : 1;
     const payload = {
-      shop_id: 1,
+      shop_id: shopId,
       items: cartItems.map(item => ({
         product_id: item.product.id,
         quantity: item.quantity,

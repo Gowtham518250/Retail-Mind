@@ -140,6 +140,7 @@ def employee_check_in(
     """Employee check-in - accepts both user_id and worker_id"""
     # First try to find as Worker
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
+    is_worker = employee is not None
 
     # If not found as Worker, try to find as User (for shopkeepers/owners checking in)
     if not employee:
@@ -149,16 +150,23 @@ def employee_check_in(
         raise HTTPException(status_code=404, detail="Employee not found")
 
     today = date.today()
+    
+    # For workers, use shopkeeper_id as employee_id but store worker_id separately
+    actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
+    worker_id_to_store = employee.id if is_worker else None
+
     attendance = db.query(Attendance).filter(
         and_(
-            Attendance.employee_id == employee_id,
-            Attendance.attendance_date == today
+            Attendance.employee_id == actual_employee_id,
+            Attendance.attendance_date == today,
+            Attendance.worker_id == worker_id_to_store if worker_id_to_store is not None else True
         )
     ).first()
 
     if not attendance:
         attendance = Attendance(
-            employee_id=employee_id,
+            employee_id=actual_employee_id,
+            worker_id=worker_id_to_store,
             attendance_date=today,
             check_in_time=datetime.now(),
             status="PRESENT"
@@ -176,7 +184,8 @@ def employee_check_in(
 
     return {
         "message": "Check-in successful",
-        "employee_id": employee_id,
+        "employee_id": actual_employee_id,
+        "worker_id": worker_id_to_store,
         "check_in_time": attendance.check_in_time,
         "status": attendance.status
     }
@@ -189,6 +198,7 @@ def employee_check_out(
     """Employee check-out - accepts both user_id and worker_id"""
     # First try to find as Worker
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
+    is_worker = employee is not None
 
     # If not found as Worker, try to find as User (for shopkeepers/owners checking out)
     if not employee:
@@ -198,10 +208,16 @@ def employee_check_out(
         raise HTTPException(status_code=404, detail="Employee not found")
 
     today = date.today()
+    
+    # For workers, use shopkeeper_id as employee_id but store worker_id separately
+    actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
+    worker_id_to_store = employee.id if is_worker else None
+
     attendance = db.query(Attendance).filter(
         and_(
-            Attendance.employee_id == employee_id,
-            Attendance.attendance_date == today
+            Attendance.employee_id == actual_employee_id,
+            Attendance.attendance_date == today,
+            Attendance.worker_id == worker_id_to_store if worker_id_to_store is not None else True
         )
     ).first()
 
@@ -223,7 +239,8 @@ def employee_check_out(
 
     return {
         "message": "Check-out successful",
-        "employee_id": employee_id,
+        "employee_id": actual_employee_id,
+        "worker_id": worker_id_to_store,
         "check_out_time": attendance.check_out_time,
         "working_hours": attendance.working_hours
     }
