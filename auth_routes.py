@@ -58,7 +58,9 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
 
     # Create new user AND shop profile atomically to avoid partial registration
     try:
-        with db.begin():
+        # Use a nested transaction (SAVEPOINT) so this handler can be called
+        # even when the session already has an active transaction.
+        with db.begin_nested():
             new_user = User(
                 user_name=user.username,
                 email=user.email.strip().lower(),  # Store email in lowercase for consistency
