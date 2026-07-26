@@ -331,17 +331,46 @@ async def serve_shop_frontend(request: Request, shop_id: str):
     frontend_url = build_shop_frontend_redirect_url(request, shop_id)
     return RedirectResponse(url=frontend_url)
 
-# Mount the new React Web Dashboard
-frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend-web", "out")
-if os.path.exists(frontend_dist_path):
-    api.mount("/dashboard", StaticFiles(directory=frontend_dist_path, html=True), name="dashboard")
+# Mount static asset folders for both Next.js (_next) and Vite (assets)
+frontend_web_out = os.path.join(os.path.dirname(__file__), "frontend-web", "out")
+frontend_vite_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
-# Mount the Next.js assets directory directly for CSS/JS
-next_assets_path = os.path.join(os.path.dirname(__file__), "frontend-web", "out", "_next")
+next_assets_path = os.path.join(frontend_web_out, "_next")
 if os.path.exists(next_assets_path):
     api.mount("/_next", StaticFiles(directory=next_assets_path), name="next_assets")
 
-# (Previous dashboard mount replaced by root assets mount above)
+vite_assets_path = os.path.join(frontend_vite_dist, "assets")
+if os.path.exists(vite_assets_path):
+    api.mount("/assets", StaticFiles(directory=vite_assets_path), name="vite_assets")
+
+
+@api.get("/dashboard", tags=["Web UI"])
+async def serve_dashboard(request: Request):
+    """Serve the React Web Dashboard index.html directly."""
+    web_out_index = os.path.join(frontend_web_out, "index.html")
+    vite_dist_index = os.path.join(frontend_vite_dist, "index.html")
+
+    target_index = None
+    if os.path.exists(web_out_index):
+        target_index = web_out_index
+    elif os.path.exists(vite_dist_index):
+        target_index = vite_dist_index
+
+    if target_index and os.path.exists(target_index):
+        with open(target_index, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+
+    return HTMLResponse(
+        content="<h1>Dashboard frontend not found. Please build the web frontend.</h1>",
+        status_code=404
+    )
+
+
+if os.path.exists(frontend_web_out):
+    api.mount("/dashboard", StaticFiles(directory=frontend_web_out, html=True), name="dashboard")
+elif os.path.exists(frontend_vite_dist):
+    api.mount("/dashboard", StaticFiles(directory=frontend_vite_dist, html=True), name="dashboard")
+
 
 
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
