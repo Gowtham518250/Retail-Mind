@@ -391,17 +391,25 @@ def get_whatsapp_batch_reminders(
                 bal = c["total_balance"]
                 due = c["earliest_due_date"] or "As soon as possible"
 
+                shop_upi = getattr(shop_user, 'upi_id', None) or "store@upi"
+                clean_shop_name = shop_name.replace(" ", "%20")
+                upi_link = f"upi://pay?pa={shop_upi}&pn={clean_shop_name}&am={bal:.2f}&cu=INR&tn=Udhar%20Payment"
+
                 msg = (
                     f"Dear {name},\n\n"
-                    f"This is a friendly reminder from *{shop_name}* regarding your pending balance of *₹{bal:.2f}*.\n"
-                    f"Due Date: {due}\n\n"
-                    f"Kindly settle your payment at your earliest convenience. Thank you!"
+                    f"This is a friendly payment reminder from *{shop_name}*.\n\n"
+                    f"💳 *Pending Amount*: ₹{bal:.2f}\n"
+                    f"📅 *Due Date*: {due}\n\n"
+                    f"⚡ *Pay Directly via UPI (GPay / PhonePe / Paytm)*:\n"
+                    f"{upi_link}\n\n"
+                    f"Thank you!"
                 )
 
                 reminders.append({
                     "customer_name": name,
                     "customer_phone": phone,
                     "balance": bal,
+                    "upi_link": upi_link,
                     "is_overdue": c["is_overdue"],
                     "days_overdue": c["days_overdue"],
                     "message": msg
