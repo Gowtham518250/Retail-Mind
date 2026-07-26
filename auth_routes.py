@@ -77,9 +77,15 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
 
         # Refresh to load generated fields
         db.refresh(new_user)
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+    except Exception as e:
+        # Log full stack trace for debugging and rollback
+        logger.exception("Registration failed: unexpected error")
+        try:
+            db.rollback()
+        except Exception:
+            logger.warning("Rollback failed during registration error handling")
+        # Return a generic message to the client while preserving details in server logs
+        raise HTTPException(status_code=500, detail="Registration failed: internal server error (see server logs)")
 
     # Send Welcome Email with Credentials in the background
     try:
