@@ -459,15 +459,15 @@ async def serve_storefront(request: Request):
     import html as _html
 
     shop_id = request.query_params.get("shop_id")
-    # Choose built index (Vite dist preferred)
+    # Choose built index: storefront build in frontend-web/out should be preferred.
     index_path = None
-    if os.path.exists(store_vite_dist):
-        index_path = os.path.join(store_vite_dist, "index.html")
-    elif os.path.exists(store_web_out):
+    if os.path.exists(store_web_out):
         index_path = os.path.join(store_web_out, "index.html")
+    elif os.path.exists(store_vite_dist):
+        index_path = os.path.join(store_vite_dist, "index.html")
 
     if not index_path or not os.path.exists(index_path):
-        return HTMLResponse(content="<h1>Storefront not found. Please build the web frontend.</h1>", status_code=404)
+        return HTMLResponse(content="<h1>Storefront not found. Please build the customer storefront web frontend.</h1>", status_code=404)
 
     try:
         with open(index_path, "r", encoding="utf-8") as f:
