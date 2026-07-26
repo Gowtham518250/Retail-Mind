@@ -332,14 +332,14 @@ async def serve_shop_frontend(request: Request, shop_id: str):
     return RedirectResponse(url=frontend_url)
 
 # Mount the new React Web Dashboard
-frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+frontend_dist_path = os.path.join(os.path.dirname(__file__), "frontend-web", "out")
 if os.path.exists(frontend_dist_path):
     api.mount("/dashboard", StaticFiles(directory=frontend_dist_path, html=True), name="dashboard")
 
-# Mount the React assets directory directly for CSS/JS
-frontend_assets_path = os.path.join(os.path.dirname(__file__), "frontend", "dist", "assets")
-if os.path.exists(frontend_assets_path):
-    api.mount("/assets", StaticFiles(directory=frontend_assets_path), name="frontend_assets")
+# Mount the Next.js assets directory directly for CSS/JS
+next_assets_path = os.path.join(os.path.dirname(__file__), "frontend-web", "out", "_next")
+if os.path.exists(next_assets_path):
+    api.mount("/_next", StaticFiles(directory=next_assets_path), name="next_assets")
 
 # (Previous dashboard mount replaced by root assets mount above)
 
