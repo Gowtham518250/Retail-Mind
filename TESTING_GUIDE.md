@@ -238,7 +238,7 @@ Success Rate: 91.7%
 
 Your `.env.production` already has:
 ```
-DATABASE_URL=postgresql://retail_mind_xxog_user:...@dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com/retail_mind_xxog
+DATABASE_URL=postgresql://<user>:<password>@<host>.oregon-postgres.render.com/<database>
 ```
 
 **To test against production:**

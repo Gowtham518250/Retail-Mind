@@ -208,10 +208,20 @@ except Exception as migration_err:
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,retail-mind-vkbp.onrender.com").split(",")
 
+# CORS needs full origins (scheme + host) — browsers send e.g. "https://example.com"
+# as the Origin header, which never matches a bare hostname like "example.com".
+# Build proper origins from ALLOWED_HOSTS, plus explicit extra origins (e.g. the
+# deployed static frontend, which may live on a different domain than the API).
+_extra_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+ALLOWED_ORIGINS = [
+    origin for host in ALLOWED_HOSTS
+    for origin in ([f"https://{host}", f"http://{host}"] if host not in ("localhost", "127.0.0.1") else [f"http://{host}:3000", f"http://{host}:8000"])
+] + [o.strip() for o in _extra_origins if o.strip()]
+
 # 1. CORS — Restrict to known origins only (no wildcard *)
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_HOSTS,
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
@@ -219,6 +229,21 @@ api.add_middleware(
 
 # 2. Trusted Host — prevent Host header injection attacks
 api.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)  # Set to ALLOWED_HOSTS in production
+
+# 2b. Security response headers — these were previously only exposed via an
+# informational GET endpoint (/security-headers) and never actually attached
+# to real responses. Attach them for real here.
+@api.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 # 3. Request Logging & Timing Middleware
 @api.middleware("http")

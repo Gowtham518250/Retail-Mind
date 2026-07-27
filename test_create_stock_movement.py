@@ -1,9 +1,10 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import StockMovement, Product
 from datetime import datetime
 
-DB_URL = "postgresql://retail_mind_xxog_user:hjvmy6P7OxYlA7rec54JLx6OL0LlLocc@dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com/retail_mind_xxog"
+DB_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DB_URL)
 Session = sessionmaker(bind=engine)
 db = Session()

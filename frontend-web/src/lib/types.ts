@@ -18,3 +18,24 @@ export interface ShopResponse {
   shop_address?: string;
   products: ShopProduct[];
 }
+
+export interface GuestOrderPayload {
+  shop_id: number;
+  customer_name: string;
+  phone: string;
+  delivery_address: string;
+  items: { product_id: number; quantity: number }[];
+}
+
+export interface PlacedOrder {
+  order_id: number;
+  shop_name: string;
+  total_amount: number;
+  status: string;
+  payment_method: 'COD' | 'UPI' | 'CARD';
+  customer_name: string;
+  phone: string;
+  delivery_address: string;
+  items: { name: string; quantity: number; price: number }[];
+  placed_at: string;
+}

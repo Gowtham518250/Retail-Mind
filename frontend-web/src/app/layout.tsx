@@ -14,7 +14,6 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "RetailShop",
   },
-  themeColor: "#050816",
 };
 
 export const viewport = {
