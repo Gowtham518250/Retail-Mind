@@ -47,11 +47,8 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
         raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
 
-    # If a shop_name is provided, ensure it's available (case-insensitive)
-    if user.shop_name and user.shop_name.strip():
-        existing_shop = db.query(ShopProfile).filter(func.lower(ShopProfile.shop_name) == user.shop_name.strip().lower()).first()
-        if existing_shop:
-            raise HTTPException(status_code=409, detail="Shop name already taken. Please choose a different shop name.")
+    # Allow duplicate shop names: multiple shops may use the same display name
+    # (no uniqueness check here)
 
     # Hash password securely
     hashed_password = hash_password(user.password)
