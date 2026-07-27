@@ -431,8 +431,8 @@ async def serve_shop_frontend(request: Request, shop_id: str):
                 "shop_name": shop.shop_name,
                 "address": shop.address,
                 "phone": shop.phone,
-                "upi_id": shop.upi_id,
-                "is_online": shop.is_online,
+                "upi_id": getattr(shop, 'upi_id', None),
+                "is_online": getattr(shop, 'is_online_store_enabled', False),
                 "message": "Shop data retrieved successfully"
             }
         else:
