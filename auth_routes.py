@@ -33,10 +33,7 @@ class RefreshTokenRequest(BaseModel):
 
 @router.post("/register")
 def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    # Check username uniqueness — return 409 Conflict (not 400) so clients can distinguish
-    if db.query(User).filter(User.user_name == user.username).first():
-        raise HTTPException(status_code=409, detail="Username already registered. Please choose a different name.")
-    
+    # Email is required and must be unique (we treat email as the primary login identifier)
     if not user.email or user.email.strip() == "":
         raise HTTPException(status_code=400, detail="Email is required")
 
@@ -46,6 +43,11 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     # Check email uniqueness (case-insensitive) — return 409 Conflict
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
         raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
+
+    # Check username uniqueness — return 409 Conflict (not 400) so clients can distinguish
+    if db.query(User).filter(User.user_name == user.username).first():
+        raise HTTPException(status_code=409, detail="Username already registered. Please choose a different name.")
+
 
     # Allow duplicate shop names: multiple shops may use the same display name
     # (no uniqueness check here)
