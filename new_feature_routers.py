@@ -135,7 +135,14 @@ def save_template(template_name: str = Body(...), template_items: list = Body(..
 from credit_score_service import CreditScoreService
 
 @router.get("/credit-score/{customer_id}")
-def get_credit_score(customer_id: int, db: Session = Depends(get_db)):
+def get_credit_score(customer_id: int, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    from models import Customer
+    customer = db.query(Customer).filter(
+        Customer.id == customer_id,
+        Customer.user_id == user_id
+    ).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
     return CreditScoreService.calculate_credit_score(db, customer_id)
 
 # ==========================================
@@ -670,8 +677,13 @@ async def sync_invoices_batch(payload: dict = Body(...), user_id: int = Depends(
                     from models import Product
                     product = db.query(Product).filter(Product.id == product_id, Product.user_id == user_id).with_for_update().first()
                     if product and product.current_stock is not None:
-                        qty = float(item.get('qty', item.get('quantity', 1)))
-                        product.current_stock = max(0, int(product.current_stock) - int(qty))
+                        qty = int(item.get('qty', item.get('quantity', 1)))
+                        if int(product.current_stock) < qty:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Insufficient stock for product ID {product_id} while syncing invoice {inv.get('invoice_number')}. Available: {product.current_stock}, Required: {qty}"
+                            )
+                        product.current_stock = int(product.current_stock) - qty
                 
             synced_count += 1
             
@@ -680,6 +692,9 @@ async def sync_invoices_batch(payload: dict = Body(...), user_id: int = Depends(
             "status": "success",
             "synced_count": synced_count
         }
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Invoices sync failed: {str(e)}")
@@ -816,8 +831,13 @@ async def sync_invoices_chunked(
                     from models import Product
                     product = db.query(Product).filter(Product.id == product_id, Product.user_id == user_id).with_for_update().first()
                     if product and product.current_stock is not None:
-                        qty = float(item.get('qty', item.get('quantity', 1)))
-                        product.current_stock = max(0, int(product.current_stock) - int(qty))
+                        qty = int(item.get('qty', item.get('quantity', 1)))
+                        if int(product.current_stock) < qty:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Insufficient stock for product ID {product_id} while syncing invoice {inv.get('invoice_number')}. Available: {product.current_stock}, Required: {qty}"
+                            )
+                        product.current_stock = int(product.current_stock) - qty
             synced_count += 1
 
         db.commit()
@@ -829,6 +849,9 @@ async def sync_invoices_chunked(
             "skipped_duplicates": skipped_count,
             "is_complete": chunk_index + 1 >= total_chunks
         }
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Chunked sync failed: {str(e)}")

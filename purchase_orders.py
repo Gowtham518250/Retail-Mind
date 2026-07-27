@@ -128,7 +128,7 @@ def mark_po_delivered(
             product = db.query(Product).filter(
                 Product.id == item["product_id"],
                 Product.user_id == shop_id,
-            ).first()
+            ).with_for_update().first()
             if product:
                 product.current_stock = (product.current_stock or 0) + item["quantity"]
                 # Log stock movement

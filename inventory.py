@@ -80,7 +80,7 @@ class ProductUpdate(BaseModel):
 class StockMovementCreate(BaseModel):
     product_id: int
     movement_type: str  # "IN", "OUT", "ADJUSTMENT"
-    quantity: int
+    quantity: int = Field(..., ge=0, description="Must be non-negative; use movement_type to indicate direction")
     reason: Optional[str] = None
     reference_id: Optional[str] = None
 

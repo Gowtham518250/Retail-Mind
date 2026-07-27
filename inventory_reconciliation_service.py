@@ -35,7 +35,7 @@ class ReconciliationReport(BaseModel):
 class StockCorrectionRequest(BaseModel):
     """Request to manually correct stock"""
     product_id: int
-    correct_stock: int
+    correct_stock: int = Field(..., ge=0)
     reason: str
 
 
@@ -167,7 +167,7 @@ def correct_stock_manually(
         product = db.query(Product).filter(
             Product.id == correction.product_id,
             Product.user_id == user_id
-        ).first()
+        ).with_for_update().first()
         
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")

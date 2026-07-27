@@ -276,11 +276,22 @@ def _process_product_import(
                 
                 # Create or update product
                 if existing and overwrite:
+                    from models import StockMovement
+                    new_stock = int(row.get('current_stock', 0))
+                    old_stock = existing.current_stock or 0
                     existing.product_name = row.get('product_name')
                     existing.description = row.get('description')
-                    existing.current_stock = int(row.get('current_stock', 0))
+                    existing.current_stock = new_stock
                     existing.unit_price = float(row.get('unit_price', 0))
                     existing.category = row.get('category')
+                    if new_stock != old_stock:
+                        db.add(StockMovement(
+                            product_id=existing.id,
+                            movement_type="ADJUSTMENT",
+                            quantity=abs(new_stock - old_stock),
+                            reason="Bulk CSV import (overwrite)",
+                            reference_id=f"BATCH_{batch_op.id}",
+                        ))
                 else:
                     product = Product(
                         user_id=user_id,

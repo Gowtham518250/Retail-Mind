@@ -154,6 +154,22 @@ def sync_offline_invoice(
     try:
         # Create Invoice
         sub_t = Decimal(str(data.total_amount)) - Decimal(str(data.tax))
+
+        if data.line_items and len(data.line_items) > 0:
+            computed_subtotal = sum(
+                Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+                for item in data.line_items
+            )
+            tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
+            if abs(computed_subtotal - sub_t) > tolerance:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Invoice total mismatch: line items sum to {computed_subtotal}, "
+                        f"but total_amount - tax = {sub_t}. Please recalculate."
+                    )
+                )
+
         invoice = Invoice(
             user_id=shop_id,
             customer_id=customer_id,
@@ -217,26 +233,27 @@ def sync_offline_invoice(
                         db.add(mov)
                         print(f"✅ [Backend] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
                 else:
-                    # 🔧 FIX: Deduct by product name when product_id is missing
+                    # Deduct by product name when product_id is missing
                     product = db.query(Product).filter(
                         func.lower(Product.product_name) == item.product_name.lower().strip(),
                         Product.user_id == shop_id
                     ).with_for_update().first()
                     if product:
                         current_stock = product.current_stock or 0
-                        if current_stock >= item.quantity:
-                            # 🔧 FIX: Debug logging for quantity deduction
-                            print(f"🔍 [Backend] Deducting {item.quantity} from {item.product_name} by name (current: {current_stock})")
-                            product.current_stock = max(0, current_stock - item.quantity)
-                            mov = StockMovement(
-                                product_id=product.id,
-                                movement_type="OUT",
-                                quantity=item.quantity,
-                                reason="Sales Sync (by name)",
-                                reference_id=invoice_number,
+                        if current_stock < item.quantity:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Required: {item.quantity}"
                             )
-                            db.add(mov)
-                            print(f"✅ [Backend] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
+                        product.current_stock = current_stock - item.quantity
+                        mov = StockMovement(
+                            product_id=product.id,
+                            movement_type="OUT",
+                            quantity=item.quantity,
+                            reason="Sales Sync (by name)",
+                            reference_id=invoice_number,
+                        )
+                        db.add(mov)
 
         # Universal Journal Entry
         tx = UniversalTransaction(
@@ -356,7 +373,22 @@ def create_invoice(
         due_date = inv_date
 
     sub_t2 = Decimal(str(data.total_amount)) - Decimal(str(data.tax))
-    
+
+    if data.line_items and len(data.line_items) > 0:
+        computed_subtotal = sum(
+            Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+            for item in data.line_items
+        )
+        tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
+        if abs(computed_subtotal - sub_t2) > tolerance:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invoice total mismatch: line items sum to {computed_subtotal}, "
+                    f"but total_amount - tax = {sub_t2}. Please recalculate."
+                )
+            )
+
     invoice = Invoice(
         user_id=shop_id,
         customer_id=customer_id,
@@ -415,26 +447,28 @@ def create_invoice(
                     db.add(mov)
                     logger.debug(f"✅ [Backend Create] Stock updated: {item.product_name} ({(product.current_stock or 0) + item.quantity} → {product.current_stock})")
             else:
-                # 🔧 FIX: Deduct by product name when product_id is missing
+                # Deduct by product name when product_id is missing
                 product = db.query(Product).with_for_update().filter(
                     func.lower(Product.product_name) == item.product_name.lower().strip(),
                     Product.user_id == shop_id
                 ).first()
                 if product:
                     current_stock = product.current_stock or 0
-                    if current_stock >= item.quantity:
-                        # 🔧 FIX: Debug logging for quantity deduction
-                        logger.debug(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} by name (current: {current_stock})")
-                        product.current_stock = max(0, current_stock - item.quantity)
-                        mov = StockMovement(
-                            product_id=product.id,
-                            movement_type="OUT",
-                            quantity=item.quantity,
-                            reason="Manual Sale (by name)",
-                            reference_id=invoice_number,
+                    if current_stock < item.quantity:
+                        db.rollback()
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Requested: {item.quantity}"
                         )
-                        db.add(mov)
-                        logger.debug(f"✅ [Backend Create] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
+                    product.current_stock = current_stock - item.quantity
+                    mov = StockMovement(
+                        product_id=product.id,
+                        movement_type="OUT",
+                        quantity=item.quantity,
+                        reason="Manual Sale (by name)",
+                        reference_id=invoice_number,
+                    )
+                    db.add(mov)
 
     tx = UniversalTransaction(
         shop_id=shop_id,
