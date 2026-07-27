@@ -13,6 +13,7 @@ from typing import List, Optional
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Product, StockMovement, ProductBatch, Notification
+from stock_service import StockService
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
@@ -223,45 +224,20 @@ def create_stock_movement(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Normalize movement_type to uppercase to match enum constraints
-    VALID_TYPES = {"IN", "OUT", "ADJUSTMENT"}
     movement_type = movement.movement_type.upper() if movement.movement_type else "IN"
-    if movement_type not in VALID_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid movement_type. Must be one of: {list(VALID_TYPES)}")
-    
-    # Update product stock
-    if movement_type == "IN":
-        product.current_stock += movement.quantity
-    elif movement_type == "OUT":
-        if product.current_stock < movement.quantity:
-            raise HTTPException(status_code=400, detail="Insufficient stock")
-        product.current_stock -= movement.quantity
-    elif movement_type == "ADJUSTMENT":
-        product.current_stock = movement.quantity
-    
+    if movement_type not in {"IN", "OUT", "ADJUSTMENT"}:
+        raise HTTPException(status_code=400, detail="Invalid movement_type. Must be one of: ['IN', 'OUT', 'ADJUSTMENT']")
+
     try:
-        # Create stock movement record with normalized type
-        db_movement = StockMovement(
+        product, _ = StockService.apply_stock_change(
+            db,
             product_id=movement.product_id,
-            movement_type=movement_type,
+            user_id=user_id,
             quantity=movement.quantity,
+            movement_type=movement_type,
             reason=movement.reason,
-            reference_id=movement.reference_id
+            reference_id=movement.reference_id,
         )
-        db.add(db_movement)
-        
-        # Check if stock is below minimum
-        if product.current_stock <= product.min_stock:
-            notification = Notification(
-                notification_type="LOW_STOCK",
-                channel="EMAIL",
-                recipient=f"admin@store.com",
-                message=f"Product {product.product_name} (SKU: {product.sku}) is below minimum stock level. Current: {product.current_stock}, Minimum: {product.min_stock}",
-                status="PENDING"
-            )
-            db.add(notification)
-        
-        db.add(product)
         db.commit()
     except Exception as e:
         db.rollback()

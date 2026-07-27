@@ -23,7 +23,6 @@ const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
-  output: 'export',
   // NOTE: The API proxy is removed.
   // All API calls now use absolute URLs via src/lib/api.ts
   // pointing to process.env.NEXT_PUBLIC_API_URL or the default
