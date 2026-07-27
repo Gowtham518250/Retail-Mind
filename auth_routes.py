@@ -77,8 +77,15 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
                 shop_profile = ShopProfile(shop_id=new_user.id, shop_name=shop_name_value)
                 db.add(shop_profile)
 
-        # Refresh to load generated fields
+        # Refresh to load generated fields and persist the user/shop to the database
         db.refresh(new_user)
+        # Commit the transaction so a separate login request can see the newly created user
+        try:
+            db.commit()
+        except Exception:
+            # In case commit fails, rollback to leave DB in a consistent state
+            db.rollback()
+            raise
     except Exception as e:
         # Log full stack trace for debugging and rollback
         logger.exception("Registration failed: unexpected error")
