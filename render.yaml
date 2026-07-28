@@ -17,12 +17,25 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      # Internal URL of the retail-mind-web service below, used to proxy
+      # customer-facing frontend requests so the public site is served from
+      # this one domain. Prefer Render's private-network hostname if your
+      # plan supports it (e.g. http://retail-mind-web:10000); otherwise use
+      # retail-mind-web's own public onrender.com URL.
+      - key: FRONTEND_ORIGIN
+        sync: false
 
-  - type: static
-    name: retail-mind-frontend
-    env: static
-    buildCommand: "cd frontend && npm ci && npm run build"
-    publishPath: "frontend/dist"
+  # Customer storefront — a real Next.js server (not a static export), so any
+  # shop ID renders correctly on demand without needing a rebuild whenever a
+  # new shop is added. Not exposed directly to customers; retail-mind-api
+  # proxies to it so everything lives under one public domain.
+  - type: web
+    name: retail-mind-web
+    env: node
+    buildCommand: "cd frontend-web && npm ci && npm run build"
+    startCommand: "cd frontend-web && npm run start -- -p $PORT"
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://retail-mind-vkbp.onrender.com

@@ -1,6 +1,5 @@
-import { getKnownShopIds } from '../../../../../lib/staticParams';
-
+// See generateStaticParams.ts files for rationale: one placeholder shell,
+// real ids are read client-side from the live URL at runtime.
 export async function getProductRouteParams() {
-  const shopIds = await getKnownShopIds();
-  return shopIds.map((shopId) => ({ shopId, productId: '1' }));
+  return [{ shopId: 'placeholder', productId: 'placeholder' }];
 }

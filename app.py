@@ -438,7 +438,7 @@ def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
     return f"/store?shop_id={shop_id}"
 
 
-@api.get("/shop/{shop_id}", tags=["Online Store Frontend"])
+@api.get("/api/shop/{shop_id}/info", tags=["Online Store Frontend"])
 async def serve_shop_frontend(request: Request, shop_id: str):
     """Return shop data as JSON - frontend handles rendering."""
     from db import sessionLocal
@@ -677,3 +677,13 @@ async def serve_product_detail_page(product_id: str):
         content = f.read().replace("{{PRODUCT_ID}}", str(product_id))
     return HTMLResponse(content=content)
 
+
+# ==========================================================================
+# Storefront reverse proxy — registered last so any more specific route
+# defined above (e.g. /shop/{shop_id}/ssr) still takes priority. Everything
+# else under /shop, /_next, /auth, /orders, /profile is forwarded to the
+# frontend-web Next.js server so the whole site lives on one public domain.
+# See frontend_proxy.py for details and the FRONTEND_ORIGIN env var.
+# ==========================================================================
+from frontend_proxy import router as frontend_proxy_router
+api.include_router(frontend_proxy_router)

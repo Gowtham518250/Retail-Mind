@@ -23,7 +23,12 @@ const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
-  output: 'export',
+  // Deliberately NOT using `output: 'export'`. A static export requires every
+  // dynamic route (every shop ID) to be known at build time via
+  // generateStaticParams, meaning a new shop added in the backend wouldn't
+  // get a working storefront until the next full rebuild+redeploy. Running
+  // as a normal Next.js server renders any shop ID on demand, correctly,
+  // with zero rebuilds needed as shops are added.
   // NOTE: The API proxy is removed.
   // All API calls now use absolute URLs via src/lib/api.ts
   // pointing to process.env.NEXT_PUBLIC_API_URL or the default
