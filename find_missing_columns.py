@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, text
 from db import Base
 import models  # Must import models to register tables in Base.metadata
 
-DB_URL = "postgresql://retail_mind_xxog_user:hjvmy6P7OxYlA7rec54JLx6OL0LlLocc@dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com/retail_mind_xxog"
+DB_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DB_URL)
 
 print("Fetching database schema via direct query...")

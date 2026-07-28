@@ -1,4 +1,4 @@
-import { getKnownShopIds } from '../../../lib/staticParams';
+import { getKnownShopIds } from '../../../../lib/staticParams';
 
 export async function generateStaticParams() {
   const ids = await getKnownShopIds();

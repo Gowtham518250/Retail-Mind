@@ -1,12 +1,11 @@
+import os
 import psycopg2
 
-conn = psycopg2.connect(
-    host="dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com",
-    database="retail_mind_xxog",
-    user="retail_mind_xxog_user",
-    password="hjvmy6P7OxYlA7rec54JLx6OL0LlLocc",
-    sslmode="require"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is not set.")
+
+conn = psycopg2.connect(DATABASE_URL, sslmode="require")
 
 cur = conn.cursor()
 
