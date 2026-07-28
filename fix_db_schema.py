@@ -1,7 +1,8 @@
+import os
 from sqlalchemy import create_engine, text
 
 # Hardcode external PostgreSQL URL from Render
-DB_URL = "postgresql://retail_mind_xxog_user:hjvmy6P7OxYlA7rec54JLx6OL0LlLocc@dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com/retail_mind_xxog"
+DB_URL = os.getenv("DATABASE_URL")
 
 print(f"Connecting to live Render PostgreSQL database to apply patch...")
 engine = create_engine(DB_URL)

@@ -26,7 +26,8 @@ from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
     check_login_lockout, record_login_failure, record_login_success,
-    owner_only, customer_only, get_current_user, get_current_user_dict, sanitize_input
+    owner_only, customer_only, get_current_user, get_current_user_dict, sanitize_input,
+    check_rate_limit,
 )
 try:
     from email_notifications import EmailNotificationService
@@ -111,7 +112,7 @@ class CustomerForgot(BaseModel):
 
 class OrderItem(BaseModel):
     product_id: int
-    quantity: int = Field(..., gt=0)
+    quantity: int = Field(..., gt=0, le=1000)
 
 class PlaceOrder(BaseModel):
     shop_id: int
@@ -120,10 +121,10 @@ class PlaceOrder(BaseModel):
 
 class GuestOrder(BaseModel):
     shop_id: int
-    customer_name: str = Field(..., min_length=1)
-    phone: str = Field(..., min_length=10)
-    delivery_address: str = Field(..., min_length=1)
-    items: List[OrderItem] = Field(..., min_length=1)
+    customer_name: str = Field(..., min_length=1, max_length=100)
+    phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    delivery_address: str = Field(..., min_length=5, max_length=500)
+    items: List[OrderItem] = Field(..., min_length=1, max_length=50)
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
 
 
@@ -135,6 +136,7 @@ def register_customer(
     data: CustomerRegister,
     request: Request,
     db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
 ):
     """Register a new customer account — supports phone-only (no email required)"""
 
@@ -257,6 +259,7 @@ def customer_login_phone(
 def forgot_password(
     data: CustomerForgot,
     db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
 ):
     """Send password reset link — always 200 to prevent email enumeration"""
     db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
@@ -387,7 +390,7 @@ def browse_shop_products(
                 "flash_sale_active": discount > 0,
                 "stock_available": p.current_stock if p.current_stock is not None else 999,
                 "description": p.description,
-            })(p, get_active_discount(db, shop_id, p.category))
+            })(p, get_active_discount(db, shop_id_int, p.category))
             for p in products
         ],
     }
@@ -401,6 +404,7 @@ def place_order(
     data: PlaceOrder,
     db: Session = Depends(get_db),
     current_user: dict = Depends(customer_only),
+    _rl: None = Depends(check_rate_limit),
 ):
     """Place an online order at a specific shop"""
     customer_id = current_user["user_id"]
@@ -479,6 +483,7 @@ def place_order(
 def place_guest_order(
     data: GuestOrder,
     db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
 ):
     """Place an online order as a guest (no auth required)"""
     logger.info(f"Received guest order: shop_id={data.shop_id}, customer={data.customer_name}, phone={data.phone}, items_count={len(data.items)}")
@@ -687,6 +692,43 @@ def track_order(
 # =====================
 # OWNER ORDER MANAGEMENT
 # =====================
+@router.get("/order/{order_id}/guest-track")
+def guest_track_order(
+    order_id: int,
+    phone: str = Query(..., min_length=10, description="Phone number used at checkout"),
+    db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
+):
+    """Track an order without login, verified by the phone number used at checkout.
+
+    Guest checkout never issues an auth token, so the authenticated
+    /order/{id}/track endpoint is unreachable for guest customers. This
+    endpoint lets a guest confirm their identity with the phone number
+    they placed the order with instead.
+    """
+    order = db.query(OnlineOrder).filter(OnlineOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+
+    customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == order.customer_id).first()
+    if not customer or customer.phone != phone.strip():
+        raise HTTPException(status_code=403, detail="Phone number does not match this order.")
+
+    STATUS_STEPS = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
+    current_step = STATUS_STEPS.index(order.order_status) if order.order_status in STATUS_STEPS else 0
+
+    return {
+        "order_id": order.id,
+        "status": order.order_status,
+        "progress_step": current_step + 1,
+        "total_steps": len(STATUS_STEPS),
+        "total_amount": float(order.total_amount),
+        "delivery_address": order.delivery_address,
+        "items": json.loads(order.items_json),
+        "created_at": order.created_at,
+    }
+
+
 @router.get("/owner/orders")
 def get_incoming_orders(
     status: Optional[str] = None,

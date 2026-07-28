@@ -1,6 +1,7 @@
+import os
 import psycopg2
 
-DATABASE_URL = "postgresql://retail_mind_xxog_user:hjvmy6P7OxYlA7rec54JLx6OL0LlLocc@dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com/retail_mind_xxog"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
