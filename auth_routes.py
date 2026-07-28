@@ -33,10 +33,7 @@ class RefreshTokenRequest(BaseModel):
 
 @router.post("/register")
 def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    # Check username uniqueness — return 409 Conflict (not 400) so clients can distinguish
-    if db.query(User).filter(User.user_name == user.username).first():
-        raise HTTPException(status_code=409, detail="Username already registered. Please choose a different name.")
-    
+    # Email is required and must be unique (we treat email as the primary login identifier)
     if not user.email or user.email.strip() == "":
         raise HTTPException(status_code=400, detail="Email is required")
 
@@ -47,11 +44,13 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
         raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
 
-    # If a shop_name is provided, ensure it's available (case-insensitive)
-    if user.shop_name and user.shop_name.strip():
-        existing_shop = db.query(ShopProfile).filter(func.lower(ShopProfile.shop_name) == user.shop_name.strip().lower()).first()
-        if existing_shop:
-            raise HTTPException(status_code=409, detail="Shop name already taken. Please choose a different shop name.")
+    # Check username uniqueness — return 409 Conflict (not 400) so clients can distinguish
+    if db.query(User).filter(User.user_name == user.username).first():
+        raise HTTPException(status_code=409, detail="Username already registered. Please choose a different name.")
+
+
+    # Allow duplicate shop names: multiple shops may use the same display name
+    # (no uniqueness check here)
 
     # Hash password securely
     hashed_password = hash_password(user.password)
@@ -77,8 +76,15 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
                 shop_profile = ShopProfile(shop_id=new_user.id, shop_name=shop_name_value)
                 db.add(shop_profile)
 
-        # Refresh to load generated fields
+        # Refresh to load generated fields and persist the user/shop to the database
         db.refresh(new_user)
+        # Commit the transaction so a separate login request can see the newly created user
+        try:
+            db.commit()
+        except Exception:
+            # In case commit fails, rollback to leave DB in a consistent state
+            db.rollback()
+            raise
     except Exception as e:
         # Log full stack trace for debugging and rollback
         logger.exception("Registration failed: unexpected error")
