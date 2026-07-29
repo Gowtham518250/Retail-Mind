@@ -75,6 +75,7 @@ rate_limiter = RateLimiter()
 def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
     """
     Decorator for rate limiting API endpoints
+    Works with both sync and async functions
     Usage:
         @rate_limit_endpoint(max_requests=5, window_seconds=60)
         async def login_endpoint(request: Request):
@@ -82,7 +83,7 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
     """
     def decorator(func):
         @wraps(func)
-        async def wrapper(request: Request, *args, **kwargs):
+        async def async_wrapper(request: Request, *args, **kwargs):
             # Get client IP
             ip = request.client.host if request.client else "unknown"
             endpoint = request.url.path.split('/')[-1] or "default"
@@ -108,7 +109,7 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
             if int(time.time()) % 300 == 0:  # Every 5 minutes
                 rate_limiter.cleanup_old_requests()
             
-            # Call the function with headers
+            # Call the async function with headers
             response = await func(request, *args, **kwargs)
             
             # Add rate limit headers to response
@@ -117,7 +118,50 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
             
             return response
         
-        return wrapper
+        @wraps(func)
+        def sync_wrapper(request: Request, *args, **kwargs):
+            # Get client IP
+            ip = request.client.host if request.client else "unknown"
+            endpoint = request.url.path.split('/')[-1] or "default"
+            
+            # Check rate limit
+            allowed, remaining = rate_limiter.is_allowed(ip, endpoint)
+            
+            # Add rate limit headers
+            headers = {
+                "X-RateLimit-Limit": str(max_requests),
+                "X-RateLimit-Remaining": str(remaining),
+                "X-RateLimit-Reset": str(int(time.time()) + window_seconds),
+            }
+            
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {window_seconds} seconds."},
+                    headers=headers
+                )
+            
+            # Clean up old requests periodically
+            if int(time.time()) % 300 == 0:  # Every 5 minutes
+                rate_limiter.cleanup_old_requests()
+            
+            # Call the sync function with headers
+            response = func(request, *args, **kwargs)
+            
+            # Add rate limit headers to response
+            if hasattr(response, 'headers'):
+                response.headers.update(headers)
+            
+            return response
+        
+        # Return appropriate wrapper based on function type
+        import asyncio
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+    
+    return decorator
 
 def get_client_ip(request: Request) -> str:
     """Extract client IP from request"""
