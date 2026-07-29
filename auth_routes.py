@@ -8,6 +8,7 @@ from db import get_db
 from models import User, ShopProfile
 from security import hash_password, verify_password, create_access_token, ROLE_OWNER, get_current_user, check_login_lockout, record_login_failure, record_login_success
 from email_notifications import EmailNotificationService
+from rate_limiter import rate_limit_endpoint, get_client_ip, ip_rate_limiter
 import random
 import time
 from typing import Optional
@@ -177,15 +178,28 @@ def verify_otp(request: VerifyOTPRequest):
     return {"msg": "OTP verified successfully"}
 
 @router.post("/login")
+@rate_limit_endpoint(max_requests=5, window_seconds=60)
 def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
     try:
-        ip = request.client.host
+        ip = get_client_ip(request)
+        
+        # Check if IP is blocked due to too many failed attempts
+        if ip_rate_limiter.is_blocked(ip):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed login attempts. Please try again in 5 minutes.",
+            )
+        
         check_login_lockout(ip)
         
         # Case-insensitive email lookup
         db_user = db.query(User).filter(User.email.ilike(user.email)).first()
         
         if not db_user or not verify_password(user.password, db_user.password):
+            # Record failed attempt
+            if ip_rate_limiter.record_failure(ip):
+                logger.warning(f"IP {ip} blocked due to too many failed login attempts")
+            
             record_login_failure(ip)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -198,7 +212,9 @@ def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is deactivated. Please contact support.",
             )
-            
+        
+        # Record successful login and reset failure counter
+        ip_rate_limiter.record_success(ip)
         record_login_success(ip)
 
         # Get user role from database

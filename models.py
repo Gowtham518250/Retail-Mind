@@ -3,7 +3,7 @@ Enhanced Database Models for Hybrid Search RAG
 Includes: Inventory, Attendance, Invoices, Payments, Customers, Notifications, Stock Management
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, date
@@ -195,11 +195,18 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, nullable=False)
     user_name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=False, index=True)
     password = Column(String(100), nullable=False)
-    user_type = Column(String(50), default="OWNER", nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
+    user_type = Column(String(50), default="OWNER", nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
     fcm_token = Column(String(255), nullable=True) # Added for Firebase Push Notifications
+    
+    # Add indexes for performance
+    __table_args__ = (
+        Index('idx_user_email', 'email'),
+        Index('idx_user_type', 'user_type'),
+        Index('idx_user_active', 'is_active'),
+    )
     
     # Relationships
     products = relationship("Product", back_populates="owner")
@@ -234,7 +241,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
     product_name = Column(String(100), nullable=False)
-    sku = Column(String(50), nullable=False)
+    sku = Column(String(50), nullable=False, index=True)
     description = Column(Text)
     current_stock = Column(Integer, default=0)
     min_stock = Column(Integer, default=10)  # Alert when below this
@@ -243,9 +250,15 @@ class Product(Base):
     unit_price = Column(Numeric(10, 2), nullable=False)
     purchase_price = Column(Numeric(10, 2), default=0)  # For margin calculation (Feature 15)
     category = Column(String(50), index=True)
-    is_active = Column(Boolean, default=True)  # Soft-delete: False = deleted from catalogue
+    is_active = Column(Boolean, default=True, index=True)  # Soft-delete: False = deleted from catalogue
     
-    __table_args__ = (UniqueConstraint('user_id', 'sku', name='uix_user_sku'),)
+    __table_args__ = (
+        UniqueConstraint('user_id', 'sku', name='uix_user_sku'),
+        Index('idx_product_name', 'product_name'),
+        Index('idx_product_sku', 'sku'),
+        Index('idx_product_category', 'category'),
+        Index('idx_product_active', 'is_active'),
+    )
     
     # Relationships
     owner = relationship("User", back_populates="products")

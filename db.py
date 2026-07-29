@@ -76,6 +76,10 @@ if database_url:
         database_url,
         future=True,
         pool_pre_ping=True,  # Test connection before using
+        pool_size=20,         # Number of connections to maintain
+        max_overflow=30,      # Allow temporary overflow up to 30 connections
+        pool_timeout=30,      # Timeout for getting connection from pool
+        pool_recycle=3600,    # Recycle connections after 1 hour
         echo=False
     )
 else:
@@ -86,24 +90,42 @@ else:
     db_password = os.getenv("DB_PASSWORD", "")
     db_name = os.getenv("DB_NAME", "postgres")
 
-    print(f" PostgreSQL Configuration fallback:\n  Host: {db_host}:{db_port}")
+    # Redact password from logs
+    safe_host = f"{db_host}:{db_port}"
+    safe_user = db_user if db_user else "postgres"
+    print(f" PostgreSQL Configuration fallback:\n  Host: {safe_host}\n  User: {safe_user}\n  Database: {db_name}")
+    # Never log password
 
     # Build connection URL
     url = URL.create(
         drivername="postgresql",
         username=db_user,
-        password=db_password,
+        password=db_password,  # Password only used in connection string
         host=db_host,
         port=db_port,
         database=db_name
     )
 
-    engine = create_engine(
-        url,
-        future=True,
-        pool_pre_ping=True,
-        echo=False
-    )
+    try:
+        engine = create_engine(
+            url,
+            future=True,
+            pool_pre_ping=True,
+            pool_size=20,
+            max_overflow=30,
+            pool_timeout=30,
+            pool_recycle=3600,
+            echo=False,
+            # Add additional connection validation
+            connect_args={
+                'connect_timeout': 10,
+            }
+        )
+    except Exception as e:
+        # Redact credentials from error messages
+        safe_error = str(e).replace(db_password, "***") if db_password else str(e)
+        print(f"Database connection failed: {safe_error}")
+        raise
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 sessionLocal = SessionLocal # Alias for legacy imports
@@ -118,6 +140,18 @@ def get_db():
         raise
     finally:
         db.close()
+
+# Add health check function
+def check_database_health():
+    """Check if database connection is healthy"""
+    try:
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception as e:
+        print(f"Database health check failed: {e}")
+        return False
 
 
 
