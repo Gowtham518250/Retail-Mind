@@ -20,7 +20,7 @@ import hashlib
 import json
 from pydantic import BaseModel, EmailStr, Field
 from db import get_db
-from authentication import create_access_token, hash_password, verify_password
+from security import create_access_token, hash_password, verify_password, check_login_lockout, record_login_failure, record_login_success
 import os
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication & Sessions"])
@@ -444,11 +444,18 @@ async def login(
     """
     from enterprise_models_v3 import User
     
+    # 🔒 SECURITY FIX: Add brute-force protection
+    ip_address = request.client.host if request.client else "unknown"
+    
+    # Check if IP is locked due to too many failed attempts
+    check_login_lockout(ip_address)
+    
     # Find user by email
     user = db.query(User).filter(User.email == login_request.email).first()
     
     if not user or not verify_password(login_request.password, user.password):
-        # Log failed attempt
+        # 🔒 SECURITY FIX: Record failed login attempt
+        record_login_failure(ip_address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
@@ -460,8 +467,10 @@ async def login(
             detail="User account is inactive"
         )
     
+    # 🔒 SECURITY FIX: Record successful login
+    record_login_success(ip_address)
+    
     # Get client info
-    ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent", "")
     
     # Create session

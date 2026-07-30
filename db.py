@@ -82,10 +82,10 @@ if database_url:
         future=True,
         poolclass=QueuePool,
         pool_pre_ping=True,  # Test connection before using
-        pool_size=10,         # Number of connections to maintain (reduced for production)
-        max_overflow=20,      # Allow temporary overflow up to 20 connections (reduced)
+        pool_size=25,         # 🚀 PERFORMANCE: Increased from 10 to 25 for better concurrency
+        max_overflow=40,      # 🚀 PERFORMANCE: Increased from 20 to 40 for peak loads
         pool_timeout=30,      # Timeout for getting connection from pool
-        pool_recycle=1800,    # Recycle connections after 30 minutes (reduced from 1 hour)
+        pool_recycle=3600,    # 🚀 PERFORMANCE: Increased to 1 hour to reduce connection churn
         pool_reset_on_return='commit',  # Reset connection state on return
         echo=False,
         connect_args={

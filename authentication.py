@@ -30,22 +30,16 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 # =========================
-# PASSWORD (FIXED)
+# PASSWORD (CONSOLIDATED)
 # =========================
+# 🔒 FIX: Consolidated to use direct bcrypt (same as security.py)
+# This ensures consistency across all auth endpoints
 def hash_password(password: str) -> str:
-    # 🔒 FIX happens HERE
-    # Convert any-length password → fixed-length string
-    sha256_hash = hashlib.sha256(
-        password.encode("utf-8")
-    ).hexdigest()
-
-    # bcrypt now receives SAFE input (<72 bytes)
-    return pwd_context.hash(sha256_hash)
+    """Hash password with bcrypt directly (no SHA-256 pre-hashing)"""
+    return pwd_context.hash(password)
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    sha256_hash = hashlib.sha256(
-        password.encode("utf-8")
-    ).hexdigest()
-    return pwd_context.verify(sha256_hash, hashed_password)
+    """Verify a password against its bcrypt hash"""
+    return pwd_context.verify(password, hashed_password)
 

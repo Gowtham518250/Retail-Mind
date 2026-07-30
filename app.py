@@ -13,11 +13,13 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, HTMLResponse
 import os
 import time
 import logging
+from performance_middleware import setup_performance_middleware
 
 # ========================
 # LOGGING SETUP
@@ -344,10 +346,12 @@ api.include_router(new_features_router, tags=["Legacy Features"])
 # Advanced System Features
 api.include_router(caching_router, prefix="/cache", tags=["Caching System"])
 api.include_router(batch_operations_router, tags=["Batch Operations"])
-api.include_router(rate_limiting_router, tags=["Rate Limiting"])
 api.include_router(security_hardening_router, tags=["Security Hardening"])
 api.include_router(observability_router, tags=["Observability"])
 api.include_router(operations_router, prefix="/api", tags=["Operations"])
+
+# 🚀 PERFORMANCE: Setup performance monitoring middleware
+setup_performance_middleware(api)
 
 # ========================
 # ROOT & HEALTH ENDPOINTS
