@@ -8,17 +8,18 @@ from fastapi.responses import JSONResponse
 import os
 
 # 🔒 SECURITY FIX: Use Redis for distributed rate limiting in production
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+import os
+import redis
+
+REDIS_URL = os.getenv("REDIS_URL")
+
+
 
 # Try to import Redis, fall back to in-memory if not available
 try:
-    import redis
-    redis_client = redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        password=REDIS_PASSWORD if REDIS_PASSWORD else None,
+
+    redis_client=redis.from_url(
+        REDIS_URL,
         decode_responses=True,
         socket_connect_timeout=5,
         socket_timeout=5
