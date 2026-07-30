@@ -11,8 +11,11 @@ import os
 import os
 import redis
 
-REDIS_URL = os.getenv("REDIS_URL")
+global USE_REDIS
 
+REDIS_URL = os.getenv("REDIS_URL")
+if not REDIS_URL:
+    raise ValueError("Redis url not provided")
 
 
 # Try to import Redis, fall back to in-memory if not available
