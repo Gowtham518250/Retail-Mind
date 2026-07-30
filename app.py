@@ -208,7 +208,7 @@ except Exception as migration_err:
 # SECURITY MIDDLEWARE
 # ========================
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,retail-mind-vkbp.onrender.com,https://retail-mind-web.onrender.com").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,retail-mind-vkbp.onrender.com,retail-mind-web.onrender.com").split(",")
 
 # CORS needs full origins (scheme + host) — browsers send e.g. "https://example.com"
 # as the Origin header, which never matches a bare hostname like "example.com".
