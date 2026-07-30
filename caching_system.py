@@ -12,8 +12,11 @@ from functools import wraps
 import hashlib
 import pickle
 import logging
+from fastapi import APIRouter, Depends
 
 logger = logging.getLogger(__name__)
+
+from security import get_current_user
 
 
 class CacheManager:
@@ -279,7 +282,7 @@ class CacheWarmer:
 
 # ====================== CACHE ENDPOINTS ======================
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from db import get_db
 from sqlalchemy.orm import Session
 
@@ -312,8 +315,11 @@ async def warm_analytics_cache(db: Session = Depends(get_db)):
 
 
 @router.delete("/clear/{pattern}")
-async def clear_cache_pattern(pattern: str):
-    """Clear cache entries by pattern"""
+async def clear_cache_pattern(
+    pattern: str,
+    current_user_id: int = Depends(get_current_user)
+):
+    """Clear cache entries by pattern (requires authentication)"""
     count = cache_manager.delete_pattern(pattern)
     return {
         "status": "success",
@@ -322,8 +328,10 @@ async def clear_cache_pattern(pattern: str):
 
 
 @router.delete("/clear-all")
-async def clear_all_cache():
-    """Clear entire cache"""
+async def clear_all_cache(
+    current_user_id: int = Depends(get_current_user)
+):
+    """Clear entire cache (requires authentication)"""
     success = cache_manager.clear_all()
     return {
         "status": "success" if success else "failed"

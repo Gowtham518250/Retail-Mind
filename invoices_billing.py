@@ -219,8 +219,8 @@ def sync_offline_invoice(
                                 status_code=400,
                                 detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
                             )
-                        # 🔧 FIX: Debug logging for quantity deduction
-                        print(f"🔍 [Backend] Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
+                        # 🔧 FIX: Use proper logging instead of print statements
+                        logger.info(f"Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
                         product.current_stock = max(0, current_stock - item.quantity)
                         # Log stock movement
                         mov = StockMovement(
@@ -231,7 +231,7 @@ def sync_offline_invoice(
                             reference_id=invoice_number,
                         )
                         db.add(mov)
-                        print(f"✅ [Backend] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
+                        logger.info(f"Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
                 else:
                     # Deduct by product name when product_id is missing
                     product = db.query(Product).filter(
