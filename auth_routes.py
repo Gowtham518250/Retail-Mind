@@ -12,6 +12,7 @@ from rate_limiter import rate_limit_endpoint, get_client_ip, ip_rate_limiter
 import random
 import time
 from typing import Optional
+import hashlib
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -137,9 +138,12 @@ otp_cache = {}
 def send_otp(request: SendOTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     otp_code = str(random.randint(100000, 999999))
     
-    # Store in memory for 10 minutes
+    # 🔒 SECURITY FIX: Hash OTP before storing in memory
+    otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+    
+    # Store hash in memory for 10 minutes instead of plain text
     otp_cache[request.email] = {
-        "otp": otp_code,
+        "otp_hash": otp_hash,  # Store hash instead of plain text
         "expires_at": time.time() + 600
     }
     
@@ -169,7 +173,9 @@ def verify_otp(request: VerifyOTPRequest):
         del otp_cache[request.email]
         raise HTTPException(status_code=400, detail="OTP expired")
         
-    if record["otp"] != request.otp:
+    # 🔒 SECURITY FIX: Verify by comparing hashes instead of plain text
+    request_otp_hash = hashlib.sha256(request.otp.encode()).hexdigest()
+    if record["otp_hash"] != request_otp_hash:
         raise HTTPException(status_code=400, detail="Invalid OTP")
         
     # Clear OTP after successful verification

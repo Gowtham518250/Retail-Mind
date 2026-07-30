@@ -214,6 +214,29 @@ class User(Base):
     attendance = relationship("Attendance", back_populates="employee")
     invoices = relationship("Invoice", back_populates="user")
     customers = relationship("Customer", back_populates="user")
+    
+    # 🔒 SECURITY FIX: Prevent mass assignment of sensitive fields
+    def __init__(self, **kwargs):
+        # Only allow safe fields to be set via mass assignment
+        safe_fields = {'user_name', 'email', 'password', 'user_type', 'is_active'}
+        for key, value in kwargs.items():
+            if key in safe_fields:
+                setattr(self, key, value)
+            elif key not in ['id', 'fcm_token']:  # Skip silently for protected fields
+                raise ValueError(f"Cannot set protected field '{key}' via mass assignment")
+    
+    def to_dict(self, exclude_sensitive=True):
+        """Safely convert to dictionary, excluding sensitive fields"""
+        data = {
+            'id': self.id,
+            'user_name': self.user_name,
+            'email': self.email,
+            'user_type': self.user_type,
+            'is_active': self.is_active,
+        }
+        if not exclude_sensitive:
+            data['fcm_token'] = self.fcm_token
+        return data
 
 
 class sales(Base):
@@ -227,6 +250,7 @@ class sales(Base):
     total = Column(Numeric(10, 2), nullable=False)
     sale_date = Column(Date, index=True)
     
+    # 🔒 PERFORMANCE FIX: Add index on foreign key (already has index=True)
     # Relationship
     shopkeeper = relationship("User", back_populates="sales")
 

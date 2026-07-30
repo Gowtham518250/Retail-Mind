@@ -1,9 +1,14 @@
 from urllib.parse import quote_plus, urlparse, urlunparse
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy.pool import QueuePool
+from contextlib import contextmanager
 import os
+import logging
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
+
+logger = logging.getLogger(__name__)
 
 def normalize_database_url(url: str) -> str:
     """
@@ -75,12 +80,18 @@ if database_url:
     engine = create_engine(
         database_url,
         future=True,
+        poolclass=QueuePool,
         pool_pre_ping=True,  # Test connection before using
-        pool_size=20,         # Number of connections to maintain
-        max_overflow=30,      # Allow temporary overflow up to 30 connections
+        pool_size=10,         # Number of connections to maintain (reduced for production)
+        max_overflow=20,      # Allow temporary overflow up to 20 connections (reduced)
         pool_timeout=30,      # Timeout for getting connection from pool
-        pool_recycle=3600,    # Recycle connections after 1 hour
-        echo=False
+        pool_recycle=1800,    # Recycle connections after 30 minutes (reduced from 1 hour)
+        pool_reset_on_return='commit',  # Reset connection state on return
+        echo=False,
+        connect_args={
+            'connect_timeout': 10,
+            'options': '-c statement_timeout=30000'  # 30 second statement timeout
+        }
     )
 else:
     # Fallback to Render Database if DATABASE_URL is not provided
@@ -110,15 +121,18 @@ else:
         engine = create_engine(
             url,
             future=True,
+            poolclass=QueuePool,
             pool_pre_ping=True,
-            pool_size=20,
-            max_overflow=30,
+            pool_size=10,
+            max_overflow=20,
             pool_timeout=30,
-            pool_recycle=3600,
+            pool_recycle=1800,
+            pool_reset_on_return='commit',
             echo=False,
             # Add additional connection validation
             connect_args={
                 'connect_timeout': 10,
+                'options': '-c statement_timeout=30000'
             }
         )
     except Exception as e:
@@ -132,11 +146,37 @@ sessionLocal = SessionLocal # Alias for legacy imports
 Base = declarative_base()
 
 def get_db():
-    db = SessionLocal()
+    """
+    Database session dependency with proper session management.
+    Ensures transactions are properly committed or rolled back.
+    """
+    db: Session = SessionLocal()
     try:
         yield db
-    except Exception:
+        # Commit if no exception occurred
+        db.commit()
+    except Exception as e:
+        # Rollback on any exception
         db.rollback()
+        logger.error(f"Database session error, transaction rolled back: {e}")
+        raise
+    finally:
+        # Always close the session
+        db.close()
+
+@contextmanager
+def get_db_context():
+    """
+    Context manager for database sessions.
+    Useful for background tasks or non-FastAPI contexts.
+    """
+    db: Session = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Database context error, transaction rolled back: {e}")
         raise
     finally:
         db.close()
@@ -152,6 +192,18 @@ def check_database_health():
     except Exception as e:
         print(f"Database health check failed: {e}")
         return False
+
+def dispose_engine():
+    """
+    Properly dispose of the database engine and connection pool.
+    Should be called on application shutdown.
+    """
+    try:
+        logger.info("Disposing database engine and connection pool...")
+        engine.dispose()
+        logger.info("Database engine disposed successfully")
+    except Exception as e:
+        logger.error(f"Error disposing database engine: {e}")
 
 
 

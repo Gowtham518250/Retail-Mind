@@ -321,10 +321,14 @@ def get_stock_alerts(
 @router.post("/batches")
 def create_batch(
     batch: ProductBatchCreate,
+    user_id: int = Depends(check_current_user),  # 🔒 SECURITY FIX: Add authentication
     db: Session = Depends(get_db)
 ):
     """Create product batch (for expiry tracking)"""
-    product = db.query(Product).filter(Product.id == batch.product_id).first()
+    product = db.query(Product).filter(
+        Product.id == batch.product_id,
+        Product.user_id == user_id  # 🔒 SECURITY FIX: Verify product belongs to user
+    ).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     

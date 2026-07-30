@@ -44,14 +44,12 @@ VALID_ROLES = {ROLE_OWNER, ROLE_CUSTOMER, ROLE_WORKER}
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
-    """Hash password with SHA-256 pre-processing then bcrypt"""
-    sha256_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
-    return pwd_context.hash(sha256_hash)
+    """Hash password with bcrypt (follows best practices)"""
+    return pwd_context.hash(password)
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    """Verify a password against its bcrypt+sha256 hash"""
-    sha256_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
-    return pwd_context.verify(sha256_hash, hashed_password)
+    """Verify a password against its bcrypt hash"""
+    return pwd_context.verify(password, hashed_password)
 
 # =====================
 # TOKEN CREATION

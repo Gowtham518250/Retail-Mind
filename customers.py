@@ -190,10 +190,14 @@ def delete_customer(
 def set_contact_preference(
     customer_id: int,
     preference: str = Query(...),  # EMAIL, WHATSAPP, CALL, SMS
+    user_id: int = Depends(check_current_user),  # 🔒 SECURITY FIX: Add authentication
     db: Session = Depends(get_db)
 ):
     """Set preferred contact method for customer"""
-    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    customer = db.query(Customer).filter(
+        Customer.id == customer_id,
+        Customer.user_id == user_id  # 🔒 SECURITY FIX: Verify customer belongs to user
+    ).first()
     
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")

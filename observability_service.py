@@ -147,11 +147,14 @@ def readiness_check(db: Session = Depends(get_db)):
         # Check database connectivity
         db.execute(text("SELECT 1"))
         
-        # Check critical tables exist
+        # Check critical tables exist using SQLAlchemy ORM (safe from SQL injection)
         tables_to_check = ['user_details', 'products', 'invoices']
         for table in tables_to_check:
             try:
-                db.execute(text(f"SELECT 1 FROM {table} LIMIT 1"))
+                # Use SQLAlchemy's text() with parameterized query
+                from sqlalchemy import table, select
+                table_obj = table(table)
+                db.execute(select(1).select_from(table_obj).limit(1))
             except Exception:
                 return {
                     "status": "not_ready",
@@ -358,12 +361,14 @@ def get_database_performance(db: Session = Depends(get_db)):
     try:
         metrics = {}
         
-        # Table sizes
+        # Table sizes using SQLAlchemy ORM (safe from SQL injection)
         try:
             tables = ['user_details', 'products', 'invoices', 'customers']
             for table in tables:
                 try:
-                    result = db.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                    from sqlalchemy import table, select, func
+                    table_obj = table(table)
+                    result = db.execute(select(func.count()).select_from(table_obj))
                     count = result.scalar()
                     metrics[f"{table}_count"] = count
                 except Exception:

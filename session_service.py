@@ -5,14 +5,59 @@ Prevents data loss on logout/login
 """
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from models import User, RefreshToken, SessionToken, OfflineDataQueue
 from datetime import datetime, timedelta
 import secrets
 import json
 import logging
+import threading
 from fastapi import HTTPException
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+# Global lock dictionary for token refresh operations
+# Key: refresh_token, Value: Lock object
+_token_refresh_locks = {}
+_token_refresh_locks_lock = threading.Lock()
+
+def get_token_lock(token: str) -> threading.Lock:
+    """
+    Get or create a lock for a specific refresh token.
+    This prevents concurrent refresh operations on the same token.
+    """
+    with _token_refresh_locks_lock:
+        if token not in _token_refresh_locks:
+            _token_refresh_locks[token] = threading.Lock()
+        return _token_refresh_locks[token]
+
+def cleanup_token_lock(token: str):
+    """
+    Clean up a token lock when it's no longer needed.
+    """
+    with _token_refresh_locks_lock:
+        if token in _token_refresh_locks:
+            del _token_refresh_locks[token]
+
+@contextmanager
+def transaction_handler(db: Session, operation_name: str):
+    """
+    Context manager for handling database transactions with proper error handling.
+    Ensures rollback on error and proper logging.
+    """
+    try:
+        yield
+        db.commit()
+        logger.info(f"Transaction committed successfully: {operation_name}")
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error in {operation_name}, transaction rolled back: {e}")
+        raise HTTPException(status_code=500, detail=f"Database operation failed: {operation_name}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error in {operation_name}, transaction rolled back: {e}")
+        raise HTTPException(status_code=500, detail=f"Operation failed: {operation_name}")
 
 
 class SessionService:
@@ -23,7 +68,7 @@ class SessionService:
         Create 7-day refresh token for auto-login.
         Call after successful login.
         """
-        try:
+        with transaction_handler(db, "create_refresh_token"):
             # Generate secure token
             token_value = secrets.token_urlsafe(64)
             
@@ -47,7 +92,6 @@ class SessionService:
                 device_id=device_id
             )
             db.add(session)
-            db.commit()
             
             return {
                 "user_id": user_id,
@@ -56,58 +100,74 @@ class SessionService:
                 "expires_in": "7 days",
                 "device_id": device_id
             }
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Failed to create refresh token: {e}")
-            raise HTTPException(status_code=500, detail="Session creation failed")
     
     @staticmethod
     def refresh_access_token(db: Session, refresh_token: str, device_id: str = None) -> dict:
         """
         Use refresh token to get new access token without re-entering password.
         Call on app startup or when access token expires.
+        Uses both application-level locking and row-level locking to prevent race conditions.
         """
+        # Get application-level lock for this specific token
+        token_lock = get_token_lock(refresh_token)
+        
         try:
-            # Use SELECT FOR UPDATE to prevent race condition
-            token_record = db.query(RefreshToken).filter_by(
-                token=refresh_token,
-                is_valid=True
-            ).with_for_update().first()
-            
-            if not token_record:
-                return {"error": "Invalid refresh token"}
-            
-            # Check if expired
-            if token_record.expires_at < datetime.utcnow():
-                token_record.is_valid = False
+            # Acquire lock to prevent concurrent refresh operations
+            with token_lock:
+                # Use SELECT FOR UPDATE to prevent race condition - lock the row
+                token_record = db.query(RefreshToken).filter_by(
+                    token=refresh_token,
+                    is_valid=True
+                ).with_for_update(of=RefreshToken).first()
+                
+                if not token_record:
+                    return {"error": "Invalid refresh token"}
+                
+                # Check if expired
+                if token_record.expires_at < datetime.utcnow():
+                    token_record.is_valid = False
+                    db.commit()
+                    cleanup_token_lock(refresh_token)
+                    return {"error": "Refresh token expired. Please login again."}
+                
+                # Get user
+                user = db.query(User).filter_by(id=token_record.user_id).first()
+                if not user:
+                    return {"error": "User not found"}
+                
+                # 🔒 SECURITY FIX: Invalidate old session tokens before creating new one
+                # Use synchronize_session=False for better performance
+                db.query(SessionToken).filter(
+                    SessionToken.refresh_token_id == token_record.id,
+                    SessionToken.is_active == True
+                ).update({"is_active": False}, synchronize_session=False)
+                
+                # Create new access token
+                new_access_token = secrets.token_urlsafe(64)
+                session = SessionToken(
+                    user_id=token_record.user_id,
+                    access_token=new_access_token,
+                    refresh_token_id=token_record.id,
+                    device_id=device_id
+                )
+                db.add(session)
                 db.commit()
-                return {"error": "Refresh token expired. Please login again."}
-            
-            # Get user
-            user = db.query(User).filter_by(id=token_record.user_id).first()
-            if not user:
-                return {"error": "User not found"}
-            
-            # Create new access token
-            new_access_token = secrets.token_urlsafe(64)
-            session = SessionToken(
-                user_id=token_record.user_id,
-                access_token=new_access_token,
-                refresh_token_id=token_record.id,
-                device_id=device_id
-            )
-            db.add(session)
-            db.commit()
-            
-            return {
-                "success": True,
-                "user_id": user.id,
-                "user_name": user.user_name,
-                "email": user.email,
-                "access_token": new_access_token,
-                "refresh_token": refresh_token,  # Same token continues
-                "message": "Logged in from saved session"
-            }
+                
+                logger.info(f"Successfully refreshed access token for user {user.id}")
+                
+                return {
+                    "success": True,
+                    "user_id": user.id,
+                    "user_name": user.user_name,
+                    "email": user.email,
+                    "access_token": new_access_token,
+                    "refresh_token": refresh_token,  # Same token continues
+                    "message": "Logged in from saved session"
+                }
+        except SQLAlchemyError as e:
+            db.rollback()
+            logger.error(f"Database error during token refresh: {e}")
+            return {"error": "Token refresh failed due to database error"}
         except Exception as e:
             db.rollback()
             logger.error(f"Failed to refresh access token: {e}")
@@ -121,7 +181,12 @@ class SessionService:
             if session:
                 session.is_active = False
                 db.commit()
+                logger.info(f"User logged out successfully for token: {access_token[:10]}...")
                 return True
+            return False
+        except SQLAlchemyError as e:
+            db.rollback()
+            logger.error(f"Database error during logout: {e}")
             return False
         except Exception as e:
             db.rollback()
@@ -137,7 +202,12 @@ class SessionService:
             for session in sessions:
                 session.is_active = False
             db.commit()
+            logger.info(f"Logged out from {count} devices for user {user_id}")
             return count
+        except SQLAlchemyError as e:
+            db.rollback()
+            logger.error(f"Database error during logout all devices: {e}")
+            return 0
         except Exception as e:
             db.rollback()
             logger.error(f"Failed to logout all devices: {e}")
@@ -186,6 +256,10 @@ class SessionService:
                 "user_name": user.user_name if user else None,
                 "device_id": session.device_id
             }
+        except SQLAlchemyError as e:
+            db.rollback()
+            logger.error(f"Database error during token verification: {e}")
+            return {"valid": False, "error": "Token verification failed due to database error"}
         except Exception as e:
             db.rollback()
             logger.error(f"Failed to verify access token: {e}")
@@ -209,6 +283,10 @@ class SessionService:
                 "type": data_type,
                 "will_sync_when_online": True
             }
+        except SQLAlchemyError as e:
+            db.rollback()
+            logger.error(f"Database error queuing offline data: {e}")
+            return {"queued": False, "error": "Database error occurred"}
         except Exception as e:
             db.rollback()
             logger.error(f"Failed to queue offline data: {e}")
@@ -253,6 +331,10 @@ class SessionService:
                 "items": synced_items,
                 "message": f"Synced {len(synced_items)} offline items"
             }
+        except SQLAlchemyError as e:
+            db.rollback()
+            logger.error(f"Database error syncing offline queue: {e}")
+            return {"synced": False, "error": "Database error occurred"}
         except Exception as e:
             db.rollback()
             logger.error(f"Failed to sync offline queue: {e}")
@@ -264,9 +346,14 @@ class SessionService:
         try:
             expired = db.query(RefreshToken).filter(
                 RefreshToken.expires_at < datetime.utcnow()
-            ).delete()
+            ).delete(synchronize_session=False)
             db.commit()
+            logger.info(f"Deleted {expired} expired refresh tokens")
             return expired
+        except SQLAlchemyError as e:
+            db.rollback()
+            logger.error(f"Database error deleting expired tokens: {e}")
+            return 0
         except Exception as e:
             db.rollback()
             logger.error(f"Failed to delete expired tokens: {e}")

@@ -24,7 +24,22 @@ logger = logging.getLogger(__name__)
 
 # Security configuration — use same SECRET_KEY as main security.py to avoid token invalidation on restart
 import os as _os
-SECRET_KEY = _os.getenv("SECRET_KEY", "CHANGE-ME-IN-PRODUCTION-SECRET-KEY-MIN-32-CHARS")
+SECRET_KEY = _os.getenv("SECRET_KEY")
+
+# 🔒 CRITICAL SECURITY: Validate SECRET_KEY before starting
+if not SECRET_KEY:
+    logger.error("CRITICAL: SECRET_KEY environment variable not set!")
+    logger.error("Auth hardening service cannot start without secure key configuration.")
+    logger.error("Set SECRET_KEY environment variable with at least 32 random characters.")
+    raise RuntimeError("SECRET_KEY environment variable is required for security")
+
+# Validate SECRET_KEY length
+if len(SECRET_KEY) < 32:
+    logger.error(f"CRITICAL: SECRET_KEY is too short ({len(SECRET_KEY)} chars, must be at least 32 characters)")
+    raise RuntimeError("SECRET_KEY must be at least 32 characters for security")
+
+logger.info("✅ SECRET_KEY validated successfully for auth hardening service")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
