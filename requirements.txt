@@ -2,7 +2,11 @@ fastapi==0.115.2
 uvicorn[standard]==0.30.0
 gunicorn==23.0.0
 python-multipart==0.0.6
+<<<<<<< HEAD
 starlette==0.37.0
+=======
+starlette==0.37.2
+>>>>>>> 2747c825010fff5db125a242506d7c8dac597379
 
 Jinja2==3.1.2
 
