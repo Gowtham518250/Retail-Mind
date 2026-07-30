@@ -97,7 +97,6 @@ from new_feature_routers import router as new_features_router
 # Advanced system features
 from caching_system import router as caching_router
 from batch_operations import router as batch_operations_router
-from rate_limiting import router as rate_limiting_router
 from security_hardening import router as security_hardening_router
 from observability_service import router as observability_router
 from operations_routes import router as operations_router
