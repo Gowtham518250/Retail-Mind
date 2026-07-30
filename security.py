@@ -63,6 +63,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+# Wrapper for backward compatibility with authentication.py
+def create_access_token_simple(data: dict) -> str:
+    """Simple wrapper for create_access_token without expires_delta parameter"""
+    return create_access_token(data)
+
 def create_refresh_token(user_id: int, role: str) -> str:
     """Create a long-lived refresh token"""
     data = {"sub": str(user_id), "role": role, "type": "refresh"}

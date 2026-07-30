@@ -17,8 +17,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 from models import BatchOperation
+from security import get_current_user
 
 
 # ====================== REQUEST/RESPONSE MODELS ======================
@@ -52,11 +52,11 @@ router = APIRouter(prefix="/api/batch", tags=["Batch Operations"])
 
 @router.post("/products/import")
 async def bulk_import_products(
-    user_id: int,
     file: UploadFile = File(...),
     overwrite: bool = False,
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    user_id: int = Depends(get_current_user)
 ):
     """
     Bulk import products from CSV file
@@ -109,9 +109,9 @@ async def bulk_import_products(
 
 @router.post("/products/export")
 async def bulk_export_products(
-    user_id: int,
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    user_id: int = Depends(get_current_user)
 ):
     """Export all products to CSV"""
     try:
@@ -156,10 +156,10 @@ async def bulk_export_products(
 
 @router.post("/customers/import")
 async def bulk_import_customers(
-    user_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    user_id: int = Depends(get_current_user)
 ):
     """
     Bulk import customers from CSV file
@@ -221,9 +221,9 @@ async def get_batch_status(
 
 @router.get("/history")
 async def get_batch_history(
-    user_id: int,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user)
 ):
     """Get batch operation history for user"""
     operations = db.query(BatchOperation).filter(

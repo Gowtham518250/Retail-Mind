@@ -135,7 +135,8 @@ class AttendanceResponse(BaseModel):
 @router.post("/check-in")
 def employee_check_in(
     employee_id: int = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Employee check-in - accepts both user_id and worker_id"""
     # First try to find as Worker
@@ -148,6 +149,16 @@ def employee_check_in(
 
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Security check: verify the current user owns/manages this employee
+    if is_worker:
+        # For workers, check that the current user is the shopkeeper
+        if employee.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only check in your own workers")
+    else:
+        # For shopkeepers/owners, they can only check in themselves
+        if employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only check in yourself")
 
     today = date.today()
     
@@ -193,7 +204,8 @@ def employee_check_in(
 @router.post("/check-out")
 def employee_check_out(
     employee_id: int = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Employee check-out - accepts both user_id and worker_id"""
     # First try to find as Worker
@@ -206,6 +218,37 @@ def employee_check_out(
 
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Security check: verify the current user owns/manages this employee
+    if is_worker:
+        # For workers, check that the current user is the shopkeeper
+        if employee.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only check out your own workers")
+    else:
+        # For shopkeepers/owners, they can only check out themselves
+        if employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only check out yourself")
+    """Employee check-out - accepts both user_id and worker_id"""
+    # First try to find as Worker
+    employee = db.query(Worker).filter(Worker.id == employee_id).first()
+    is_worker = employee is not None
+
+    # If not found as Worker, try to find as User (for shopkeepers/owners checking out)
+    if not employee:
+        employee = db.query(User).filter(User.id == employee_id).first()
+
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Security check: verify the current user owns/manages this employee
+    if is_worker:
+        # For workers, check that the current user is the shopkeeper
+        if employee.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only check out your own workers")
+    else:
+        # For shopkeepers/owners, they can only check out themselves
+        if employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only check out yourself")
 
     today = date.today()
     
@@ -250,13 +293,18 @@ def employee_check_out(
 @router.post("/record-manual")
 def record_manual_attendance(
     record: AttendanceRecord,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Manually record attendance"""
     # Accept worker_id from Worker table (or user_id from User table)
     employee = db.query(Worker).filter(Worker.id == record.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Security check: verify the current user owns this worker
+    if employee.shopkeeper_id != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only record attendance for your own workers")
     
     att_date = datetime.strptime(record.attendance_date, "%Y-%m-%d").date()
     
@@ -302,9 +350,21 @@ def get_employee_attendance(
     employee_id: int,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Get attendance records for an employee"""
+    # Security check: verify the current user has access to this employee's data
+    # First check if it's a worker belonging to the current user
+    worker = db.query(Worker).filter(Worker.id == employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own workers' attendance")
+    else:
+        # If not a worker, it might be the shopkeeper themselves
+        if employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own attendance")
+    
     query = db.query(Attendance).filter(Attendance.employee_id == employee_id)
     
     if from_date:
@@ -426,12 +486,23 @@ def get_leave_requests(
 @router.put("/leave-request/{leave_id}/approve")
 def approve_leave(
     leave_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Approve leave request"""
     leave = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).first()
     if not leave:
         raise HTTPException(status_code=404, detail="Leave request not found")
+    
+    # Security check: verify the current user owns/manages this employee
+    worker = db.query(Worker).filter(Worker.id == leave.employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only approve leave for your own workers")
+    else:
+        # If not a worker, check if it's the shopkeeper themselves
+        if leave.employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only approve leave for yourself or your workers")
     
     leave.status = "APPROVED"
     
@@ -470,12 +541,23 @@ def approve_leave(
 @router.put("/leave-request/{leave_id}/reject")
 def reject_leave(
     leave_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Reject leave request"""
     leave = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).first()
     if not leave:
         raise HTTPException(status_code=404, detail="Leave request not found")
+    
+    # Security check: verify the current user owns/manages this employee
+    worker = db.query(Worker).filter(Worker.id == leave.employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only reject leave for your own workers")
+    else:
+        # If not a worker, check if it's the shopkeeper themselves
+        if leave.employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only reject leave for yourself or your workers")
     
     leave.status = "REJECTED"
     db.commit()

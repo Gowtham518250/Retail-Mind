@@ -254,9 +254,18 @@ def create_stock_movement(
 def get_stock_movements(
     product_id: int,
     days: int = Query(30),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Get stock movement history"""
+    # Security check: verify the current user owns this product
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    if product.user_id != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only view your own products' stock movements")
+    
     cutoff_date = datetime.now() - timedelta(days=days)
     
     movements = db.query(StockMovement).filter(
@@ -342,9 +351,18 @@ def create_batch(
 @router.get("/batches/{product_id}")
 def get_batches(
     product_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
     """Get all batches for a product"""
+    # Security check: verify the current user owns this product
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    if product.user_id != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only view your own products' batches")
+    
     batches = db.query(ProductBatch).filter(ProductBatch.product_id == product_id).all()
     return batches
 
