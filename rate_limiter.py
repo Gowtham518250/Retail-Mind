@@ -5,36 +5,36 @@ from datetime import datetime, timedelta
 from functools import wraps
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
-import os
-
-# 🔒 SECURITY FIX: Use Redis for distributed rate limiting in production
-import os
 import redis
 
 global USE_REDIS
 
 REDIS_URL = os.getenv("REDIS_URL")
-print(REDIS_URL)
-if not REDIS_URL:
-    raise ValueError("Redis url not provided")
 
-
-# Try to import Redis, fall back to in-memory if not available
-try:
-
-    redis_client=redis.from_url(
-        REDIS_URL,
-        decode_responses=True,
-        socket_connect_timeout=5,
-        socket_timeout=5
-    )
-    # Test Redis connection
-    redis_client.ping()
-    USE_REDIS = True
-    print("✅ Using Redis for distributed rate limiting")
-except Exception as e:
-    print(f"⚠️ Redis not available, falling back to in-memory rate limiting: {e}")
-    USE_REDIS = False
+# 🛡️ FIX: this used to `raise ValueError(...)` here if REDIS_URL wasn't set,
+# which crashed the entire app at import time (auth_routes.py imports this
+# module directly) — a missing Redis config took down the whole backend
+# instead of just disabling distributed rate limiting. The try/except below
+# already implements a correct graceful fallback to in-memory rate limiting;
+# it just needs to actually run instead of being pre-empted by the raise.
+# Also stopped logging REDIS_URL — the format is redis://user:password@host,
+# so this was writing the Redis password to plaintext logs on every restart.
+USE_REDIS = False
+if REDIS_URL:
+    try:
+        redis_client = redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=5
+        )
+        # Test Redis connection
+        redis_client.ping()
+        USE_REDIS = True
+        print("✅ Using Redis for distributed rate limiting")
+    except Exception as e:
+        print(f"⚠️ Redis not available, falling back to in-memory rate limiting: {e}")
+        USE_REDIS = False
 
 class RateLimiter:
     """
