@@ -14,6 +14,7 @@ import redis
 global USE_REDIS
 
 REDIS_URL = os.getenv("REDIS_URL")
+print(REDIS_URL)
 if not REDIS_URL:
     raise ValueError("Redis url not provided")
 

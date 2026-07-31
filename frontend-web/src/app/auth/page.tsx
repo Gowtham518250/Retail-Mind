@@ -12,6 +12,7 @@ type View = 'login' | 'register' | 'reset';
 export default function AuthPage() {
   const router = useRouter();
   const [view, setView] = useState<View>('login');
+  const [email, setEmail]     = useState('');
   const [phone, setPhone]     = useState('');
   const [password, setPassword] = useState('');
   const [name, setName]       = useState('');
@@ -33,11 +34,16 @@ export default function AuthPage() {
     setView(v);
   };
 
+  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
   // ── Login ────────────────────────────────────────────────────────────────
+  // 🔧 FIX: switched from phone+password to email+password. The backend's
+  // /store/customer/login already supported email (it was built to accept
+  // either), the web form was just never updated to offer it.
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^\d{10}$/.test(phone)) {
-      setError('Please enter a valid 10-digit phone number.');
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address.');
       return;
     }
     setLoading(true);
@@ -46,13 +52,13 @@ export default function AuthPage() {
       const res = await fetch(`${API_BASE}/store/customer/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.message || 'Login failed. Check your credentials.');
 
       localStorage.setItem('customerToken', data.access_token);
-      localStorage.setItem('customerName', data.customer?.name || data.name || phone);
+      localStorage.setItem('customerName', data.customer?.name || data.name || email);
       router.replace('/');
     } catch (err: any) {
       setError(err.message);
@@ -62,10 +68,20 @@ export default function AuthPage() {
   };
 
   // ── Register ─────────────────────────────────────────────────────────────
+  // 🔧 FIX: email is now required here (backend previously allowed it to be
+  // optional for the Flutter app's phone-only flow). Without an email on
+  // file, "forgot password" has nothing to send the new password to — so
+  // for the web storefront specifically we require it up front. Phone is
+  // still collected because the backend's CustomerRegister schema still
+  // requires it.
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim().length < 2) {
       setError('Name must be at least 2 characters long.');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address.');
       return;
     }
     if (!/^\d{10}$/.test(phone)) {
@@ -82,7 +98,7 @@ export default function AuthPage() {
       const res = await fetch(`${API_BASE}/store/customer/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, password }),
+        body: JSON.stringify({ name, email, phone, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.message || 'Registration failed. Please try again.');
@@ -98,8 +114,16 @@ export default function AuthPage() {
   };
 
   // ── Forgot Password ───────────────────────────────────────────────────────
+  // 🔧 FIX: now sends `email` (the backend's /store/customer/forgot-password
+  // was previously a no-op stub that didn't send anything regardless of
+  // what was posted to it — that's fixed server-side too. It now generates
+  // and emails a real temporary password.)
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
@@ -107,11 +131,11 @@ export default function AuthPage() {
       const res = await fetch(`${API_BASE}/store/customer/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ email }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.message || 'Reset failed. Please try again.');
-      setSuccess('Password reset instructions sent to your registered contact.');
+      setSuccess('If this email is registered, a new password has been sent to it.');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -175,20 +199,18 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Mobile Number</label>
+                    <label className={styles.label}>Email</label>
                     <div className={styles.inputWrap}>
-                      <Phone size={17} className={styles.inputIcon} />
+                      <Mail size={17} className={styles.inputIcon} />
                       <input
-                        id="login-phone"
-                        type="tel"
-                        value={phone}
-                        onChange={e => setPhone(e.target.value)}
+                        id="login-email"
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
                         className={styles.input}
-                        placeholder="10-digit number"
+                        placeholder="you@example.com"
                         required
-                        pattern="[0-9]{10}"
-                        maxLength={10}
-                        autoComplete="tel"
+                        autoComplete="email"
                       />
                     </div>
                   </div>
@@ -275,6 +297,23 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
+                    <label className={styles.label}>Email</label>
+                    <div className={styles.inputWrap}>
+                      <Mail size={17} className={styles.inputIcon} />
+                      <input
+                        id="reg-email"
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        className={styles.input}
+                        placeholder="you@example.com"
+                        required
+                        autoComplete="email"
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.fieldGroup}>
                     <label className={styles.label}>Mobile Number</label>
                     <div className={styles.inputWrap}>
                       <Phone size={17} className={styles.inputIcon} />
@@ -343,7 +382,7 @@ export default function AuthPage() {
                 transition={{ duration: 0.28 }}
               >
                 <h1 className={styles.authTitle}>Reset password</h1>
-                <p className={styles.authSubtitle}>Enter your registered mobile number</p>
+                <p className={styles.authSubtitle}>Enter your registered email — we&apos;ll send you a new password</p>
 
                 <form onSubmit={handleReset} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -360,19 +399,18 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Mobile Number</label>
+                    <label className={styles.label}>Email</label>
                     <div className={styles.inputWrap}>
-                      <Phone size={17} className={styles.inputIcon} />
+                      <Mail size={17} className={styles.inputIcon} />
                       <input
-                        id="reset-phone"
-                        type="tel"
-                        value={phone}
-                        onChange={e => setPhone(e.target.value)}
+                        id="reset-email"
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
                         className={styles.input}
-                        placeholder="Registered number"
+                        placeholder="Registered email"
                         required
-                        pattern="[0-9]{10}"
-                        maxLength={10}
+                        autoComplete="email"
                       />
                     </div>
                   </div>
@@ -385,7 +423,7 @@ export default function AuthPage() {
                     className={styles.submitBtn}
                     id="reset-submit"
                   >
-                    {loading ? <span className={styles.spinner} /> : 'Send Reset Link'}
+                    {loading ? <span className={styles.spinner} /> : 'Send New Password'}
                   </motion.button>
                 </form>
 

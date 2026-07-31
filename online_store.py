@@ -12,6 +12,7 @@ Covers:
 import math
 import json
 import logging
+import secrets
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
 
@@ -261,9 +262,47 @@ def forgot_password(
     db: Session = Depends(get_db),
     _rl: None = Depends(check_rate_limit),
 ):
-    """Send password reset link — always 200 to prevent email enumeration"""
-    db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
-    return {"message": "If this email is registered, a reset link has been sent."}
+    """Generate a new temporary password and email it to the customer.
+
+    🔧 FIX: this previously queried the customer and then did nothing with
+    the result — no email was ever sent, no password was ever changed. It
+    just returned a generic success message regardless, which made the
+    "forgot password" flow completely non-functional while looking like
+    it worked from the client's perspective.
+
+    Always returns the same generic message whether or not the account
+    exists, to avoid leaking which emails are registered.
+    """
+    user = None
+    if data.email:
+        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
+    elif data.phone:
+        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
+
+    if user and user.email:
+        try:
+            # Generate a secure, random temporary password (not a
+            # predictable/short one) and store only its bcrypt hash.
+            temp_password = secrets.token_urlsafe(9)  # ~12 char URL-safe string
+            user.password = hash_password(temp_password)
+            db.commit()
+
+            if EmailNotificationService:
+                subject, body = EmailNotificationService.welcome_credentials_template(
+                    user.user_name, temp_password, "Customer (Password Reset)"
+                )
+                EmailNotificationService.create_notification(
+                    db=db,
+                    recipient_email=user.email,
+                    subject=subject,
+                    body=body,
+                    event_type="PASSWORD_RESET",
+                )
+        except Exception as e:
+            logger.error(f"Failed to process password reset for customer: {e}")
+            db.rollback()
+
+    return {"message": "If this account is registered with an email, a new password has been sent to it."}
 
 
 # =====================
