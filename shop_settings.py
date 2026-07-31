@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from models import ShopProfile, User, UniversalTransaction
-from security import get_current_user, owner_only, sanitize_input
+from security import get_current_user, owner_only, sanitize_input, resolve_shop_id
 
 router = APIRouter(prefix="/shop", tags=["Shop Settings"])
 
@@ -96,7 +96,7 @@ def create_shop_profile(
     current_user: dict = Depends(owner_only),
 ):
     """Create the shop profile (one per owner)"""
-    owner_id = current_user
+    owner_id = resolve_shop_id(current_user)
 
     # Check if profile already exists
     existing = db.query(ShopProfile).filter(ShopProfile.shop_id == owner_id).first()
@@ -117,8 +117,12 @@ def create_shop_profile(
         logo_url=data.logo_url,
     )
     db.add(profile)
-    db.commit()
-    db.refresh(profile)
+    try:
+        db.commit()
+        db.refresh(profile)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create shop profile: {str(e)}")
     return profile
 
 
@@ -128,7 +132,7 @@ def get_shop_profile(
     current_user: dict = Depends(get_current_user),
 ):
     """Get the current user's shop profile"""
-    owner_id = current_user
+    owner_id = resolve_shop_id(current_user)
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == owner_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Shop profile not found. Please create one first.")
@@ -142,7 +146,7 @@ def update_shop_profile(
     current_user: dict = Depends(owner_only),
 ):
     """Update shop profile (all fields optional)"""
-    owner_id = current_user
+    owner_id = resolve_shop_id(current_user)
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == owner_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Shop profile not found. Create one first via POST /shop/profile")
@@ -153,8 +157,12 @@ def update_shop_profile(
             value = sanitize_input(value, key)
         setattr(profile, key, value)
 
-    db.commit()
-    db.refresh(profile)
+    try:
+        db.commit()
+        db.refresh(profile)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update shop profile: {str(e)}")
     return profile
 
 
@@ -169,7 +177,7 @@ def get_upi_qr(
     Optionally pass ?amount=250.00 to create a fixed-amount QR for an invoice.
     Returns a base64 PNG for embedding directly in the app.
     """
-    owner_id = current_user
+    owner_id = resolve_shop_id(current_user)
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == owner_id).first()
 
     if not profile:
@@ -199,13 +207,17 @@ def toggle_online_store(
     current_user: dict = Depends(owner_only),
 ):
     """Enable or disable the online store for this shop"""
-    owner_id = current_user
+    owner_id = resolve_shop_id(current_user)
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == owner_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Shop profile not found.")
 
     profile.is_online_store_enabled = enable
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to toggle online store: {str(e)}")
     return {
         "message": f"Online store {'ENABLED' if enable else 'DISABLED'} successfully.",
         "is_online_store_enabled": enable,

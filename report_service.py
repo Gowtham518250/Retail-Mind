@@ -92,7 +92,11 @@ class ReportService:
             card_collected=card_collected
         )
         db.add(report)
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to save daily report: {str(e)}")
         
         return {
             "report_id": report.id,
@@ -169,7 +173,11 @@ Generated: {datetime.now().strftime('%I:%M %p')}"""
         # Mark as sent
         report.whatsapp_sent = True
         report.whatsapp_sent_at = datetime.now()
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to mark report as sent: {str(e)}")
         
         return {
             "status": "ready_to_send",

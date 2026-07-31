@@ -695,8 +695,12 @@ def update_invoice(
     if data.notes is not None:
         invoice.notes = data.notes
     
-    db.commit()
-    db.refresh(invoice)
+    try:
+        db.commit()
+        db.refresh(invoice)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update invoice: {str(e)}")
     
     # Get line items
     line_items = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice_id).all()
@@ -740,5 +744,9 @@ def delete_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     db.delete(invoice)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete invoice: {str(e)}")
     return {"message": "Invoice deleted securely."}

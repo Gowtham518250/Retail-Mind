@@ -99,18 +99,8 @@ class AdvancedRetailServices:
                         "recommended_action": "Send Welcome Offer Coupon"
                     })
                     
-        # Fallback to simulated/mock if DB is empty so the UI doesn't look blank or break
-        if not at_risk:
-            mock_names = ["Gowtham Kumar", "Rahul Sharma", "Amit Patel"]
-            mock_phones = ["9876543210", "9123456789", "8888888888"]
-            for i, name in enumerate(mock_names):
-                at_risk.append({
-                    "customer_id": 9999 + i,
-                    "name": name,
-                    "phone": mock_phones[i],
-                    "last_visit": cutoff_date.isoformat(),
-                    "recommended_action": "Send 10% Win-back WhatsApp Coupon"
-                })
+        # Removed mock data injection so the UI accurately shows an empty state 
+        # when there are no churn risk customers instead of showing dummy data.
                 
         return {
             "at_risk_count": len(at_risk),

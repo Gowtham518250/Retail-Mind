@@ -84,13 +84,16 @@ class ShopService:
             shop_profile.upi_ids = json.dumps(data.get("upi_ids"))
         
         db.add(shop_profile)
-        db.commit()
-        db.refresh(shop_profile)
-        
-        # Create default shop settings
+        # Create default shop settings in same transaction to avoid orphan profiles
+        db.flush()  # Get shop_profile.id without committing
         settings = ShopSettings(shop_id=shop_profile.id)
         db.add(settings)
-        db.commit()
+        try:
+            db.commit()
+            db.refresh(shop_profile)
+        except Exception as e:
+            db.rollback()
+            raise ValueError(f"Failed to create shop profile: {str(e)}")
         
         return shop_profile
     
@@ -106,14 +109,18 @@ class ShopService:
                 shop_name=data.get("shop_name", "My Shop")
             )
             db.add(shop_profile)
-            db.flush()
+            db.flush()  # Get id before commit
             
-            # Also ensure default settings are created
+            # Also ensure default settings are created in same transaction
             from models import ShopSettings
             settings = ShopSettings(shop_id=shop_profile.id)
             db.add(settings)
-            db.commit()
-            db.refresh(shop_profile)
+            try:
+                db.commit()
+                db.refresh(shop_profile)
+            except Exception as e:
+                db.rollback()
+                raise ValueError(f"Failed to auto-create shop profile: {str(e)}")
         
         # Update fields
         for key, value in data.items():
@@ -131,8 +138,12 @@ class ShopService:
                     setattr(shop_profile, key, value)
         
         shop_profile.updated_at = datetime.now()
-        db.commit()
-        db.refresh(shop_profile)
+        try:
+            db.commit()
+            db.refresh(shop_profile)
+        except Exception as e:
+            db.rollback()
+            raise ValueError(f"Failed to update shop profile: {str(e)}")
         
         return shop_profile
     
@@ -145,14 +156,18 @@ class ShopService:
             # Auto-create default profile
             profile = ShopProfile(shop_id=user_id, shop_name="My Shop")
             db.add(profile)
-            db.flush()
+            db.flush()  # Get id before commit
             
-            # Auto-create settings
+            # Auto-create settings in same transaction
             from models import ShopSettings
             settings = ShopSettings(shop_id=profile.id)
             db.add(settings)
-            db.commit()
-            db.refresh(profile)
+            try:
+                db.commit()
+                db.refresh(profile)
+            except Exception as e:
+                db.rollback()
+                raise ValueError(f"Failed to auto-create profile: {str(e)}")
             
         return profile
     
@@ -163,8 +178,12 @@ class ShopService:
         if not settings:
             settings = ShopSettings(shop_id=shop_id)
             db.add(settings)
-            db.commit()
-            db.refresh(settings)
+            try:
+                db.commit()
+                db.refresh(settings)
+            except Exception as e:
+                db.rollback()
+                raise ValueError(f"Failed to create shop settings: {str(e)}")
         
         # Update fields
         for key, value in data.items():
@@ -172,8 +191,12 @@ class ShopService:
                 setattr(settings, key, value)
         
         settings.updated_at = datetime.now()
-        db.commit()
-        db.refresh(settings)
+        try:
+            db.commit()
+            db.refresh(settings)
+        except Exception as e:
+            db.rollback()
+            raise ValueError(f"Failed to update shop settings: {str(e)}")
         
         return settings
     
@@ -184,8 +207,12 @@ class ShopService:
         if not settings:
             settings = ShopSettings(shop_id=shop_id)
             db.add(settings)
-            db.commit()
-            db.refresh(settings)
+            try:
+                db.commit()
+                db.refresh(settings)
+            except Exception as e:
+                db.rollback()
+                raise ValueError(f"Failed to create default settings: {str(e)}")
         return settings
     
     @staticmethod
@@ -197,7 +224,11 @@ class ShopService:
             return False
         
         db.delete(profile)
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise ValueError(f"Failed to delete shop profile: {str(e)}")
         return True
 
 
@@ -437,8 +468,25 @@ def upload_logo(file: UploadFile = File(...), user_id: int = Depends(check_curre
         import os
         import uuid
         
-        # Generate unique filename
-        filename = f"{user_id}_{uuid.uuid4()}_{file.filename}"
+        # Validate file type — only allow images
+        ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+        ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+        MAX_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+        
+        if file.content_type not in ALLOWED_TYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid file type '{file.content_type}'. Only JPEG/PNG/WebP/GIF allowed.")
+        
+        ext = os.path.splitext(file.filename or "")[1].lower()
+        if ext not in ALLOWED_EXTS:
+            raise HTTPException(status_code=400, detail=f"Invalid file extension '{ext}'.")
+        
+        # Read content and enforce size limit
+        content = file.file.read()
+        if len(content) > MAX_SIZE_BYTES:
+            raise HTTPException(status_code=413, detail="Logo file too large. Maximum allowed size is 5 MB.")
+        
+        # Generate unique filename (sanitised — no user-controlled path components)
+        filename = f"{user_id}_{uuid.uuid4()}{ext}"
         upload_dir = "static/logos"
         
         os.makedirs(upload_dir, exist_ok=True)
@@ -446,19 +494,30 @@ def upload_logo(file: UploadFile = File(...), user_id: int = Depends(check_curre
         
         # Save file
         with open(file_path, "wb") as f:
-            f.write(file.file.read())
+            f.write(content)
         
         # Update profile with logo path
         profile = ShopService.get_shop_profile(db, user_id)
         profile.logo_file_path = file_path
+        if profile.logo_version is None:
+            profile.logo_version = 0
         profile.logo_version += 1
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            # Remove the uploaded file if DB update fails
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=500, detail=f"Failed to update logo: {str(e)}")
         
         return {
             "status": "success",
             "logo_path": file_path,
             "url": f"/static/logos/{filename}"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -529,7 +588,11 @@ def set_publish_status(data: dict, user_id: int = Depends(check_current_user), d
         is_published = data.get("is_published", False)
         profile = ShopService.get_shop_profile(db, user_id)
         profile.is_online_store_enabled = is_published
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to update publish status: {str(e)}")
         return {
             "success": True, 
             "is_published": is_published, 
@@ -551,8 +614,12 @@ def publish_marketplace(data: dict, user_id: int = Depends(check_current_user), 
         if data.get("address_nickname"):
             profile.location = data.get("address_nickname")
             
-        db.commit()
-        slug = profile.shop_name.lower().replace(" ", "-")
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to publish marketplace: {str(e)}")
+        slug = profile.shop_name.lower().replace(" ", "-") if profile.shop_name else str(profile.id)
         return {
             "success": True,
             "shop_id": profile.id,
@@ -569,7 +636,11 @@ def unpublish_marketplace(user_id: int = Depends(check_current_user), db: Sessio
     try:
         profile = ShopService.get_shop_profile(db, user_id)
         profile.is_online_store_enabled = False
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to unpublish: {str(e)}")
         return {
             "success": True,
             "message": "Your shop is no longer visible to customers."

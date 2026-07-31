@@ -13,6 +13,7 @@ import random
 import time
 from typing import Optional
 import hashlib
+from jose import JWTError  # Required for refresh_token endpoint exception handling
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -326,7 +327,11 @@ def register_fcm_token(request: FCMTokenRequest, user_id: int = Depends(get_curr
         raise HTTPException(status_code=404, detail="User not found")
     
     db_user.fcm_token = request.fcm_token
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to register FCM token: {str(e)}")
     
     return {"msg": "FCM token registered successfully"}
 @router.get("/sales")

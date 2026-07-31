@@ -37,7 +37,11 @@ class CreditScoreService:
                 db.add(score_record)
             score_record.credit_score = 50
             score_record.score_badge = "REGULAR"
-            db.commit()
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                raise HTTPException(status_code=500, detail=f"Failed to save credit score: {str(e)}")
             return {
                 "customer_id": customer_id,
                 "credit_score": 50,
@@ -145,7 +149,11 @@ class CreditScoreService:
         score_record.avg_days_to_pay = sum(overdue_days) / len(overdue_days) if overdue_days else 0
         score_record.last_calculated = datetime.now()
         
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to save credit score: {str(e)}")
         
         return {
             "customer_id": customer_id,
@@ -225,7 +233,11 @@ class CreditScoreService:
         else:
             score.score_badge = "CAUTION"
         
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to save manual score adjustment: {str(e)}")
         
         return {
             "old_score": old_score,

@@ -161,8 +161,12 @@ def update_customer(
         setattr(db_customer, field, value)
     
     db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
+    try:
+        db.commit()
+        db.refresh(db_customer)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Customer update failed: {str(e)}")
     
     return db_customer
 
@@ -182,7 +186,11 @@ def delete_customer(
         raise HTTPException(status_code=404, detail="Customer not found")
     
     customer.is_active = False  # Soft delete — preserves all transaction history
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Customer archive failed: {str(e)}")
     
     return {"message": f"Customer '{customer.customer_name}' archived. Khata and invoice history preserved."}
 
@@ -206,7 +214,11 @@ def set_contact_preference(
         raise HTTPException(status_code=400, detail="Invalid contact preference")
     
     customer.contact_preference = preference
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update contact preference: {str(e)}")
     
     return {"message": f"Contact preference set to {preference}"}
 

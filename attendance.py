@@ -49,8 +49,12 @@ def create_worker(
         **worker_data.dict()
     )
     db.add(worker)
-    db.commit()
-    db.refresh(worker)
+    try:
+        db.commit()
+        db.refresh(worker)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create worker: {str(e)}")
     return worker
 
 @router.get("/workers")
@@ -75,9 +79,12 @@ def update_worker(
     update_data = data.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(worker, key, value)
-    
-    db.commit()
-    db.refresh(worker)
+    try:
+        db.commit()
+        db.refresh(worker)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update worker: {str(e)}")
     return worker
 
 @router.delete("/workers/{worker_id}")
@@ -95,7 +102,11 @@ def delete_worker(
         raise HTTPException(status_code=404, detail="Worker not found")
     
     db.delete(worker)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete worker: {str(e)}")
     return {"message": "Worker deleted successfully", "worker_id": worker_id}
 
 
@@ -190,8 +201,12 @@ def employee_check_in(
     else:
         raise HTTPException(status_code=400, detail="Already checked in today")
 
-    db.commit()
-    db.refresh(attendance)
+    try:
+        db.commit()
+        db.refresh(attendance)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Check-in failed: {str(e)}")
 
     return {
         "message": "Check-in successful",
@@ -277,8 +292,12 @@ def employee_check_out(
         duration = attendance.check_out_time - attendance.check_in_time
         attendance.working_hours = duration.total_seconds() / 3600  # Convert to hours
 
-    db.commit()
-    db.refresh(attendance)
+    try:
+        db.commit()
+        db.refresh(attendance)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Check-out failed: {str(e)}")
 
     return {
         "message": "Check-out successful",
@@ -341,7 +360,11 @@ def record_manual_attendance(
         )
         db.add(attendance)
     
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to record attendance: {str(e)}")
     
     return {"message": "Attendance recorded successfully", "worker_id": record.employee_id, "status": normalized_status}
 
@@ -456,8 +479,12 @@ def request_leave(
     )
     
     db.add(db_leave)
-    db.commit()
-    db.refresh(db_leave)
+    try:
+        db.commit()
+        db.refresh(db_leave)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create leave request: {str(e)}")
     
     return db_leave
 
@@ -528,13 +555,11 @@ def approve_leave(
     
         current += timedelta(days=1)
     
-   # To:
     try:
         db.commit()
-    except Exception:
+    except Exception as e:
         db.rollback()
-    # Attendance records may already exist, that's fine
-    pass
+        raise HTTPException(status_code=500, detail=f"Failed to approve leave: {str(e)}")
 
     return {"message": "Leave approved"}
 
@@ -560,7 +585,11 @@ def reject_leave(
             raise HTTPException(status_code=403, detail="You can only reject leave for yourself or your workers")
     
     leave.status = "REJECTED"
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to reject leave: {str(e)}")
     
     return {"message": "Leave rejected"}
 

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from models import PurchaseOrder, Product, StockMovement, UniversalTransaction
-from security import owner_only, sanitize_input
+from security import owner_only, sanitize_input, resolve_shop_id
 import json
 
 router = APIRouter(prefix="/purchase-orders", tags=["Purchase Orders"])
@@ -60,7 +60,7 @@ def create_purchase_order(
     current_user: dict = Depends(owner_only),
 ):
     """Create a new purchase order to a supplier"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     supplier_name = sanitize_input(data.supplier_name, "supplier_name")
 
     items_data = [item.model_dump() for item in data.items]
@@ -75,8 +75,12 @@ def create_purchase_order(
         expected_delivery=data.expected_delivery,
     )
     db.add(po)
-    db.commit()
-    db.refresh(po)
+    try:
+        db.commit()
+        db.refresh(po)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create purchase order: {str(e)}")
     return po
 
 
@@ -89,7 +93,7 @@ def list_purchase_orders(
     current_user: dict = Depends(owner_only),
 ):
     """List all purchase orders for this shop"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     q = db.query(PurchaseOrder).filter(PurchaseOrder.shop_id == shop_id)
     if status:
         q = q.filter(PurchaseOrder.status == status.upper())
@@ -107,7 +111,7 @@ def mark_po_delivered(
     Mark a PO as delivered.
     This AUTOMATICALLY adds received stock quantities to inventory.
     """
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     po = db.query(PurchaseOrder).filter(
         PurchaseOrder.id == po_id,
         PurchaseOrder.shop_id == shop_id,
@@ -158,7 +162,11 @@ def mark_po_delivered(
         description=f"Purchase Order from {po.supplier_name}",
     )
     db.add(tx)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update PO delivery: {str(e)}")
 
     return {
         "message": f"PO #{po.id} marked as delivered. Stock updated.",
@@ -174,7 +182,7 @@ def cancel_purchase_order(
     current_user: dict = Depends(owner_only),
 ):
     """Cancel a purchase order"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     po = db.query(PurchaseOrder).filter(
         PurchaseOrder.id == po_id,
         PurchaseOrder.shop_id == shop_id,
@@ -186,5 +194,9 @@ def cancel_purchase_order(
         raise HTTPException(status_code=409, detail="Cannot cancel a delivered PO.")
 
     po.status = "CANCELLED"
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to cancel purchase order: {str(e)}")
     return {"message": f"Purchase order #{po_id} has been cancelled."}

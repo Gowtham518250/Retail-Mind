@@ -45,7 +45,7 @@ def add_expense(
     current_user: dict = Depends(owner_only),
 ):
     """Log a shop expense (rent, salary, utilities, etc.)"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     category = sanitize_input(data.category, "category")
     desc = sanitize_input(data.description or "", "description") or None
 
@@ -68,7 +68,11 @@ def add_expense(
         description=desc or f"{category} expense",
     )
     db.add(tx)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to log expense: {str(e)}")
 
     return {"message": "Expense logged successfully.", "amount": data.amount, "category": category}
 
@@ -84,7 +88,7 @@ def list_expenses(
     current_user: dict = Depends(owner_only),
 ):
     """List shop expenses with optional date/category filters"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     q = db.query(ShopExpense).filter(ShopExpense.shop_id == shop_id)
     if start_date:
         q = q.filter(ShopExpense.expense_date >= start_date)
@@ -138,7 +142,7 @@ def add_worker(
     current_user: dict = Depends(owner_only),
 ):
     """Add a new worker/staff member"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     worker = Worker(
         shopkeeper_id=shop_id,
         name=sanitize_input(data.name, "name"),
@@ -150,8 +154,12 @@ def add_worker(
         pin=data.pin,
     )
     db.add(worker)
-    db.commit()
-    db.refresh(worker)
+    try:
+        db.commit()
+        db.refresh(worker)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to add worker: {str(e)}")
     return {"message": "Worker added successfully.", "worker_id": worker.id, "name": worker.name}
 
 
@@ -161,7 +169,7 @@ def list_workers(
     current_user: dict = Depends(owner_only),
 ):
     """List all workers for this shop"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     workers = db.query(Worker).filter(
         Worker.shopkeeper_id == shop_id,
         Worker.status == "active",
@@ -194,7 +202,7 @@ def update_worker(
     current_user: dict = Depends(owner_only),
 ):
     """Update worker details (salary, position, status)"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     worker = db.query(Worker).filter(
         Worker.id == worker_id,
         Worker.shopkeeper_id == shop_id,
@@ -206,7 +214,11 @@ def update_worker(
     for key, value in update_data.items():
         setattr(worker, key, value)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update worker: {str(e)}")
     return {"message": "Worker updated.", "worker_id": worker_id}
 
 
@@ -222,7 +234,7 @@ def pay_worker_salary(
         from datetime import datetime
         month = datetime.now().strftime("%Y-%m")
         
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     worker = db.query(Worker).filter(
         Worker.id == worker_id,
         Worker.shopkeeper_id == shop_id,
@@ -255,7 +267,11 @@ def pay_worker_salary(
         description=f"Salary: {worker.name} ({month})",
     )
     db.add(tx)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to pay salary: {str(e)}")
 
     return {
         "message": f"Salary of ₹{salary:.2f} paid to {worker.name} for {month}.",
@@ -280,7 +296,7 @@ def add_reconciliation(
     current_user: dict = Depends(owner_only),
 ):
     """Record daily UPI vs bank deposit reconciliation"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
 
     diff = abs(data.expected_upi_amount - data.actual_bank_deposit)
     status = "MATCHED" if diff < 1.0 else "DISCREPANCY"
@@ -294,7 +310,11 @@ def add_reconciliation(
         notes=data.notes,
     )
     db.add(recon)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to record reconciliation: {str(e)}")
 
     return {
         "message": "Reconciliation recorded.",
@@ -313,7 +333,7 @@ def list_reconciliations(
     current_user: dict = Depends(owner_only),
 ):
     """View bank reconciliation history"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     q = db.query(BankReconciliation).filter(BankReconciliation.shop_id == shop_id)
     if start_date:
         q = q.filter(BankReconciliation.recon_date >= start_date)
@@ -351,7 +371,7 @@ def get_profit_and_loss(
     Full Profit & Loss summary:
     Revenue (sales) - Expenses (all categories) = Net Profit
     """
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     if not start_date:
         start_date = date.today().replace(day=1)  # Current month
     if not end_date:
@@ -421,7 +441,7 @@ def get_all_transactions(
     current_user: dict = Depends(owner_only),
 ):
     """All Transactions view: every money movement (sales, expenses, khata, PO)"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     q = db.query(UniversalTransaction).filter(UniversalTransaction.shop_id == shop_id)
     if tx_type:
         q = q.filter(UniversalTransaction.tx_type == tx_type.upper())
@@ -458,7 +478,7 @@ def stock_analysis(
     current_user: dict = Depends(owner_only),
 ):
     """Identify fast-moving and dead-stock items"""
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
 
     products = db.query(Product).filter(
         Product.user_id == shop_id,
@@ -523,11 +543,11 @@ def get_remarketing_opportunities(
     Find customers who haven't purchased in `threshold_days`,
     determine their favorite item, and generate a WhatsApp message.
     """
-    shop_id = current_user
+    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
     threshold_date = datetime.now(timezone.utc) - timedelta(days=threshold_days)
     
-    # 1. Get all customers for this shop
-    customers = db.query(Customer).filter(Customer.shop_id == shop_id).all()
+    # 1. Get all customers for this shop (Customer uses user_id, not shop_id)
+    customers = db.query(Customer).filter(Customer.user_id == shop_id).all()
     
     opportunities = []
     
@@ -537,7 +557,7 @@ def get_remarketing_opportunities(
             
         # Get latest invoice
         latest_invoice = db.query(Invoice).filter(
-            Invoice.shop_id == shop_id,
+            Invoice.user_id == shop_id,  # FIX: Invoice uses user_id not shop_id
             Invoice.customer_id == customer.id
         ).order_by(Invoice.created_at.desc()).first()
         
@@ -557,7 +577,7 @@ def get_remarketing_opportunities(
         # 2. Find favorite item
         # Get all invoices for this customer
         invoices = db.query(Invoice).filter(
-            Invoice.shop_id == shop_id, 
+            Invoice.user_id == shop_id,  # FIX: Invoice uses user_id not shop_id
             Invoice.customer_id == customer.id
         ).all()
         invoice_ids = [inv.id for inv in invoices]
@@ -573,15 +593,16 @@ def get_remarketing_opportunities(
         if not line_items:
             continue
             
-        # Tally item frequency
+        # Tally item frequency (InvoiceLineItem uses 'description', not 'product_name')
         item_counts = {}
         for item in line_items:
-            item_counts[item.product_name] = item_counts.get(item.product_name, 0) + 1
+            item_desc = item.description or "Unknown Product"
+            item_counts[item_desc] = item_counts.get(item_desc, 0) + 1
             
         # Get item with max frequency
         favorite_item = max(item_counts, key=item_counts.get)
         
-        name = customer.name or "Customer"
+        name = customer.customer_name or "Customer"  # FIX: Customer model uses customer_name not name
         msg = f"Hi {name}! You usually buy {favorite_item} from us, but we haven't seen you in a while. Reply to this message to order now and get a 5% discount on your next purchase!"
         
         opportunities.append(RemarketingOpportunity(

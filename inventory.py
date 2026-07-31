@@ -34,7 +34,11 @@ def bulk_import_products(items: list[dict], user_id: int = Depends(check_current
         p = Product(user_id=user_id, **item)
         db.add(p)
         created += 1
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk import failed: {str(e)}")
     return {"imported": created}
 
 @router.post("/bulk-import/customers")
@@ -46,7 +50,11 @@ def bulk_import_customers(items: list[dict], user_id: int = Depends(check_curren
         c = Customer(user_id=user_id, **item)
         db.add(c)
         created += 1
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk customer import failed: {str(e)}")
     return {"imported": created}
 
 @router.get("/batch-history")
@@ -128,8 +136,12 @@ def create_product(
         **product.dict()
     )
     db.add(db_product)
-    db.commit()
-    db.refresh(db_product)
+    try:
+        db.commit()
+        db.refresh(db_product)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")
     return db_product
 
 @router.get("/products", response_model=List[ProductResponse])
@@ -186,8 +198,12 @@ def update_product(
         setattr(db_product, field, value)
     
     db.add(db_product)
-    db.commit()
-    db.refresh(db_product)
+    try:
+        db.commit()
+        db.refresh(db_product)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update product: {str(e)}")
     return db_product
 
 @router.delete("/products/{product_id}")
@@ -205,7 +221,11 @@ def delete_product(
         raise HTTPException(status_code=404, detail="Product not found")
     
     db_product.is_active = False  # Soft delete — preserves all invoice line item history
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to archive product: {str(e)}")
     return {"message": f"Product '{db_product.product_name}' archived. All invoice history preserved."}
 
 # ==================== STOCK MANAGEMENT ====================
@@ -343,8 +363,12 @@ def create_batch(
     
     db_batch = ProductBatch(**batch.dict())
     db.add(db_batch)
-    db.commit()
-    db.refresh(db_batch)
+    try:
+        db.commit()
+        db.refresh(db_batch)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create batch: {str(e)}")
     
     return db_batch
 

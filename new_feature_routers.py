@@ -73,7 +73,7 @@ def get_today_deliveries(db: Session = Depends(get_db), current_user: int = Depe
     return {"deliveries": DeliveryService.get_today_deliveries(db, shop_id=current_user)}
 
 @router.post("/delivery/{delivery_id}/update-status")
-def update_delivery(delivery_id: int, status: str = Body(embed=True), notes: Optional[str] = Body(default=None, embed=True), db: Session = Depends(get_db)):
+def update_delivery(delivery_id: int, status: str = Body(embed=True), notes: Optional[str] = Body(default=None, embed=True), current_user: int = Depends(check_current_user), db: Session = Depends(get_db)):
     return DeliveryService.update_status(db, delivery_id, status, notes=notes)
 
 
@@ -81,11 +81,11 @@ def update_delivery(delivery_id: int, status: str = Body(embed=True), notes: Opt
 # 3. LOYALTY POINTS (FEATURE 7)
 # ==========================================
 @router.post("/loyalty/earn")
-def earn_points(customer_id: int = Body(...), invoice_id: int = Body(...), amount: float = Body(...), db: Session = Depends(get_db)):
+def earn_points(customer_id: int = Body(...), invoice_id: int = Body(...), amount: float = Body(...), current_user: int = Depends(check_current_user), db: Session = Depends(get_db)):
     return LoyaltyService.earn_points(db, customer_id, invoice_id, amount)
 
 @router.post("/loyalty/redeem")
-def redeem_points(customer_id: int = Body(...), points: int = Body(...), invoice_id: int = Body(...), db: Session = Depends(get_db)):
+def redeem_points(customer_id: int = Body(...), points: int = Body(...), invoice_id: int = Body(...), current_user: int = Depends(check_current_user), db: Session = Depends(get_db)):
     result = LoyaltyService.redeem_points(db, customer_id, points, invoice_id)
     if not result.get("success", False):
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to redeem"))
@@ -452,14 +452,15 @@ def get_expense_history(category: Optional[str] = None, skip: int = 0, limit: in
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/transactions/recent")
-def get_recent_transactions(limit: int = 50, db: Session = Depends(get_db)):
+def get_recent_transactions(limit: int = 50, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Get recent transactions across all types (invoices, payments, expenses) - for Recent Transactions screen"""
     try:
         from models import Invoice, KhataHistory
         from datetime import datetime, timedelta
         
-        # Get recent paid invoices
+        # Get recent paid invoices - filtered by user_id to prevent IDOR
         recent_invoices = db.query(Invoice).filter(
+            Invoice.user_id == user_id,
             Invoice.payment_status == 'PAID',
             Invoice.updated_at >= datetime.now() - timedelta(days=30)
         ).order_by(Invoice.updated_at.desc()).limit(limit).all()
@@ -485,14 +486,15 @@ def get_recent_transactions(limit: int = 50, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/transactions/online-payments")
-def get_online_payments(days: int = 30, limit: int = 100, db: Session = Depends(get_db)):
+def get_online_payments(days: int = 30, limit: int = 100, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Fetch online (UPI/digital) payments only for last N days"""
     try:
         from models import Invoice
         from datetime import datetime, timedelta
         
-        # Get UPI/online payments from invoices
+        # Get UPI/online payments from invoices - filtered by user_id to prevent IDOR
         online_invoices = db.query(Invoice).filter(
+            Invoice.user_id == user_id,
             Invoice.payment_status == 'PAID',
             Invoice.payment_method != None,
             (Invoice.payment_method.ilike('%upi%')) | 
@@ -549,7 +551,7 @@ def export_data_backup(user_id: int = Depends(check_current_user), db: Session =
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/data/integrity-check")
-def verify_data_integrity(db: Session = Depends(get_db)):
+def verify_data_integrity(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Verify data integrity across all critical tables"""
     try:
         from models import Invoice, KhataBalance, KhataHistory, ShopExpense
@@ -628,6 +630,7 @@ async def sync_invoices_batch(payload: dict = Body(...), user_id: int = Depends(
     try:
         invoices_data = payload.get('data', [])
         synced_count = 0
+        skipped_count = 0  # FIX: was undefined, caused NameError on duplicate invoices
         shop_id = await get_user_shop_id(user_id, db)
         
         for inv in invoices_data:

@@ -324,8 +324,12 @@ async def _handle_update_sale(
     sale.version = incoming_version + 1
     sale.sync_status = 'synced'
     
-    db.commit()
-    db.refresh(sale)
+    try:
+        db.commit()
+        db.refresh(sale)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Sale update failed: {str(e)}")
     
     return {"uuid": sale.uuid, "version": sale.version}
 
@@ -350,7 +354,11 @@ async def _handle_delete_sale(
     sale.deleted_at = datetime.utcnow()
     sale.sync_status = 'synced'
     
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Sale deletion failed: {str(e)}")
     
     return {"uuid": sale.uuid, "deleted": True}
 
@@ -366,7 +374,8 @@ async def _handle_update_stock(
     if not product_uuid:
         raise HTTPException(status_code=400, detail="Product UUID required")
     
-    product = db.query(Product).filter(Product.uuid == product_uuid).first()
+    # Use row-level lock to prevent concurrent stock updates
+    product = db.query(Product).filter(Product.uuid == product_uuid).with_for_update().first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
@@ -378,8 +387,12 @@ async def _handle_update_stock(
     product.updated_at = datetime.utcnow()
     product.sync_status = 'synced'
     
-    db.commit()
-    db.refresh(product)
+    try:
+        db.commit()
+        db.refresh(product)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Stock update failed: {str(e)}")
     
     logger.info(f"Stock updated: {product_uuid} from {old_quantity} to {new_quantity}")
     
@@ -418,8 +431,12 @@ async def _handle_create_customer(
     )
     
     db.add(customer)
-    db.commit()
-    db.refresh(customer)
+    try:
+        db.commit()
+        db.refresh(customer)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Customer creation failed: {str(e)}")
     
     return {"uuid": customer.uuid, "name": customer.name}
 

@@ -18,7 +18,7 @@ from sqlalchemy import func
 
 from db import get_db
 from models import KhataBalance, KhataHistory, UniversalTransaction
-from security import owner_only, sanitize_input
+from security import owner_only, sanitize_input, resolve_shop_id
 import urllib.parse
 
 router = APIRouter(prefix="/khata", tags=["Khata Ledger"])
@@ -93,7 +93,7 @@ def add_khata_credit(
     current_user: dict = Depends(owner_only),
 ):
     """Record that a customer bought on credit (Udhar/Khata)"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     desc = sanitize_input(data.description or "Purchased on Khata", "description")
 
     khata = _get_or_create_khata(db, shop_id, data.customer_phone, data.customer_name)
@@ -112,7 +112,11 @@ def add_khata_credit(
     _write_universal_tx(db, shop_id, "INCOME", "KHATA_CREDIT",
         data.amount, f"KHATA-{khata.id}", f"Khata credit for {data.customer_phone}")
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to record khata credit: {str(e)}")
     return {
         "message": "Khata credit recorded successfully",
         "customer_phone": data.customer_phone,
@@ -128,7 +132,7 @@ def record_repayment(
     current_user: dict = Depends(owner_only),
 ):
     """Record a customer's partial or full repayment"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
 
     khata = db.query(KhataBalance).filter(
         KhataBalance.shop_id == shop_id,
@@ -160,7 +164,11 @@ def record_repayment(
     _write_universal_tx(db, shop_id, "INCOME", "KHATA_REPAY",
         data.amount, f"KHATA-PAY-{khata.id}", f"Khata repayment from {data.customer_phone}")
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to record repayment: {str(e)}")
     return {
         "message": "Repayment recorded successfully",
         "customer_phone": data.customer_phone,
@@ -177,7 +185,7 @@ def list_khata_customers(
     current_user: dict = Depends(owner_only),
 ):
     """List all customers with outstanding Khata balances"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     accounts = (
         db.query(KhataBalance)
         .filter(KhataBalance.shop_id == shop_id, KhataBalance.khata_balance > 0)
@@ -210,7 +218,7 @@ def get_customer_khata_history(
     current_user: dict = Depends(owner_only),
 ):
     """Full transaction history for a specific customer"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     khata = db.query(KhataBalance).filter(
         KhataBalance.shop_id == shop_id,
         KhataBalance.customer_phone == customer_phone,
@@ -235,7 +243,7 @@ def get_whatsapp_reminder_url(
     current_user: dict = Depends(owner_only),
 ):
     """Generate a pre-filled WhatsApp reminder URL for a customer with outstanding Khata"""
-    shop_id = current_user
+    shop_id = resolve_shop_id(current_user)
     khata = db.query(KhataBalance).filter(
         KhataBalance.shop_id == shop_id,
         KhataBalance.customer_phone == customer_phone,

@@ -167,8 +167,12 @@ def register_customer(
         is_active=data.is_active if data.is_active is not None else True,
     )
     db.add(customer)
-    db.commit()
-    db.refresh(customer)
+    try:
+        db.commit()
+        db.refresh(customer)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create customer account: {str(e)}")
 
     # Send Welcome Email with Credentials (only if email provided)
     try:
@@ -548,7 +552,7 @@ def place_guest_order(
                 logger.warning(f"Verified phone number does not match provided phone number: {data.phone} vs {phone_number}")
                 
         except HTTPException:
-            logger.warning(f"HTTPException during Firebase token verification.")
+            raise  # Re-raise — a rejected token must not silently fall through
         except Exception as e:
             logger.error(f"Firebase token verification failed: {e}")
             logger.warning("Falling back to unverified phone number for guest order.")
@@ -581,8 +585,12 @@ def place_guest_order(
             is_active=False  # Mark as guest/inactive
         )
         db.add(customer)
-        db.commit()
-        db.refresh(customer)
+        try:
+            db.commit()
+            db.refresh(customer)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to register guest customer: {str(e)}")
         
     customer_id = customer.id
 
@@ -929,7 +937,11 @@ def update_order_status(
                     product.current_stock = (product.current_stock or 0) + item["quantity"]
 
     order.order_status = new_status
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
 
     return {
         "message": f"Order #{order_id} status updated to {new_status}.",
