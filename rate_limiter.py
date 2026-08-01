@@ -172,8 +172,34 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
             ...
     """
     def decorator(func):
+        def _extract_request(args, kwargs) -> Request:
+            # 🛡️ FIX: previously both wrappers below declared `request:
+            # Request` as their own first positional parameter, then called
+            # `func(request, *args, **kwargs)` -- reinjecting it
+            # positionally. That's only safe if the wrapped endpoint's own
+            # first parameter is also `request`. FastAPI actually calls the
+            # wrapper with resolved parameters as keyword arguments matching
+            # the ENDPOINT's real signature (e.g. login(user, request, db)
+            # gets called as wrapper(user=..., request=..., db=...)), so for
+            # any endpoint where `request` isn't first (like login, where
+            # `user` is), the positional reinjection collided with the
+            # wrapped function's own first parameter -- "got multiple values
+            # for argument 'user'" in production. Look up `request` by
+            # keyword first (matches how FastAPI actually calls this), fall
+            # back to scanning positional args for a Request instance.
+            if 'request' in kwargs:
+                return kwargs['request']
+            for a in args:
+                if isinstance(a, Request):
+                    return a
+            raise TypeError(
+                "rate_limit_endpoint could not find a 'request: Request' "
+                "parameter on the wrapped endpoint"
+            )
+
         @wraps(func)
-        async def async_wrapper(request: Request, *args, **kwargs):
+        async def async_wrapper(*args, **kwargs):
+            request = _extract_request(args, kwargs)
             # Get client IP
             ip = request.client.host if request.client else "unknown"
             endpoint = request.url.path.split('/')[-1] or "default"
@@ -199,8 +225,9 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
             if int(time.time()) % 300 == 0:  # Every 5 minutes
                 rate_limiter.cleanup_old_requests()
             
-            # Call the async function with headers
-            response = await func(request, *args, **kwargs)
+            # Call the wrapped function with the exact args/kwargs FastAPI
+            # gave us -- no repositioning.
+            response = await func(*args, **kwargs)
             
             # Add rate limit headers to response
             if hasattr(response, 'headers'):
@@ -209,7 +236,8 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
             return response
         
         @wraps(func)
-        def sync_wrapper(request: Request, *args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
+            request = _extract_request(args, kwargs)
             # Get client IP
             ip = request.client.host if request.client else "unknown"
             endpoint = request.url.path.split('/')[-1] or "default"
@@ -236,7 +264,7 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
                 rate_limiter.cleanup_old_requests()
             
             # Call the sync function with headers
-            response = func(request, *args, **kwargs)
+            response = func(*args, **kwargs)
             
             # Add rate limit headers to response
             if hasattr(response, 'headers'):
