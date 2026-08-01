@@ -68,6 +68,15 @@ class RateLimiter:
         Check if request is allowed based on rate limit
         Returns (allowed, remaining_requests)
         """
+        # 🛡️ FIX: this method both reads USE_REDIS (below) and assigns to
+        # it in the except block further down. Without declaring it global,
+        # Python scopes USE_REDIS as local to this entire function (that's
+        # how Python resolves scope -- based on whether a name is assigned
+        # anywhere in the function body, not on runtime execution order),
+        # so the read below always raised UnboundLocalError regardless of
+        # the actual module-level value. This was crashing every single
+        # rate-limited request in production, including login.
+        global USE_REDIS
         now = time.time()
         max_requests = self.limits.get(endpoint, self.limits['default'])
         
