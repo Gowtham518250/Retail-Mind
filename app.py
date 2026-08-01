@@ -224,6 +224,17 @@ ALLOWED_ORIGINS = [
 api.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    # 🔧 FIX: 'flutter run' on Chrome (debug/dev mode) serves the app from
+    # http://localhost:<random-port> — a different port every single
+    # launch. The static allow_origins list above only ever matched
+    # localhost:3000/localhost:8000 exactly, so every other debug session
+    # got silently CORS-blocked by the browser (shows up client-side as a
+    # generic "Failed to fetch" / "All backends unreachable" with zero
+    # indication it was actually a CORS rejection, not a real outage).
+    # This regex covers any localhost/127.0.0.1 port for local development
+    # without loosening anything for production origins, which still go
+    # through the exact allow_origins list above.
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
@@ -681,4 +692,3 @@ async def serve_product_detail_page(product_id: str):
         # inject product_id into HTML for client-side fetch
         content = f.read().replace("{{PRODUCT_ID}}", str(product_id))
     return HTMLResponse(content=content)
-
