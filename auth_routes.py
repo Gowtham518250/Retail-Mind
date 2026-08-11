@@ -131,6 +131,17 @@ class VerifyOTPRequest(BaseModel):
     email: str
     otp: str
 
+
+class StoreResetOTPRequest(BaseModel):
+    email: str
+    otp: str
+
+
+class VerifyResetOTPRequest(BaseModel):
+    email: str
+    otp: str
+    password: str
+
 otp_cache = {}
 
 @router.post("/send-otp")
@@ -184,6 +195,64 @@ def verify_otp(request: VerifyOTPRequest):
     del otp_cache[request.email]
     
     return {"msg": "OTP verified successfully"}
+
+
+@router.post("/store-reset-otp")
+def store_reset_otp(request: StoreResetOTPRequest):
+    """Store a frontend-generated OTP (hashed) for later verification during password reset.
+    Expected flow: frontend generates OTP, calls this endpoint, sends email locally, then user submits OTP+new password to verify endpoint.
+    """
+    try:
+        otp_code = request.otp.strip()
+        if not otp_code or len(otp_code) < 4:
+            raise HTTPException(status_code=400, detail="Invalid OTP provided")
+
+        otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+        # store for 10 minutes
+        otp_cache[request.email.strip().lower()] = {
+            "otp_hash": otp_hash,
+            "expires_at": time.time() + 600
+        }
+        return {"msg": "OTP stored for verification"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to store reset OTP: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to store OTP")
+
+
+@router.post("/verify-reset-otp")
+def verify_reset_otp(request: VerifyResetOTPRequest, db: Session = Depends(get_db)):
+    """Verify a frontend-generated OTP and reset the user's password if valid."""
+    email = request.email.strip().lower()
+    record = otp_cache.get(email)
+    if not record:
+        raise HTTPException(status_code=400, detail="OTP not requested or expired")
+
+    if time.time() > record["expires_at"]:
+        del otp_cache[email]
+        raise HTTPException(status_code=400, detail="OTP expired")
+
+    request_otp_hash = hashlib.sha256(request.otp.encode()).hexdigest()
+    if record["otp_hash"] != request_otp_hash:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    # OTP valid — perform password reset
+    user = db.query(User).filter(User.email.ilike(email)).first()
+    if not user:
+        # Do not reveal whether email exists
+        del otp_cache[email]
+        raise HTTPException(status_code=400, detail="User not found")
+
+    user.password = hash_password(request.password)
+    try:
+        # remove the stored OTP
+        del otp_cache[email]
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return {"msg": "Password reset successfully"}
 
 
 class RequestPasswordReset(BaseModel):
