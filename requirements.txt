@@ -14,11 +14,7 @@ pydantic[email]==2.5.3
 email-validator==2.1.0
 
 sqlalchemy==2.0.23
-<<<<<<< HEAD
 psycopg2-binary==2.9.12
-=======
-psycopg2-binary==2.9.9
->>>>>>> 41aac2dbf5cc85cd52817b55264d614bcd50fc31
 alembic==1.13.1
 
 python-jose[cryptography]==3.3.0
