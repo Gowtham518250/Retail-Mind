@@ -47,8 +47,18 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
         raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
 
+<<<<<<< HEAD
     # Usernames and shop names are display labels, not account identifiers.
     # Only email is globally unique; tenant identity is the generated user id.
+=======
+    # Check username uniqueness — return 409 Conflict (not 400) so clients can distinguish
+    if db.query(User).filter(User.user_name == user.username).first():
+        raise HTTPException(status_code=409, detail="Username already registered. Please choose a different name.")
+
+
+    # Allow duplicate shop names: multiple shops may use the same display name
+    # (no uniqueness check here)
+>>>>>>> 41aac2dbf5cc85cd52817b55264d614bcd50fc31
 
     # Hash password securely
     hashed_password = hash_password(user.password)

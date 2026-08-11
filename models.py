@@ -437,7 +437,11 @@ class InvoiceLineItem(Base):
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"))
     description = Column(String(255))
+<<<<<<< HEAD
     quantity = Column(Numeric(12, 3), nullable=False)
+=======
+    quantity = Column(Integer, nullable=False)
+>>>>>>> 41aac2dbf5cc85cd52817b55264d614bcd50fc31
     unit_price = Column(Numeric(10, 2), nullable=False)
     line_total = Column(Numeric(10, 2), nullable=False)
     
