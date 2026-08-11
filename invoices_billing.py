@@ -34,11 +34,7 @@ router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
 class InvoiceLineItemCreate(BaseModel):
     product_id: Optional[int] = None
     product_name: str
-<<<<<<< HEAD
     quantity: float = Field(..., gt=0)
-=======
-    quantity: int = Field(..., gt=0)
->>>>>>> 41aac2dbf5cc85cd52817b55264d614bcd50fc31
     unit_price: float = Field(..., ge=0)
 
 class InvoiceSyncCreate(BaseModel):
@@ -144,7 +140,6 @@ def sync_offline_invoice(
             db.flush()
         customer_id = cust.id
 
-<<<<<<< HEAD
     if not data.invoice_date:
         raise HTTPException(
             status_code=400,
@@ -154,12 +149,6 @@ def sync_offline_invoice(
         inv_date = datetime.strptime(data.invoice_date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="invoice_date must use YYYY-MM-DD format")
-=======
-    try:
-        inv_date = datetime.strptime(data.invoice_date, "%Y-%m-%d").date() if data.invoice_date else date.today()
-    except ValueError:
-        inv_date = date.today()
->>>>>>> 41aac2dbf5cc85cd52817b55264d614bcd50fc31
     
     try:
         due_date = datetime.strptime(data.due_date, "%Y-%m-%d").date() if data.due_date else inv_date
