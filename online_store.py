@@ -452,11 +452,22 @@ def place_order(
     """Place an online order at a specific shop"""
     customer_id = current_user["user_id"]
 
-    # Validate shop
+    # Validate shop.
+    # Browse requests already fall back to shops whose online-store flag is not enabled,
+    # so order placement should also allow those shops when the shop record exists.
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == data.shop_id,
         ShopProfile.is_online_store_enabled == True,
     ).first()
+    if not profile:
+        profile = db.query(ShopProfile).filter(
+            ShopProfile.shop_id == data.shop_id,
+        ).first()
+        if profile:
+            logger.warning(
+                "Shop found but online ordering flag is disabled for shop_id=%s; allowing fallback order placement.",
+                data.shop_id,
+            )
     if not profile:
         raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
 
@@ -566,8 +577,19 @@ def place_guest_order(
             ShopProfile.is_online_store_enabled == True,
         ).first()
         if not profile:
+            profile = db.query(ShopProfile).filter(
+                ShopProfile.shop_id == data.shop_id,
+            ).first()
+            if profile:
+                logger.warning(
+                    "Shop found for guest order but online ordering flag is disabled for shop_id=%s; allowing fallback checkout.",
+                    data.shop_id,
+                )
+        if not profile:
             logger.error(f"Shop not found: shop_id={data.shop_id}")
             raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error validating shop: {e}")
         raise HTTPException(status_code=500, detail="Error validating shop.")

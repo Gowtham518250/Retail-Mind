@@ -38,6 +38,8 @@ export default function CheckoutClientPage() {
   const [payment, setPayment] = useState<PaymentMethod>('COD');
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState('');
+  const [locationError, setLocationError] = useState('');
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const deliveryFee = cartTotal >= 499 || cartTotal === 0 ? 0 : 29;
@@ -52,6 +54,53 @@ export default function CheckoutClientPage() {
   const setField = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
+  };
+
+  const detectLocation = async () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setLocationError('');
+    setIsDetectingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
+          const data = await res.json();
+          const address = data.address || {};
+          const city = address.city || address.town || address.village || address.county || '';
+          const pincode = address.postcode || '';
+          const road = address.road || '';
+          const house = address.house_number || '';
+          const neighbourhood = address.neighbourhood || address.suburb || '';
+
+          setForm((prev) => ({
+            ...prev,
+            address: [house, road, neighbourhood].filter(Boolean).join(' ').trim(),
+            city: city,
+            pincode: pincode,
+          }));
+        } catch (error) {
+          setLocationError('Unable to resolve your location. Please enter it manually.');
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      (error) => {
+        setIsDetectingLocation(false);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError('Please allow location access in your browser.');
+        } else {
+          setLocationError('Unable to detect location. Please enter it manually.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
   };
 
   const validate = (): boolean => {
@@ -170,8 +219,14 @@ export default function CheckoutClientPage() {
 
             <div className="checkout-field">
               <label><Home size={14} /> Address</label>
-              <textarea value={form.address} onChange={setField('address')} placeholder="House / flat no, street, area" rows={2} />
+              <div className="location-row">
+                <textarea value={form.address} onChange={setField('address')} placeholder="House / flat no, street, area" rows={2} />
+                <button type="button" className="location-button" onClick={detectLocation} disabled={isDetectingLocation}>
+                  {isDetectingLocation ? 'Detecting…' : 'Detect location'}
+                </button>
+              </div>
               {errors.address && <span className="field-error">{errors.address}</span>}
+              {locationError && <span className="field-error">{locationError}</span>}
             </div>
 
             <div className="checkout-field-row">
