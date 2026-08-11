@@ -499,17 +499,6 @@ class AgentEscalation(Base):
     resolution_date = Column(DateTime)
 
 
-class PasswordReset(Base):
-    __tablename__ = "password_resets"
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
-    reset_token = Column(String(255), unique=True, nullable=False)
-    token_expiry = Column(DateTime, nullable=False)
-    is_used = Column(Boolean, default=False)
-    used_at = Column(DateTime)
-
-
 class Token(Base):
     __tablename__ = "tokens"
     
