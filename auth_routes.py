@@ -143,20 +143,23 @@ def send_otp(request: SendOTPRequest, background_tasks: BackgroundTasks, db: Ses
         "expires_at": time.time() + 600
     }
     
-    # Send email in the background to prevent slow loading times
+    # Send email synchronously for testing so we can surface SMTP errors immediately
+    subject, body = EmailNotificationService.send_otp_template(otp_code, request.purpose)
     try:
-        subject, body = EmailNotificationService.send_otp_template(otp_code, request.purpose)
-        background_tasks.add_task(
-            EmailNotificationService.send_email,
+        success = EmailNotificationService.send_email(
             recipient_email=request.email,
             subject=subject,
             body=body
         )
-        logger.info(f"OTP generation request for {request.email}") # Log event, NOT the OTP code
+        if not success:
+            logger.error("Failed to send OTP email to %s", request.email)
+            raise HTTPException(status_code=500, detail="Failed to send OTP email; check server logs")
+        logger.info("OTP generation request for %s (email sent)", request.email)
     except Exception as e:
-        logger.error(f"Failed to queue OTP email: {e}")
-        
-    return {"msg": "OTP sent successfully (Check your Render console logs if the email does not arrive)"}
+        logger.exception("Failed while sending OTP email: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to send OTP email; check server logs")
+
+    return {"msg": "OTP sent successfully (email dispatched)"}
 
 @router.post("/verify-otp")
 def verify_otp(request: VerifyOTPRequest):

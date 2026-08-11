@@ -115,6 +115,7 @@ class EmailNotificationService:
                 server.login(cls.SENDER_EMAIL, cls.SENDER_PASSWORD)
                 server.send_message(msg)
             
+            cls.logger.info("Email sent successfully: To=%s Subject=%s", recipient_email, subject)
             return True
         except Exception as e:
             cls.logger.error(
