@@ -918,6 +918,24 @@ class KhataHistory(Base):
     khata_id = Column(Integer, ForeignKey("khata_balances.id", ondelete="CASCADE"), nullable=False)
     transaction_type = Column(Enum(KhataTransactionType, name="khata_transaction_type"), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
+
+
+class PasswordReset(Base):
+    """Password reset tokens for secure password reset flows.
+
+    Tokens are stored as SHA256 hashes; the plaintext token is returned
+    to the caller who uses it to send out the email from the frontend.
+    """
+    __tablename__ = "password_resets"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(128), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    # Relationship for convenience
+    user = relationship("User", foreign_keys=[user_id])
     reference_id = Column(String(100))  # invoice_number or payment_id
     description = Column(String(200))
     transaction_date = Column(DateTime, server_default=func.now())

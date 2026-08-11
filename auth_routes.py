@@ -13,6 +13,9 @@ import random
 import time
 from typing import Optional
 import hashlib
+import secrets
+from datetime import timedelta
+from models import PasswordReset
 from jose import JWTError  # Required for refresh_token endpoint exception handling
 
 router = APIRouter()
@@ -181,6 +184,60 @@ def verify_otp(request: VerifyOTPRequest):
     del otp_cache[request.email]
     
     return {"msg": "OTP verified successfully"}
+
+
+class RequestPasswordReset(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/request-password-reset")
+def request_password_reset(data: RequestPasswordReset, db: Session = Depends(get_db)):
+    # Generate a server-side reset token and return it so frontend can email it.
+    email = data.email.strip().lower()
+    user = db.query(User).filter(User.email.ilike(email)).first()
+    if not user:
+        # Don't reveal whether the email exists; return generic message
+        return {"msg": "If the email exists, a reset token was generated"}
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    expires_at = datetime.utcnow() + timedelta(minutes=30)
+
+    pr = PasswordReset(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
+    db.add(pr)
+    db.commit()
+
+    # Return token to the caller (frontend) so it can send/email the reset link
+    return {"msg": "Reset token generated", "token": token, "expires_in": 1800}
+
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(data.token.encode()).hexdigest()
+    now = datetime.utcnow()
+    pr = db.query(PasswordReset).filter(PasswordReset.token_hash == token_hash, PasswordReset.expires_at > now).first()
+    if not pr:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    user = db.query(User).get(pr.user_id)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found for token")
+
+    # Update password
+    user.password = hash_password(data.password)
+    # Invalidate token
+    try:
+        db.delete(pr)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return {"msg": "Password reset successfully"}
 
 @router.post("/login")
 @rate_limit_endpoint(max_requests=5, window_seconds=60)
