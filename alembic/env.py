@@ -1,6 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 
 from alembic import context
 
@@ -49,6 +49,11 @@ def run_migrations_online() -> None:
     from db import engine as db_engine
 
     with db_engine.connect() as connection:
+        if connection.dialect.name == 'postgresql':
+            connection.execute(text(
+                "ALTER TABLE IF EXISTS alembic_version ALTER COLUMN IF EXISTS version_num TYPE VARCHAR(128)"
+            ))
+
         context.configure(
             connection=connection,
             target_metadata=target_metadata
