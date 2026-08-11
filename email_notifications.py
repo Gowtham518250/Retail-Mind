@@ -4,6 +4,7 @@ Handles sending emails for alerts, notifications, and business events
 Integrates with SendGrid (production) and SMTP fallback
 """
 
+import logging
 import os
 from datetime import datetime
 import smtplib
@@ -57,11 +58,14 @@ class EmailNotification(Base):
 class EmailNotificationService:
     """Service for sending email notifications"""
     
+    logger = logging.getLogger(__name__)
+
     # Email configuration from environment
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-    SENDER_EMAIL = os.getenv("SENDER_EMAIL", "")
-    SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "")
+    SENDER_EMAIL = os.getenv("SENDER_EMAIL", os.getenv("SMTP_USER", ""))
+    SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", os.getenv("SMTP_PASSWORD", ""))
+    FROM_EMAIL = os.getenv("EMAIL_FROM", SENDER_EMAIL)
     
     @classmethod
     def send_email(
@@ -86,13 +90,16 @@ class EmailNotificationService:
         try:
             # Check if email credentials are configured
             if not cls.SENDER_EMAIL or not cls.SENDER_PASSWORD:
-                print(f"Email not configured (skipping): To: {recipient_email}, Subject: {subject}")
-                return True  # Return True to not block operation
+                cls.logger.error(
+                    "Email not configured: SENDER_EMAIL or SENDER_PASSWORD is missing. "
+                    f"To={recipient_email} Subject={subject}"
+                )
+                return False
             
             # Create message
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = cls.SENDER_EMAIL
+            msg["From"] = cls.FROM_EMAIL
             msg["To"] = recipient_email
             
             # Attach plain text
@@ -110,7 +117,11 @@ class EmailNotificationService:
             
             return True
         except Exception as e:
-            print(f"Email send error: {e}")
+            cls.logger.error(
+                "Email send error: %s", e,
+                exc_info=True,
+                extra={"recipient_email": recipient_email, "subject": subject}
+            )
             return False
     
     @classmethod
