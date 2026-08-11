@@ -1,0 +1,253 @@
+{
+  "timestamp": "20260618_142850",
+  "api_url": "http://localhost:8000",
+  "summary": {
+    "total": 24,
+    "passed": 10,
+    "failed": 14,
+    "success_rate": "41.7%"
+  },
+  "errors": [],
+  "details": [
+    {
+      "method": "GET",
+      "endpoint": "/",
+      "name": "Root Endpoint",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2121.77,
+      "success": true,
+      "response": "{\"status\":\"operational\",\"app\":\"AI Shop Pro Enterprise Backend\",\"version\":\"3.0.0\",\"modules\":[\"Authentication (RBAC: OWNER/CUSTOMER/WORKER)\",\"Shop Settings & UPI QR\",\"Inventory Management\",\"Invoices & B"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/health",
+      "name": "Health Check",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2091.76,
+      "success": true,
+      "response": "{\"status\":\"healthy\",\"database\":\"connected\",\"timestamp\":1781773084.822303}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/docs",
+      "name": "API Docs",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2060.34,
+      "success": true,
+      "response": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"http"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/redoc",
+      "name": "ReDoc",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2061.29,
+      "success": true,
+      "response": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <title>AI Shop Pro Enterprise Backend - ReDoc</title>\n    <!-- needed for adaptive design -->\n    <meta charset=\"utf-8\"/>\n    <meta name=\"viewport\" conte"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "name": "Register User",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2467.0,
+      "success": true,
+      "response": "{\"msg\":\"User registered successfully\",\"user_id\":3}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/send-otp",
+      "name": "Send OTP to Email",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2080.85,
+      "success": true,
+      "response": "{\"msg\":\"OTP sent successfully (Check your Render console logs if the email does not arrive)\"}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/login",
+      "name": "Login User",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2342.15,
+      "success": true,
+      "response": "{\"access_token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicm9sZSI6Ik9XTkVSIiwiZXhwIjoxNzgxNzc0ODk1LCJpYXQiOjE3ODE3NzMwOTV9.dBQRRiWl65zStXWunNgEQAd-jQI7MOLNnnK_XyMmxPI\",\"token_type\":\"bearer"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/refresh-token",
+      "name": "Refresh Token",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2063.54,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/shop/profile",
+      "name": "Create Shop Profile",
+      "status": 409,
+      "expected": 201,
+      "elapsed_ms": 2066.86,
+      "success": false,
+      "response": "{\"detail\":\"Shop profile already exists. Use PUT to update.\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/shop/list",
+      "name": "List Shops",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2071.63,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/api/inventory/products",
+      "name": "Create Product",
+      "status": 200,
+      "expected": 201,
+      "elapsed_ms": 2080.8,
+      "success": false,
+      "response": "{\"id\":2,\"product_name\":\"Test Product 1781773102\",\"sku\":\"SKU-1781773102\",\"current_stock\":50,\"min_stock\":5,\"max_stock\":100,\"unit_price\":1000.0,\"category\":\"Electronics\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/api/inventory/products",
+      "name": "Get Products List",
+      "status": 200,
+      "expected": 200,
+      "elapsed_ms": 2070.9,
+      "success": true,
+      "response": "[{\"id\":2,\"product_name\":\"Test Product 1781773102\",\"sku\":\"SKU-1781773102\",\"current_stock\":50,\"min_stock\":5,\"max_stock\":100,\"unit_price\":1000.0,\"category\":\"Electronics\"}]"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/api/inventory/stock-levels",
+      "name": "Get Stock Levels",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2062.33,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/customers/create",
+      "name": "Create Customer",
+      "status": 404,
+      "expected": 201,
+      "elapsed_ms": 2043.05,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/customers/list",
+      "name": "Get Customers List",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2036.85,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/customers/search?phone=9876543210",
+      "name": "Search Customers by Phone",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2065.59,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/attendance/check-in",
+      "name": "Check In",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2068.52,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/attendance/today",
+      "name": "Get Today's Attendance",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2059.97,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/cache/stats",
+      "name": "Cache Statistics",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2036.38,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/batch/status",
+      "name": "Batch Operations Status",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2052.41,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/rate-limit-info",
+      "name": "Rate Limiting Info",
+      "status": 404,
+      "expected": 200,
+      "elapsed_ms": 2060.33,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/nonexistent-endpoint",
+      "name": "Non-existent Endpoint (404)",
+      "status": 404,
+      "expected": 404,
+      "elapsed_ms": 2055.1,
+      "success": true,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/protected-endpoint",
+      "name": "Protected Endpoint without Auth (401)",
+      "status": 404,
+      "expected": 401,
+      "elapsed_ms": 2044.72,
+      "success": false,
+      "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "name": "Invalid Registration Data (422)",
+      "status": 422,
+      "expected": 422,
+      "elapsed_ms": 2053.18,
+      "success": true,
+      "response": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":{\"invalid_field\":\"test\"},\"url\":\"https://errors.pydantic.dev/2.5/v/missing\"},{\"type\":\"missing\",\"loc\":[\"body\",\"passw"
+    }
+  ]
+}

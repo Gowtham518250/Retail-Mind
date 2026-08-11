@@ -1,0 +1,1135 @@
+"""
+Enhanced Database Models for Hybrid Search RAG
+Includes: Inventory, Attendance, Invoices, Payments, Customers, Notifications, Stock Management
+"""
+
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from datetime import datetime, date
+import enum
+from db import Base
+
+# ==================== ENUM TYPES ====================
+
+class StockMovementType(str, enum.Enum):
+    IN = "IN"
+    OUT = "OUT"
+    ADJUSTMENT = "ADJUSTMENT"
+
+class AttendanceStatus(str, enum.Enum):
+    PRESENT = "PRESENT"
+    ABSENT = "ABSENT"
+    LEAVE = "LEAVE"
+    HALF_DAY = "HALF_DAY"
+    LATE = "LATE"
+
+class LeaveType(str, enum.Enum):
+    VACATION = "VACATION"
+    SICK = "SICK"
+    PERSONAL = "PERSONAL"
+
+class LeaveStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+class ContactPreference(str, enum.Enum):
+    EMAIL = "EMAIL"
+    WHATSAPP = "WHATSAPP"
+    CALL = "CALL"
+    SMS = "SMS"
+
+class InvoiceStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    SENT = "SENT"
+    PAID = "PAID"
+    OVERDUE = "OVERDUE"
+    PARTIAL = "PARTIAL"
+    CANCELLED = "CANCELLED"
+
+class PaymentStatus(str, enum.Enum):
+    UNPAID = "UNPAID"
+    PARTIAL = "PARTIAL"
+    PAID = "PAID"
+    OVERDUE = "OVERDUE"
+
+class PaymentMethod(str, enum.Enum):
+    CASH = "CASH"
+    CARD = "CARD"
+    TRANSFER = "TRANSFER"
+    CHEQUE = "CHEQUE"
+    ONLINE = "ONLINE"
+
+class NotificationType(str, enum.Enum):
+    PAYMENT_REMINDER = "PAYMENT_REMINDER"
+    INVOICE_SENT = "INVOICE_SENT"
+    PAYMENT_RECEIVED = "PAYMENT_RECEIVED"
+    OVERDUE_ALERT = "OVERDUE_ALERT"
+    LOW_STOCK = "LOW_STOCK"
+
+class NotificationChannel(str, enum.Enum):
+    EMAIL = "EMAIL"
+    WHATSAPP = "WHATSAPP"
+    SMS = "SMS"
+    CALL = "CALL"
+
+class NotificationStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+
+class TaskPriority(str, enum.Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+class TaskStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"
+    FAILED = "FAILED"
+
+class CallStatus(str, enum.Enum):
+    NOT_CALLED = "NOT_CALLED"
+    RINGING = "RINGING"
+    ANSWERED = "ANSWERED"
+    DECLINED = "DECLINED"
+    FAILED = "FAILED"
+
+class LoyaltyTransactionType(str, enum.Enum):
+    EARN = "EARN"
+    REDEEM = "REDEEM"
+    ADJUST = "ADJUST"
+    EXPIRE = "EXPIRE"
+
+class OrderStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    CONFIRM = "CONFIRM"
+    FAILED = "FAILED"
+    REFUND = "REFUND"
+
+class UpiStatus(str, enum.Enum):
+    """UPI payment status enum"""
+    PENDING = "PENDING"
+    CONFIRM = "CONFIRM"
+    FAILED = "FAILED"
+    REFUND = "REFUND"
+
+class DeliveryStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    OUT = "OUT"
+    DELIVERED = "DELIVERED"
+    FAILED = "FAILED"
+    RETURNED = "RETURNED"
+
+class ScoreBadge(str, enum.Enum):
+    CAUTION = "CAUTION"
+    REGULAR = "REGULAR"
+    TRUSTED = "TRUSTED"
+
+class OccasionType(str, enum.Enum):
+    BIRTHDAY = "BIRTHDAY"
+    ANNIVERSARY = "ANNIVERSARY"
+    WEDDING = "WEDDING"
+    CUSTOM = "CUSTOM"
+
+class KhataTransactionType(str, enum.Enum):
+    INVOICE = "INVOICE"
+    PAYMENT = "PAYMENT"
+    ADJUSTMENT = "ADJUSTMENT"
+
+class OnlineOrderStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    DISPATCHED = "DISPATCHED"
+    DELIVERED = "DELIVERED"
+    REJECTED = "REJECTED"
+
+class WhatsappOrderStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
+
+class PurchaseOrderStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+
+class BankReconciliationStatus(str, enum.Enum):
+    MATCHED = "MATCHED"
+    DISCREPANCY = "DISCREPANCY"
+    PENDING = "PENDING"
+
+class UniversalTransactionType(str, enum.Enum):
+    INCOME = "INCOME"
+    EXPENSE = "EXPENSE"
+
+class GiftCardStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    REDEEMED = "REDEEMED"
+    EXPIRED = "EXPIRED"
+
+
+# ==================== EXISTING MODELS ====================
+
+class OnlineCustomerAuth(Base):
+    """Stores online customers (users of the Customer App) entirely separate from shop owners."""
+    __tablename__ = "online_customers"
+    
+    id = Column(Integer, primary_key=True, nullable=False)
+    user_name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=True)
+    phone = Column(String(20), nullable=True, unique=True, index=True)     # Added for online store orders
+    city = Column(String(100), nullable=True)     # Added for location filtering
+    address = Column(Text, nullable=True)         # Added for delivery
+    password = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = "user_details"
+    
+    id = Column(Integer, primary_key=True, nullable=False)
+    user_name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=False, index=True)
+    password = Column(String(100), nullable=False)
+    user_type = Column(String(50), default="OWNER", nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    fcm_token = Column(String(255), nullable=True) # Added for Firebase Push Notifications
+    
+    # Add indexes for performance
+    __table_args__ = (
+        Index('idx_user_email', 'email'),
+        Index('idx_user_type', 'user_type'),
+        Index('idx_user_active', 'is_active'),
+    )
+    
+    # Relationships
+    products = relationship("Product", back_populates="owner")
+    sales = relationship("sales", back_populates="shopkeeper")
+    attendance = relationship("Attendance", back_populates="employee")
+    invoices = relationship("Invoice", back_populates="user")
+    customers = relationship("Customer", back_populates="user")
+    
+    # 🔒 SECURITY FIX: Prevent mass assignment of sensitive fields
+    def __init__(self, **kwargs):
+        # Only allow safe fields to be set via mass assignment
+        safe_fields = {'user_name', 'email', 'password', 'user_type', 'is_active'}
+        for key, value in kwargs.items():
+            if key in safe_fields:
+                setattr(self, key, value)
+            elif key not in ['id', 'fcm_token']:  # Skip silently for protected fields
+                raise ValueError(f"Cannot set protected field '{key}' via mass assignment")
+    
+    def to_dict(self, exclude_sensitive=True):
+        """Safely convert to dictionary, excluding sensitive fields"""
+        data = {
+            'id': self.id,
+            'user_name': self.user_name,
+            'email': self.email,
+            'user_type': self.user_type,
+            'is_active': self.is_active,
+        }
+        if not exclude_sensitive:
+            data['fcm_token'] = self.fcm_token
+        return data
+
+
+class sales(Base):
+    __tablename__ = "sales"
+    
+    id = Column(Integer, primary_key=True)
+    shopkeeper_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_name = Column(String(100), nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    total = Column(Numeric(10, 2), nullable=False)
+    sale_date = Column(Date, index=True)
+    
+    # 🔒 PERFORMANCE FIX: Add index on foreign key (already has index=True)
+    # Relationship
+    shopkeeper = relationship("User", back_populates="sales")
+
+
+# ==================== NEW MODELS ====================
+
+# ========== INVENTORY MANAGEMENT ==========
+
+class Product(Base):
+    __tablename__ = "products"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_name = Column(String(100), nullable=False)
+    sku = Column(String(50), nullable=False, index=True)
+    description = Column(Text)
+    current_stock = Column(Integer, default=0)
+    min_stock = Column(Integer, default=10)  # Alert when below this
+    max_stock = Column(Integer, default=100)
+    reorder_level = Column(Integer, default=20)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    purchase_price = Column(Numeric(10, 2), default=0)  # For margin calculation (Feature 15)
+    category = Column(String(50), index=True)
+    is_active = Column(Boolean, default=True, index=True)  # Soft-delete: False = deleted from catalogue
+    
+    __table_args__ = (
+        UniqueConstraint('user_id', 'sku', name='uix_user_sku'),
+        Index('idx_product_name', 'product_name'),
+        Index('idx_product_sku', 'sku'),
+        Index('idx_product_category', 'category'),
+        Index('idx_product_active', 'is_active'),
+    )
+    
+    # Relationships
+    owner = relationship("User", back_populates="products")
+    stock_movements = relationship("StockMovement", back_populates="product")
+    batches = relationship("ProductBatch", back_populates="product")
+    line_items = relationship("InvoiceLineItem", back_populates="product")
+
+
+class StockMovement(Base):
+    __tablename__ = "stock_movements"
+    
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    movement_type = Column(Enum(StockMovementType, name="stock_movement_type"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    reason = Column(String(200))  # e.g., "Purchase", "Sale", "Damage", "Inventory Adjustment"
+    reference_id = Column(String(100))  # e.g., invoice_id, purchase_order_id
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # Relationship
+    product = relationship("Product", back_populates="stock_movements")
+
+
+class ProductBatch(Base):
+    __tablename__ = "product_batches"
+    
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    batch_number = Column(String(100), unique=True)
+    manufacture_date = Column(Date)
+    expiry_date = Column(Date)
+    quantity = Column(Integer)
+    
+    # Relationship
+    product = relationship("Product", back_populates="batches")
+
+
+# ========== ATTENDANCE MANAGEMENT ==========
+
+class Attendance(Base):
+    __tablename__ = "attendance"
+    
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    worker_id = Column(Integer, ForeignKey("workers.id", ondelete="SET NULL"), nullable=True)  # Track which worker (if any)
+    attendance_date = Column(Date, nullable=False)
+    check_in_time = Column(DateTime)
+    check_out_time = Column(DateTime)
+    status = Column(Enum(AttendanceStatus, name="attendance_status"), default=AttendanceStatus.ABSENT)
+    working_hours = Column(Float, default=0.0)  # Calculated automatically
+    notes = Column(Text)
+    
+    __table_args__ = (UniqueConstraint('employee_id', 'attendance_date', 'worker_id', name='uix_employee_date_worker'),)
+    
+    # Relationship
+    employee = relationship("User", back_populates="attendance")
+
+
+class LeaveRequest(Base):
+    __tablename__ = "leave_requests"
+    
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    leave_type = Column(Enum(LeaveType, name="leave_type"), nullable=False)
+    from_date = Column(Date, nullable=False)
+    to_date = Column(Date, nullable=False)
+    reason = Column(Text)
+    status = Column(Enum(LeaveStatus, name="leave_status"), default=LeaveStatus.PENDING)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+# ========== CUSTOMER MANAGEMENT ==========
+
+class Customer(Base):
+    __tablename__ = "customers"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_name = Column(String(100), nullable=False)
+    email = Column(String(100))
+    phone = Column(String(20), nullable=False, index=True)
+    whatsapp_number = Column(String(20))  # For WhatsApp notifications
+    address = Column(Text)
+    city = Column(String(50))
+    state = Column(String(50))          # Added: was missing from model
+    postal_code = Column(String(20))    # Added: was missing from model
+    credit_limit = Column(Numeric(10, 2), default=0)
+    payment_terms = Column(String(50))  # e.g., "Net 30", "COD"
+    contact_preference = Column(Enum(ContactPreference, name="contact_preference"), default=ContactPreference.EMAIL)
+    is_active = Column(Boolean, default=True)  # Soft-delete: False = customer archived
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # Relationship
+    user = relationship("User", back_populates="customers")
+    invoices = relationship("Invoice", back_populates="customer")
+
+
+# ========== INVOICE & PAYMENT MANAGEMENT ==========
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=True)
+    customer_name = Column(String(100), nullable=True)
+    customer_phone = Column(String(20), nullable=True)
+    invoice_number = Column(String(50), nullable=False, index=True)
+    offline_id = Column(String(50), nullable=True, index=True)  # 🔧 FIX: Removed global unique, will add per-user constraint
+    invoice_date = Column(Date, server_default=func.now(), index=True)
+    due_date = Column(Date, nullable=True, default=None)  # FIX: was NOT NULL causing 500 errors on invoice creation
+    subtotal = Column(Numeric(10, 2), default=0)
+    tax = Column(Numeric(10, 2), default=0)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    paid_amount = Column(Numeric(10, 2), default=0)
+    status = Column(Enum(InvoiceStatus, name="invoice_status"), default=InvoiceStatus.DRAFT)
+    payment_status = Column(Enum(PaymentStatus, name="payment_status"), default=PaymentStatus.UNPAID, index=True)
+    payment_method = Column(String(50))
+    source = Column(String(50), default="MANUAL_ENTRY") # OFFLINE_SYNC, ONLINE_ORDER, MANUAL_ENTRY
+    notes = Column(Text)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # 🔧 FIX: Added unique constraint on (user_id, offline_id) for idempotency
+    __table_args__ = (
+        UniqueConstraint('user_id', 'invoice_number', name='uix_user_invoice_number'),
+        UniqueConstraint('user_id', 'offline_id', name='uix_user_offline_id'),
+    )
+    
+    # Relationships
+    user = relationship("User", back_populates="invoices")
+    customer = relationship("Customer", back_populates="invoices")
+    line_items = relationship(
+        "InvoiceLineItem",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    payments = relationship(
+        "Payment",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class InvoiceLineItem(Base):
+    __tablename__ = "invoice_line_items"
+    
+    id = Column(Integer, primary_key=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"))
+    description = Column(String(255))
+    quantity = Column(Numeric(12, 3), nullable=False)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    line_total = Column(Numeric(10, 2), nullable=False)
+    
+    # Relationships
+    invoice = relationship("Invoice", back_populates="line_items")
+    product = relationship("Product", back_populates="line_items")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    
+    id = Column(Integer, primary_key=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    payment_method = Column(Enum(PaymentMethod, name="payment_method"), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    payment_date = Column(DateTime, server_default=func.now())
+    reference_number = Column(String(100))  # Transaction ID, check number, etc.
+    notes = Column(Text)
+    
+    # Relationship
+    invoice = relationship("Invoice", back_populates="payments")
+
+
+# ========== NOTIFICATION & ESCALATION ==========
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    
+    id = Column(Integer, primary_key=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"))
+    notification_type = Column(Enum(NotificationType, name="notification_type"), nullable=False)
+    channel = Column(Enum(NotificationChannel, name="notification_channel"), nullable=False)
+    recipient = Column(String(255), nullable=False)  # Email, phone, or contact number
+    message = Column(Text)
+    status = Column(Enum(NotificationStatus, name="notification_status"), default=NotificationStatus.PENDING)
+    attempted_at = Column(DateTime)
+    sent_at = Column(DateTime)
+    error_message = Column(Text)
+    
+    # Relationship
+    invoice = relationship("Invoice")
+
+
+class AgentEscalation(Base):
+    __tablename__ = "agent_escalations"
+    
+    id = Column(Integer, primary_key=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    agent_id = Column(Integer, ForeignKey("user_details.id", ondelete="SET NULL"))
+    escalation_reason = Column(String(200))  # e.g., "PAYMENT_OVERDUE_7_DAYS", "MULTIPLE_REMINDERS_IGNORED"
+    escalation_level = Column(Integer, default=1)  # 1, 2, 3 (increasing severity)
+    priority = Column(Enum(TaskPriority, name="task_priority"), default=TaskPriority.MEDIUM)
+    status = Column(Enum(TaskStatus, name="task_status"), default=TaskStatus.PENDING)
+    call_initiated = Column(Boolean, default=False)
+    call_timestamp = Column(DateTime)
+    call_duration = Column(Integer)  # in seconds
+    call_status = Column(Enum(CallStatus, name="call_status"), default=CallStatus.NOT_CALLED)
+    notes = Column(Text)
+    resolution_date = Column(DateTime)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    reset_token = Column(String(255), unique=True, nullable=False)
+    token_expiry = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    used_at = Column(DateTime)
+
+
+class Token(Base):
+    __tablename__ = "tokens"
+    
+    id = Column(Integer, primary_key=True)
+    token = Column(String(64), unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+
+
+# ==================== SESSION MANAGEMENT ====================
+
+class RefreshToken(Base):
+    """7-day auto-login tokens for persistent sessions"""
+    __tablename__ = "refresh_tokens"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    token = Column(String(500), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)  # 7 days from creation
+    is_valid = Column(Boolean, default=True)
+
+
+class SessionToken(Base):
+    """Active session tracking"""
+    __tablename__ = "session_tokens"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    access_token = Column(String(500), unique=True, nullable=False)
+    refresh_token_id = Column(Integer, ForeignKey("refresh_tokens.id", ondelete="CASCADE"))
+    device_id = Column(String(200))  # For multi-device tracking
+    is_active = Column(Boolean, default=True)
+    last_activity = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class OfflineDataQueue(Base):
+    """Queue offline sales/transactions until sync"""
+    __tablename__ = "offline_data_queue"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    data_type = Column(String(50))  # "sale", "customer", "inventory"
+    data_payload = Column(Text)  # JSON data
+    synced = Column(Boolean, default=False)
+    sync_timestamp = Column(DateTime)
+
+
+
+class ShopSettings(Base):
+    """
+    Business configuration and preferences for a shop.
+    Includes business hours, tax settings, payment preferences, and more.
+    """
+    __tablename__ = "shop_settings"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("shop_profiles.id", ondelete="CASCADE"), unique=True, nullable=False)
+    
+    # Business Hours
+    monday_open = Column(String(10), default="09:00")  # HH:MM format
+    monday_close = Column(String(10), default="21:00")
+    monday_closed = Column(Boolean, default=False)
+    
+    tuesday_open = Column(String(10), default="09:00")
+    tuesday_close = Column(String(10), default="21:00")
+    tuesday_closed = Column(Boolean, default=False)
+    
+    wednesday_open = Column(String(10), default="09:00")
+    wednesday_close = Column(String(10), default="21:00")
+    wednesday_closed = Column(Boolean, default=False)
+    
+    thursday_open = Column(String(10), default="09:00")
+    thursday_close = Column(String(10), default="21:00")
+    thursday_closed = Column(Boolean, default=False)
+    
+    friday_open = Column(String(10), default="09:00")
+    friday_close = Column(String(10), default="21:00")
+    friday_closed = Column(Boolean, default=False)
+    
+    saturday_open = Column(String(10), default="09:00")
+    saturday_close = Column(String(10), default="21:00")
+    saturday_closed = Column(Boolean, default=False)
+    
+    sunday_open = Column(String(10), default="09:00")
+    sunday_close = Column(String(10), default="21:00")
+    sunday_closed = Column(Boolean, default=True)
+    
+    timezone = Column(String(50), default="Asia/Kolkata")
+    
+    # Tax Configuration
+    tax_type = Column(String(20), default="GST")  # "GST", "VAT", "FLAT_RATE"
+    igst_percentage = Column(Float, default=18.0)
+    sgst_percentage = Column(Float, default=9.0)
+    utgst_percentage = Column(Float, default=9.0)
+    flat_tax_percentage = Column(Float, default=0.0)
+    
+    # Payment Methods Configuration
+    accept_cash = Column(Boolean, default=True)
+    accept_card = Column(Boolean, default=True)
+    accept_upi = Column(Boolean, default=True)
+    accept_bank_transfer = Column(Boolean, default=True)
+    accept_cheque = Column(Boolean, default=False)
+    accept_wallet = Column(Boolean, default=False)
+    
+    card_payment_gateway = Column(String(50))  # "Razorpay", "PayU", "Stripe"
+    upi_merchant_id = Column(String(100))
+    
+    # Preferences
+    currency_code = Column(String(3), default="INR")
+    language = Column(String(10), default="en")
+    theme_mode = Column(String(20), default="light")  # "light", "dark", "auto"
+    receipt_format = Column(String(20), default="detailed")  # "detailed", "minimal", "full"
+    
+    # Notifications & Alerts
+    low_stock_alert_threshold = Column(Integer, default=10)
+    send_email_on_sale = Column(Boolean, default=True)
+    send_sms_on_sale = Column(Boolean, default=False)
+    send_notification_on_order = Column(Boolean, default=True)
+    
+    # Advanced Settings
+    enable_inventory_tracking = Column(Boolean, default=True)
+    enable_customer_loyalty = Column(Boolean, default=True)
+    enable_batch_tracking = Column(Boolean, default=True)
+    enable_multi_branch = Column(Boolean, default=False)
+    
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    shop_profile = relationship("ShopProfile", back_populates="shop_settings")
+
+
+# ==================== FEATURE 7: CUSTOMER LOYALTY POINTS ====================
+
+class LoyaltyTier(Base):
+    """Loyalty tier definitions: Bronze, Silver, Gold"""
+    __tablename__ = "loyalty_tiers"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    tier_name = Column(String(50), nullable=False)  # Bronze, Silver, Gold
+    tier_level = Column(Integer, nullable=False)  # 1, 2, 3
+    min_points = Column(Integer, default=0)  # Min points to reach this tier
+    discount_percentage = Column(Float, default=0)  # Discount when redeeming
+
+
+class CustomerLoyalty(Base):
+    """Track loyalty points for customers"""
+    __tablename__ = "customer_loyalty"
+    
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    total_points = Column(Integer, default=0)
+    points_redeemed = Column(Integer, default=0)
+    available_points = Column(Integer, default=0)
+    current_tier_id = Column(Integer, ForeignKey("loyalty_tiers.id"))
+    tier_updated_at = Column(DateTime)
+    last_tier_bump_notified = Column(Boolean, default=False)
+
+
+class LoyaltyTransaction(Base):
+    """Point transactions: earning and redemption"""
+    __tablename__ = "loyalty_transactions"
+    
+    id = Column(Integer, primary_key=True)
+    customer_loyalty_id = Column(Integer, ForeignKey("customer_loyalty.id", ondelete="CASCADE"), nullable=False)
+    transaction_type = Column(Enum(LoyaltyTransactionType, name="loyalty_transaction_type"), nullable=False)
+    points = Column(Integer, nullable=False)
+    reference_id = Column(String(100))  # invoice_id, sale_id
+    notes = Column(Text)
+
+
+# ==================== FEATURE 8: UPI COLLECTIONS DASHBOARD ====================
+
+class UpiLedger(Base):
+    """Track all UPI payments separately for reconciliation"""
+    __tablename__ = "upi_ledger"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("shop_profiles.id", ondelete="CASCADE"))
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"))
+    upi_id = Column(String(100))  # Which UPI ID received this
+    amount = Column(Numeric(10, 2), nullable=False)
+    upi_reference = Column(String(100), unique=True)  # Transaction ref
+    customer_upi = Column(String(100))  # Payer UPI
+    status = Column(Enum(UpiStatus, name="upi_status"), default=UpiStatus.PENDING)
+    payment_date = Column(DateTime, server_default=func.now())
+
+
+# ==================== FEATURE 10: HOME DELIVERY TRACKING ====================
+
+class Delivery(Base):
+    """Home delivery orders"""
+    __tablename__ = "deliveries"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("shop_profiles.id", ondelete="CASCADE"))
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"))
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"))
+    delivery_address = Column(Text, nullable=False)
+    delivery_date = Column(Date)
+    delivery_time = Column(String(20))  # HH:MM format
+    assigned_to = Column(String(100))  # Delivery staff name
+    special_instructions = Column(Text)
+
+
+class DeliveryTracking(Base):
+    """Track delivery status updates"""
+    __tablename__ = "delivery_tracking"
+    
+    id = Column(Integer, primary_key=True)
+    delivery_id = Column(Integer, ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    status = Column(Enum(DeliveryStatus, name="delivery_status"), nullable=False)
+    status_timestamp = Column(DateTime, server_default=func.now())
+    staff_name = Column(String(100))
+    notes = Column(Text)
+    location_lat = Column(Float)  # GPS coordinates
+    location_lng = Column(Float)
+
+
+# ==================== FEATURE 9: SAVED BILL TEMPLATES ====================
+
+class BillingTemplate(Base):
+    """Save frequently used bill structures"""
+    __tablename__ = "billing_templates"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    template_name = Column(String(100), nullable=False)
+    template_data = Column(Text)  # JSON: [{product_id, qty, price}, ...]
+    last_used = Column(DateTime)
+
+
+# ==================== FEATURE 11: MULTI-STAFF BILLING COUNTERS ====================
+
+class BillingCounter(Base):
+    """Track which staff member + counter processed the sale"""
+    __tablename__ = "billing_counters"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    staff_name = Column(String(100), nullable=False)
+    counter_number = Column(Integer, nullable=False)
+    billing_pin = Column(String(255), nullable=False)  # Hashed PIN
+    is_active = Column(Boolean, default=True)
+
+
+class SalesByCounter(Base):
+    """Link sales to staff + counter"""
+    __tablename__ = "sales_by_counter"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("shop_profiles.id", ondelete="CASCADE"))
+    counter_id = Column(Integer, ForeignKey("billing_counters.id"))
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"))
+    staff_name = Column(String(100))
+    counter_number = Column(Integer)
+    sale_date = Column(Date)
+    sale_amount = Column(Numeric(10, 2))
+
+
+# ==================== FEATURE 13: CUSTOMER CREDIT SCORING ====================
+
+class CustomerCreditScore(Base):
+    """Credit scoring for customers"""
+    __tablename__ = "customer_credit_scores"
+    
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    credit_score = Column(Integer, default=50)  # 0-100
+    score_badge = Column(Enum(ScoreBadge, name="score_badge"), default=ScoreBadge.REGULAR)
+    suggested_credit_limit = Column(Numeric(10, 2), default=0)
+    
+    # Scoring factors
+    total_purchases = Column(Integer, default=0)
+    on_time_payments = Column(Integer, default=0)
+    late_payments = Column(Integer, default=0)
+    days_since_last_purchase = Column(Integer, default=999)
+    avg_days_to_pay = Column(Float, default=0)
+    
+    last_calculated = Column(DateTime)
+
+
+# ==================== FEATURE 14: BIRTHDAY AUTO-DISCOUNTS ====================
+
+class CustomerOccasion(Base):
+    """Track customer birthdays and other occasions"""
+    __tablename__ = "customer_occasions"
+    
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    occasion_type = Column(Enum(OccasionType, name="occasion_type"), nullable=False)
+    occasion_date = Column(Date, nullable=False)  # MM-DD format for annual
+    discount_percentage = Column(Float, default=10)
+    last_notification_sent = Column(DateTime)
+
+
+# ==================== FEATURE 16: DAILY WHATSAPP REPORT ====================
+
+class DailyReport(Base):
+    """Daily aggregated report for WhatsApp"""
+    __tablename__ = "daily_reports"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    report_date = Column(Date, nullable=False)
+    
+    total_revenue = Column(Numeric(12, 2), default=0)
+    total_expenses = Column(Numeric(12, 2), default=0)
+    total_profit = Column(Numeric(12, 2), default=0)
+    bill_count = Column(Integer, default=0)
+    
+    top_product_id = Column(Integer, ForeignKey("products.id"))
+    top_product_name = Column(String(100))
+    top_product_qty = Column(Integer, default=0)
+    
+    cash_collected = Column(Numeric(10, 2), default=0)
+    upi_collected = Column(Numeric(10, 2), default=0)
+    card_collected = Column(Numeric(10, 2), default=0)
+    
+    whatsapp_sent = Column(Boolean, default=False)
+    whatsapp_sent_at = Column(DateTime)
+
+
+# ==================== FEATURE 3: FESTIVAL STOCK PREDICTOR ====================
+
+class FestivalEvent(Base):
+    """Indian festival calendar with last year comparison"""
+    __tablename__ = "festival_events"
+    
+    id = Column(Integer, primary_key=True)
+    festival_name = Column(String(100), nullable=False)  # Diwali, Holi, Eid, Pongal
+    festival_date = Column(Date, nullable=False)
+    festival_year = Column(Integer, nullable=False)
+    days_until = Column(Integer)  # Calculated
+    top_products_last_year = Column(Text)  # JSON: [{product_id, name, qty_sold}, ...]
+
+
+# ==================== FEATURE 4: CHATBOT CONTEXT ====================
+
+class ChatbotContext(Base):
+    """Store shop context for chatbot API calls"""
+    __tablename__ = "chatbot_context"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), unique=True, nullable=False)
+    shop_name = Column(String(100))
+    shop_type = Column(String(100))
+    location = Column(String(300))
+    top_5_products = Column(Text)  # JSON: [{id, name, revenue}, ...]
+    last_10_sales = Column(Text)  # JSON: [{product, qty, amount, date}, ...]
+    total_customers = Column(Integer, default=0)
+    avg_sale_value = Column(Numeric(10, 2), default=0)
+    last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+# ==================== WORKER / STAFF MANAGEMENT ====================
+
+class Worker(Base):
+    """
+    Staff / Worker details as managed in the application.
+    Includes salary, position, and access PIN for attendance tracking.
+    """
+    __tablename__ = "workers"
+    
+    id = Column(Integer, primary_key=True)
+    shopkeeper_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    phone = Column(String(20))
+    address = Column(Text)
+    salary = Column(Numeric(10, 2), default=0)
+    assigned_work = Column(String(200))
+    position = Column(String(100), default="Staff")
+    join_date = Column(Date, server_default=func.now())
+    status = Column(String(20), default="active")  # active, inactive, suspended
+    pin = Column(String(10))  # Attendance access PIN
+    
+    # Relationship to shopkeeper (User)
+    shopkeeper = relationship("User", foreign_keys=[shopkeeper_id])
+    
+
+
+# ==================== KHATA / LEDGER MANAGEMENT ====================
+
+class KhataBalance(Base):
+    """Customer credit ledger (Khata) - tracks outstanding balance"""
+    __tablename__ = "khata_balances"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_phone = Column(String(20), nullable=False, index=True)
+    customer_name = Column(String(100))
+    khata_balance = Column(Numeric(12, 2), default=0)  # Outstanding amount
+    last_transaction = Column(DateTime, server_default=func.now())
+    
+    __table_args__ = (
+        UniqueConstraint('shop_id', 'customer_phone', name='uix_shop_customer_khata'),
+    )
+
+
+class KhataHistory(Base):
+    """Transaction history for khata (invoices created, payments received)"""
+    __tablename__ = "khata_history"
+    
+    id = Column(Integer, primary_key=True)
+    khata_id = Column(Integer, ForeignKey("khata_balances.id", ondelete="CASCADE"), nullable=False)
+    transaction_type = Column(Enum(KhataTransactionType, name="khata_transaction_type"), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
+    reference_id = Column(String(100))  # invoice_number or payment_id
+    description = Column(String(200))
+    transaction_date = Column(DateTime, server_default=func.now())
+
+
+# ==================== EXPENSE TRACKING ====================
+
+class ShopExpense(Base):
+    """Track shop daily expenses (rent, staff, utilities, supplies)"""
+    __tablename__ = "shop_expenses"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    category = Column(String(50), nullable=False)  # rent, utilities, salary, supplies, etc
+    amount = Column(Numeric(12, 2), nullable=False)
+    description = Column(String(200))
+    expense_date = Column(Date, nullable=False)
+    payment_method = Column(String(50))  # cash, bank_transfer, etc
+
+# ==================== ONLINE STORE & SHOP PROFILE ====================
+
+class ShopProfile(Base):
+    """
+    Streamlined ShopProfile containing ONLY the fields the flutter app and backend actively use.
+    """
+    __tablename__ = "shop_profiles"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, unique=True)
+    
+    # Basic Shop Information
+    shop_name = Column(String(200), nullable=False)
+    shop_tagline = Column(String(500))
+    shop_description = Column(Text)
+    shop_type = Column(String(100), default="General")  
+    
+    # Contact Information
+    phone = Column(String(20))
+    email = Column(String(100))
+    website = Column(String(200))
+    gst_number = Column(String(50))
+    logo_url = Column(String(500))
+    
+    # Geographic Location (BUG-B12)
+    latitude = Column(Float, index=True, nullable=True)
+    longitude = Column(Float, index=True, nullable=True)
+    
+    # Location Information
+    address = Column(Text)
+    address_line1 = Column(String(200))
+    address_line2 = Column(String(200))
+    location = Column(String(300))
+    latitude = Column(Float)
+    longitude = Column(Float)
+    city = Column(String(100))
+    state = Column(String(100))
+    postal_code = Column(String(10))
+    
+    # Essential Payment & Config
+    upi_id = Column(String(100))
+    upi_ids = Column(Text)  # JSON string
+    shop_categories = Column(Text)  # JSON string
+    is_online_store_enabled = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    
+    # Additional Business Details
+    pan_number = Column(String(50))
+    registration_number = Column(String(100))
+    contact_person_name = Column(String(100))
+    contact_person_phone = Column(String(20))
+    contact_person_email = Column(String(100))
+    
+    # Branding
+    color_primary = Column(String(20))
+    color_secondary = Column(String(20))
+    logo_file_path = Column(String(500))
+    logo_version = Column(Integer, default=0)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    shop_settings = relationship("ShopSettings", back_populates="shop_profile", uselist=False, cascade="all, delete-orphan")
+
+class OnlineOrder(Base):
+    """Customer orders placed via the separate customer login"""
+    __tablename__ = "online_orders"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    customer_id = Column(Integer, nullable=False) # In future, link to a CustomerUser table
+    order_status = Column(Enum(OnlineOrderStatus, name="online_order_status"), default=OnlineOrderStatus.PENDING)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    delivery_address = Column(Text)
+    items_json = Column(Text, nullable=False) # JSON: [{product_id, name, qty, price}, ...]
+    created_at = Column(DateTime, server_default=func.now())
+
+class WhatsappOrder(Base):
+    """Customer orders placed via WhatsApp and shared to the app"""
+    __tablename__ = "whatsapp_orders"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    sender_number = Column(String(20), nullable=True)
+    raw_text = Column(Text, nullable=False)
+    parsed_items_json = Column(Text, nullable=True)
+    status = Column(Enum(WhatsappOrderStatus, name="whatsapp_order_status"), default=WhatsappOrderStatus.PENDING)
+    total_amount = Column(Numeric(10, 2), default=0.00)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+# ==================== PURCHASE ORDERS & INVENTORY ====================
+
+class PurchaseOrder(Base):
+    """Orders placed to wholesalers for restocking"""
+    __tablename__ = "purchase_orders"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    supplier_name = Column(String(100), nullable=False)
+    status = Column(Enum(PurchaseOrderStatus, name="purchase_order_status"), default=PurchaseOrderStatus.DRAFT)
+    total_cost = Column(Numeric(12, 2), default=0)
+    items_json = Column(Text, nullable=False)
+    expected_delivery = Column(Date)
+    created_at = Column(DateTime, server_default=func.now())
+
+# ==================== BANK RECONCILIATION & TRANSACTIONS ====================
+
+class BankReconciliation(Base):
+    """Daily checks to ensure UPI/Card collections hit the bank account"""
+    __tablename__ = "bank_reconciliations"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    recon_date = Column(Date, nullable=False)
+    expected_upi_amount = Column(Numeric(12, 2), default=0)
+    actual_bank_deposit = Column(Numeric(12, 2), default=0)
+    status = Column(Enum(BankReconciliationStatus, name="bank_reconciliation_status"), default=BankReconciliationStatus.PENDING)
+    notes = Column(Text)
+
+class UniversalTransaction(Base):
+    """Enterprise Tracker: Unified journal for ALL money in/out (Sales, Expense, Khata, PO)"""
+    __tablename__ = "universal_transactions"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    tx_type = Column(Enum(UniversalTransactionType, name="universal_transaction_type"), nullable=False)
+    category = Column(String(50)) # SALE, KHATA_REPAY, EXPENSE, PO_PAYMENT, SALARY
+    amount = Column(Numeric(12, 2), nullable=False)
+    reference_id = Column(String(100)) # ID to link back to the exact invoice/expense
+    description = Column(String(200))
+    tx_date = Column(DateTime, server_default=func.now())
+
+# ==================== GIFTCARDS ====================
+
+class GiftCard(Base):
+    """Digital Gift Cards issued by the shop"""
+    __tablename__ = "gift_cards"
+    
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    card_code = Column(String(50), nullable=False, unique=True)
+    initial_balance = Column(Numeric(10, 2), nullable=False)
+    current_balance = Column(Numeric(10, 2), nullable=False)
+    issued_to = Column(String(100))
+    issued_date = Column(DateTime, server_default=func.now())
+    expiry_date = Column(Date, nullable=True)
+    is_active = Column(Boolean, default=True)
+    status = Column(Enum(GiftCardStatus, name="gift_card_status"), default=GiftCardStatus.ACTIVE)
+
+class BatchOperation(Base):
+    """Track batch operations"""
+    __tablename__ = "batch_operations"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False)
+    operation_type = Column(String(50), nullable=False)  # IMPORT, EXPORT, UPDATE, DELETE
+    entity_type = Column(String(50), nullable=False)     # PRODUCT, CUSTOMER, SALE, etc.
+    status = Column(String(50), default="PROCESSING")    # PROCESSING, COMPLETED, FAILED
+    total_records = Column(Integer, default=0)
+    processed_records = Column(Integer, default=0)
+    failed_records = Column(Integer, default=0)
+    errors = Column(Text, nullable=True) # Changed from JSON to Text for broad compatibility
+    started_at = Column(DateTime, server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
+    operation_metadata = Column(Text, nullable=True) # Changed from JSON to Text for broad compatibility
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "operation_type": self.operation_type,
+            "entity_type": self.entity_type,
+            "status": self.status,
+            "total_records": self.total_records,
+            "processed_records": self.processed_records,
+            "failed_records": self.failed_records,
+            "progress_percent": round((self.processed_records / max(self.total_records, 1)) * 100),
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+class FlashSale(Base):
+    __tablename__ = "flash_sales"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    category = Column(String(50), nullable=False)
+    discount_pct = Column(Float, nullable=False)
+    hours_duration = Column(Integer, nullable=False)
+    start_time = Column(DateTime, default=func.now())
+    end_time = Column(DateTime, nullable=False)
+    is_active = Column(Boolean, default=True)
+
+# ==================== END OF MODELS ====================

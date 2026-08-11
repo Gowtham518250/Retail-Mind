@@ -1,0 +1,32 @@
+﻿# Python
+.venv/
+venv/
+env/
+test_venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Byte-compiled / optimized / DLL files
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Frontend build
+frontend/dist/
+frontend-web/out/
+
+# Local env files
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
