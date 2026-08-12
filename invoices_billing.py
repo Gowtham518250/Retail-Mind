@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func
 from sqlalchemy.orm import Session, joinedload
 from decimal import Decimal
+import logging
+from sqlalchemy.exc import IntegrityError
 
 from db import get_db
 from models import (
@@ -27,6 +29,7 @@ from models import (
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
+logger = logging.getLogger(__name__)
 
 # =====================
 # SCHEMAS
@@ -111,7 +114,7 @@ def sync_offline_invoice(
             Invoice.offline_id == data.offline_id
         ).first()
         if existing:
-            return {"message": "Invoice already synced (offline_id).", "invoice_id": existing.id, "status": "DUPLICATE"}
+            return {"message": "Invoice already synced (offline_id).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "offline_id": data.offline_id}
     
     # Always check invoice_number as fallback
     existing = db.query(Invoice).filter(
@@ -120,7 +123,7 @@ def sync_offline_invoice(
     ).first()
 
     if existing:
-        return {"message": "Invoice already synced (invoice_number).", "invoice_id": existing.id, "status": "DUPLICATE"}
+        return {"message": "Invoice already synced (invoice_number).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "invoice_number": invoice_number}
 
     # Find/Create Customer
     customer_id = None
@@ -306,9 +309,33 @@ def sync_offline_invoice(
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
-        # Rollback on any error
+    except IntegrityError:
+        # Another request may have committed the same offline_id/invoice_number
+        # between the pre-check and insert. Treat that race as idempotent success.
         db.rollback()
+        existing = None
+        if data.offline_id:
+            existing = db.query(Invoice).filter(
+                Invoice.user_id == shop_id,
+                Invoice.offline_id == data.offline_id,
+            ).first()
+        if existing is None:
+            existing = db.query(Invoice).filter(
+                Invoice.user_id == shop_id,
+                Invoice.invoice_number == invoice_number,
+            ).first()
+        if existing is not None:
+            return {
+                "message": "Invoice already synced",
+                "invoice_id": existing.id,
+                "invoice_number": existing.invoice_number,
+                "offline_id": existing.offline_id,
+                "status": "ALREADY_SYNCED",
+            }
+        raise HTTPException(status_code=409, detail="Invoice idempotency conflict")
+    except Exception as e:
+        db.rollback()
+        logger.exception("Invoice sync transaction failed")
         raise HTTPException(status_code=500, detail=f"Transaction failed: {str(e)}")
 
 

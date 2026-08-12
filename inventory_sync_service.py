@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, desc
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+from decimal import Decimal
 import logging
 
 from db import get_db
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 class StockDeductionRequest(BaseModel):
     """Request to deduct stock with idempotency"""
     product_id: int
-    quantity: int = Field(..., gt=0)
+    quantity: Decimal = Field(..., gt=0)
     reason: str = "SALE"
     reference_id: str  # invoice_number or sale_id
     idempotency_key: str  # Prevent duplicate deductions
@@ -35,8 +36,8 @@ class StockDeductionResponse(BaseModel):
     """Response with updated stock and sync status"""
     success: bool
     product_id: int
-    previous_stock: int
-    new_stock: int
+    previous_stock: Decimal
+    new_stock: Decimal
     message: str
     sync_timestamp: datetime
 
@@ -74,38 +75,41 @@ def deduct_stock_with_idempotency(
     Frontend MUST call this for every stock change.
     """
     try:
-        
-        product = (
-        db.query(Product)
-        .filter(
-            Product.id == request.product_id,
-            Product.user_id == user_id,
-        )
-        .with_for_update()
-        .first()
-    )
-
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
-
+        # Check idempotency - prevent duplicate deductions
         existing_movement = db.query(StockMovement).filter(
             and_(
                 StockMovement.product_id == request.product_id,
                 StockMovement.reference_id == request.reference_id,
                 StockMovement.movement_type == "OUT",
-                StockMovement.reason == request.reason,
+                StockMovement.reason == request.reason
             )
         ).first()
-
+        
         if existing_movement:
+            # Already processed - return current state
+            product = db.query(Product).filter(
+                Product.id == request.product_id,
+                Product.user_id == user_id
+            ).first()
+            
             return StockDeductionResponse(
                 success=True,
                 product_id=request.product_id,
-                previous_stock=product.current_stock,
+                previous_stock=product.current_stock + request.quantity,
                 new_stock=product.current_stock,
                 message="Already processed (idempotent)",
-                sync_timestamp=existing_movement.created_at,
+                sync_timestamp=existing_movement.created_at
             )
+        
+        # Get product (row-level lock to prevent concurrent syncs from overselling)
+        product = db.query(Product).filter(
+            Product.id == request.product_id,
+            Product.user_id == user_id
+        ).with_for_update().first()
+        
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
         previous_stock = product.current_stock
         
         # Check sufficient stock
@@ -179,17 +183,6 @@ def deduct_stock_batch(
         for item in request.updates:
             try:
                 # Process each item
-                product = db.query(Product).filter(
-                                    Product.id == item.product_id,
-                                    Product.user_id == user_id
-                                ).with_for_update().first()
-                                
-                if not product:
-                    failed_items.append({
-                                        "product_id": item.product_id,
-                                        "error": "Product not found"
-                                    })
-                    continue
                 existing_movement = db.query(StockMovement).filter(
                     and_(
                         StockMovement.product_id == item.product_id,
@@ -210,6 +203,18 @@ def deduct_stock_batch(
                         "success": True,
                         "message": "Already processed (idempotent)",
                         "new_stock": product.current_stock
+                    })
+                    continue
+                
+                product = db.query(Product).filter(
+                    Product.id == item.product_id,
+                    Product.user_id == user_id
+                ).with_for_update().first()
+                
+                if not product:
+                    failed_items.append({
+                        "product_id": item.product_id,
+                        "error": "Product not found"
                     })
                     continue
                 
@@ -246,20 +251,10 @@ def deduct_stock_batch(
                     "error": str(e)
                 })
         
-        if failed_items:
-            db.rollback()
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": "Stock deduction failed",
-                    "failed_items": failed_items,
-                },
-            )
-
         db.commit()
         
         return {
-            "success": True,
+            "success": len(failed_items) == 0,
             "total_items": len(request.updates),
             "successful": len(results),
             "failed": len(failed_items),

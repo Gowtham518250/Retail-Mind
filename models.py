@@ -267,7 +267,7 @@ class Product(Base):
     product_name = Column(String(100), nullable=False)
     sku = Column(String(50), nullable=False, index=True)
     description = Column(Text)
-    current_stock = Column(Integer, default=0)
+    current_stock = Column(Numeric(12, 3), default=0)
     min_stock = Column(Integer, default=10)  # Alert when below this
     max_stock = Column(Integer, default=100)
     reorder_level = Column(Integer, default=20)
@@ -297,22 +297,14 @@ class StockMovement(Base):
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     movement_type = Column(Enum(StockMovementType, name="stock_movement_type"), nullable=False)
-    quantity = Column(Integer, nullable=False)
+    quantity = Column(Numeric(12, 3), nullable=False)
     reason = Column(String(200))  # e.g., "Purchase", "Sale", "Damage", "Inventory Adjustment"
     reference_id = Column(String(100))  # e.g., invoice_id, purchase_order_id
     created_at = Column(DateTime, server_default=func.now())
     
     # Relationship
     product = relationship("Product", back_populates="stock_movements")
-    __table_args__ = (
-    UniqueConstraint(
-        'product_id',
-        'reference_id',
-        'movement_type',
-        'reason',
-        name='uix_stock_movement_reference'
-    ),
-)
+
 
 class ProductBatch(Base):
     __tablename__ = "product_batches"
@@ -322,7 +314,7 @@ class ProductBatch(Base):
     batch_number = Column(String(100), unique=True)
     manufacture_date = Column(Date)
     expiry_date = Column(Date)
-    quantity = Column(Integer)
+    quantity = Column(Numeric(12, 3))
     
     # Relationship
     product = relationship("Product", back_populates="batches")
@@ -347,6 +339,7 @@ class Attendance(Base):
     
     # Relationship
     employee = relationship("User", back_populates="attendance")
+    worker = relationship("Worker", foreign_keys=[worker_id])
 
 
 class LeaveRequest(Base):
@@ -886,6 +879,7 @@ class Worker(Base):
     
     # Relationship to shopkeeper (User)
     shopkeeper = relationship("User", foreign_keys=[shopkeeper_id])
+    attendance = relationship("Attendance", foreign_keys="Attendance.worker_id", back_populates="worker")
     
 
 

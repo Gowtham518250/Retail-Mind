@@ -5,7 +5,7 @@ Check-in/Check-out, Attendance tracking, Leave management, Attendance analytics
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, desc
+from sqlalchemy import and_, or_, func, desc
 from pydantic import BaseModel, Field
 from datetime import datetime, date, timedelta
 from typing import List, Optional
@@ -147,43 +147,39 @@ class AttendanceResponse(BaseModel):
 def employee_check_in(
     employee_id: int = Query(...),
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(check_current_user)
+    current_user_id: int = Depends(check_current_user),
 ):
-    """Employee check-in - accepts both user_id and worker_id"""
-    # First try to find as Worker
+    """Idempotent check-in using Worker.id for worker identity."""
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
     is_worker = employee is not None
 
-    # If not found as Worker, try to find as User (for shopkeepers/owners checking in)
     if not employee:
         employee = db.query(User).filter(User.id == employee_id).first()
-
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Security check: verify the current user owns/manages this employee
     if is_worker:
-        # For workers, check that the current user is the shopkeeper
         if employee.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check in your own workers")
+        actual_employee_id = employee.shopkeeper_id
+        worker_id_to_store = employee.id
     else:
-        # For shopkeepers/owners, they can only check in themselves
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check in yourself")
+        actual_employee_id = employee_id
+        worker_id_to_store = None
 
     today = date.today()
-    
-    # For workers, use shopkeeper_id as employee_id but store worker_id separately
-    actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
-    worker_id_to_store = employee.id if is_worker else None
+    filters = [
+        Attendance.employee_id == actual_employee_id,
+        Attendance.attendance_date == today,
+    ]
+    if worker_id_to_store is None:
+        filters.append(Attendance.worker_id.is_(None))
+    else:
+        filters.append(Attendance.worker_id == worker_id_to_store)
 
-    attendance = db.query(Attendance).filter(
-        and_(
-            Attendance.employee_id == actual_employee_id,
-            Attendance.attendance_date == today,
-            Attendance.worker_id == worker_id_to_store if worker_id_to_store is not None else True
-        )
-    ).first()
+    attendance = db.query(Attendance).filter(and_(*filters)).first()
 
     if not attendance:
         attendance = Attendance(
@@ -191,15 +187,17 @@ def employee_check_in(
             worker_id=worker_id_to_store,
             attendance_date=today,
             check_in_time=datetime.now(),
-            status="PRESENT"
+            status="PRESENT",
         )
         db.add(attendance)
+        message = "Check-in successful"
     elif attendance.check_in_time is None:
         attendance.check_in_time = datetime.now()
-        if attendance.status == "ABSENT":
-            attendance.status = "PRESENT"
+        attendance.status = "PRESENT"
+        message = "Check-in successful"
     else:
-        raise HTTPException(status_code=400, detail="Already checked in today")
+        # Idempotent replay: desired state already exists.
+        message = "Already checked in today"
 
     try:
         db.commit()
@@ -209,88 +207,63 @@ def employee_check_in(
         raise HTTPException(status_code=500, detail=f"Check-in failed: {str(e)}")
 
     return {
-        "message": "Check-in successful",
+        "message": message,
+        "idempotent": message.startswith("Already"),
         "employee_id": actual_employee_id,
         "worker_id": worker_id_to_store,
         "check_in_time": attendance.check_in_time,
-        "status": attendance.status
+        "status": attendance.status,
     }
+
 
 @router.post("/check-out")
 def employee_check_out(
     employee_id: int = Query(...),
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(check_current_user)
+    current_user_id: int = Depends(check_current_user),
 ):
-    """Employee check-out - accepts both user_id and worker_id"""
-    # First try to find as Worker
+    """Idempotent check-out using Worker.id for worker identity."""
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
     is_worker = employee is not None
 
-    # If not found as Worker, try to find as User (for shopkeepers/owners checking out)
     if not employee:
         employee = db.query(User).filter(User.id == employee_id).first()
-
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Security check: verify the current user owns/manages this employee
     if is_worker:
-        # For workers, check that the current user is the shopkeeper
         if employee.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check out your own workers")
+        actual_employee_id = employee.shopkeeper_id
+        worker_id_to_store = employee.id
     else:
-        # For shopkeepers/owners, they can only check out themselves
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check out yourself")
-    """Employee check-out - accepts both user_id and worker_id"""
-    # First try to find as Worker
-    employee = db.query(Worker).filter(Worker.id == employee_id).first()
-    is_worker = employee is not None
-
-    # If not found as Worker, try to find as User (for shopkeepers/owners checking out)
-    if not employee:
-        employee = db.query(User).filter(User.id == employee_id).first()
-
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-
-    # Security check: verify the current user owns/manages this employee
-    if is_worker:
-        # For workers, check that the current user is the shopkeeper
-        if employee.shopkeeper_id != current_user_id:
-            raise HTTPException(status_code=403, detail="You can only check out your own workers")
-    else:
-        # For shopkeepers/owners, they can only check out themselves
-        if employee_id != current_user_id:
-            raise HTTPException(status_code=403, detail="You can only check out yourself")
+        actual_employee_id = employee_id
+        worker_id_to_store = None
 
     today = date.today()
-    
-    # For workers, use shopkeeper_id as employee_id but store worker_id separately
-    actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
-    worker_id_to_store = employee.id if is_worker else None
+    filters = [
+        Attendance.employee_id == actual_employee_id,
+        Attendance.attendance_date == today,
+    ]
+    if worker_id_to_store is None:
+        filters.append(Attendance.worker_id.is_(None))
+    else:
+        filters.append(Attendance.worker_id == worker_id_to_store)
 
-    attendance = db.query(Attendance).filter(
-        and_(
-            Attendance.employee_id == actual_employee_id,
-            Attendance.attendance_date == today,
-            Attendance.worker_id == worker_id_to_store if worker_id_to_store is not None else True
-        )
-    ).first()
-
+    attendance = db.query(Attendance).filter(and_(*filters)).first()
     if not attendance or not attendance.check_in_time:
         raise HTTPException(status_code=400, detail="No check-in found for today")
 
-    if attendance.check_out_time:
-        raise HTTPException(status_code=400, detail="Already checked out today")
-
-    attendance.check_out_time = datetime.now()
-
-    # Calculate working hours
-    if attendance.check_in_time and attendance.check_out_time:
+    if attendance.check_out_time is None:
+        attendance.check_out_time = datetime.now()
         duration = attendance.check_out_time - attendance.check_in_time
-        attendance.working_hours = duration.total_seconds() / 3600  # Convert to hours
+        attendance.working_hours = max(0.0, duration.total_seconds() / 3600.0)
+        message = "Check-out successful"
+    else:
+        # Idempotent replay: desired state already exists.
+        message = "Already checked out today"
 
     try:
         db.commit()
@@ -300,11 +273,12 @@ def employee_check_out(
         raise HTTPException(status_code=500, detail=f"Check-out failed: {str(e)}")
 
     return {
-        "message": "Check-out successful",
+        "message": message,
+        "idempotent": message.startswith("Already"),
         "employee_id": actual_employee_id,
         "worker_id": worker_id_to_store,
         "check_out_time": attendance.check_out_time,
-        "working_hours": attendance.working_hours
+        "working_hours": attendance.working_hours,
     }
 
 # ==================== ATTENDANCE RECORDS ====================
@@ -336,33 +310,30 @@ def record_manual_attendance(
                       "half_day": "HALF_DAY", "halfday": "HALF_DAY", "late": "LATE"}
         normalized_status = STATUS_MAP.get(record.status.lower(), "PRESENT")
     
-    # Use worker.shopkeeper_id as the employee reference for Attendance
-    # Attendance.employee_id FK references user_details.id (shopkeeper), not worker
-    # Worker attendance is keyed by Worker.id. Keep shopkeeper_id only as the
-    # tenant/owner reference for the Attendance.employee_id FK.
-    worker_id = employee.id
+    # Worker identity is authoritative for worker attendance.
+    # Attendance.employee_id retains the owning shopkeeper; worker_id identifies
+    # the actual worker whose attendance is being recorded.
     employee_user_id = employee.shopkeeper_id
 
     existing = db.query(Attendance).filter(
         and_(
-            Attendance.worker_id == worker_id,
-            Attendance.attendance_date == att_date
+            Attendance.employee_id == employee_user_id,
+            Attendance.worker_id == employee.id,
+            Attendance.attendance_date == att_date,
         )
     ).first()
 
     if existing:
-        existing.employee_id = employee_user_id
-        existing.worker_id = worker_id
-        existing.status = normalized_status.upper().replace('-', '_')
+        existing.status = normalized_status
         existing.notes = record.notes
         db.add(existing)
     else:
         attendance = Attendance(
             employee_id=employee_user_id,
-            worker_id=worker_id,
+            worker_id=employee.id,
             attendance_date=att_date,
-            status=normalized_status.upper().replace('-', '_'),
-            notes=record.notes
+            status=normalized_status,
+            notes=record.notes,
         )
         db.add(attendance)
     
@@ -395,7 +366,10 @@ def get_employee_attendance(
             raise HTTPException(status_code=403, detail="You can only view your own attendance")
     
     if worker:
-        query = db.query(Attendance).filter(Attendance.worker_id == worker.id)
+        query = db.query(Attendance).filter(
+            Attendance.employee_id == worker.shopkeeper_id,
+            Attendance.worker_id == worker.id,
+        )
     else:
         query = db.query(Attendance).filter(Attendance.employee_id == employee_id)
     
@@ -419,17 +393,35 @@ def get_employee_attendance(
 def get_attendance_by_date(
     date_str: str,
     employee_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user),
 ):
-    """Get all attendance records for a specific date (optionally filtered by employee_id)"""
+    """Get all attendance records for a date, scoped to the current shopkeeper."""
     att_date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
-    # Build query
+    # Always scope to the current shopkeeper's own attendance or their workers.
     query = db.query(Attendance).filter(Attendance.attendance_date == att_date)
 
-    # Filter by employee_id if provided
     if employee_id is not None:
-        query = query.filter(Attendance.employee_id == employee_id)
+        worker = db.query(Worker).filter(Worker.id == employee_id).first()
+        if worker:
+            if worker.shopkeeper_id != current_user_id:
+                raise HTTPException(status_code=403, detail="You can only view your own workers' attendance")
+            query = query.filter(
+                Attendance.employee_id == worker.shopkeeper_id,
+                Attendance.worker_id == worker.id,
+            )
+        else:
+            if employee_id != current_user_id:
+                raise HTTPException(status_code=403, detail="You can only view your own attendance")
+            query = query.filter(Attendance.employee_id == current_user_id, Attendance.worker_id.is_(None))
+    else:
+        worker_ids = [w.id for w in db.query(Worker.id).filter(Worker.shopkeeper_id == current_user_id).all()]
+        query = query.filter(
+            Attendance.employee_id == current_user_id,
+        )
+        if worker_ids:
+            query = query.filter(or_(Attendance.worker_id.is_(None), Attendance.worker_id.in_(worker_ids)))
 
     records = query.order_by(desc(Attendance.attendance_date)).all()
 
