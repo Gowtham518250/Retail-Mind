@@ -304,7 +304,15 @@ class StockMovement(Base):
     
     # Relationship
     product = relationship("Product", back_populates="stock_movements")
-
+    __table_args__ = (
+    UniqueConstraint(
+        'product_id',
+        'reference_id',
+        'movement_type',
+        'reason',
+        name='uix_stock_movement_reference'
+    ),
+)
 
 class ProductBatch(Base):
     __tablename__ = "product_batches"
