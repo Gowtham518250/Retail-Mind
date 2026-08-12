@@ -4,14 +4,12 @@ import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, User, Phone, MapPin, Home, Banknote, Smartphone, CreditCard,
+  ArrowLeft, User, Phone, MapPin, Home, Banknote,
   ShieldCheck, Loader2, AlertCircle, ShoppingBag,
 } from 'lucide-react';
 import { useCart } from '../../../../context/CartContext';
 import { API_BASE } from '../../../../lib/api';
 import type { PlacedOrder } from '../../../../lib/types';
-
-type PaymentMethod = 'COD' | 'UPI' | 'CARD';
 
 interface FormState {
   name: string;
@@ -35,7 +33,6 @@ export default function CheckoutClientPage() {
   const { cartItems, cartTotal, clearCart } = useCart();
 
   const [form, setForm] = useState<FormState>(initialForm);
-  const [payment, setPayment] = useState<PaymentMethod>('COD');
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState('');
   const [locationError, setLocationError] = useState('');
@@ -45,80 +42,70 @@ export default function CheckoutClientPage() {
   const deliveryFee = cartTotal >= 499 || cartTotal === 0 ? 0 : 29;
   const grandTotal = cartTotal + deliveryFee;
 
-  const combinedAddress = useMemo(() => {
-    return [form.address, form.landmark ? `Landmark: ${form.landmark}` : '', form.city, form.pincode]
+  const combinedAddress = useMemo(() => (
+    [form.address, form.landmark ? `Landmark: ${form.landmark}` : '', form.city, form.pincode]
       .filter(Boolean)
-      .join(', ');
-  }, [form.address, form.landmark, form.city, form.pincode]);
+      .join(', ')
+  ), [form.address, form.landmark, form.city, form.pincode]);
 
-  const setField = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const setField = (key: keyof FormState) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
-  const detectLocation = async () => {
+  const detectLocation = () => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser.');
       return;
     }
-
     setLocationError('');
     setIsDetectingLocation(true);
-
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-
+      async ({ coords }) => {
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}`
+          );
+          if (!res.ok) throw new Error('reverse geocoding failed');
           const data = await res.json();
           const address = data.address || {};
-          const city = address.city || address.town || address.village || address.county || '';
-          const pincode = address.postcode || '';
-          const road = address.road || '';
-          const house = address.house_number || '';
-          const neighbourhood = address.neighbourhood || address.suburb || '';
-
           setForm((prev) => ({
             ...prev,
-            address: [house, road, neighbourhood].filter(Boolean).join(' ').trim(),
-            city: city,
-            pincode: pincode,
+            address: [address.house_number, address.road, address.neighbourhood || address.suburb]
+              .filter(Boolean).join(' ').trim(),
+            city: address.city || address.town || address.village || address.county || '',
+            pincode: address.postcode || '',
           }));
-        } catch (error) {
+        } catch {
           setLocationError('Unable to resolve your location. Please enter it manually.');
         } finally {
           setIsDetectingLocation(false);
         }
       },
-      (error) => {
+      () => {
         setIsDetectingLocation(false);
-        if (error.code === error.PERMISSION_DENIED) {
-          setLocationError('Please allow location access in your browser.');
-        } else {
-          setLocationError('Unable to detect location. Please enter it manually.');
-        }
+        setLocationError('Unable to detect location. Please enter it manually.');
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
     );
   };
 
-  const validate = (): boolean => {
+  const validate = () => {
     const next: Partial<Record<keyof FormState, string>> = {};
-    if (!form.name.trim() || form.name.trim().length < 2) next.name = 'Enter your full name';
+    if (form.name.trim().length < 2) next.name = 'Enter your full name';
     if (!/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10-digit phone number';
     if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = 'Enter a valid email';
     if (!form.city.trim()) next.city = 'City is required';
     if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
-    if (!form.address.trim() || form.address.trim().length < 5) next.address = 'Enter your full address';
+    if (form.address.trim().length < 5) next.address = 'Enter your full address';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
   const handlePlaceOrder = async () => {
-    if (cartItems.length === 0) return;
-    if (!validate()) return;
-
+    if (!cartItems.length || !validate()) return;
     setSubmitError('');
     setIsSubmitting(true);
 
@@ -128,6 +115,7 @@ export default function CheckoutClientPage() {
       phone: form.phone.trim(),
       delivery_address: combinedAddress,
       items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+      payment_method: 'COD',
     };
 
     try {
@@ -144,7 +132,7 @@ export default function CheckoutClientPage() {
         shop_name: data.shop_name,
         total_amount: data.total_amount,
         status: data.status || 'PENDING',
-        payment_method: payment,
+        payment_method: 'COD',
         customer_name: form.name.trim(),
         phone: form.phone.trim(),
         delivery_address: combinedAddress,
@@ -156,7 +144,10 @@ export default function CheckoutClientPage() {
         placed_at: new Date().toISOString(),
       };
 
-      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
+      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify({
+        ...placedOrder,
+        tracking_token: data.tracking_token,
+      }));
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
     } catch (err: any) {
@@ -166,12 +157,10 @@ export default function CheckoutClientPage() {
     }
   };
 
-  if (cartItems.length === 0) {
+  if (!cartItems.length) {
     return (
       <div className="container" style={{ padding: '48px 20px' }}>
-        <div className="store-empty-state">
-          Your cart is empty. Add a few products before checking out.
-        </div>
+        <div className="store-empty-state">Your cart is empty. Add a few products before checking out.</div>
         <div style={{ marginTop: 18 }}>
           <button className="hero-cta" onClick={() => router.push(`/shop/${shopId}`)}>
             <ArrowLeft size={16} /> Back to shop
@@ -187,17 +176,10 @@ export default function CheckoutClientPage() {
         <ArrowLeft size={16} /> Back to shop
       </button>
 
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="checkout-grid"
-      >
-        {/* Left: forms */}
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="checkout-grid">
         <div className="checkout-main">
           <section className="checkout-card">
             <h2 className="checkout-card-title"><MapPin size={18} /> Delivery details</h2>
-
             <div className="checkout-field-row">
               <div className="checkout-field">
                 <label><User size={14} /> Full name</label>
@@ -210,13 +192,11 @@ export default function CheckoutClientPage() {
                 {errors.phone && <span className="field-error">{errors.phone}</span>}
               </div>
             </div>
-
             <div className="checkout-field">
               <label>Email <span className="field-optional">(optional)</span></label>
               <input value={form.email} onChange={setField('email')} placeholder="you@example.com" />
               {errors.email && <span className="field-error">{errors.email}</span>}
             </div>
-
             <div className="checkout-field">
               <label><Home size={14} /> Address</label>
               <div className="location-row">
@@ -228,7 +208,6 @@ export default function CheckoutClientPage() {
               {errors.address && <span className="field-error">{errors.address}</span>}
               {locationError && <span className="field-error">{locationError}</span>}
             </div>
-
             <div className="checkout-field-row">
               <div className="checkout-field">
                 <label>City</label>
@@ -241,12 +220,10 @@ export default function CheckoutClientPage() {
                 {errors.pincode && <span className="field-error">{errors.pincode}</span>}
               </div>
             </div>
-
             <div className="checkout-field">
               <label>Landmark <span className="field-optional">(optional)</span></label>
               <input value={form.landmark} onChange={setField('landmark')} placeholder="Nearby landmark" />
             </div>
-
             <div className="checkout-field">
               <label>Order notes <span className="field-optional">(optional)</span></label>
               <textarea value={form.notes} onChange={setField('notes')} placeholder="Any delivery instructions" rows={2} />
@@ -254,53 +231,20 @@ export default function CheckoutClientPage() {
           </section>
 
           <section className="checkout-card">
-            <h2 className="checkout-card-title">Payment method</h2>
+            <h2 className="checkout-card-title"><Banknote size={18} /> Payment method</h2>
             <div className="payment-options">
-              <button
-                type="button"
-                className={`payment-option ${payment === 'COD' ? 'active' : ''}`}
-                onClick={() => setPayment('COD')}
-              >
+              <div className="payment-option active" aria-label="Cash on Delivery selected">
                 <Banknote size={20} />
                 <div>
                   <strong>Cash on Delivery</strong>
                   <span>Pay when your order arrives</span>
                 </div>
-              </button>
-              <button
-                type="button"
-                className={`payment-option ${payment === 'UPI' ? 'active' : ''}`}
-                onClick={() => setPayment('UPI')}
-              >
-                <Smartphone size={20} />
-                <div>
-                  <strong>UPI</strong>
-                  <span>Coming soon</span>
-                </div>
-                <span className="payment-badge">Soon</span>
-              </button>
-              <button
-                type="button"
-                className={`payment-option ${payment === 'CARD' ? 'active' : ''}`}
-                onClick={() => setPayment('CARD')}
-              >
-                <CreditCard size={20} />
-                <div>
-                  <strong>Credit / Debit Card</strong>
-                  <span>Coming soon</span>
-                </div>
-                <span className="payment-badge">Soon</span>
-              </button>
+              </div>
             </div>
-            {payment !== 'COD' && (
-              <p className="payment-note">
-                Online payments aren't live yet — your order will be placed as Cash on Delivery for now.
-              </p>
-            )}
+            <p className="payment-note">Online UPI and card payments are not enabled yet. No payment is captured online.</p>
           </section>
         </div>
 
-        {/* Right: order summary */}
         <aside className="checkout-summary">
           <h2 className="checkout-card-title"><ShoppingBag size={18} /> Order summary</h2>
           <div className="summary-items">
@@ -311,32 +255,14 @@ export default function CheckoutClientPage() {
               </div>
             ))}
           </div>
-
-          <div className="summary-row">
-            <span>Subtotal</span>
-            <span>₹{cartTotal.toFixed(2)}</span>
-          </div>
-          <div className="summary-row">
-            <span>Delivery</span>
-            <span>{deliveryFee === 0 ? 'FREE' : `₹${deliveryFee.toFixed(2)}`}</span>
-          </div>
-          <div className="summary-row muted">
-            <span>GST</span>
-            <span>Included</span>
-          </div>
-          <div className="summary-row total">
-            <span>Total</span>
-            <span>₹{grandTotal.toFixed(2)}</span>
-          </div>
-
-          {submitError && (
-            <div className="cart-banner error"><AlertCircle size={15} /> {submitError}</div>
-          )}
-
+          <div className="summary-row"><span>Subtotal</span><span>₹{cartTotal.toFixed(2)}</span></div>
+          <div className="summary-row"><span>Delivery</span><span>{deliveryFee === 0 ? 'FREE' : `₹${deliveryFee.toFixed(2)}`}</span></div>
+          <div className="summary-row muted"><span>GST</span><span>Included</span></div>
+          <div className="summary-row total"><span>Total</span><span>₹{grandTotal.toFixed(2)}</span></div>
+          {submitError && <div className="cart-banner error"><AlertCircle size={15} /> {submitError}</div>}
           <button className="place-order-btn" onClick={handlePlaceOrder} disabled={isSubmitting}>
             {isSubmitting ? <><Loader2 size={16} className="spin" /> Placing order…</> : 'Place Order'}
           </button>
-
           <div className="checkout-trust"><ShieldCheck size={14} /> Secure guest checkout · No account needed</div>
         </aside>
       </motion.div>
