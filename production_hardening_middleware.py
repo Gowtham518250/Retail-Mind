@@ -10,7 +10,7 @@ import json
 import re
 from typing import Optional
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from db import sessionLocal
@@ -43,11 +43,7 @@ def _json_response_like(response: Response, payload: dict) -> JSONResponse:
     headers = dict(response.headers)
     headers.pop("content-length", None)
     headers.pop("content-encoding", None)
-    return JSONResponse(
-        status_code=response.status_code,
-        content=payload,
-        headers=headers,
-    )
+    return JSONResponse(status_code=response.status_code, content=payload, headers=headers)
 
 
 def install(app) -> None:
@@ -57,11 +53,6 @@ def install(app) -> None:
     async def production_hardening(request: Request, call_next):
         path = request.url.path
 
-        # ------------------------------------------------------------------
-        # Guest checkout: enforce the only payment mode actually implemented
-        # by the backend. This prevents the UI from claiming an online payment
-        # succeeded when no payment gateway transaction exists.
-        # ------------------------------------------------------------------
         guest_order = path == _GUEST_ORDER_PATH and request.method == "POST"
         guest_payload: Optional[dict] = None
         if guest_order:
@@ -78,9 +69,8 @@ def install(app) -> None:
                     content={"detail": "Online payments are not enabled yet. Please use Cash on Delivery."},
                 )
 
-            # If Firebase verification is supplied, a mismatched verified phone
-            # must fail closed. The legacy handler logged the mismatch and then
-            # continued with an unverified guest order.
+            # Fail closed when Firebase verification is supplied but does not
+            # match the phone number entered at checkout.
             firebase_token = guest_payload.get("firebase_id_token")
             phone = str(guest_payload.get("phone", "")).strip()
             if firebase_token:
@@ -94,17 +84,12 @@ def install(app) -> None:
                     verified_phone = str(decoded.get("phone_number") or "")
                     normalized_verified = "".join(ch for ch in verified_phone if ch.isdigit())
                     normalized_phone = "".join(ch for ch in phone if ch.isdigit())
-                    if not normalized_verified.endswith(normalized_phone):
+                    if not normalized_phone or not normalized_verified.endswith(normalized_phone):
                         return JSONResponse(status_code=403, content={"detail": "Verified phone number does not match checkout phone number."})
-                except JSONResponse:
-                    raise
                 except Exception:
                     return JSONResponse(status_code=401, content={"detail": "Invalid or expired Firebase verification token."})
 
-        # ------------------------------------------------------------------
-        # Guest order tracking: phone number alone is not a sufficient secret.
-        # Require a server-derived tracking token returned at checkout.
-        # ------------------------------------------------------------------
+        # Phone numbers alone are not sufficient credentials for guest tracking.
         track_match = _GUEST_TRACK_RE.match(path) if request.method == "GET" else None
         if track_match:
             order_id = int(track_match.group(1))
@@ -114,12 +99,8 @@ def install(app) -> None:
             if not token or not expected or not hmac.compare_digest(token, expected):
                 return JSONResponse(status_code=403, content={"detail": "Valid guest tracking credentials are required."})
 
-        # ------------------------------------------------------------------
-        # Owner order state machine: prevent impossible transitions that would
-        # otherwise create duplicate sales/invoices or restore already-sold
-        # stock. The existing endpoint remains responsible for RBAC and the
-        # actual mutation.
-        # ------------------------------------------------------------------
+        # Enforce a monotonic order state machine before the existing owner
+        # handler mutates inventory, sales and invoices.
         owner_action_match = _OWNER_ACTION_RE.match(path) if request.method == "POST" else None
         if owner_action_match and _authorized_owner(request):
             order_id = int(owner_action_match.group(1))
@@ -138,9 +119,7 @@ def install(app) -> None:
                     if action not in allowed.get(order.order_status, set()):
                         return JSONResponse(
                             status_code=409,
-                            content={
-                                "detail": f"Invalid order transition: {order.order_status} -> {action or 'UNKNOWN'}."
-                            },
+                            content={"detail": f"Invalid order transition: {order.order_status} -> {action or 'UNKNOWN'}."},
                         )
             finally:
                 db.close()
@@ -157,8 +136,6 @@ def install(app) -> None:
                 payload["tracking_token"] = _tracking_token(order_id, phone)
                 return _json_response_like(response, payload)
             except Exception:
-                # Never turn a successful order into a false client failure just
-                # because the optional response enrichment failed.
                 return response
 
         return response
