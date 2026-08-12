@@ -24,6 +24,11 @@ class PaymentRecordRequest(BaseModel):
     amount: float = Field(..., gt=0, description="Payment amount received")
     payment_method: str = Field("CASH", description="Payment method: CASH, UPI, CARD, TRANSFER")
     notes: Optional[str] = None
+    idempotency_key: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description="Stable offline operation key; retrying it must not duplicate a payment.",
+    )
 
 class DeadlineUpdateRequest(BaseModel):
     customer_phone: Optional[str] = None
@@ -227,95 +232,207 @@ def record_khata_payment(
     user_id: int = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Record payment received against customer's pending invoices (FIFO settle or target invoice).
-    """
+    """Record a payment against pending invoices safely and idempotently."""
     try:
-        payment_amount = payload.amount
+        payment_amount = float(payload.amount)
         if payment_amount <= 0:
-            raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
+            raise HTTPException(
+                status_code=400,
+                detail="Payment amount must be greater than zero",
+            )
 
-        # Find target invoices
+        customer_phone = (payload.customer_phone or "").strip()
+        customer_id = (
+            payload.customer_id
+            if payload.customer_id and payload.customer_id > 0
+            else None
+        )
+        idempotency_key = (payload.idempotency_key or "").strip() or None
+
+        # Retry protection. Payment has no direct user_id, so scope through Invoice.
+        if idempotency_key:
+            existing_payment = (
+                db.query(Payment)
+                .join(Invoice, Payment.invoice_id == Invoice.id)
+                .filter(
+                    Invoice.user_id == user_id,
+                    Payment.idempotency_key == idempotency_key,
+                )
+                .first()
+            )
+            if existing_payment:
+                existing_invoice = (
+                    db.query(Invoice)
+                    .filter(
+                        Invoice.id == existing_payment.invoice_id,
+                        Invoice.user_id == user_id,
+                    )
+                    .first()
+                )
+                return {
+                    "success": True,
+                    "duplicate": True,
+                    "payment_id": existing_payment.id,
+                    "invoice_id": existing_payment.invoice_id,
+                    "message": "Payment already recorded (idempotent retry).",
+                    "applied_amount": float(existing_payment.amount or 0),
+                    "unapplied_change": 0.0,
+                    "settled_invoices": (
+                        [existing_invoice.invoice_number]
+                        if existing_invoice is not None else []
+                    ),
+                    "idempotency_key": idempotency_key,
+                }
+
+        # Resolve invoices only within this authenticated shop.
         if payload.invoice_id:
-            invoices = db.query(Invoice).filter(
-                Invoice.id == payload.invoice_id,
-                Invoice.user_id == user_id
-            ).all()
-        elif payload.customer_phone:
-            invoices = db.query(Invoice).filter(
-                Invoice.user_id == user_id,
-                Invoice.customer_phone == payload.customer_phone,
-                Invoice.payment_status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]),
-                Invoice.status != InvoiceStatus.CANCELLED
-            ).order_by(Invoice.invoice_date.asc()).all()
-        elif payload.customer_id:
-            invoices = db.query(Invoice).filter(
-                Invoice.user_id == user_id,
-                Invoice.customer_id == payload.customer_id,
-                Invoice.payment_status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]),
-                Invoice.status != InvoiceStatus.CANCELLED
-            ).order_by(Invoice.invoice_date.asc()).all()
+            invoices = (
+                db.query(Invoice)
+                .filter(
+                    Invoice.id == payload.invoice_id,
+                    Invoice.user_id == user_id,
+                    Invoice.status != InvoiceStatus.CANCELLED,
+                )
+                .with_for_update()
+                .all()
+            )
+        elif customer_phone:
+            invoices = (
+                db.query(Invoice)
+                .filter(
+                    Invoice.user_id == user_id,
+                    Invoice.customer_phone == customer_phone,
+                    Invoice.payment_status.in_(
+                        [PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]
+                    ),
+                    Invoice.status != InvoiceStatus.CANCELLED,
+                )
+                .order_by(Invoice.invoice_date.asc(), Invoice.id.asc())
+                .with_for_update()
+                .all()
+            )
+        elif customer_id:
+            invoices = (
+                db.query(Invoice)
+                .filter(
+                    Invoice.user_id == user_id,
+                    Invoice.customer_id == customer_id,
+                    Invoice.payment_status.in_(
+                        [PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]
+                    ),
+                    Invoice.status != InvoiceStatus.CANCELLED,
+                )
+                .order_by(Invoice.invoice_date.asc(), Invoice.id.asc())
+                .with_for_update()
+                .all()
+            )
         else:
-            raise HTTPException(status_code=400, detail="Must provide customer_phone, customer_id, or invoice_id")
+            raise HTTPException(
+                status_code=400,
+                detail="Must provide customer_phone, customer_id, or invoice_id",
+            )
 
         if not invoices:
-            raise HTTPException(status_code=404, detail="No pending invoices found for this record")
+            raise HTTPException(
+                status_code=404,
+                detail="No pending invoices found for this record",
+            )
+
+        # Explicit invoice settlement must not silently overpay.
+        if payload.invoice_id:
+            balance = max(
+                0.0,
+                float(invoices[0].total_amount or 0.0)
+                - float(invoices[0].paid_amount or 0.0),
+            )
+            if payment_amount > balance + 0.01:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Payment exceeds invoice balance. "
+                        f"Outstanding: ₹{balance:.2f}, "
+                        f"Received: ₹{payment_amount:.2f}"
+                    ),
+                )
 
         remaining = payment_amount
+        applied_total = 0.0
         settled_invoices = []
 
-        # Parse payment method enum
-        p_method_str = payload.payment_method.upper()
-        p_method_enum = PaymentMethod.CASH
-        if hasattr(PaymentMethod, p_method_str):
-            p_method_enum = getattr(PaymentMethod, p_method_str)
+        p_method_str = (payload.payment_method or "CASH").upper().strip()
+        p_method_enum = PaymentMethod.__members__.get(
+            p_method_str,
+            PaymentMethod.CASH,
+        )
 
         for inv in invoices:
-            if remaining <= 0:
+            if remaining <= 0.01:
                 break
 
-            balance = float(inv.total_amount or 0.0) - float(inv.paid_amount or 0.0)
+            balance = max(
+                0.0,
+                float(inv.total_amount or 0.0)
+                - float(inv.paid_amount or 0.0),
+            )
             if balance <= 0.01:
                 continue
 
             apply_amt = min(remaining, balance)
-            new_paid = float(inv.paid_amount or 0.0) + apply_amt
-            inv.paid_amount = round(new_paid, 2)
+            new_paid = round(float(inv.paid_amount or 0.0) + apply_amt, 2)
+            inv.paid_amount = new_paid
 
-            if inv.paid_amount >= float(inv.total_amount or 0.0) - 0.01:
+            if new_paid >= float(inv.total_amount or 0.0) - 0.01:
+                inv.paid_amount = round(float(inv.total_amount or 0.0), 2)
                 inv.payment_status = PaymentStatus.PAID
                 inv.status = InvoiceStatus.PAID
             else:
                 inv.payment_status = PaymentStatus.PARTIAL
                 inv.status = InvoiceStatus.PARTIAL
 
-            # Add payment record
-            pay_record = Payment(
-                invoice_id=inv.id,
-                payment_method=p_method_enum,
-                amount=apply_amt,
-                notes=payload.notes or "Khata Payment Settlement"
+            # One user action may FIFO-settle multiple invoices.
+            # Only its first Payment row carries the operation key.
+            db.add(
+                Payment(
+                    invoice_id=inv.id,
+                    payment_method=p_method_enum,
+                    amount=round(apply_amt, 2),
+                    notes=payload.notes or "Khata Payment Settlement",
+                    idempotency_key=idempotency_key if not settled_invoices else None,
+                )
             )
-            db.add(pay_record)
 
-            remaining -= apply_amt
+            remaining = round(remaining - apply_amt, 2)
+            applied_total = round(applied_total + apply_amt, 2)
             settled_invoices.append(inv.invoice_number)
+
+        if applied_total <= 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail="No outstanding invoice balance was available for this payment.",
+            )
 
         db.commit()
 
         return {
             "success": True,
+            "duplicate": False,
             "message": f"Payment of ₹{payment_amount:.2f} recorded successfully",
-            "applied_amount": round(payment_amount - max(0, remaining), 2),
-            "unapplied_change": round(max(0, remaining), 2),
-            "settled_invoices": settled_invoices
+            "applied_amount": applied_total,
+            "unapplied_change": max(0.0, round(payment_amount - applied_total, 2)),
+            "settled_invoices": settled_invoices,
+            "idempotency_key": idempotency_key,
         }
+
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error recording khata payment: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error recording khata payment: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Payment transaction failed safely.",
+        )
 
 
 @router.post("/update-deadline")

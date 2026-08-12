@@ -457,7 +457,11 @@ class Payment(Base):
     payment_date = Column(DateTime, server_default=func.now())
     reference_number = Column(String(100))  # Transaction ID, check number, etc.
     notes = Column(Text)
-    
+
+    # Durable offline idempotency key.
+    # Retrying the same offline payment must never create a second Payment row.
+    idempotency_key = Column(String(128), unique=True, nullable=True, index=True)
+
     # Relationship
     invoice = relationship("Invoice", back_populates="payments")
 
