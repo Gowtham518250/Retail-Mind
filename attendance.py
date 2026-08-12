@@ -338,9 +338,10 @@ def record_manual_attendance(
     
     # Use worker.shopkeeper_id as the employee reference for Attendance
     # Attendance.employee_id FK references user_details.id (shopkeeper), not worker
-    # Worker attendance MUST be identified by Worker.id.
-# shopkeeper_id is only the owner/tenant relationship.
+    # Worker attendance is keyed by Worker.id. Keep shopkeeper_id only as the
+    # tenant/owner reference for the Attendance.employee_id FK.
     worker_id = employee.id
+    employee_user_id = employee.shopkeeper_id
 
     existing = db.query(Attendance).filter(
         and_(
@@ -350,15 +351,17 @@ def record_manual_attendance(
     ).first()
 
     if existing:
-        existing.status = normalized_status
+        existing.employee_id = employee_user_id
+        existing.worker_id = worker_id
+        existing.status = normalized_status.upper().replace('-', '_')
         existing.notes = record.notes
         db.add(existing)
     else:
         attendance = Attendance(
-            employee_id=employee.shopkeeper_id,  # keep owner reference if required by schema
+            employee_id=employee_user_id,
             worker_id=worker_id,
             attendance_date=att_date,
-            status=normalized_status,
+            status=normalized_status.upper().replace('-', '_'),
             notes=record.notes
         )
         db.add(attendance)
@@ -382,25 +385,19 @@ def get_employee_attendance(
     """Get attendance records for an employee"""
     # Security check: verify the current user has access to this employee's data
     # First check if it's a worker belonging to the current user
-    worker = db.query(Worker).filter(
-        Worker.id == employee_id
-    ).first()
-
-    if not worker:
-        raise HTTPException(
-            status_code=404,
-            detail="Worker not found"
-        )
-
-    if worker.shopkeeper_id != current_user_id:
-        raise HTTPException(
-            status_code=403,
-            detail="You can only view your own workers' attendance"
-        )
-
-    query = db.query(Attendance).filter(
-        Attendance.worker_id == employee_id
-    )
+    worker = db.query(Worker).filter(Worker.id == employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own workers' attendance")
+    else:
+        # If not a worker, it might be the shopkeeper themselves
+        if employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own attendance")
+    
+    if worker:
+        query = db.query(Attendance).filter(Attendance.worker_id == worker.id)
+    else:
+        query = db.query(Attendance).filter(Attendance.employee_id == employee_id)
     
     if from_date:
         from_dt = datetime.strptime(from_date, "%Y-%m-%d").date()

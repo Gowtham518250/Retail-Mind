@@ -17,7 +17,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.exc import IntegrityError
 from decimal import Decimal
 
 from db import get_db
@@ -213,50 +212,31 @@ def sync_offline_invoice(
 
                 # Inventory Auto-Deduction with validation
                 if item.product_id:
-                    product = (
-                        db.query(Product)
-                        .filter(
-                            Product.id == item.product_id,
-                            Product.user_id == shop_id,
+                    product = db.query(Product).filter(
+                        Product.id == item.product_id,
+                        Product.user_id == shop_id
+                    ).with_for_update().first()  # Row-level lock for concurrency
+                    if product:
+                        # Validate stock availability
+                        current_stock = product.current_stock or 0
+                        if current_stock < item.quantity:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
+                            )
+                        # 🔧 FIX: Use proper logging instead of print statements
+                        logger.info(f"Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
+                        product.current_stock = max(0, current_stock - item.quantity)
+                        # Log stock movement
+                        mov = StockMovement(
+                            product_id=product.id,
+                            movement_type="OUT",
+                            quantity=item.quantity,
+                            reason="Sales Sync",
+                            reference_id=invoice_number,
                         )
-                        .with_for_update()
-                        .first()
-                    )
-
-                    if not product:
-                        raise HTTPException(
-                            status_code=404,
-                            detail=f"Product {item.product_id} not found",
-                        )
-
-                    current_stock = product.current_stock or 0
-                    if current_stock < item.quantity:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=(
-                                f"Insufficient stock for product {item.product_name}. "
-                                f"Available: {current_stock}, Required: {item.quantity}"
-                            ),
-                        )
-
-                    logger.info(
-                        f"Deducting {item.quantity} from {item.product_name} "
-                        f"(current: {current_stock})"
-                    )
-                    product.current_stock = current_stock - item.quantity
-
-                    mov = StockMovement(
-                        product_id=product.id,
-                        movement_type="OUT",
-                        quantity=item.quantity,
-                        reason="Sales Sync",
-                        reference_id=invoice_number,
-                    )
-                    db.add(mov)
-                    logger.info(
-                        f"Stock updated: {item.product_name} "
-                        f"({current_stock} → {product.current_stock})"
-                    )
+                        db.add(mov)
+                        logger.info(f"Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
                 else:
                     # Deduct by product name when product_id is missing
                     product = db.query(Product).filter(
@@ -323,42 +303,11 @@ def sync_offline_invoice(
         }
         return JSONResponse(status_code=201, content=payload)
 
-    except IntegrityError:
-        db.rollback()
-
-        existing = None
-
-        if data.offline_id:
-            existing = db.query(Invoice).filter(
-                Invoice.user_id == shop_id,
-                Invoice.offline_id == data.offline_id,
-            ).first()
-
-        if existing is None:
-            existing = db.query(Invoice).filter(
-                Invoice.user_id == shop_id,
-                Invoice.invoice_number == invoice_number,
-            ).first()
-
-        if existing:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "message": "Invoice already synced",
-                    "invoice_id": existing.id,
-                    "invoice_number": existing.invoice_number,
-                    "status": "DUPLICATE",
-                },
-            )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Invoice synchronization failed due to a database constraint.",
-        )
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
+        # Rollback on any error
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Transaction failed: {str(e)}")
 
