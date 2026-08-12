@@ -17,6 +17,8 @@ const STAGES = [
   { key: 'DELIVERED', label: 'Delivered', icon: Home },
 ];
 
+type StoredOrder = PlacedOrder & { tracking_token?: string };
+
 export default function OrderSuccessClientPage() {
   const params = useParams();
   const search = useSearchParams();
@@ -24,17 +26,18 @@ export default function OrderSuccessClientPage() {
   const shopId = Number(params?.shopId || 8);
   const orderId = search?.get('orderId');
 
-  const [order, setOrder] = useState<PlacedOrder | null>(null);
+  const [order, setOrder] = useState<StoredOrder | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [trackingError, setTrackingError] = useState('');
 
   useEffect(() => {
     if (!orderId) { setNotFound(true); return; }
     const raw = sessionStorage.getItem(`order:${orderId}`);
     if (!raw) { setNotFound(true); return; }
     try {
-      setOrder(JSON.parse(raw));
+      setOrder(JSON.parse(raw) as StoredOrder);
     } catch {
       setNotFound(true);
     }
@@ -47,17 +50,25 @@ export default function OrderSuccessClientPage() {
 
   const refreshStatus = async () => {
     if (!order) return;
+    if (!order.tracking_token) {
+      setTrackingError('Secure tracking credentials are missing. Please use the original order confirmation page.');
+      return;
+    }
     setIsRefreshing(true);
+    setTrackingError('');
     try {
       const res = await fetch(
-        `${API_BASE}/store/order/${order.order_id}/guest-track?phone=${encodeURIComponent(order.phone)}`
+        `${API_BASE}/store/order/${order.order_id}/guest-track?phone=${encodeURIComponent(order.phone)}`,
+        { headers: { 'X-Guest-Tracking-Token': order.tracking_token } },
       );
-      if (res.ok) {
-        const data = await res.json();
-        setLiveStatus(data.status);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || 'Unable to verify order tracking credentials.');
       }
-    } catch {
-      // Silently keep last known status — this is a non-critical enhancement.
+      const data = await res.json();
+      setLiveStatus(data.status);
+    } catch (error: any) {
+      setTrackingError(error.message || 'Unable to refresh order status right now.');
     } finally {
       setIsRefreshing(false);
     }
@@ -101,36 +112,25 @@ export default function OrderSuccessClientPage() {
         transition={{ duration: 0.4, ease: 'easeOut' }}
         className="success-card"
       >
-        <div className="success-icon-wrap">
-          <CheckCircle2 size={56} strokeWidth={1.5} />
-        </div>
+        <div className="success-icon-wrap"><CheckCircle2 size={56} strokeWidth={1.5} /></div>
         <h1 className="success-title">Order placed successfully!</h1>
         <p className="success-sub">
           Thank you, {order.customer_name.split(' ')[0]}. {order.shop_name} has received your order.
         </p>
 
         <div className="success-meta-row">
-          <div className="success-meta-pill">
-            <span>Order ID</span>
-            <strong>#{order.order_id}</strong>
-          </div>
-          <div className="success-meta-pill">
-            <span>Estimated delivery</span>
-            <strong>{fmt(estStart)} – {fmt(estEnd)}</strong>
-          </div>
-          <div className="success-meta-pill">
-            <span>Payment</span>
-            <strong>{order.payment_method === 'COD' ? 'Cash on Delivery' : order.payment_method}</strong>
-          </div>
+          <div className="success-meta-pill"><span>Order ID</span><strong>#{order.order_id}</strong></div>
+          <div className="success-meta-pill"><span>Estimated delivery</span><strong>{fmt(estStart)} – {fmt(estEnd)}</strong></div>
+          <div className="success-meta-pill"><span>Payment</span><strong>Cash on Delivery</strong></div>
         </div>
 
-        {/* Timeline */}
         <div className="timeline-refresh-row">
           <span>Live order status</span>
           <button onClick={refreshStatus} disabled={isRefreshing} aria-label="Refresh status">
             <RefreshCw size={13} className={isRefreshing ? 'spin' : ''} />
           </button>
         </div>
+        {trackingError && <div className="cart-banner error">{trackingError}</div>}
         <div className="order-timeline">
           {STAGES.map((stage, index) => {
             const Icon = stage.icon;
