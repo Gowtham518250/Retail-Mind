@@ -80,6 +80,7 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     product_name: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = None
+    current_stock: Optional[int] = Field(None, ge=0)
     min_stock: Optional[int] = Field(None, ge=0)
     max_stock: Optional[int] = Field(None, gt=0)
     reorder_level: Optional[int] = Field(None, ge=0)
