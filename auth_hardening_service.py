@@ -471,3 +471,13 @@ def _update_session_token(db: Session, user_id: int, new_access_token: str, new_
         session.last_activity = datetime.utcnow()
     else:
         _create_session_token(db, user_id, new_access_token, new_refresh_token)
+
+
+# Password-reset authorization extension. It is attached here because this
+# router is already registered by app.py under /api/auth-hardened.
+try:
+    from password_reset_security import attach_password_reset_security_routes
+    attach_password_reset_security_routes(router)
+except Exception:
+    logger.exception("Failed to attach secure password-reset routes")
+    raise
