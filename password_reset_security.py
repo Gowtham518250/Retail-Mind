@@ -20,7 +20,7 @@ import secrets
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -101,8 +101,6 @@ def _confirmation_url(email_proof_token: str) -> str:
 
 
 def attach_password_reset_security_routes(router) -> None:
-    _ensure_table()
-
     @router.post("/password-reset/start")
     @rate_limit_endpoint(max_requests=5, window_seconds=60)
     def start_password_reset(
@@ -110,6 +108,7 @@ def attach_password_reset_security_routes(router) -> None:
         http_request: Request,
         db: Session = Depends(get_db),
     ):
+        _ensure_table()
         email = request.email.strip().lower()
         _invalidate_existing(email, db)
 
