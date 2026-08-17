@@ -9,7 +9,7 @@ Covers:
 """
 
 from typing import Optional, List
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
@@ -31,6 +31,19 @@ from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_i
 router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
 logger = logging.getLogger(__name__)
 
+
+def _parse_client_timestamp(raw: Optional[str]) -> Optional[datetime]:
+    """Normalize an ISO-8601 phone timestamp to naive UTC for DateTime columns."""
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+    except (TypeError, ValueError, OverflowError):
+        return None
+
 # =====================
 # SCHEMAS
 # =====================
@@ -51,6 +64,7 @@ class InvoiceSyncCreate(BaseModel):
     payment_status: str = "PAID"
     line_items: Optional[List[InvoiceLineItemCreate]] = None  # Made optional
     invoice_date: Optional[str] = None  # YYYY-MM-DD
+    sale_timestamp: Optional[str] = None  # Exact phone-side sale time (ISO-8601)
     due_date: Optional[str] = None  # Added due_date
     notes: Optional[str] = None
     
@@ -153,6 +167,8 @@ def sync_offline_invoice(
     except ValueError:
         raise HTTPException(status_code=400, detail="invoice_date must use YYYY-MM-DD format")
     
+    client_timestamp = _parse_client_timestamp(data.sale_timestamp)
+
     try:
         due_date = datetime.strptime(data.due_date, "%Y-%m-%d").date() if data.due_date else inv_date
     except ValueError:
@@ -186,6 +202,7 @@ def sync_offline_invoice(
             invoice_number=invoice_number,
             offline_id=data.offline_id,
             invoice_date=inv_date,
+            created_at=client_timestamp or datetime.utcnow(),
             due_date=due_date,
             subtotal=float(sub_t),
             tax=data.tax,
