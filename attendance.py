@@ -314,15 +314,11 @@ def record_manual_attendance(
     VALID_STATUSES = {"PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE"}
     normalized_status = record.status.upper()
     if normalized_status not in VALID_STATUSES:
-        # Map common aliases
         STATUS_MAP = {"present": "PRESENT", "absent": "ABSENT", "leave": "LEAVE",
                       "half_day": "HALF_DAY", "halfday": "HALF_DAY", "late": "LATE"}
         normalized_status = STATUS_MAP.get(record.status.lower(), "PRESENT")
     
-    # Use worker.shopkeeper_id as the employee reference for Attendance
-    # Attendance.employee_id FK references user_details.id (shopkeeper), not worker
-    # Worker attendance is keyed by Worker.id. Keep shopkeeper_id only as the
-    # tenant/owner reference for the Attendance.employee_id FK.
+    # Attendance.employee_id is the shopkeeper/user FK; worker_id identifies a worker.
     worker_id = employee.id
     employee_user_id = employee.shopkeeper_id
 
@@ -366,14 +362,11 @@ def get_employee_attendance(
     current_user_id: int = Depends(check_current_user)
 ):
     """Get attendance records for an employee"""
-    # Security check: verify the current user has access to this employee's data
-    # First check if it's a worker belonging to the current user
     worker = db.query(Worker).filter(Worker.id == employee_id).first()
     if worker:
         if worker.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only view your own workers' attendance")
     else:
-        # If not a worker, it might be the shopkeeper themselves
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only view your own attendance")
     
@@ -407,11 +400,8 @@ def get_attendance_by_date(
 ):
     """Get all attendance records for a specific date (optionally filtered by employee_id)"""
     att_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-
-    # Build query
     query = db.query(Attendance).filter(Attendance.attendance_date == att_date)
 
-    # Filter by employee_id if provided
     if employee_id is not None:
         worker = db.query(Worker).filter(Worker.id == employee_id).first()
         if worker is not None:
@@ -426,7 +416,6 @@ def get_attendance_by_date(
         query = query.filter(Attendance.employee_id == current_user_id)
 
     records = query.order_by(desc(Attendance.attendance_date)).all()
-
     present = sum(1 for r in records if r.status == "PRESENT")
     absent = sum(1 for r in records if r.status == "ABSENT")
     leave = sum(1 for r in records if r.status == "LEAVE")
@@ -445,42 +434,40 @@ def get_attendance_by_date(
 @router.post("/leave-request")
 def request_leave(
     leave_request: LeaveRequestCreate,
+    current_user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Request leave"""
+    """Request leave for a worker owned by the authenticated shopkeeper."""
     employee = db.query(Worker).filter(Worker.id == leave_request.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
+
+    if employee.shopkeeper_id != current_user_id:
+        raise HTTPException(status_code=403, detail="You can only request leave for your own workers")
+
     from_dt = datetime.strptime(leave_request.from_date, "%Y-%m-%d").date()
     to_dt = datetime.strptime(leave_request.to_date, "%Y-%m-%d").date()
-    
     if to_dt < from_dt:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
-    
-    # Normalize leave_type to valid enum values
-    VALID_LEAVE_TYPES = {"VACATION", "SICK", "PERSONAL"}
-    LEAVE_TYPE_MAP = {
+
+    valid_leave_types = {"VACATION", "SICK", "PERSONAL"}
+    leave_type_map = {
         "casual": "PERSONAL", "cl": "PERSONAL", "annual": "VACATION",
         "earned": "VACATION", "medical": "SICK", "sl": "SICK",
         "vacation": "VACATION", "sick": "SICK", "personal": "PERSONAL"
     }
     normalized_leave_type = leave_request.leave_type.upper()
-    if normalized_leave_type not in VALID_LEAVE_TYPES:
-        normalized_leave_type = LEAVE_TYPE_MAP.get(leave_request.leave_type.lower(), "PERSONAL")
-    
-    # Use the shopkeeper's user_id as employee_id (FK references user_details)
-    employee_user_id = employee.shopkeeper_id
-    
+    if normalized_leave_type not in valid_leave_types:
+        normalized_leave_type = leave_type_map.get(leave_request.leave_type.lower(), "PERSONAL")
+
     db_leave = LeaveRequest(
-        employee_id=employee_user_id,
+        employee_id=employee.shopkeeper_id,
         leave_type=normalized_leave_type,
         from_date=from_dt,
         to_date=to_dt,
         reason=leave_request.reason,
         status="PENDING"
     )
-    
     db.add(db_leave)
     try:
         db.commit()
@@ -488,30 +475,30 @@ def request_leave(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create leave request: {str(e)}")
-    
     return db_leave
 
 @router.get("/leave-requests")
 def get_leave_requests(
     employee_id: Optional[int] = None,
     status: Optional[str] = None,
+    current_user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get leave requests"""
-    query = db.query(LeaveRequest)
-    
-    if employee_id:
-        query = query.filter(LeaveRequest.employee_id == employee_id)
-    
+    """Get leave requests scoped to the authenticated shopkeeper."""
+    query = db.query(LeaveRequest).filter(LeaveRequest.employee_id == current_user_id)
+
+    if employee_id is not None:
+        worker = db.query(Worker).filter(Worker.id == employee_id).first()
+        if worker and worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own workers' leave requests")
+        if not worker and employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="Employee not found")
+
     if status:
         query = query.filter(LeaveRequest.status == status)
-    
+
     requests = query.order_by(desc(LeaveRequest.created_at)).all()
-    
-    return {
-        "leave_requests": requests,
-        "total": len(requests)
-    }
+    return {"leave_requests": requests, "total": len(requests)}
 
 @router.put("/leave-request/{leave_id}/approve")
 def approve_leave(
@@ -530,13 +517,11 @@ def approve_leave(
         if worker.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only approve leave for your own workers")
     else:
-        # If not a worker, check if it's the shopkeeper themselves
         if leave.employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only approve leave for yourself or your workers")
     
     leave.status = "APPROVED"
     
-    # Create attendance records for leave period
     from_date = leave.from_date if isinstance(leave.from_date, date) else leave.from_date.date()
     to_date = leave.to_date if isinstance(leave.to_date, date) else leave.to_date.date()
     current = from_date
@@ -577,13 +562,11 @@ def reject_leave(
     if not leave:
         raise HTTPException(status_code=404, detail="Leave request not found")
     
-    # Security check: verify the current user owns/manages this employee
     worker = db.query(Worker).filter(Worker.id == leave.employee_id).first()
     if worker:
         if worker.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only reject leave for your own workers")
     else:
-        # If not a worker, check if it's the shopkeeper themselves
         if leave.employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only reject leave for yourself or your workers")
     
@@ -601,16 +584,21 @@ def reject_leave(
 @router.get("/analytics/summary")
 def get_attendance_summary(
     days: int = Query(30),
+    current_user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get attendance summary for past N days"""
+    """Get attendance summary for the authenticated shopkeeper's records."""
+    days = max(1, min(days, 366))
     cutoff_date = date.today() - timedelta(days=days)
     
     records = db.query(Attendance).filter(
+        Attendance.employee_id == current_user_id,
         Attendance.attendance_date >= cutoff_date
     ).all()
     
-    employees = db.query(User).all()
+    worker_count = db.query(func.count(Worker.id)).filter(
+        Worker.shopkeeper_id == current_user_id
+    ).scalar() or 0
     
     present = sum(1 for r in records if r.status == "PRESENT")
     absent = sum(1 for r in records if r.status == "ABSENT")
@@ -622,7 +610,7 @@ def get_attendance_summary(
         "present": present,
         "absent": absent,
         "leave": leave,
-        "total_employees": len(employees),
+        "total_employees": int(worker_count) + 1,
         "attendance_percentage": (present / len(records) * 100) if records else 0
     }
 
@@ -630,18 +618,27 @@ def get_attendance_summary(
 def get_employee_analytics(
     employee_id: int,
     days: int = Query(30),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
-    """Get analytics for specific employee"""
-    cutoff_date = date.today() - timedelta(days=days)
-    
-    records = db.query(Attendance).filter(
-        and_(
-            Attendance.employee_id == employee_id,
-            Attendance.attendance_date >= cutoff_date
+    """Get analytics for a worker belonging to the authenticated shopkeeper, or the shopkeeper."""
+    worker = db.query(Worker).filter(Worker.id == employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own workers' analytics")
+        query = db.query(Attendance).filter(Attendance.worker_id == worker.id)
+    else:
+        if employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own attendance analytics")
+        query = db.query(Attendance).filter(
+            Attendance.employee_id == current_user_id,
+            Attendance.worker_id.is_(None)
         )
-    ).all()
-    
+
+    days = max(1, min(days, 366))
+    cutoff_date = date.today() - timedelta(days=days)
+    records = query.filter(Attendance.attendance_date >= cutoff_date).all()
+
     present = sum(1 for r in records if r.status == "PRESENT")
     absent = sum(1 for r in records if r.status == "ABSENT")
     leave = sum(1 for r in records if r.status == "LEAVE")
