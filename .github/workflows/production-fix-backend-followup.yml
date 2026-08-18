@@ -1,0 +1,116 @@
+name: Backend Payment Hardening
+on:
+  push:
+    branches: [production-fix-2026-08-18]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[backend-payment-hardening-applied]') && !contains(github.event.head_commit.message, '[backend-production-fix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: production-fix-2026-08-18
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Patch billing and payment persistence
+        shell: python
+        run: |
+          from pathlib import Path
+          def replace(path, old, new, count=1):
+              p=Path(path); s=p.read_text(encoding='utf-8')
+              if old not in s: raise SystemExit(f'PATCH TARGET NOT FOUND: {path}')
+              p.write_text(s.replace(old,new,count),encoding='utf-8')
+
+          replace('invoices_billing.py', 'payment_status: str = "PAID"', 'payment_status: str = "UNPAID"')
+          replace('invoices_billing.py', '    invoice_number = sanitize_input(data.invoice_number, "invoice_number")\n\n    # Check for duplicate sync', '    invoice_number = sanitize_input(data.invoice_number, "invoice_number")\n    if data.paid_amount > data.total_amount + 0.01:\n        raise HTTPException(status_code=400, detail="paid_amount cannot exceed invoice total")\n\n    # Check for duplicate sync')
+          replace('invoices_billing.py', '            paid_amount=data.paid_amount,\n            status="SENT",\n            payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",', '            paid_amount=min(max(data.paid_amount, 0.0), data.total_amount),\n            status="SENT",\n            payment_status=("PAID" if data.paid_amount >= data.total_amount - 0.01 else ("PARTIAL" if data.paid_amount > 0 else "UNPAID")),', 1)
+          replace('invoices_billing.py', '    invoice_number = sanitize_input(data.invoice_number, "invoice_number")\n\n    existing = db.query(Invoice).filter(', '    invoice_number = sanitize_input(data.invoice_number, "invoice_number")\n    if data.paid_amount > data.total_amount + 0.01:\n        raise HTTPException(status_code=400, detail="paid_amount cannot exceed invoice total")\n\n    existing = db.query(Invoice).filter(', 1)
+          replace('invoices_billing.py', '        paid_amount=data.paid_amount,\n        status="SENT",\n        payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",', '        paid_amount=min(max(data.paid_amount, 0.0), data.total_amount),\n        status="SENT",\n        payment_status=("PAID" if data.paid_amount >= data.total_amount - 0.01 else ("PARTIAL" if data.paid_amount > 0 else "UNPAID")),', 1)
+
+          marker='# ── These MUST come before /{invoice_id} ──────────────────────────────'
+          insert='''class PaymentCreate(BaseModel):
+    invoice_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+    amount: float = Field(..., gt=0)
+    payment_method: str = "ONLINE"
+    reference_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.post("/payments")
+def record_invoice_payment(data: PaymentCreate, db: Session = Depends(get_db), current_user: dict = Depends(worker_or_owner)):
+    shop_id = resolve_shop_id(current_user)
+    if not data.invoice_id and not data.invoice_number:
+        return JSONResponse(status_code=202, content={"status":"PENDING_LOCAL_MAPPING","message":"Payment detected locally; invoice mapping is not available yet."})
+    invoice = None
+    if data.invoice_id:
+        invoice = db.query(Invoice).filter(Invoice.id == data.invoice_id, Invoice.user_id == shop_id).first()
+    if invoice is None and data.invoice_number:
+        invoice = db.query(Invoice).filter(Invoice.invoice_number == sanitize_input(data.invoice_number, "invoice_number"), Invoice.user_id == shop_id).first()
+    if invoice is None:
+        return JSONResponse(status_code=202, content={"status":"PENDING_LOCAL_MAPPING","message":"Payment detected locally; invoice is not synced yet."})
+    reference = (data.reference_id or data.idempotency_key or "").strip() or None
+    if reference:
+        existing = db.query(Payment).filter(Payment.invoice_id == invoice.id, Payment.reference_number == reference).first()
+        if existing:
+            return {"status":"ALREADY_RECORDED","payment_id":existing.id,"invoice_id":invoice.id,"paid_amount":float(invoice.paid_amount or 0)}
+    current_paid = float(invoice.paid_amount or 0)
+    remaining = max(0.0, float(invoice.total_amount or 0) - current_paid)
+    if data.amount > remaining + 0.01:
+        raise HTTPException(status_code=400, detail=f"Payment exceeds remaining due of {remaining:.2f}")
+    try:
+        method_name = data.payment_method.upper()
+        method = PaymentMethod(method_name) if method_name in {m.value for m in PaymentMethod} else PaymentMethod.ONLINE
+        payment = Payment(invoice_id=invoice.id, payment_method=method, amount=data.amount, reference_number=reference, notes=sanitize_input(data.notes or "", "notes"))
+        db.add(payment)
+        new_paid = min(float(invoice.total_amount), current_paid + data.amount)
+        invoice.paid_amount = new_paid
+        invoice.payment_status = "PAID" if new_paid >= float(invoice.total_amount) - 0.01 else "PARTIAL"
+        invoice.status = "PAID" if invoice.payment_status == "PAID" else "PARTIAL"
+        db.add(UniversalTransaction(shop_id=shop_id, tx_type="INCOME", category="PAYMENT", amount=data.amount, reference_id=reference or invoice.invoice_number, description=f"Payment for invoice {invoice.invoice_number}", tx_date=datetime.utcnow()))
+        db.commit(); db.refresh(invoice)
+        return {"status":"RECORDED","payment_id":payment.id,"invoice_id":invoice.id,"amount":data.amount,"paid_amount":new_paid,"remaining_due":max(0.0,float(invoice.total_amount)-new_paid),"payment_status":invoice.payment_status}
+    except IntegrityError:
+        db.rollback()
+        return {"status":"ALREADY_RECORDED","invoice_id":invoice.id,"paid_amount":float(invoice.paid_amount or 0)}
+    except Exception:
+        db.rollback(); logger.exception("Payment recording failed")
+        raise HTTPException(status_code=500, detail="Payment could not be recorded")
+
+
+@router.put("/number/{invoice_number}")
+def update_invoice_by_number(invoice_number: str, data: InvoiceUpdate, db: Session = Depends(get_db), current_user: dict = Depends(worker_or_owner)):
+    shop_id = resolve_shop_id(current_user)
+    invoice = db.query(Invoice).filter(Invoice.invoice_number == sanitize_input(invoice_number, "invoice_number"), Invoice.user_id == shop_id).first()
+    if not invoice: raise HTTPException(status_code=404, detail="Invoice not found")
+    if data.paid_amount is not None:
+        if data.paid_amount < 0 or data.paid_amount > float(invoice.total_amount) + 0.01:
+            raise HTTPException(status_code=400, detail="Invalid paid amount")
+        invoice.paid_amount = min(float(invoice.total_amount), data.paid_amount)
+        invoice.payment_status = "PAID" if invoice.paid_amount >= float(invoice.total_amount)-0.01 else ("PARTIAL" if invoice.paid_amount > 0 else "UNPAID")
+        invoice.status = "PAID" if invoice.payment_status == "PAID" else ("PARTIAL" if invoice.payment_status == "PARTIAL" else "SENT")
+    if data.notes is not None: invoice.notes = data.notes
+    db.commit(); db.refresh(invoice)
+    return {"id":invoice.id,"invoice_number":invoice.invoice_number,"total_amount":float(invoice.total_amount),"paid_amount":float(invoice.paid_amount),"payment_status":invoice.payment_status,"status":invoice.status}
+
+
+'''
+          replace('invoices_billing.py', marker, insert+marker)
+
+      - name: Validate backend
+        run: python -m compileall -q .
+      - name: Commit and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add invoices_billing.py .github/workflows/production-fix-backend-followup.yml
+          git rm -f .github/workflows/production-fix-backend-followup.yml
+          git commit -m "Harden invoice partial payments and payment persistence [backend-payment-hardening-applied]"
+          git push origin production-fix-2026-08-18
