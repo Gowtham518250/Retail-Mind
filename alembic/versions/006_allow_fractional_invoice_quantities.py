@@ -1,12 +1,12 @@
 """Allow fractional invoice line quantities.
 
-Revision ID: 006_allow_fractional_invoice_quantities
+Revision ID: 006_frac_qty
 Revises: 005_add_worker_id_to_attendance
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "006_allow_fractional_invoice_quantities"
+revision = "006_frac_qty"
 down_revision = "005_add_worker_id_to_attendance"
 branch_labels = None
 depends_on = None
