@@ -50,23 +50,25 @@ def _parse_client_timestamp(raw: Optional[str]) -> Optional[datetime]:
 class InvoiceLineItemCreate(BaseModel):
     product_id: Optional[int] = None
     product_name: str
-    quantity: float = Field(..., gt=0)
-    unit_price: float = Field(..., ge=0)
-    discount_amount: float = Field(0, ge=0)
+    # Decimal is intentional: Product.current_stock is PostgreSQL NUMERIC,
+    # so quantities must use the same numeric type during inventory arithmetic.
+    quantity: Decimal = Field(..., gt=0)
+    unit_price: Decimal = Field(..., ge=0)
+    discount_amount: Decimal = Field(Decimal("0"), ge=0)
 
 class InvoiceSyncCreate(BaseModel):
     invoice_number: str
     offline_id: Optional[str] = None
-    customer_phone: Optional[str] = None  # Removed min_length/max_length restriction for flexibility
+    customer_phone: Optional[str] = None
     customer_name: Optional[str] = None
     total_amount: float = Field(..., ge=0)
     paid_amount: float = Field(0, ge=0)
     tax: float = Field(0, ge=0)
     payment_status: str = "PAID"
-    line_items: Optional[List[InvoiceLineItemCreate]] = None  # Made optional
-    invoice_date: Optional[str] = None  # YYYY-MM-DD
-    sale_timestamp: Optional[str] = None  # Exact phone-side sale time (ISO-8601)
-    due_date: Optional[str] = None  # Added due_date
+    line_items: Optional[List[InvoiceLineItemCreate]] = None
+    invoice_date: Optional[str] = None
+    sale_timestamp: Optional[str] = None
+    due_date: Optional[str] = None
     notes: Optional[str] = None
     
     @validator('line_items')
@@ -81,7 +83,7 @@ class InvoiceLineItemResponse(BaseModel):
     id: int
     product_id: Optional[int]
     description: Optional[str]
-    quantity: int
+    quantity: float
     unit_price: float
     discount_amount: float = 0
     line_total: float
@@ -123,7 +125,6 @@ def sync_offline_invoice(
     shop_id = resolve_shop_id(current_user)
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
-    # Check for duplicate sync (idempotency) - check both offline_id and invoice_number
     if data.offline_id:
         existing = db.query(Invoice).filter(
             Invoice.user_id == shop_id,
@@ -132,7 +133,6 @@ def sync_offline_invoice(
         if existing:
             return {"message": "Invoice already synced (offline_id).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "offline_id": data.offline_id}
     
-    # Always check invoice_number as fallback
     existing = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         Invoice.invoice_number == invoice_number
@@ -141,7 +141,6 @@ def sync_offline_invoice(
     if existing:
         return {"message": "Invoice already synced (invoice_number).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "invoice_number": invoice_number}
 
-    # Find/Create Customer
     customer_id = None
     if data.customer_phone:
         phone = sanitize_input(data.customer_phone, "customer_phone")
@@ -176,14 +175,12 @@ def sync_offline_invoice(
     except ValueError:
         due_date = inv_date
 
-    # TRANSACTION-BASED APPROACH: All operations in single transaction
     try:
-        # Create Invoice
         sub_t = Decimal(str(data.total_amount)) - Decimal(str(data.tax))
 
         if data.line_items and len(data.line_items) > 0:
             computed_subtotal = sum(
-                Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+                item.quantity * item.unit_price
                 for item in data.line_items
             )
             tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
@@ -218,7 +215,6 @@ def sync_offline_invoice(
         db.add(invoice)
         db.flush()
 
-        # Process Line Items & Deduct Inventory (if any)
         if data.line_items and len(data.line_items) > 0:
             for item in data.line_items:
                 line_total = item.quantity * item.unit_price
@@ -233,24 +229,20 @@ def sync_offline_invoice(
                 )
                 db.add(db_line)
 
-                # Inventory Auto-Deduction with validation
                 if item.product_id:
                     product = db.query(Product).filter(
                         Product.id == item.product_id,
                         Product.user_id == shop_id
-                    ).with_for_update().first()  # Row-level lock for concurrency
+                    ).with_for_update().first()
                     if product:
-                        # Validate stock availability
-                        current_stock = product.current_stock or 0
+                        current_stock = product.current_stock or Decimal("0")
                         if current_stock < item.quantity:
                             raise HTTPException(
                                 status_code=400,
                                 detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
                             )
-                        # 🔧 FIX: Use proper logging instead of print statements
                         logger.info(f"Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
-                        product.current_stock = max(0, current_stock - item.quantity)
-                        # Log stock movement
+                        product.current_stock = max(Decimal("0"), current_stock - item.quantity)
                         mov = StockMovement(
                             product_id=product.id,
                             movement_type="OUT",
@@ -261,19 +253,18 @@ def sync_offline_invoice(
                         db.add(mov)
                         logger.info(f"Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
                 else:
-                    # Deduct by product name when product_id is missing
                     product = db.query(Product).filter(
                         func.lower(Product.product_name) == item.product_name.lower().strip(),
                         Product.user_id == shop_id
                     ).with_for_update().first()
                     if product:
-                        current_stock = product.current_stock or 0
+                        current_stock = product.current_stock or Decimal("0")
                         if current_stock < item.quantity:
                             raise HTTPException(
                                 status_code=400,
                                 detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Required: {item.quantity}"
                             )
-                        product.current_stock = current_stock - item.quantity
+                        product.current_stock = max(Decimal("0"), current_stock - item.quantity)
                         mov = StockMovement(
                             product_id=product.id,
                             movement_type="OUT",
@@ -283,7 +274,6 @@ def sync_offline_invoice(
                         )
                         db.add(mov)
 
-        # Universal Journal Entry
         tx = UniversalTransaction(
             shop_id=shop_id,
             tx_type="INCOME",
@@ -295,9 +285,7 @@ def sync_offline_invoice(
         )
         db.add(tx)
 
-        # Commit transaction - all operations succeed or all fail
         db.commit()
-        # Build consistent response payload
         line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
         payload = {
             "id": invoice.id,
@@ -317,7 +305,7 @@ def sync_offline_invoice(
                 {
                     "product_id": li.product_id,
                     "product_name": li.description,
-                    "quantity": li.quantity,
+                    "quantity": float(li.quantity),
                     "unit_price": float(li.unit_price),
                     "total": float(li.line_total),
                 }
@@ -330,8 +318,6 @@ def sync_offline_invoice(
         db.rollback()
         raise
     except IntegrityError:
-        # Another request may have committed the same offline_id/invoice_number
-        # between the pre-check and insert. Treat that race as idempotent success.
         db.rollback()
         existing = None
         if data.offline_id:
@@ -428,7 +414,7 @@ def create_invoice(
 
     if data.line_items and len(data.line_items) > 0:
         computed_subtotal = sum(
-            Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+            item.quantity * item.unit_price
             for item in data.line_items
         )
         tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
@@ -480,15 +466,15 @@ def create_invoice(
                     Product.user_id == shop_id
                 ).first()
                 if product:
-                    if (product.current_stock or 0) < item.quantity:
+                    current_stock = product.current_stock or Decimal("0")
+                    if current_stock < item.quantity:
                         db.rollback()
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Insufficient stock for product ID {product.id}. Available: {product.current_stock or 0}, Requested: {item.quantity}"
+                            detail=f"Insufficient stock for product ID {product.id}. Available: {current_stock}, Requested: {item.quantity}"
                         )
-                    # 🔧 FIX: Debug logging for quantity deduction
-                    logger.debug(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} (current: {product.current_stock or 0})")
-                    product.current_stock = (product.current_stock or 0) - item.quantity
+                    logger.debug(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
+                    product.current_stock = max(Decimal("0"), current_stock - item.quantity)
                     mov = StockMovement(
                         product_id=product.id,
                         movement_type="OUT",
@@ -497,22 +483,21 @@ def create_invoice(
                         reference_id=invoice_number,
                     )
                     db.add(mov)
-                    logger.debug(f"✅ [Backend Create] Stock updated: {item.product_name} ({(product.current_stock or 0) + item.quantity} → {product.current_stock})")
+                    logger.debug(f"✅ [Backend Create] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
             else:
-                # Deduct by product name when product_id is missing
                 product = db.query(Product).with_for_update().filter(
                     func.lower(Product.product_name) == item.product_name.lower().strip(),
                     Product.user_id == shop_id
                 ).first()
                 if product:
-                    current_stock = product.current_stock or 0
+                    current_stock = product.current_stock or Decimal("0")
                     if current_stock < item.quantity:
                         db.rollback()
                         raise HTTPException(
                             status_code=400,
                             detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Requested: {item.quantity}"
                         )
-                    product.current_stock = current_stock - item.quantity
+                    product.current_stock = max(Decimal("0"), current_stock - item.quantity)
                     mov = StockMovement(
                         product_id=product.id,
                         movement_type="OUT",
@@ -559,7 +544,7 @@ def create_invoice(
             {
                 "product_id": li.product_id,
                 "product_name": li.description,
-                "quantity": li.quantity,
+                "quantity": float(li.quantity),
                 "unit_price": float(li.unit_price),
                 "total": float(li.line_total),
             }
@@ -568,8 +553,6 @@ def create_invoice(
     }
     return JSONResponse(status_code=201, content=payload)
 
-
-# ── These MUST come before /{invoice_id} ──────────────────────────────
 
 @router.get("/overdue")
 def get_overdue_invoices(
@@ -664,8 +647,6 @@ def get_invoice_analytics(
     }
 
 
-# ── /{invoice_id} MUST be last ────────────────────────────────────────
-
 @router.get("/{invoice_id}")
 def get_invoice(
     invoice_id: int,
@@ -697,7 +678,7 @@ def get_invoice(
             {
                 "product_id":   li.product_id,
                 "product_name": li.description,
-                "quantity":     li.quantity,
+                "quantity":     float(li.quantity),
                 "unit_price":   float(li.unit_price),
                 "total":        float(li.line_total),
             }
@@ -727,10 +708,8 @@ def update_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    # Update fields
     if data.paid_amount is not None:
         invoice.paid_amount = data.paid_amount
-        # Auto-set payment status based on paid_amount vs total_amount
         if invoice.paid_amount >= invoice.total_amount:
             invoice.payment_status = "PAID"
         elif invoice.paid_amount > 0:
@@ -754,7 +733,6 @@ def update_invoice(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update invoice: {str(e)}")
     
-    # Get line items
     line_items = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice_id).all()
     
     return {
@@ -774,7 +752,7 @@ def update_invoice(
             {
                 "product_id": li.product_id,
                 "product_name": li.description,
-                "quantity": li.quantity,
+                "quantity": float(li.quantity),
                 "unit_price": float(li.unit_price),
                 "total": float(li.line_total),
             }
