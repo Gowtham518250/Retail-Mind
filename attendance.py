@@ -235,7 +235,7 @@ def employee_check_in(
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check in yourself")
 
-    today = date.today()
+    today = _local_now().date()
     now = _local_now()
     session_key, session_label, session_window = _session_for_time(now)
     if not session_key:
@@ -346,7 +346,7 @@ def employee_check_out(
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check out yourself")
 
-    today = date.today()
+    today = _local_now().date()
     actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
     worker_id_to_store = employee.id if is_worker else None
 
@@ -709,7 +709,7 @@ def get_attendance_summary(
 ):
     """Get attendance summary for the authenticated shopkeeper's records."""
     days = max(1, min(days, 366))
-    cutoff_date = date.today() - timedelta(days=days)
+    cutoff_date = _local_now().date() - timedelta(days=days)
     
     records = db.query(Attendance).filter(
         Attendance.employee_id == current_user_id,
@@ -756,7 +756,7 @@ def get_employee_analytics(
         )
 
     days = max(1, min(days, 366))
-    cutoff_date = date.today() - timedelta(days=days)
+    cutoff_date = _local_now().date() - timedelta(days=days)
     records = query.filter(Attendance.attendance_date >= cutoff_date).all()
 
     present = sum(1 for r in records if r.status == "PRESENT")
