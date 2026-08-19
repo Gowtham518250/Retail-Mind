@@ -9,11 +9,71 @@ from sqlalchemy import and_, func, desc
 from pydantic import BaseModel, Field
 from datetime import datetime, date, timedelta
 from typing import List, Optional
+from zoneinfo import ZoneInfo
+import json
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Attendance, LeaveRequest, User, Worker
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
+
+# Three attendance sessions per business day.  Times are evaluated in India time
+# because Retail Mind is intended for the Indian retail market.
+ATTENDANCE_TZ = ZoneInfo("Asia/Kolkata")
+ATTENDANCE_SESSIONS = (
+    ("morning", 6, 12, "Morning", "6:00 AM–12:00 PM"),
+    ("afternoon", 12, 17, "Afternoon", "12:00 PM–5:00 PM"),
+    ("evening", 17, 24, "Evening", "5:00 PM–12:00 AM"),
+)
+SESSION_META_KEY = "_retail_mind_sessions"
+
+
+def _local_now():
+    return datetime.now(ATTENDANCE_TZ)
+
+
+def _session_for_time(value=None):
+    value = value or _local_now()
+    hour = value.hour
+    for key, start_hour, end_hour, label, window in ATTENDANCE_SESSIONS:
+        if start_hour <= hour < end_hour:
+            return key, label, window
+    return None, None, None
+
+
+def _session_meta(attendance):
+    """Read session history stored in the existing notes column.
+
+    This deliberately avoids a schema change so existing production databases
+    and existing attendance rows remain compatible.
+    """
+    raw = attendance.notes or ""
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and isinstance(data.get(SESSION_META_KEY), dict):
+            return data
+    except (TypeError, ValueError):
+        pass
+    return {SESSION_META_KEY: {}, "note": raw if raw else None}
+
+
+def _save_session_meta(attendance, data):
+    attendance.notes = json.dumps(data, separators=(",", ":"), default=str)
+
+
+def _completed_session_message(meta, current_key):
+    completed = meta.get(SESSION_META_KEY, {})
+    session = completed.get(current_key)
+    if session and session.get("check_in_time"):
+        label = session.get("label", current_key.title())
+        _, next_label, next_window = next((x for x in ATTENDANCE_SESSIONS if x[0] != current_key and x[2] == session.get("next_window")), (None, None, None)) if False else (None, None, None)
+        remaining = []
+        for key, start_hour, end_hour, session_label, window in ATTENDANCE_SESSIONS:
+            if key != current_key and not completed.get(key, {}).get("check_in_time"):
+                remaining.append(f"{session_label} ({window})")
+        next_text = f" Try {remaining[0]}." if remaining else " All three sessions are already marked for today."
+        return f"{label} attendance already marked for today.{next_text}"
+    return None
 
 # ==================== PYDANTIC MODELS FOR WORKERS ====================
 
@@ -153,31 +213,34 @@ def employee_check_in(
     db: Session = Depends(get_db),
     current_user_id: int = Depends(check_current_user)
 ):
-    """Employee check-in - accepts both user_id and worker_id"""
-    # First try to find as Worker
+    """Check in once per morning/afternoon/evening session.
+
+    The active session is represented by the existing check_in_time and
+    check_out_time fields. Completed sessions are retained in notes as JSON,
+    so clearing mobile app data does not reset the server-side state.
+    """
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
     is_worker = employee is not None
 
-    # If not found as Worker, try to find as User (for shopkeepers/owners checking in)
     if not employee:
         employee = db.query(User).filter(User.id == employee_id).first()
 
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Security check: verify the current user owns/manages this employee
     if is_worker:
-        # For workers, check that the current user is the shopkeeper
         if employee.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check in your own workers")
     else:
-        # For shopkeepers/owners, they can only check in themselves
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check in yourself")
 
     today = date.today()
-    
-    # For workers, use shopkeeper_id as employee_id but store worker_id separately
+    now = _local_now()
+    session_key, session_label, session_window = _session_for_time(now)
+    if not session_key:
+        raise HTTPException(status_code=400, detail="Attendance is currently outside the configured sessions.")
+
     actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
     worker_id_to_store = employee.id if is_worker else None
 
@@ -194,18 +257,53 @@ def employee_check_in(
             employee_id=actual_employee_id,
             worker_id=worker_id_to_store,
             attendance_date=today,
-            check_in_time=datetime.now(),
-            status="PRESENT"
+            check_in_time=now.replace(tzinfo=None),
+            status="PRESENT",
+            working_hours=0.0
         )
+        meta = {SESSION_META_KEY: {}}
+        meta[SESSION_META_KEY][session_key] = {
+            "label": session_label,
+            "window": session_window,
+            "check_in_time": now.isoformat(),
+            "check_out_time": None,
+            "working_hours": 0.0,
+        }
+        _save_session_meta(attendance, meta)
         db.add(attendance)
-    elif attendance.check_in_time is None:
-        attendance.check_in_time = datetime.now()
+    else:
+        meta = _session_meta(attendance)
+        completed_message = _completed_session_message(meta, session_key)
+        if completed_message:
+            raise HTTPException(status_code=400, detail=completed_message)
+
+        # If the current row is still active, do not create a duplicate check-in.
+        if attendance.check_in_time and not attendance.check_out_time:
+            active_meta = meta.get(SESSION_META_KEY, {})
+            active_label = active_meta.get("active_session", session_label)
+            raise HTTPException(status_code=400, detail=f"{active_label.title()} attendance is currently checked in. Please check out before starting another session.")
+
+        # The previous session is completed. Reuse the existing attendance row
+        # for the new active session and retain the completed session in notes.
+        attendance.check_in_time = now.replace(tzinfo=None)
+        attendance.check_out_time = None
+        attendance.working_hours = 0.0
+        meta.setdefault(SESSION_META_KEY, {})[session_key] = {
+            "label": session_label,
+            "window": session_window,
+            "check_in_time": now.isoformat(),
+            "check_out_time": None,
+            "working_hours": 0.0,
+        }
+        meta[SESSION_META_KEY]["active_session"] = session_key
+        _save_session_meta(attendance, meta)
         if attendance.status == "ABSENT":
             attendance.status = "PRESENT"
-    else:
-        raise HTTPException(status_code=400, detail="Already checked in today")
 
     try:
+        meta = _session_meta(attendance)
+        meta.setdefault(SESSION_META_KEY, {})["active_session"] = session_key
+        _save_session_meta(attendance, meta)
         db.commit()
         db.refresh(attendance)
     except Exception as e:
@@ -213,11 +311,16 @@ def employee_check_in(
         raise HTTPException(status_code=500, detail=f"Check-in failed: {str(e)}")
 
     return {
-        "message": "Check-in successful",
+        "message": f"{session_label} check-in successful",
         "employee_id": actual_employee_id,
         "worker_id": worker_id_to_store,
+        "session": session_key,
+        "session_label": session_label,
+        "session_window": session_window,
         "check_in_time": attendance.check_in_time,
-        "status": attendance.status
+        "check_out_time": attendance.check_out_time,
+        "status": attendance.status,
+        "can_check_out": True
     }
 
 @router.post("/check-out")
@@ -226,31 +329,24 @@ def employee_check_out(
     db: Session = Depends(get_db),
     current_user_id: int = Depends(check_current_user)
 ):
-    """Employee check-out - accepts both user_id and worker_id"""
-    # First try to find as Worker
+    """Check out the currently active attendance session."""
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
     is_worker = employee is not None
 
-    # If not found as Worker, try to find as User (for shopkeepers/owners checking out)
     if not employee:
         employee = db.query(User).filter(User.id == employee_id).first()
 
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Security check: verify the current user owns/manages this employee
     if is_worker:
-        # For workers, check that the current user is the shopkeeper
         if employee.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check out your own workers")
     else:
-        # For shopkeepers/owners, they can only check out themselves
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check out yourself")
 
     today = date.today()
-    
-    # For workers, use shopkeeper_id as employee_id but store worker_id separately
     actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
     worker_id_to_store = employee.id if is_worker else None
 
@@ -263,17 +359,43 @@ def employee_check_out(
     ).first()
 
     if not attendance or not attendance.check_in_time:
-        raise HTTPException(status_code=400, detail="No check-in found for today")
+        raise HTTPException(status_code=400, detail="No active check-in found for today")
 
     if attendance.check_out_time:
-        raise HTTPException(status_code=400, detail="Already checked out today")
+        meta = _session_meta(attendance)
+        active_session = meta.get(SESSION_META_KEY, {}).get("active_session")
+        if active_session:
+            label = next((x[3] for x in ATTENDANCE_SESSIONS if x[0] == active_session), active_session.title())
+            raise HTTPException(status_code=400, detail=f"{label} attendance is already checked out. Try the next session when its time starts.")
+        raise HTTPException(status_code=400, detail="Attendance is already checked out. Try the next session when its time starts.")
 
-    attendance.check_out_time = datetime.now()
+    now = _local_now().replace(tzinfo=None)
+    attendance.check_out_time = now
 
-    # Calculate working hours
-    if attendance.check_in_time and attendance.check_out_time:
-        duration = attendance.check_out_time - attendance.check_in_time
-        attendance.working_hours = duration.total_seconds() / 3600  # Convert to hours
+    duration = attendance.check_out_time - attendance.check_in_time
+    session_hours = max(0.0, duration.total_seconds() / 3600)
+    attendance.working_hours = session_hours
+
+    meta = _session_meta(attendance)
+    sessions = meta.setdefault(SESSION_META_KEY, {})
+    active_session = sessions.get("active_session")
+    if not active_session:
+        active_session, session_label, session_window = _session_for_time()
+    else:
+        match = next((x for x in ATTENDANCE_SESSIONS if x[0] == active_session), None)
+        session_label = match[3] if match else active_session.title()
+        session_window = match[4] if match else ""
+
+    if active_session:
+        sessions[active_session] = {
+            "label": session_label,
+            "window": session_window,
+            "check_in_time": sessions.get(active_session, {}).get("check_in_time", attendance.check_in_time.isoformat()),
+            "check_out_time": now.isoformat(),
+            "working_hours": session_hours,
+        }
+    sessions.pop("active_session", None)
+    _save_session_meta(attendance, meta)
 
     try:
         db.commit()
@@ -283,11 +405,14 @@ def employee_check_out(
         raise HTTPException(status_code=500, detail=f"Check-out failed: {str(e)}")
 
     return {
-        "message": "Check-out successful",
+        "message": f"{session_label} check-out successful",
         "employee_id": actual_employee_id,
         "worker_id": worker_id_to_store,
+        "session": active_session,
+        "session_label": session_label,
         "check_out_time": attendance.check_out_time,
-        "working_hours": attendance.working_hours
+        "working_hours": attendance.working_hours,
+        "can_check_in_next_session": True
     }
 
 # ==================== ATTENDANCE RECORDS ====================
@@ -299,18 +424,15 @@ def record_manual_attendance(
     current_user_id: int = Depends(check_current_user)
 ):
     """Manually record attendance"""
-    # Accept worker_id from Worker table (or user_id from User table)
     employee = db.query(Worker).filter(Worker.id == record.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
-    # Security check: verify the current user owns this worker
     if employee.shopkeeper_id != current_user_id:
         raise HTTPException(status_code=403, detail="You can only record attendance for your own workers")
     
     att_date = datetime.strptime(record.attendance_date, "%Y-%m-%d").date()
     
-    # Normalize status to uppercase valid enum value
     VALID_STATUSES = {"PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE"}
     normalized_status = record.status.upper()
     if normalized_status not in VALID_STATUSES:
@@ -318,7 +440,6 @@ def record_manual_attendance(
                       "half_day": "HALF_DAY", "halfday": "HALF_DAY", "late": "LATE"}
         normalized_status = STATUS_MAP.get(record.status.lower(), "PRESENT")
     
-    # Attendance.employee_id is the shopkeeper/user FK; worker_id identifies a worker.
     worker_id = employee.id
     employee_user_id = employee.shopkeeper_id
 
@@ -511,7 +632,6 @@ def approve_leave(
     if not leave:
         raise HTTPException(status_code=404, detail="Leave request not found")
     
-    # Security check: verify the current user owns/manages this employee
     worker = db.query(Worker).filter(Worker.id == leave.employee_id).first()
     if worker:
         if worker.shopkeeper_id != current_user_id:
