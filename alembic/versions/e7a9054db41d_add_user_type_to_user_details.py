@@ -19,7 +19,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('user_details', sa.Column('user_type', sa.String(length=50), nullable=False, server_default='OWNER'))
+    # Existing production databases may already have this column because
+    # SQLAlchemy created the schema before Alembic was introduced.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = {column['name'] for column in inspector.get_columns('user_details')}
+    if 'user_type' not in columns:
+        op.add_column(
+            'user_details',
+            sa.Column('user_type', sa.String(length=50), nullable=False, server_default='OWNER')
+        )
+
 
 def downgrade() -> None:
-    op.drop_column('user_details', 'user_type')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = {column['name'] for column in inspector.get_columns('user_details')}
+    if 'user_type' in columns:
+        op.drop_column('user_details', 'user_type')
