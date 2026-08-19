@@ -1,0 +1,74 @@
+name: Apply backend sync contract fixes
+on:
+  push:
+    branches: [production-fix-2026-08-18]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[backend-sync-fix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: production-fix-2026-08-18
+          fetch-depth: 0
+      - name: Apply backend fixes
+        shell: python
+        run: |
+          from pathlib import Path
+          def replace(path, old, new):
+              p=Path(path); s=p.read_text(encoding='utf-8')
+              if old not in s:
+                  raise SystemExit(f'TARGET NOT FOUND: {path}: {old[:160]!r}')
+              p.write_text(s.replace(old,new,1),encoding='utf-8')
+
+          # Purchase orders created by the API must have the same status the
+          # Flutter client treats as actionable. DRAFT made the newly synced
+          # order invisible to the Delivered/Cancel actions.
+          replace('purchase_orders.py', 'status="DRAFT",', 'status="PENDING",')
+
+          # Persist discount metadata instead of silently dropping it at the
+          # Pydantic boundary. It is informational and does not alter the
+          # already-authoritative unit_price/total calculation.
+          replace('invoices_billing.py', "    unit_price: float = Field(..., ge=0)\n", "    unit_price: float = Field(..., ge=0)\n    discount_amount: float = Field(0, ge=0)\n")
+          replace('invoices_billing.py', "                    unit_price=item.unit_price,\n                    line_total=line_total,", "                    unit_price=item.unit_price,\n                    discount_amount=item.discount_amount,\n                    line_total=line_total,")
+          replace('models.py', "    unit_price = Column(Numeric(10, 2), nullable=False)\n    line_total = Column(Numeric(10, 2), nullable=False)", "    unit_price = Column(Numeric(10, 2), nullable=False)\n    discount_amount = Column(Numeric(10, 2), nullable=False, default=0)\n    line_total = Column(Numeric(10, 2), nullable=False)")
+
+      - name: Add migration
+        shell: bash
+        run: |
+          cat > alembic/versions/008_add_invoice_line_discount_amount.py <<'PY'
+          """Persist invoice line discount metadata.
+
+          Revision ID: 008_add_invoice_line_discount_amount
+          Revises: 007_merge_migration_heads
+          """
+          from alembic import op
+          import sqlalchemy as sa
+
+          revision = "008_add_invoice_line_discount_amount"
+          down_revision = "007_merge_migration_heads"
+          branch_labels = None
+          depends_on = None
+
+          def upgrade():
+              op.add_column(
+                  "invoice_line_items",
+                  sa.Column("discount_amount", sa.Numeric(10, 2), nullable=False, server_default="0"),
+              )
+              op.alter_column("invoice_line_items", "discount_amount", server_default=None)
+
+          def downgrade():
+              op.drop_column("invoice_line_items", "discount_amount")
+          PY
+
+      - name: Commit backend fixes
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add purchase_orders.py invoices_billing.py models.py alembic/versions/008_add_invoice_line_discount_amount.py
+          git commit -m 'Fix backend PO and discount persistence [backend-sync-fix-applied]' || true
+          git push origin production-fix-2026-08-18
