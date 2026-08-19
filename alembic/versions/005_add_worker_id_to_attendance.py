@@ -7,7 +7,6 @@ Create Date: 2026-07-26 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '005_add_worker_id_to_attendance'
@@ -17,42 +16,84 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add worker_id column to attendance table
-    op.add_column('attendance', sa.Column('worker_id', sa.Integer(), nullable=True))
-    
-    # Add foreign key constraint to workers table
-    op.create_foreign_key(
-        'fk_attendance_worker_id',
-        'attendance', 'workers',
-        ['worker_id'], ['id'],
-        ondelete='SET NULL'
+    # Some production databases already contain worker_id and/or the
+    # associated constraints. Make this migration safe to resume.
+    op.execute(
+        "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS worker_id INTEGER"
     )
-    
-    # Update unique constraint to include worker_id
-    # First drop the old constraint if it exists
-    op.execute('ALTER TABLE attendance DROP CONSTRAINT IF EXISTS uix_employee_date')
-    
-    # Add new unique constraint including worker_id
-    op.create_unique_constraint(
-        'uix_employee_date_worker',
-        'attendance',
-        ['employee_id', 'attendance_date', 'worker_id']
+
+    # Add the FK only when it is missing.
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'fk_attendance_worker_id'
+                  AND conrelid = 'attendance'::regclass
+            ) THEN
+                ALTER TABLE attendance
+                ADD CONSTRAINT fk_attendance_worker_id
+                FOREIGN KEY (worker_id) REFERENCES workers(id)
+                ON DELETE SET NULL;
+            END IF;
+        END
+        $$;
+        """
+    )
+
+    # Replace the old employee/date uniqueness with the worker-aware version.
+    op.execute(
+        'ALTER TABLE attendance DROP CONSTRAINT IF EXISTS uix_employee_date'
+    )
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'uix_employee_date_worker'
+                  AND conrelid = 'attendance'::regclass
+            ) THEN
+                ALTER TABLE attendance
+                ADD CONSTRAINT uix_employee_date_worker
+                UNIQUE (employee_id, attendance_date, worker_id);
+            END IF;
+        END
+        $$;
+        """
     )
 
 
 def downgrade() -> None:
-    # Remove the new unique constraint
-    op.drop_constraint('uix_employee_date_worker', 'attendance', type_='unique')
-    
-    # Restore old unique constraint
-    op.create_unique_constraint(
-        'uix_employee_date',
-        'attendance',
-        ['employee_id', 'attendance_date']
+    op.execute(
+        'ALTER TABLE attendance DROP CONSTRAINT IF EXISTS uix_employee_date_worker'
     )
-    
-    # Remove foreign key
-    op.drop_constraint('fk_attendance_worker_id', 'attendance', type_='foreignkey')
-    
-    # Remove worker_id column
-    op.drop_column('attendance', 'worker_id')
+
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'uix_employee_date'
+                  AND conrelid = 'attendance'::regclass
+            ) THEN
+                ALTER TABLE attendance
+                ADD CONSTRAINT uix_employee_date
+                UNIQUE (employee_id, attendance_date);
+            END IF;
+        END
+        $$;
+        """
+    )
+
+    op.execute(
+        'ALTER TABLE attendance DROP CONSTRAINT IF EXISTS fk_attendance_worker_id'
+    )
+    op.execute(
+        'ALTER TABLE attendance DROP COLUMN IF EXISTS worker_id'
+    )
