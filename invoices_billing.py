@@ -83,6 +83,7 @@ class InvoiceLineItemResponse(BaseModel):
     description: Optional[str]
     quantity: int
     unit_price: float
+    discount_amount: float = 0
     line_total: float
     
     class Config:
