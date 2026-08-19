@@ -69,7 +69,7 @@ def create_purchase_order(
     po = PurchaseOrder(
         shop_id=shop_id,
         supplier_name=supplier_name,
-        status="DRAFT",
+        status="PENDING",
         total_cost=total_cost,
         items_json=json.dumps(items_data),
         expected_delivery=data.expected_delivery,

@@ -440,6 +440,7 @@ class InvoiceLineItem(Base):
     description = Column(String(255))
     quantity = Column(Numeric(12, 3), nullable=False)
     unit_price = Column(Numeric(10, 2), nullable=False)
+    discount_amount = Column(Numeric(10, 2), nullable=False, default=0)
     line_total = Column(Numeric(10, 2), nullable=False)
     
     # Relationships

@@ -52,6 +52,7 @@ class InvoiceLineItemCreate(BaseModel):
     product_name: str
     quantity: float = Field(..., gt=0)
     unit_price: float = Field(..., ge=0)
+    discount_amount: float = Field(0, ge=0)
 
 class InvoiceSyncCreate(BaseModel):
     invoice_number: str
@@ -226,6 +227,7 @@ def sync_offline_invoice(
                     description=sanitize_input(item.product_name, "product_name"),
                     quantity=item.quantity,
                     unit_price=item.unit_price,
+                    discount_amount=item.discount_amount,
                     line_total=line_total,
                 )
                 db.add(db_line)
