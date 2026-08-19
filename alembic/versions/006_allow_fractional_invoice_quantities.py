@@ -13,13 +13,30 @@ depends_on = None
 
 
 def upgrade():
-    op.alter_column(
-        "invoice_line_items",
-        "quantity",
-        existing_type=sa.Integer(),
-        type_=sa.Numeric(12, 3),
-        existing_nullable=False,
+    # The ORM schema may already use NUMERIC(12, 3) in databases created
+    # before Alembic tracked this change. Only alter the column when needed.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    column = next(
+        column for column in inspector.get_columns("invoice_line_items")
+        if column["name"] == "quantity"
     )
+    column_type = column["type"]
+
+    already_fractional = (
+        isinstance(column_type, sa.Numeric)
+        and getattr(column_type, "precision", None) == 12
+        and getattr(column_type, "scale", None) == 3
+    )
+
+    if not already_fractional:
+        op.alter_column(
+            "invoice_line_items",
+            "quantity",
+            existing_type=column_type,
+            type_=sa.Numeric(12, 3),
+            existing_nullable=False,
+        )
 
 
 def downgrade():
