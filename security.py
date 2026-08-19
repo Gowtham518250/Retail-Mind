@@ -29,9 +29,9 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is not set. Refusing to start.")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-# Long enough for a normal retail business day and for users who reopen the app
-# after being away for a while. Keep the 7-day refresh token as the recovery path.
-# Render can override this with ACCESS_TOKEN_EXPIRE_MINUTES when explicitly set.
+# 1016 minutes keeps the access token valid through a long gap between app sessions.
+# The 7-day refresh token remains the longer-lived renewal mechanism.
+# Render can override this explicitly with ACCESS_TOKEN_EXPIRE_MINUTES.
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1016))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 
@@ -130,6 +130,7 @@ def require_role(*allowed_roles: str):
         return current_user
     return _check
 
+# Convenience guards
 def owner_only(current_user: dict = Depends(require_role(ROLE_OWNER))):
     return current_user
 
@@ -151,21 +152,24 @@ def resolve_shop_id(current_user) -> int:
 # =====================
 # RATE LIMITER (In-Memory)
 # =====================
-_rate_limit_store: dict = defaultdict(list)
-_login_fail_store: dict = defaultdict(int)
-_login_lockout: dict = defaultdict(float)
+_rate_limit_store: dict = defaultdict(list)  # {ip: [timestamp, ...]}
+_login_fail_store: dict = defaultdict(int)   # {ip: fail_count}
+_login_lockout: dict = defaultdict(float)    # {ip: unlock_timestamp}
 
 RATE_LIMIT_CALLS = int(os.getenv("RATE_LIMIT_CALLS", 100))
 RATE_LIMIT_WINDOW_SECS = int(os.getenv("RATE_LIMIT_WINDOW_SECS", 60))
 LOGIN_MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", 5))
-LOGIN_LOCKOUT_SECS = int(os.getenv("LOGIN_LOCKOUT_SECS", 300))
+LOGIN_LOCKOUT_SECS = int(os.getenv("LOGIN_LOCKOUT_SECS", 300))  # 5 minutes
 
 def check_rate_limit(request: Request):
     """Dependency: block IP addresses making too many requests"""
     ip = request.client.host
     now = time.time()
     window_start = now - RATE_LIMIT_WINDOW_SECS
+
+    # Clean old timestamps
     _rate_limit_store[ip] = [t for t in _rate_limit_store[ip] if t > window_start]
+
     if len(_rate_limit_store[ip]) >= RATE_LIMIT_CALLS:
         raise HTTPException(
             status_code=429,
@@ -187,7 +191,7 @@ def record_login_failure(ip: str):
     _login_fail_store[ip] += 1
     if _login_fail_store[ip] >= LOGIN_MAX_FAILS:
         _login_lockout[ip] = time.time() + LOGIN_LOCKOUT_SECS
-        _login_fail_store[ip] = 0
+        _login_fail_store[ip] = 0  # reset counter after lockout
 
 def record_login_success(ip: str):
     """Clear failed attempts on successful login"""
@@ -208,25 +212,36 @@ def sanitize_input(value: str, field_name: str = "input") -> str:
     if not isinstance(value, str):
         return value
     if _SQL_INJECTION_PATTERN.search(value):
-        raise HTTPException(status_code=400, detail=f"Malicious SQL pattern detected in field '{field_name}'. Request blocked.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Malicious SQL pattern detected in field '{field_name}'. Request blocked."
+        )
     if _XSS_PATTERN.search(value):
-        raise HTTPException(status_code=400, detail=f"Malicious script pattern detected in field '{field_name}'. Request blocked.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Malicious script pattern detected in field '{field_name}'. Request blocked."
+        )
     return value.strip()
 
+# =====================
+# DATA MASKING UTILITIES
+# =====================
 def mask_phone(phone: str) -> str:
+    """Mask phone number for logs: 9876543210 → 98****3210"""
     if not phone or len(phone) < 6:
         return "****"
     return phone[:2] + "*" * (len(phone) - 4) + phone[-4:]
 
 def mask_upi(upi_id: str) -> str:
+    """Mask UPI ID for logs: user@bank → us**@bank"""
     if not upi_id or "@" not in upi_id:
         return "****"
     parts = upi_id.split("@")
     return parts[0][:2] + "**@" + parts[1]
 
 def mask_email(email: str) -> str:
+    """Mask email for logs: user@example.com → us**@example.com"""
     if not email or "@" not in email:
         return "****"
-    parts = email.split("@", 1)
-    local = parts[0]
-    return (local[:2] + "**" if len(local) > 2 else "**") + "@" + parts[1]
+    parts = email.split("@")
+    return parts[0][:2] + "**@" + parts[1]
