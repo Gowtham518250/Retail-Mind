@@ -11,6 +11,10 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 10080
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 7
       - key: SENDER_EMAIL
         sync: false
       - key: SENDER_PASSWORD
