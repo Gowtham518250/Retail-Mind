@@ -1,0 +1,39 @@
+name: Production attendance persistence fix
+
+on:
+  push:
+    branches: [production-fix-2026-08-18]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified production fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git fetch origin production-fix-2026-08-18
+
+          # The verified attendance persistence fix stores the three daily
+          # attendance sessions server-side so clearing app data cannot reset
+          # the check-in/check-out state.
+          git cherry-pick a6a1970845f4973b2a0bde296c3dca2aba6c1206
+
+          # Apply the verified India-local business-date corrections on top.
+          git cherry-pick 4994d909be440b25d1cd54a799a9bf097a642bdd
+
+          rm -f .github/workflows/production-attendance-persistence-fix.yml
+          git add -A
+          git commit -m 'fix: persist attendance sessions and local business dates' || true
+          git push origin HEAD:production-fix-2026-08-18
