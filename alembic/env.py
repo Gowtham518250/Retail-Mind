@@ -39,34 +39,6 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def _repair_known_schema_drift(connection) -> None:
-    """Repair known production schema drift before Alembic runs."""
-    if connection.dialect.name != "postgresql":
-        return
-
-    inspector = inspect(connection)
-    tables = set(inspector.get_table_names())
-    if "invoice_line_items" not in tables:
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("invoice_line_items")}
-    if "discount_amount" not in columns:
-        connection.execute(
-            text(
-                "ALTER TABLE invoice_line_items "
-                "ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10, 2) "
-                "NOT NULL DEFAULT 0"
-            )
-        )
-        connection.execute(
-            text(
-                "ALTER TABLE invoice_line_items "
-                "ALTER COLUMN discount_amount DROP DEFAULT"
-            )
-        )
-        connection.commit()
-
-
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -105,8 +77,6 @@ def run_migrations_online() -> None:
                     "INSERT INTO alembic_version (version_num) VALUES ('001_initial_schema')"
                 ))
                 connection.commit()
-
-            _repair_known_schema_drift(connection)
 
         context.configure(
             connection=connection,

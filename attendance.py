@@ -6,15 +6,74 @@ Check-in/Check-out, Attendance tracking, Leave management, Attendance analytics
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
-from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from datetime import datetime, date, timedelta
 from typing import List, Optional
+from zoneinfo import ZoneInfo
+import json
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Attendance, LeaveRequest, User, Worker
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
+
+# Three attendance sessions per business day.  Times are evaluated in India time
+# because Retail Mind is intended for the Indian retail market.
+ATTENDANCE_TZ = ZoneInfo("Asia/Kolkata")
+ATTENDANCE_SESSIONS = (
+    ("morning", 6, 12, "Morning", "6:00 AM–12:00 PM"),
+    ("afternoon", 12, 17, "Afternoon", "12:00 PM–5:00 PM"),
+    ("evening", 17, 24, "Evening", "5:00 PM–12:00 AM"),
+)
+SESSION_META_KEY = "_retail_mind_sessions"
+
+
+def _local_now():
+    return datetime.now(ATTENDANCE_TZ)
+
+
+def _session_for_time(value=None):
+    value = value or _local_now()
+    hour = value.hour
+    for key, start_hour, end_hour, label, window in ATTENDANCE_SESSIONS:
+        if start_hour <= hour < end_hour:
+            return key, label, window
+    return None, None, None
+
+
+def _session_meta(attendance):
+    """Read session history stored in the existing notes column.
+
+    This deliberately avoids a schema change so existing production databases
+    and existing attendance rows remain compatible.
+    """
+    raw = attendance.notes or ""
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and isinstance(data.get(SESSION_META_KEY), dict):
+            return data
+    except (TypeError, ValueError):
+        pass
+    return {SESSION_META_KEY: {}, "note": raw if raw else None}
+
+
+def _save_session_meta(attendance, data):
+    attendance.notes = json.dumps(data, separators=(",", ":"), default=str)
+
+
+def _completed_session_message(meta, current_key):
+    completed = meta.get(SESSION_META_KEY, {})
+    session = completed.get(current_key)
+    if session and session.get("check_in_time"):
+        label = session.get("label", current_key.title())
+        _, next_label, next_window = next((x for x in ATTENDANCE_SESSIONS if x[0] != current_key and x[2] == session.get("next_window")), (None, None, None)) if False else (None, None, None)
+        remaining = []
+        for key, start_hour, end_hour, session_label, window in ATTENDANCE_SESSIONS:
+            if key != current_key and not completed.get(key, {}).get("check_in_time"):
+                remaining.append(f"{session_label} ({window})")
+        next_text = f" Try {remaining[0]}." if remaining else " All three sessions are already marked for today."
+        return f"{label} attendance already marked for today.{next_text}"
+    return None
 
 # ==================== PYDANTIC MODELS FOR WORKERS ====================
 
@@ -154,99 +213,114 @@ def employee_check_in(
     db: Session = Depends(get_db),
     current_user_id: int = Depends(check_current_user)
 ):
-    """Employee check-in - accepts both user_id and worker_id"""
-    # First try to find as Worker
+    """Check in once per morning/afternoon/evening session.
+
+    The active session is represented by the existing check_in_time and
+    check_out_time fields. Completed sessions are retained in notes as JSON,
+    so clearing mobile app data does not reset the server-side state.
+    """
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
     is_worker = employee is not None
 
-    # If not found as Worker, try to find as User (for shopkeepers/owners checking in)
     if not employee:
         employee = db.query(User).filter(User.id == employee_id).first()
 
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Security check: verify the current user owns/manages this employee
     if is_worker:
-        # For workers, check that the current user is the shopkeeper
         if employee.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check in your own workers")
     else:
-        # For shopkeepers/owners, they can only check in themselves
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check in yourself")
 
-    today = date.today()
-    
-    # For workers, use shopkeeper_id as employee_id but store worker_id separately
+    today = _local_now().date()
+    now = _local_now()
+    session_key, session_label, session_window = _session_for_time(now)
+    if not session_key:
+        raise HTTPException(status_code=400, detail="Attendance is currently outside the configured sessions.")
+
     actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
     worker_id_to_store = employee.id if is_worker else None
 
-    attendance_filters = [
-        Attendance.employee_id == actual_employee_id,
-        Attendance.attendance_date == today,
-    ]
-    if worker_id_to_store is None:
-        attendance_filters.append(Attendance.worker_id.is_(None))
-    else:
-        attendance_filters.append(Attendance.worker_id == worker_id_to_store)
-
-    attendance = db.query(Attendance).filter(and_(*attendance_filters)).first()
+    attendance = db.query(Attendance).filter(
+        and_(
+            Attendance.employee_id == actual_employee_id,
+            Attendance.attendance_date == today,
+            Attendance.worker_id == worker_id_to_store if worker_id_to_store is not None else True
+        )
+    ).first()
 
     if not attendance:
         attendance = Attendance(
             employee_id=actual_employee_id,
             worker_id=worker_id_to_store,
             attendance_date=today,
-            check_in_time=datetime.now(),
-            status="PRESENT"
+            check_in_time=now.replace(tzinfo=None),
+            status="PRESENT",
+            working_hours=0.0
         )
+        meta = {SESSION_META_KEY: {}}
+        meta[SESSION_META_KEY][session_key] = {
+            "label": session_label,
+            "window": session_window,
+            "check_in_time": now.isoformat(),
+            "check_out_time": None,
+            "working_hours": 0.0,
+        }
+        _save_session_meta(attendance, meta)
         db.add(attendance)
-    elif attendance.check_in_time is None:
-        attendance.check_in_time = datetime.now()
+    else:
+        meta = _session_meta(attendance)
+        completed_message = _completed_session_message(meta, session_key)
+        if completed_message:
+            raise HTTPException(status_code=400, detail=completed_message)
+
+        # If the current row is still active, do not create a duplicate check-in.
+        if attendance.check_in_time and not attendance.check_out_time:
+            active_meta = meta.get(SESSION_META_KEY, {})
+            active_label = active_meta.get("active_session", session_label)
+            raise HTTPException(status_code=400, detail=f"{active_label.title()} attendance is currently checked in. Please check out before starting another session.")
+
+        # The previous session is completed. Reuse the existing attendance row
+        # for the new active session and retain the completed session in notes.
+        attendance.check_in_time = now.replace(tzinfo=None)
+        attendance.check_out_time = None
+        attendance.working_hours = 0.0
+        meta.setdefault(SESSION_META_KEY, {})[session_key] = {
+            "label": session_label,
+            "window": session_window,
+            "check_in_time": now.isoformat(),
+            "check_out_time": None,
+            "working_hours": 0.0,
+        }
+        meta[SESSION_META_KEY]["active_session"] = session_key
+        _save_session_meta(attendance, meta)
         if attendance.status == "ABSENT":
             attendance.status = "PRESENT"
-    else:
-        raise HTTPException(status_code=400, detail="Already checked in today")
 
     try:
+        meta = _session_meta(attendance)
+        meta.setdefault(SESSION_META_KEY, {})["active_session"] = session_key
+        _save_session_meta(attendance, meta)
         db.commit()
         db.refresh(attendance)
-    except IntegrityError:
-        # A concurrent second request may race past the SELECT before the
-        # first transaction commits. The DB uniqueness rule is the final
-        # authority; reconcile the conflict to the existing attendance row
-        # instead of returning a misleading 500.
-        db.rollback()
-        existing_filters = [
-            Attendance.employee_id == actual_employee_id,
-            Attendance.attendance_date == today,
-        ]
-        if worker_id_to_store is None:
-            existing_filters.append(Attendance.worker_id.is_(None))
-        else:
-            existing_filters.append(Attendance.worker_id == worker_id_to_store)
-
-        existing = db.query(Attendance).filter(and_(*existing_filters)).first()
-        if existing is None:
-            raise HTTPException(status_code=500, detail="Check-in failed: could not reconcile after conflict")
-        return {
-            "message": "Already checked in today",
-            "employee_id": actual_employee_id,
-            "worker_id": worker_id_to_store,
-            "check_in_time": existing.check_in_time,
-            "status": existing.status,
-        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Check-in failed: {str(e)}")
 
     return {
-        "message": "Check-in successful",
+        "message": f"{session_label} check-in successful",
         "employee_id": actual_employee_id,
         "worker_id": worker_id_to_store,
+        "session": session_key,
+        "session_label": session_label,
+        "session_window": session_window,
         "check_in_time": attendance.check_in_time,
-        "status": attendance.status
+        "check_out_time": attendance.check_out_time,
+        "status": attendance.status,
+        "can_check_out": True
     }
 
 @router.post("/check-out")
@@ -255,57 +329,73 @@ def employee_check_out(
     db: Session = Depends(get_db),
     current_user_id: int = Depends(check_current_user)
 ):
-    """Employee check-out - accepts both user_id and worker_id"""
-    # First try to find as Worker
+    """Check out the currently active attendance session."""
     employee = db.query(Worker).filter(Worker.id == employee_id).first()
     is_worker = employee is not None
 
-    # If not found as Worker, try to find as User (for shopkeepers/owners checking out)
     if not employee:
         employee = db.query(User).filter(User.id == employee_id).first()
 
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Security check: verify the current user owns/manages this employee
     if is_worker:
-        # For workers, check that the current user is the shopkeeper
         if employee.shopkeeper_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check out your own workers")
     else:
-        # For shopkeepers/owners, they can only check out themselves
         if employee_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only check out yourself")
 
-    today = date.today()
-    
-    # For workers, use shopkeeper_id as employee_id but store worker_id separately
+    today = _local_now().date()
     actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
     worker_id_to_store = employee.id if is_worker else None
 
-    attendance_filters = [
-        Attendance.employee_id == actual_employee_id,
-        Attendance.attendance_date == today,
-    ]
-    if worker_id_to_store is None:
-        attendance_filters.append(Attendance.worker_id.is_(None))
-    else:
-        attendance_filters.append(Attendance.worker_id == worker_id_to_store)
-
-    attendance = db.query(Attendance).filter(and_(*attendance_filters)).first()
+    attendance = db.query(Attendance).filter(
+        and_(
+            Attendance.employee_id == actual_employee_id,
+            Attendance.attendance_date == today,
+            Attendance.worker_id == worker_id_to_store if worker_id_to_store is not None else True
+        )
+    ).first()
 
     if not attendance or not attendance.check_in_time:
-        raise HTTPException(status_code=400, detail="No check-in found for today")
+        raise HTTPException(status_code=400, detail="No active check-in found for today")
 
     if attendance.check_out_time:
-        raise HTTPException(status_code=400, detail="Already checked out today")
+        meta = _session_meta(attendance)
+        active_session = meta.get(SESSION_META_KEY, {}).get("active_session")
+        if active_session:
+            label = next((x[3] for x in ATTENDANCE_SESSIONS if x[0] == active_session), active_session.title())
+            raise HTTPException(status_code=400, detail=f"{label} attendance is already checked out. Try the next session when its time starts.")
+        raise HTTPException(status_code=400, detail="Attendance is already checked out. Try the next session when its time starts.")
 
-    attendance.check_out_time = datetime.now()
+    now = _local_now().replace(tzinfo=None)
+    attendance.check_out_time = now
 
-    # Calculate working hours
-    if attendance.check_in_time and attendance.check_out_time:
-        duration = attendance.check_out_time - attendance.check_in_time
-        attendance.working_hours = duration.total_seconds() / 3600  # Convert to hours
+    duration = attendance.check_out_time - attendance.check_in_time
+    session_hours = max(0.0, duration.total_seconds() / 3600)
+    attendance.working_hours = session_hours
+
+    meta = _session_meta(attendance)
+    sessions = meta.setdefault(SESSION_META_KEY, {})
+    active_session = sessions.get("active_session")
+    if not active_session:
+        active_session, session_label, session_window = _session_for_time()
+    else:
+        match = next((x for x in ATTENDANCE_SESSIONS if x[0] == active_session), None)
+        session_label = match[3] if match else active_session.title()
+        session_window = match[4] if match else ""
+
+    if active_session:
+        sessions[active_session] = {
+            "label": session_label,
+            "window": session_window,
+            "check_in_time": sessions.get(active_session, {}).get("check_in_time", attendance.check_in_time.isoformat()),
+            "check_out_time": now.isoformat(),
+            "working_hours": session_hours,
+        }
+    sessions.pop("active_session", None)
+    _save_session_meta(attendance, meta)
 
     try:
         db.commit()
@@ -315,11 +405,14 @@ def employee_check_out(
         raise HTTPException(status_code=500, detail=f"Check-out failed: {str(e)}")
 
     return {
-        "message": "Check-out successful",
+        "message": f"{session_label} check-out successful",
         "employee_id": actual_employee_id,
         "worker_id": worker_id_to_store,
+        "session": active_session,
+        "session_label": session_label,
         "check_out_time": attendance.check_out_time,
-        "working_hours": attendance.working_hours
+        "working_hours": attendance.working_hours,
+        "can_check_in_next_session": True
     }
 
 # ==================== ATTENDANCE RECORDS ====================
@@ -331,18 +424,15 @@ def record_manual_attendance(
     current_user_id: int = Depends(check_current_user)
 ):
     """Manually record attendance"""
-    # Accept worker_id from Worker table (or user_id from User table)
     employee = db.query(Worker).filter(Worker.id == record.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
-    # Security check: verify the current user owns this worker
     if employee.shopkeeper_id != current_user_id:
         raise HTTPException(status_code=403, detail="You can only record attendance for your own workers")
     
     att_date = datetime.strptime(record.attendance_date, "%Y-%m-%d").date()
     
-    # Normalize status to uppercase valid enum value
     VALID_STATUSES = {"PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE"}
     normalized_status = record.status.upper()
     if normalized_status not in VALID_STATUSES:
@@ -350,7 +440,6 @@ def record_manual_attendance(
                       "half_day": "HALF_DAY", "halfday": "HALF_DAY", "late": "LATE"}
         normalized_status = STATUS_MAP.get(record.status.lower(), "PRESENT")
     
-    # Attendance.employee_id is the shopkeeper/user FK; worker_id identifies a worker.
     worker_id = employee.id
     employee_user_id = employee.shopkeeper_id
 
@@ -469,7 +558,7 @@ def request_leave(
     current_user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Request leave for a worker"""
+    """Request leave for a worker owned by the authenticated shopkeeper."""
     employee = db.query(Worker).filter(Worker.id == leave_request.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -477,192 +566,210 @@ def request_leave(
     if employee.shopkeeper_id != current_user_id:
         raise HTTPException(status_code=403, detail="You can only request leave for your own workers")
 
-    try:
-        from_date = datetime.strptime(leave_request.from_date, "%Y-%m-%d").date()
-        to_date = datetime.strptime(leave_request.to_date, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    from_dt = datetime.strptime(leave_request.from_date, "%Y-%m-%d").date()
+    to_dt = datetime.strptime(leave_request.to_date, "%Y-%m-%d").date()
+    if to_dt < from_dt:
+        raise HTTPException(status_code=400, detail="End date cannot be before start date")
 
-    if to_date < from_date:
-        raise HTTPException(status_code=400, detail="to_date cannot be before from_date")
+    valid_leave_types = {"VACATION", "SICK", "PERSONAL"}
+    leave_type_map = {
+        "casual": "PERSONAL", "cl": "PERSONAL", "annual": "VACATION",
+        "earned": "VACATION", "medical": "SICK", "sl": "SICK",
+        "vacation": "VACATION", "sick": "SICK", "personal": "PERSONAL"
+    }
+    normalized_leave_type = leave_request.leave_type.upper()
+    if normalized_leave_type not in valid_leave_types:
+        normalized_leave_type = leave_type_map.get(leave_request.leave_type.lower(), "PERSONAL")
 
-    leave = LeaveRequest(
-        employee_id=leave_request.employee_id,
-        leave_type=leave_request.leave_type,
-        from_date=from_date,
-        to_date=to_date,
+    db_leave = LeaveRequest(
+        employee_id=employee.shopkeeper_id,
+        leave_type=normalized_leave_type,
+        from_date=from_dt,
+        to_date=to_dt,
         reason=leave_request.reason,
         status="PENDING"
     )
-    db.add(leave)
+    db.add(db_leave)
     try:
         db.commit()
-        db.refresh(leave)
+        db.refresh(db_leave)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to request leave: {str(e)}")
-
-    return {"message": "Leave request submitted successfully", "leave_id": leave.id}
+        raise HTTPException(status_code=500, detail=f"Failed to create leave request: {str(e)}")
+    return db_leave
 
 @router.get("/leave-requests")
 def get_leave_requests(
+    employee_id: Optional[int] = None,
+    status: Optional[str] = None,
     current_user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get leave requests for the current user's workers"""
-    workers = db.query(Worker).filter(Worker.shopkeeper_id == current_user_id).all()
-    worker_ids = [w.id for w in workers]
-    if not worker_ids:
-        return []
+    """Get leave requests scoped to the authenticated shopkeeper."""
+    query = db.query(LeaveRequest).filter(LeaveRequest.employee_id == current_user_id)
 
-    return db.query(LeaveRequest).filter(LeaveRequest.employee_id.in_(worker_ids)).all()
+    if employee_id is not None:
+        worker = db.query(Worker).filter(Worker.id == employee_id).first()
+        if worker and worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own workers' leave requests")
+        if not worker and employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="Employee not found")
 
-@router.put("/leave-requests/{leave_id}")
-def update_leave_request(
+    if status:
+        query = query.filter(LeaveRequest.status == status)
+
+    requests = query.order_by(desc(LeaveRequest.created_at)).all()
+    return {"leave_requests": requests, "total": len(requests)}
+
+@router.put("/leave-request/{leave_id}/approve")
+def approve_leave(
     leave_id: int,
-    status: str = Query(...),
-    current_user_id: int = Depends(check_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
-    """Approve or reject a leave request"""
+    """Approve leave request"""
     leave = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).first()
     if not leave:
         raise HTTPException(status_code=404, detail="Leave request not found")
-
-    employee = db.query(Worker).filter(Worker.id == leave.employee_id).first()
-    if not employee or employee.shopkeeper_id != current_user_id:
-        raise HTTPException(status_code=403, detail="You can only update leave requests for your workers")
-
-    if status.upper() not in ["APPROVED", "REJECTED"]:
-        raise HTTPException(status_code=400, detail="Status must be APPROVED or REJECTED")
-
-    leave.status = status.upper()
+    
+    worker = db.query(Worker).filter(Worker.id == leave.employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only approve leave for your own workers")
+    else:
+        if leave.employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only approve leave for yourself or your workers")
+    
+    leave.status = "APPROVED"
+    
+    from_date = leave.from_date if isinstance(leave.from_date, date) else leave.from_date.date()
+    to_date = leave.to_date if isinstance(leave.to_date, date) else leave.to_date.date()
+    current = from_date
+    while current <= to_date:
+        existing = db.query(Attendance).filter(
+            and_(
+            Attendance.employee_id == leave.employee_id,
+            Attendance.attendance_date == current
+            )
+        ).first()
+        
+        if not existing:
+            attendance = Attendance(
+            employee_id=leave.employee_id,
+            attendance_date=current,
+            status="LEAVE"
+            )
+            db.add(attendance)
+    
+        current += timedelta(days=1)
+    
     try:
         db.commit()
-        db.refresh(leave)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update leave request: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve leave: {str(e)}")
 
-    return {"message": f"Leave request {status.lower()} successfully", "leave_id": leave_id}
+    return {"message": "Leave approved"}
 
-@router.get("/summary")
+@router.put("/leave-request/{leave_id}/reject")
+def reject_leave(
+    leave_id: int,
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
+):
+    """Reject leave request"""
+    leave = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    
+    worker = db.query(Worker).filter(Worker.id == leave.employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only reject leave for your own workers")
+    else:
+        if leave.employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only reject leave for yourself or your workers")
+    
+    leave.status = "REJECTED"
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to reject leave: {str(e)}")
+    
+    return {"message": "Leave rejected"}
+
+# ==================== ANALYTICS ====================
+
+@router.get("/analytics/summary")
 def get_attendance_summary(
+    days: int = Query(30),
     current_user_id: int = Depends(check_current_user),
-    month: Optional[int] = None,
-    year: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    """Get attendance summary for current user's workers"""
-    today = date.today()
-    target_month = month or today.month
-    target_year = year or today.year
+    """Get attendance summary for the authenticated shopkeeper's records."""
+    days = max(1, min(days, 366))
+    cutoff_date = _local_now().date() - timedelta(days=days)
     
-    # Get workers for this shopkeeper
-    workers = db.query(Worker).filter(Worker.shopkeeper_id == current_user_id).all()
-    worker_ids = [w.id for w in workers]
-    
-    # Get attendance records for the month
-    query = db.query(Attendance).filter(
+    records = db.query(Attendance).filter(
         Attendance.employee_id == current_user_id,
-        func.extract('month', Attendance.attendance_date) == target_month,
-        func.extract('year', Attendance.attendance_date) == target_year
-    )
+        Attendance.attendance_date >= cutoff_date
+    ).all()
     
-    records = query.all()
+    worker_count = db.query(func.count(Worker.id)).filter(
+        Worker.shopkeeper_id == current_user_id
+    ).scalar() or 0
     
-    # Group by employee
-    summary = {}
-    for record in records:
-        emp_id = record.worker_id or record.employee_id
-        if emp_id not in summary:
-            summary[emp_id] = {"present": 0, "absent": 0, "leave": 0, "half_day": 0, "total": 0}
-        summary[emp_id]["total"] += 1
-        status = record.status.lower()
-        if status == "present":
-            summary[emp_id]["present"] += 1
-        elif status == "absent":
-            summary[emp_id]["absent"] += 1
-        elif status == "leave":
-            summary[emp_id]["leave"] += 1
-        elif status == "half_day":
-            summary[emp_id]["half_day"] += 1
+    present = sum(1 for r in records if r.status == "PRESENT")
+    absent = sum(1 for r in records if r.status == "ABSENT")
+    leave = sum(1 for r in records if r.status == "LEAVE")
     
     return {
-        "month": target_month,
-        "year": target_year,
-        "summary": summary,
-        "workers_count": len(workers),
-        "total_records": len(records)
+        "period_days": days,
+        "total_records": len(records),
+        "present": present,
+        "absent": absent,
+        "leave": leave,
+        "total_employees": int(worker_count) + 1,
+        "attendance_percentage": (present / len(records) * 100) if records else 0
     }
 
-@router.get("/today")
-def get_today_attendance(
-    current_user_id: int = Depends(check_current_user),
-    db: Session = Depends(get_db)
+@router.get("/analytics/employee/{employee_id}")
+def get_employee_analytics(
+    employee_id: int,
+    days: int = Query(30),
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user)
 ):
-    """Get today's attendance for all workers"""
-    today = date.today()
-    
-    workers = db.query(Worker).filter(Worker.shopkeeper_id == current_user_id).all()
-    worker_ids = [w.id for w in workers]
-    
-    if not worker_ids:
-        return []
-    
-    records = db.query(Attendance).filter(
-        Attendance.employee_id == current_user_id,
-        Attendance.worker_id.in_(worker_ids),
-        Attendance.attendance_date == today
-    ).all()
-    
-    return records
+    """Get analytics for a worker belonging to the authenticated shopkeeper, or the shopkeeper."""
+    worker = db.query(Worker).filter(Worker.id == employee_id).first()
+    if worker:
+        if worker.shopkeeper_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own workers' analytics")
+        query = db.query(Attendance).filter(Attendance.worker_id == worker.id)
+    else:
+        if employee_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own attendance analytics")
+        query = db.query(Attendance).filter(
+            Attendance.employee_id == current_user_id,
+            Attendance.worker_id.is_(None)
+        )
 
-@router.get("/stats")
-def get_attendance_stats(
-    current_user_id: int = Depends(check_current_user),
-    month: Optional[int] = None,
-    year: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
-    """Get detailed attendance statistics"""
-    today = date.today()
-    target_month = month or today.month
-    target_year = year or today.year
-    
-    workers = db.query(Worker).filter(Worker.shopkeeper_id == current_user_id).all()
-    worker_ids = [w.id for w in workers]
-    
-    if not worker_ids:
-        return {"total_workers": 0, "statistics": {}}
-    
-    records = db.query(Attendance).filter(
-        Attendance.employee_id == current_user_id,
-        Attendance.worker_id.in_(worker_ids),
-        func.extract('month', Attendance.attendance_date) == target_month,
-        func.extract('year', Attendance.attendance_date) == target_year
-    ).all()
-    
-    stats = {}
-    for worker in workers:
-        worker_records = [r for r in records if r.worker_id == worker.id]
-        present = sum(1 for r in worker_records if r.status == "PRESENT")
-        absent = sum(1 for r in worker_records if r.status == "ABSENT")
-        leave = sum(1 for r in worker_records if r.status == "LEAVE")
-        half_day = sum(1 for r in worker_records if r.status == "HALF_DAY")
-        total_days = len(worker_records)
-        
-        stats[worker.id] = {
-            "worker_name": worker.name,
-            "present": present,
-            "absent": absent,
-            "leave": leave,
-            "half_day": half_day,
-            "total_days": total_days,
-            "attendance_percentage": round((present / total_days * 100) if total_days > 0 else 0, 2)
-        }
+    days = max(1, min(days, 366))
+    cutoff_date = _local_now().date() - timedelta(days=days)
+    records = query.filter(Attendance.attendance_date >= cutoff_date).all()
+
+    present = sum(1 for r in records if r.status == "PRESENT")
+    absent = sum(1 for r in records if r.status == "ABSENT")
+    leave = sum(1 for r in records if r.status == "LEAVE")
+    total_hours = sum(r.working_hours for r in records if r.working_hours)
     
     return {
-        "total_workers": len(workers),
-        "statistics": stats
+        "employee_id": employee_id,
+        "period_days": days,
+        "present": present,
+        "absent": absent,
+        "leave": leave,
+        "total_working_hours": total_hours,
+        "attendance_percentage": (present / len(records) * 100) if records else 0
     }
