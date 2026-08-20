@@ -32,7 +32,7 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 # 1016 minutes keeps the access token valid through a long gap between app sessions.
 # The 7-day refresh token remains the longer-lived renewal mechanism.
 # Render can override this explicitly with ACCESS_TOKEN_EXPIRE_MINUTES.
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1016))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 
 # Roles
