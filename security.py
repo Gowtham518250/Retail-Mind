@@ -63,16 +63,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# Wrapper for backward compatibility with authentication.py
 def create_access_token_simple(data: dict) -> str:
     """Simple wrapper for create_access_token without expires_delta parameter"""
     return create_access_token(data)
 
 def create_refresh_token(user_id: int, role: str) -> str:
-    """Create a long-lived refresh token"""
+    """Create a long-lived JWT refresh token."""
     data = {"sub": str(user_id), "role": role, "type": "refresh"}
     expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    data.update({"exp": expire})
+    data.update({"exp": expire, "iat": datetime.now(timezone.utc)})
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 # =====================
@@ -81,7 +80,7 @@ def create_refresh_token(user_id: int, role: str) -> str:
 security_scheme = HTTPBearer()
 
 def decode_token(token: str) -> dict:
-    """Decode and validate a JWT token, raise 401 on failure"""
+    """Decode and validate a JWT token, raise 401 on failure."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
@@ -95,7 +94,7 @@ def decode_token(token: str) -> dict:
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
 ) -> int:
-    """Extract and validate the current user from the Bearer token"""
+    """Extract and validate the current user from the Bearer token."""
     payload = decode_token(credentials.credentials)
     user_id = payload.get("sub")
     if not user_id:
@@ -105,7 +104,7 @@ def get_current_user(
 def get_current_user_dict(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
 ) -> dict:
-    """Extract and validate the current user from the Bearer token (Returns full dict)"""
+    """Extract and validate the current user from the Bearer token."""
     payload = decode_token(credentials.credentials)
     user_id = payload.get("sub")
     role = payload.get("role", ROLE_OWNER)
@@ -117,7 +116,7 @@ def get_current_user_dict(
 # RBAC GUARDS
 # =====================
 def require_role(*allowed_roles: str):
-    """Factory: creates a dependency that blocks any role NOT in allowed_roles"""
+    """Factory: creates a dependency that blocks any role NOT in allowed_roles."""
     def _check(current_user: dict = Depends(get_current_user_dict)) -> dict:
         if current_user["role"] not in allowed_roles:
             raise HTTPException(
@@ -127,7 +126,6 @@ def require_role(*allowed_roles: str):
         return current_user
     return _check
 
-# Convenience guards
 def owner_only(current_user: dict = Depends(require_role(ROLE_OWNER))):
     return current_user
 
@@ -149,24 +147,21 @@ def resolve_shop_id(current_user) -> int:
 # =====================
 # RATE LIMITER (In-Memory)
 # =====================
-_rate_limit_store: dict = defaultdict(list)  # {ip: [timestamp, ...]}
-_login_fail_store: dict = defaultdict(int)   # {ip: fail_count}
-_login_lockout: dict = defaultdict(float)    # {ip: unlock_timestamp}
+_rate_limit_store: dict = defaultdict(list)
+_login_fail_store: dict = defaultdict(int)
+_login_lockout: dict = defaultdict(float)
 
 RATE_LIMIT_CALLS = int(os.getenv("RATE_LIMIT_CALLS", 100))
 RATE_LIMIT_WINDOW_SECS = int(os.getenv("RATE_LIMIT_WINDOW_SECS", 60))
 LOGIN_MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", 5))
-LOGIN_LOCKOUT_SECS = int(os.getenv("LOGIN_LOCKOUT_SECS", 300))  # 5 minutes
+LOGIN_LOCKOUT_SECS = int(os.getenv("LOGIN_LOCKOUT_SECS", 300))
 
 def check_rate_limit(request: Request):
-    """Dependency: block IP addresses making too many requests"""
+    """Dependency: block IP addresses making too many requests."""
     ip = request.client.host
     now = time.time()
     window_start = now - RATE_LIMIT_WINDOW_SECS
-
-    # Clean old timestamps
     _rate_limit_store[ip] = [t for t in _rate_limit_store[ip] if t > window_start]
-
     if len(_rate_limit_store[ip]) >= RATE_LIMIT_CALLS:
         raise HTTPException(
             status_code=429,
@@ -175,7 +170,7 @@ def check_rate_limit(request: Request):
     _rate_limit_store[ip].append(now)
 
 def check_login_lockout(ip: str):
-    """Raise 429 if this IP is in brute-force lockout"""
+    """Raise 429 if this IP is in brute-force lockout."""
     if _login_lockout[ip] > time.time():
         secs_remaining = int(_login_lockout[ip] - time.time())
         raise HTTPException(
@@ -188,10 +183,10 @@ def record_login_failure(ip: str):
     _login_fail_store[ip] += 1
     if _login_fail_store[ip] >= LOGIN_MAX_FAILS:
         _login_lockout[ip] = time.time() + LOGIN_LOCKOUT_SECS
-        _login_fail_store[ip] = 0  # reset counter after lockout
+        _login_fail_store[ip] = 0
 
 def record_login_success(ip: str):
-    """Clear failed attempts on successful login"""
+    """Clear failed attempts on successful login."""
     _login_fail_store[ip] = 0
     _login_lockout[ip] = 0
 
@@ -205,7 +200,7 @@ _SQL_INJECTION_PATTERN = re.compile(
 _XSS_PATTERN = re.compile(r"(<script|</script|javascript:|on\w+=)", re.IGNORECASE)
 
 def sanitize_input(value: str, field_name: str = "input") -> str:
-    """Block SQL injection and XSS in string inputs"""
+    """Block SQL injection and XSS in string inputs."""
     if not isinstance(value, str):
         return value
     if _SQL_INJECTION_PATTERN.search(value):
