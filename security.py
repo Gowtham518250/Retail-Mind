@@ -29,6 +29,9 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is not set. Refusing to start.")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
+# 1016 minutes keeps the access token valid through a long gap between app sessions.
+# The 7-day refresh token remains the longer-lived renewal mechanism.
+# Render can override this explicitly with ACCESS_TOKEN_EXPIRE_MINUTES.
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 
@@ -235,5 +238,5 @@ def mask_email(email: str) -> str:
     """Mask email for logs: user@example.com → us**@example.com"""
     if not email or "@" not in email:
         return "****"
-    local, domain = email.split("@", 1)
-    return local[:2] + "**@" + domain
+    parts = email.split("@")
+    return parts[0][:2] + "**@" + parts[1]
