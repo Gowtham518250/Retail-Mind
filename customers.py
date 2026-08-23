@@ -68,15 +68,27 @@ def create_customer(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new customer"""
-    # Check if customer with same phone already exists
+    """Create a new customer.
+
+    FIX: previously returned a hard 400 "Customer with this phone number
+    already exists" whenever the phone was already registered - including
+    when it was silently auto-created by a prior invoice/sale for the same
+    customer (invoices_billing.py's create/sync endpoints already
+    get-or-create a Customer row from customer_phone). That meant simply
+    trying to bill a repeat customer again (whose record already existed
+    from their first purchase) could surface as "conflicting/failed to
+    create invoice" - a false error for completely normal, expected usage.
+    Every other create-endpoint in this codebase (invoice creation, khata
+    balances) is already correctly idempotent (get-or-create); this one is
+    now consistent with that pattern instead of being the odd one out.
+    """
     existing = db.query(Customer).filter(
         Customer.user_id == user_id,
         Customer.phone == customer.phone
     ).first()
-    
+
     if existing:
-        raise HTTPException(status_code=400, detail="Customer with this phone number already exists")
+        return existing
     
     # Normalize contact_preference to uppercase (DB enum requires uppercase)
     VALID_PREFS = {"EMAIL", "WHATSAPP", "CALL", "SMS"}
