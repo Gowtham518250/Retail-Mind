@@ -69,6 +69,7 @@ except Exception as e:
 from auth_routes import router as authentication_router
 from auth_hardening_service import router as auth_hardening_router
 from session_routes import router as session_router
+from logs_routes import router as logs_router
 
 # Core ERP
 from inventory import router as inventory_router
@@ -329,6 +330,7 @@ async def dashboard_storefront_redirect(request: Request, call_next):
 api.include_router(authentication_router, prefix="/auth", tags=["Authentication"])
 api.include_router(auth_hardening_router, tags=["Authentication Hardened"])
 api.include_router(session_router, tags=["Session Management"])
+api.include_router(logs_router, tags=["Client Logging"])
 
 # Core ERP
 api.include_router(bill_router, prefix="/bill", tags=["Bill Generation"])
