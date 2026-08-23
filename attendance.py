@@ -17,13 +17,17 @@ from models import Attendance, LeaveRequest, User, Worker
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
-# Three attendance sessions per business day.  Times are evaluated in India time
-# because Retail Mind is intended for the Indian retail market.
+# Two attendance sessions per business day (e.g. a shop with a midday
+# break). Times are evaluated in India time because Retail Mind is
+# intended for the Indian retail market.
+#
+# ASSUMPTION: exact split not specified - defaulted to a 2 PM boundary
+# (6 AM-2 PM / 2 PM-12 AM). Adjust the hour boundaries below if your
+# shop's actual shift times differ.
 ATTENDANCE_TZ = ZoneInfo("Asia/Kolkata")
 ATTENDANCE_SESSIONS = (
-    ("morning", 6, 12, "Morning", "6:00 AM–12:00 PM"),
-    ("afternoon", 12, 17, "Afternoon", "12:00 PM–5:00 PM"),
-    ("evening", 17, 24, "Evening", "5:00 PM–12:00 AM"),
+    ("morning", 6, 14, "Morning", "6:00 AM–2:00 PM"),
+    ("evening", 14, 24, "Evening", "2:00 PM–12:00 AM"),
 )
 SESSION_META_KEY = "_retail_mind_sessions"
 
@@ -505,11 +509,73 @@ def get_employee_attendance(
         query = query.filter(Attendance.attendance_date <= to_dt)
     
     records = query.order_by(desc(Attendance.attendance_date)).all()
+
+    # FIX (payroll correctness): Attendance.working_hours only ever reflects
+    # the MOST RECENTLY completed/active session for that day (it gets
+    # overwritten on every check-in/check-out - see employee_check_in /
+    # employee_check_out above). With two sessions per day now supported,
+    # a worker who does Morning (e.g. 4 hrs) then Evening (e.g. 4 hrs)
+    # would have their Morning hours silently overwritten and lost from
+    # any total that just reads `working_hours` directly - understating
+    # their pay by half. The full per-session breakdown is already
+    # durably stored in the JSON session meta (see _session_meta), so we
+    # sum it here and expose it as `total_working_hours` alongside a
+    # `sessions` breakdown, without changing the existing `working_hours`
+    # field (kept for backward compatibility with any existing caller).
+    records_out = []
+    for r in records:
+        meta = _session_meta(r)
+        session_data = meta.get(SESSION_META_KEY, {})
+        sessions_out = {}
+        total_hours = 0.0
+        for key, _start, _end, label, window in ATTENDANCE_SESSIONS:
+            s = session_data.get(key)
+            if not s:
+                continue
+            hours = float(s.get("working_hours") or 0.0)
+            total_hours += hours
+            sessions_out[key] = {
+                "label": s.get("label", label),
+                "window": s.get("window", window),
+                "check_in_time": s.get("check_in_time"),
+                "check_out_time": s.get("check_out_time"),
+                "working_hours": hours,
+            }
+
+        # If a session is still active (checked in, not yet checked out),
+        # its hours aren't in the meta's working_hours yet - add live
+        # elapsed time so totals reflect an in-progress session too.
+        active_session = session_data.get("active_session")
+        if active_session and r.check_in_time and not r.check_out_time:
+            elapsed = (_local_now().replace(tzinfo=None) - r.check_in_time).total_seconds() / 3600
+            if active_session not in sessions_out:
+                match = next((x for x in ATTENDANCE_SESSIONS if x[0] == active_session), None)
+                sessions_out[active_session] = {
+                    "label": match[3] if match else active_session.title(),
+                    "window": match[4] if match else "",
+                    "check_in_time": r.check_in_time.isoformat(),
+                    "check_out_time": None,
+                    "working_hours": max(0.0, elapsed),
+                }
+            total_hours += max(0.0, elapsed)
+
+        records_out.append({
+            "id": r.id,
+            "employee_id": r.employee_id,
+            "worker_id": r.worker_id,
+            "attendance_date": str(r.attendance_date),
+            "check_in_time": r.check_in_time.isoformat() if r.check_in_time else None,
+            "check_out_time": r.check_out_time.isoformat() if r.check_out_time else None,
+            "status": r.status,
+            "working_hours": float(r.working_hours or 0.0),  # last/active session only - kept for backward compat
+            "total_working_hours": round(total_hours, 2),    # FIX: correct value to use for payroll
+            "sessions": sessions_out,
+        })
     
     return {
         "employee_id": employee_id,
-        "records": records,
-        "total_records": len(records)
+        "records": records_out,
+        "total_records": len(records_out)
     }
 
 @router.get("/date/{date_str}")
