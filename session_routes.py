@@ -30,52 +30,62 @@ def refresh_token(req: RefreshRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Missing refresh token")
 
     # Primary production path: login currently issues a JWT refresh token.
+    #
+    # FIX (dead legacy-fallback bug): this used to call security.decode_token(),
+    # which converts *any* decode failure (bad signature, expired, or simply
+    # "not a JWT at all") into an HTTPException(401). That HTTPException was
+    # then immediately re-raised below, so the "fall through to the DB-backed
+    # legacy SessionService" path documented in this docstring was dead code -
+    # any user still holding a pre-JWT opaque refresh token got a hard 401 on
+    # every refresh attempt and could never recover without a full re-login.
+    #
+    # We now decode the JWT directly and only treat a genuine JWTError as
+    # "not a JWT refresh token", letting it fall through to the legacy path.
+    from jose import JWTError, jwt as jose_jwt
+    from security import SECRET_KEY, ALGORITHM, create_access_token, create_refresh_token
+
+    payload = None
     try:
-        from security import decode_token, create_access_token, create_refresh_token
+        payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        payload = None  # Not a (valid) JWT - fall through to legacy path below.
 
-        payload = decode_token(token)
-        if payload.get("type") == "refresh":
-            raw_user_id = payload.get("sub")
-            if raw_user_id is None:
-                raise HTTPException(status_code=401, detail="Invalid refresh token")
+    if payload is not None and payload.get("type") == "refresh":
+        raw_user_id = payload.get("sub")
+        if raw_user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-            try:
-                user_id = int(raw_user_id)
-            except (TypeError, ValueError):
-                raise HTTPException(status_code=401, detail="Invalid refresh token subject")
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=401, detail="Invalid refresh token subject")
 
-            user = db.query(User).filter(User.id == user_id).first()
-            if not user or not user.is_active:
-                raise HTTPException(status_code=401, detail="User not found or inactive")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="User not found or inactive")
 
-            role = getattr(user, "user_type", None) or payload.get("role") or "OWNER"
-            new_access_token = create_access_token(
-                data={
-                    "sub": str(user.id),
-                    "role": role,
-                    "user_type": role,
-                }
-            )
-            new_refresh_token = create_refresh_token(user.id, role)
-
-            return {
-                "success": True,
-                "user_id": user.id,
-                "user_name": user.user_name,
-                "email": user.email,
+        role = getattr(user, "user_type", None) or payload.get("role") or "OWNER"
+        new_access_token = create_access_token(
+            data={
+                "sub": str(user.id),
                 "role": role,
                 "user_type": role,
-                "access_token": new_access_token,
-                "refresh_token": new_refresh_token,
-                "token_type": "bearer",
-                "message": "Session refreshed successfully",
             }
-    except HTTPException:
-        raise
-    except Exception:
-        # Not a JWT refresh token; fall through to the DB-backed legacy
-        # SessionService for tokens created by older app versions.
-        pass
+        )
+        new_refresh_token = create_refresh_token(user.id, role)
+
+        return {
+            "success": True,
+            "user_id": user.id,
+            "user_name": user.user_name,
+            "email": user.email,
+            "role": role,
+            "user_type": role,
+            "access_token": new_access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "bearer",
+            "message": "Session refreshed successfully",
+        }
 
     # Compatibility path for older DB-backed refresh tokens.
     result = SessionService.refresh_access_token(db, token, req.device_id)
