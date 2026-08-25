@@ -10,13 +10,28 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 
+from zoneinfo import ZoneInfo
+
+_REPORT_TZ = ZoneInfo("Asia/Kolkata")
+
+
+def _local_business_date() -> date:
+    """India business date, not the server's (likely UTC on Render) date.
+    Using date.today() directly here caused the exact class of timezone
+    bug already fixed elsewhere in this codebase (attendance.py) - a sale
+    made late evening IST could get filed under the wrong calendar day
+    once the server's own UTC clock had already rolled over, silently
+    splitting one day's real business across two different reports."""
+    return datetime.now(_REPORT_TZ).date()
+
+
 class ReportService:
     
     @staticmethod
     def generate_daily_report(db: Session, user_id: int, report_date: date = None) -> dict:
         """Generate daily report for WhatsApp"""
         if report_date is None:
-            report_date = date.today()
+            report_date = _local_business_date()
         
         # Check if report already exists
         existing_report = db.query(DailyReport).filter_by(
@@ -25,7 +40,14 @@ class ReportService:
         ).first()
         
         if existing_report:
-            return {"status": "exists", "report_id": existing_report.id}
+            # FIX: previously returned only {"status": "exists", "report_id": id}
+            # with none of the actual numbers. Any caller expecting the full
+            # report shape (e.g. format_whatsapp_message, which reads
+            # report['total_revenue'] etc.) would KeyError or silently
+            # produce a broken message on the second call of the same day -
+            # e.g. tapping "Send Daily Summary" twice, or once from the
+            # dashboard and again from a manual WhatsApp send.
+            return ReportService.get_report(db, existing_report.id)
         
         # Calculate metrics
         
@@ -165,8 +187,12 @@ Generated: {datetime.now().strftime('%I:%M %p')}"""
         
         report = db.query(DailyReport).filter_by(id=report_data["report_id"]).first()
         
-        # Get shop name from user (would need to join ShopProfile)
-        shop_name = "Your Shop"  # Placeholder
+        # FIX: was a hardcoded "Your Shop" placeholder regardless of the
+        # actual shop's registered name - every owner's WhatsApp summary
+        # said the same generic thing. Pull the real name from ShopProfile.
+        from models import ShopProfile
+        shop = db.query(ShopProfile).filter(ShopProfile.shop_id == user_id).first()
+        shop_name = shop.shop_name if shop and shop.shop_name else "Your Shop"
         
         message = ReportService.format_whatsapp_message(report_data, shop_name)
         
