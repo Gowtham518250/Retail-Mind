@@ -70,6 +70,10 @@ class InvoiceSyncCreate(BaseModel):
     sale_timestamp: Optional[str] = None
     due_date: Optional[str] = None
     notes: Optional[str] = None
+    # FEATURE (staff sales leaderboard): optional, self-reported by the
+    # client's active-worker selector. See models.py Invoice.sold_by_worker_id
+    # for why this is not used for any authorization decision.
+    sold_by_worker_id: Optional[int] = None
     
     @validator('line_items')
     def validate_line_items(cls, v):
@@ -193,6 +197,20 @@ def sync_offline_invoice(
                     )
                 )
 
+        # FEATURE (staff sales leaderboard): validate the claimed worker
+        # actually belongs to this shop before trusting it, rather than
+        # blindly storing a client-supplied ID (which could otherwise be
+        # used to attribute a sale to an arbitrary worker row in any shop).
+        validated_worker_id = None
+        if data.sold_by_worker_id:
+            from models import Worker
+            worker_row = db.query(Worker).filter(
+                Worker.id == data.sold_by_worker_id,
+                Worker.shopkeeper_id == shop_id,
+            ).first()
+            if worker_row:
+                validated_worker_id = worker_row.id
+
         invoice = Invoice(
             user_id=shop_id,
             customer_id=customer_id,
@@ -211,6 +229,7 @@ def sync_offline_invoice(
             payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
             source="OFFLINE_SYNC",
             notes=sanitize_input(data.notes or "", "notes"),
+            sold_by_worker_id=validated_worker_id,
         )
         db.add(invoice)
         db.flush()
