@@ -404,6 +404,16 @@ class Invoice(Base):
     payment_status = Column(Enum(PaymentStatus, name="payment_status"), default=PaymentStatus.UNPAID, index=True)
     payment_method = Column(String(50))
     source = Column(String(50), default="MANUAL_ENTRY") # OFFLINE_SYNC, ONLINE_ORDER, MANUAL_ENTRY
+    # FEATURE (staff sales leaderboard): which staff member made this sale,
+    # if any. Nullable and defaults to NULL for owner-made sales and for
+    # every pre-existing invoice row - this is purely additive and changes
+    # no existing behavior. Not a security boundary: the JWT for a "worker"
+    # role identifies the shop, not the individual staff member (there is
+    # no per-worker login), so this is self-reported by the client (the
+    # active-worker selector) rather than cryptographically enforced.
+    # That's an acceptable tradeoff for a leaderboard/analytics feature,
+    # but this column should NOT be used to gate authorization decisions.
+    sold_by_worker_id = Column(Integer, ForeignKey("workers.id", ondelete="SET NULL"), nullable=True, index=True)
     notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
