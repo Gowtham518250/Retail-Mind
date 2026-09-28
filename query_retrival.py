@@ -131,14 +131,18 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         if source_path  not in table_paths:
             table_paths.append(source_path)
     retrived_table_information=[]
+    # If source catalog files are missing in deployment, use FAISS chunk content directly.
     for path in table_paths:
         try:
             source_name = Path(str(path).replace("\\", "/")).name
             catalog_path = BASE_DIR / "business_table_catalog" / source_name
-            if catalog_path.suffix != ".txt" or not catalog_path.is_file():
+            if catalog_path.suffix == ".txt" and catalog_path.is_file():
+                with catalog_path.open("r", encoding="utf-8") as file:
+                    content = file.read()
+                    retrived_table_information.append(content)
                 continue
-            with catalog_path.open("r", encoding="utf-8") as file:
-                content = file.read()
+            content = str(getattr(doc, "page_content", "") or "").strip()
+            if content:
                 retrived_table_information.append(content)
         except Exception as e:
             print(f"Error reading file {path}: {str(e)}")
