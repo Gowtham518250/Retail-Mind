@@ -236,7 +236,15 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
 
     # Normalize catalog example placeholders to the single authenticated
     # parameter supported by this endpoint.
-    sql = re.sub(r":shop_id\\b", ":user_id", sql, flags=re.IGNORECASE)
+    sql = re.sub(r":shop_id\b", ":user_id", sql, flags=re.IGNORECASE)
+    # The endpoint binds only :user_id. Convert the catalog's example
+    # :business_date placeholder to a SQL date expression as well.
+    sql = re.sub(
+        r":business_date\b",
+        "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date",
+        sql,
+        flags=re.IGNORECASE,
+    )
 
     print("Generated SQL:")
     print(sql)
