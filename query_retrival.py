@@ -28,6 +28,11 @@ from tokenizers import Tokenizer
 MODEL_REPO = "Xenova/all-MiniLM-L6-v2"
 MODEL_CACHE = Path("/tmp/.cache/huggingface")
 MODEL_CACHE.mkdir(parents=True, exist_ok=True)
+# Render may provide HF_HOME/HF_XET_CACHE pointing to the non-writable /app path.
+# Override them before huggingface_hub initializes its cache/Xet paths.
+os.environ["HF_HOME"] = str(MODEL_CACHE)
+os.environ["HF_XET_CACHE"] = str(MODEL_CACHE / "xet")
+os.environ["HF_HUB_CACHE"] = str(MODEL_CACHE / "hub")
 
 TOKENIZER_PATH = hf_hub_download(
     repo_id=MODEL_REPO,
