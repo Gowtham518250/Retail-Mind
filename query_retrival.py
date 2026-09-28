@@ -2,8 +2,6 @@ import re
 import os
 from pathlib import Path
 
-import os
-
 from fastapi import Form, HTTPException, Depends, APIRouter
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
@@ -22,17 +20,20 @@ BASE_DIR = Path(__file__).resolve().parent
 # but runs inference with ONNX Runtime instead of PyTorch.
 import numpy as np
 import onnxruntime as ort
+
+# Configure Hugging Face before importing huggingface_hub so Render never
+# falls back to the non-writable /app cache, including Xet.
+MODEL_CACHE = Path("/tmp/.cache/huggingface")
+MODEL_CACHE.mkdir(parents=True, exist_ok=True)
+os.environ["HF_HOME"] = str(MODEL_CACHE)
+os.environ["HF_XET_CACHE"] = str(MODEL_CACHE / "xet")
+os.environ["HF_HUB_CACHE"] = str(MODEL_CACHE / "hub")
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+
 from huggingface_hub import hf_hub_download
 from tokenizers import Tokenizer
 
 MODEL_REPO = "Xenova/all-MiniLM-L6-v2"
-MODEL_CACHE = Path("/tmp/.cache/huggingface")
-MODEL_CACHE.mkdir(parents=True, exist_ok=True)
-# Render may provide HF_HOME/HF_XET_CACHE pointing to the non-writable /app path.
-# Override them before huggingface_hub initializes its cache/Xet paths.
-os.environ["HF_HOME"] = str(MODEL_CACHE)
-os.environ["HF_XET_CACHE"] = str(MODEL_CACHE / "xet")
-os.environ["HF_HUB_CACHE"] = str(MODEL_CACHE / "hub")
 
 TOKENIZER_PATH = hf_hub_download(
     repo_id=MODEL_REPO,
@@ -91,9 +92,18 @@ class MiniLMONNXEmbeddings(Embeddings):
         return [self._embed(text) for text in texts]
 
 embeddings = MiniLMONNXEmbeddings()
-faiss_index = Path(os.getenv("FAISS_INDEX_PATH", BASE_DIR / "faiss_index"))
-if not faiss_index.is_absolute():
-    faiss_index = BASE_DIR / faiss_index
+configured_faiss = Path(os.getenv("FAISS_INDEX_PATH", ""))
+faiss_index = configured_faiss if configured_faiss.is_absolute() else (
+    BASE_DIR / configured_faiss if str(configured_faiss) else BASE_DIR / "faiss_index"
+)
+# Ignore stale Render paths such as /app/faiss_index when the build produced
+# the index inside the deployed repository.
+if not (faiss_index / "index.faiss").is_file() or not (faiss_index / "index.pkl").is_file():
+    faiss_index = BASE_DIR / "faiss_index"
+if not (faiss_index / "index.faiss").is_file() or not (faiss_index / "index.pkl").is_file():
+    raise RuntimeError(
+        f"FAISS index files are missing. Expected {faiss_index / 'index.faiss'} and {faiss_index / 'index.pkl'}."
+    )
 vectorstore = FAISS.load_local(
     str(faiss_index),
     embeddings,
