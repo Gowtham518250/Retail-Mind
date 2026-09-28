@@ -204,9 +204,8 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
         messages=[{"role": "user", "content": formatted_prompt}],
         temperature=0.1,
-        max_completion_tokens=2048,
+        max_tokens=2048,
         top_p=0.9,
-        reasoning_effort="default",
         stream=True,
         stop=None,
     )
