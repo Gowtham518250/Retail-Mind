@@ -3,6 +3,7 @@ services:
     name: retail-mind-api
     env: python
     buildCommand: "pip install -r requirements.txt"
+    # Start the API directly; migrations are intentionally not part of the web startup path.
     startCommand: "python production_boot.py"
     envVars:
       - key: PYTHON_VERSION
