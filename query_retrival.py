@@ -102,7 +102,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     print("🔥 ENDPOINT CALLED")
     print("QUERY:", query)
 
-    answer = vectorstore.similarity_search(query, k=3)
+    answer = vectorstore.similarity_search(query, k=6)
 
     print("Relevant database information:")
     for doc in answer:
@@ -146,22 +146,20 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
 
     - Carefully understand the user's question.
     - Examine all retrieved table information.
-    - Select the table that is most relevant to the user's question.
-    - Use ONLY tables and columns that appear in the retrieved table information.
-    - Follow the QUERY GUIDANCE provided in the retrieved table information.
-    - Do NOT invent table names.
-    - Do NOT invent column names.
-    - Do NOT invent relationships.
-    - Do NOT assume a column exists just because it would normally exist in a database.
-    - Prefer the source table specified by the QUERY GUIDANCE.
+    - Use ONLY tables, columns, and relationships explicitly present in the retrieved catalog.
+    - Treat QUERY GUIDANCE as authoritative business semantics.
     - Generate PostgreSQL-compatible SQL.
-    - Generate a single-table, read-only SELECT query only.
-    - Always filter rows with `user_id = :user_id`. Do not use a literal user ID.
-    - Do not use JOINs, subqueries, OR, or UNION.
-    - Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or CREATE.
-    - For date-related questions such as "today", follow the table's documented business-date guidance.
-    - If the question requires information from multiple related tables and the relationships are explicitly provided, you may use a JOIN.
-    - If the retrieved information is insufficient to answer the question, state that the schema information is insufficient instead of inventing information.
+    - JOINs are allowed only when the retrieved catalog explicitly documents the relationship.
+    - For tables with user_id, scope using user_id = :user_id.
+    - For tables with shop_id, follow the documented shop_profiles relationship and scope the owning shop to :user_id.
+    - Never invent a relationship or literal user/shop ID.
+    - Do not assume a column exists just because it would normally exist in a database.
+    - Use the documented date column and business-date/timezone guidance for today/week/month questions.
+    - Distinguish COUNT(rows), SUM(quantity), revenue, billed value, cash received, and stock exactly as documented.
+    - Generate exactly one read-only SELECT query.
+    - Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, REVOKE, COPY, or multiple statements.
+    - The query must contain the authenticated parameter :user_id somewhere in its scope logic.
+    - If the catalog is insufficient, do not invent a schema or relationship.
 
     Retrieved complete table information:
 
@@ -190,9 +188,9 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     completion = client.chat.completions.create(
         model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
         messages=[{"role": "user", "content": formatted_prompt}],
-        temperature=0.6,
+        temperature=0.1,
         max_completion_tokens=2048,
-        top_p=0.95,
+        top_p=0.9,
         reasoning_effort="default",
         stream=True,
         stop=None,
@@ -215,12 +213,13 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     if (
         not re.match(r"^SELECT\b", sql, re.IGNORECASE)
         or ";" in sql
-        or re.search(r"\b(JOIN|UNION|OR|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|WITH)\b", sql, re.IGNORECASE)
-        or not re.search(r"\buser_id\s*=\s*:user_id\b", sql, re.IGNORECASE)
+        or re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\b", sql, re.IGNORECASE)
+        or re.search(r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export)\s*\(", sql, re.IGNORECASE)
+        or not re.search(r":user_id\b", sql, re.IGNORECASE)
     ):
         raise HTTPException(
             status_code=400,
-            detail="Generated SQL must be a single read-only SELECT scoped by user_id = :user_id.",
+            detail="Generated SQL must be a single read-only SELECT scoped with the authenticated :user_id parameter.",
         )
 
     try:
