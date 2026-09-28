@@ -166,7 +166,8 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     - Generate PostgreSQL-compatible SQL.
     - JOINs are allowed only when the retrieved catalog explicitly documents the relationship.
     - For tables with user_id, scope using user_id = :user_id.
-    - For tables with shop_id, follow the documented shop_profiles relationship and scope the owning shop to :user_id.
+    - For the sales table, shopkeeper_id is the authenticated shop owner scope, so use shopkeeper_id = :user_id.
+    - The catalog may contain example placeholders such as :shop_id or :business_date. Ignore those example parameter names: the only runtime parameter available is :user_id. For business-date filters, use the documented date column and a SQL date expression directly.
     - Never invent a relationship or literal user/shop ID.
     - Do not assume a column exists just because it would normally exist in a database.
     - Use the documented date column and business-date/timezone guidance for today/week/month questions.
@@ -200,22 +201,30 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             retrieved_table_information=retrived_table_information_str,
             question=query
         )
-    completion = client.chat.completions.create(
-        model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
-        messages=[{"role": "user", "content": formatted_prompt}],
-        temperature=0.1,
-        max_tokens=2048,
-        top_p=0.9,
-        stream=True,
-        stop=None,
-    )
+    try:
+        completion = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
+            messages=[{"role": "user", "content": formatted_prompt}],
+            temperature=0.1,
+            max_tokens=2048,
+            top_p=0.9,
+            stream=True,
+            stop=None,
+        )
 
-    generated_parts = []
-    for chunk in completion:
-        delta = getattr(chunk.choices[0], "delta", None)
-        content = getattr(delta, "content", None) or ""
-        if content:
-            generated_parts.append(content)
+        generated_parts = []
+        for chunk in completion:
+            if not getattr(chunk, "choices", None):
+                continue
+            delta = getattr(chunk.choices[0], "delta", None)
+            content = getattr(delta, "content", None) or ""
+            if content:
+                generated_parts.append(content)
+    except Exception as exc:
+        print("Groq completion failed:")
+        print(f"Exception type: {type(exc).__name__}")
+        print(f"Exception: {exc}")
+        raise HTTPException(status_code=502, detail="The SQL generation service is temporarily unavailable.") from exc
 
     generated_text = "".join(generated_parts).strip()
     sql_match = re.search(r"\bSQL\s*:\s*(.+)", generated_text, re.IGNORECASE | re.DOTALL)
@@ -224,6 +233,14 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
 
     sql = sql_match.group(1).strip().strip("`").strip()
     sql = re.sub(r";\s*$", "", sql)
+
+    # Normalize catalog example placeholders to the single authenticated
+    # parameter supported by this endpoint.
+    sql = re.sub(r":shop_id\\b", ":user_id", sql, flags=re.IGNORECASE)
+
+    print("Generated SQL:")
+    print(sql)
+
     if (
         not re.match(r"^SELECT\b", sql, re.IGNORECASE)
         or ";" in sql
@@ -231,6 +248,8 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         or re.search(r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export)\s*\(", sql, re.IGNORECASE)
         or not re.search(r":user_id\b", sql, re.IGNORECASE)
     ):
+        print("SQL validation failed for generated SQL:")
+        print(sql)
         raise HTTPException(
             status_code=400,
             detail="Generated SQL must be a single read-only SELECT scoped with the authenticated :user_id parameter.",
@@ -240,6 +259,11 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         rows = db.execute(text(sql), {"user_id": user_id}).mappings().all()
     except Exception as exc:
         db.rollback()
+        print("SQL execution failed:")
+        print(f"Exception type: {type(exc).__name__}")
+        print(f"Exception: {exc}")
+        print("SQL:")
+        print(sql)
         raise HTTPException(status_code=400, detail="The generated SQL could not be executed.") from exc
 
     return {"query": query, "sql": sql, "results": jsonable_encoder([dict(row) for row in rows])}
