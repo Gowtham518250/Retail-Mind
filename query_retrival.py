@@ -159,12 +159,21 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             table_paths.append(source_path)
 
         if catalog_key and catalog_key not in processed_tables:
-            content = full_table_catalog.get(catalog_key)
-            if content:
+            catalog_entry = full_table_catalog.get(catalog_key)
+            # Support both catalog formats so an already-deployed JSON file
+            # with {"source": ..., "content": ...} keeps working.
+            if isinstance(catalog_entry, dict):
+                content = catalog_entry.get("content", "")
+                catalog_source = catalog_entry.get("source", source_path)
+            else:
+                content = catalog_entry or ""
+                catalog_source = source_path
+
+            if isinstance(content, str) and content.strip():
                 retrived_table_information.append(content)
                 retrieved_table_records.append({
                     "table": catalog_key,
-                    "source": source_path,
+                    "source": catalog_source,
                     "content": content,
                     "retrieval": "full_table_catalog",
                 })
