@@ -16,11 +16,20 @@ from db import get_db
 from security import get_current_user as check_current_user
 
 BASE_DIR = Path(__file__).resolve().parent
-HF_HOME = Path(os.getenv("HF_HOME", BASE_DIR / ".cache" / "huggingface"))
-if not HF_HOME.is_absolute():
-    HF_HOME = BASE_DIR / HF_HOME
-os.environ["HF_HOME"] = str(HF_HOME)
+
+# Render's source directory is not writable. Use /tmp for Hugging Face caches
+# in Render, and ignore any stale HF_HOME value such as /app/.cache.
+IS_RENDER = Path("/opt/render/project/src").exists()
+if IS_RENDER:
+    HF_HOME = Path("/tmp/.cache/huggingface")
+else:
+    HF_HOME = Path(os.getenv("HF_HOME", BASE_DIR / ".cache" / "huggingface"))
+    if not HF_HOME.is_absolute():
+        HF_HOME = BASE_DIR / HF_HOME
+
 HF_HOME.mkdir(parents=True, exist_ok=True)
+os.environ["HF_HOME"] = str(HF_HOME)
+os.environ["XDG_CACHE_HOME"] = str(HF_HOME.parent)
 
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 faiss_index = Path(os.getenv("FAISS_INDEX_PATH", BASE_DIR / "faiss_index"))
