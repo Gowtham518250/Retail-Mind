@@ -1,0 +1,26 @@
+TABLE: loyalty_tiers
+
+
+PURPOSE: Shop-specific loyalty level definitions and their point/discount thresholds.
+
+COLUMNS:
+- id (integer, primary key): Tier ID.
+- user_id (integer, required): Shop/owner scope; restrict queries to the authenticated shop.
+- tier_name (string, required): Tier label, e.g. Bronze, Silver, Gold.
+- tier_level (integer, required): Ordered tier level.
+- min_points (integer, default 0): Minimum points needed for the tier.
+- discount_percentage (float, default 0): Discount percentage for the tier.
+
+RELATIONSHIPS:
+- customer_loyalty.current_tier_id -> loyalty_tiers.id.
+
+QUERY GUIDANCE:
+- Use this table to explain tier rules and discount thresholds, not customer transaction totals.
+- Compare points against min_points only according to the application's tier-upgrade logic.
+
+RETRIEVAL TERMS: loyalty tier, tier level, bronze, silver, gold, points threshold, reward discount, loyalty program.
+
+EXAMPLE QUESTIONS:
+- What are the loyalty tiers and their discounts?
+- How many points are needed for Gold tier?
+- What discount does each tier receive?

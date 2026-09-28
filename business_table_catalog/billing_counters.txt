@@ -1,0 +1,28 @@
+TABLE: billing_counters
+
+
+PURPOSE: Counter/staff configuration used to associate billing activity with an active counter.
+
+RELATIONSHIPS:
+- user_id scopes the counter to a shop account; it references user_details.id.
+- sales_by_counter.counter_id can reference billing_counters.id.
+
+COLUMNS:
+- id (integer, primary key): Counter configuration ID.
+- user_id (integer, required): Shop/owner scope.
+- staff_name (string, required): Staff label assigned to the counter.
+- counter_number (integer, required): Counter number.
+- billing_pin (string, required): Hashed PIN credential.
+- is_active (boolean, default true): Whether the counter is active.
+
+Security guidance:
+- Never embed, retrieve, or disclose billing_pin, even though the value is hashed.
+- Use only staff_name, counter_number, and is_active for authorized operational summaries.
+- Sales amounts and dates belong in sales_by_counter, not this configuration table.
+
+RETRIEVAL TERMS: billing counter, counter number, active counter, staff counter assignment, cashier station.
+
+EXAMPLE QUESTIONS:
+- Which billing counters are active?
+- Which staff member is assigned to a counter?
+- How many counters are configured?

@@ -1,0 +1,42 @@
+TABLE: customers
+
+
+PURPOSE: Customer records used for customer counts, customer lookup, location-based summaries, credit terms, and invoice relationships. This is business customer data, not user-account/authentication data.
+
+COLUMNS:
+- id (integer, primary key): Unique customer ID.
+- user_id (integer, required, indexed): Shop/owner scope. Restrict customer queries to the authenticated shop; do not join to user account details for ordinary business questions.
+- customer_name (string, required): Customer name.
+- email (string, nullable): Customer email address.
+- phone (string, required, indexed): Customer phone number.
+- whatsapp_number (string, nullable): WhatsApp contact number.
+- address (text, nullable): Street/postal address.
+- city (string, nullable): City.
+- state (string, nullable): State.
+- postal_code (string, nullable): Postal/ZIP code.
+- credit_limit (numeric 10,2, default 0): Maximum allowed credit.
+- payment_terms (string, nullable): Terms such as Net 30 or COD.
+- contact_preference (enum, default EMAIL): EMAIL, WHATSAPP, CALL, or SMS.
+- is_active (boolean, default true): False indicates an archived customer.
+- created_at (datetime): Record creation timestamp.
+- updated_at (datetime): Last update timestamp.
+
+RELATIONSHIPS:
+- customers.id -> invoices.customer_id (one customer may have many invoices).
+- To calculate customer purchase totals, join invoices on customer_id and aggregate invoice totals; do not assume a sales.customer_id exists.
+
+QUERY GUIDANCE:
+- Customer count: COUNT(*) over customers, normally WHERE is_active = true and user_id = :shop_id.
+- Customer purchase history/spend: join invoices by customer_id and aggregate invoice data, applying the shop scope.
+- "Top customers" is ambiguous: clarify or infer by invoice revenue (SUM(invoices.total_amount)) versus invoice count; exclude cancelled invoices when appropriate.
+- Filter location questions using city, state, and postal_code.
+
+Privacy and access note: The catalog describes customer contact columns but contains no customer records. Only retrieve email, phone, WhatsApp number, or full address when the user's request and access allow it; avoid returning these fields in aggregate answers.
+
+RETRIEVAL TERMS: customer, buyer, client, top customer, customer count, customer spend, city, state, address, credit limit, payment terms, contact preference.
+
+EXAMPLE QUESTIONS:
+- How many active customers do I have?
+- Who are my top customers by invoice value this month?
+- How much does a specific customer owe?
+- How many customers are in a particular city?

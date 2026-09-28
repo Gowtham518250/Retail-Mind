@@ -27,6 +27,10 @@ frontend-web/out/
 .env.local
 .env.production
 
+# Runtime model cache and uploaded document indexes
+.cache/
+RAG_Document_Store/
+
 # IDE
 .vscode/
 .idea/

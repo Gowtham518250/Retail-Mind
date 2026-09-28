@@ -1,0 +1,35 @@
+TABLE: shop_settings
+
+
+PURPOSE: Per-shop operating hours, timezone, tax configuration, payment acceptance, and operational feature preferences.
+
+RELATIONSHIPS:
+- shop_settings.shop_id -> shop_profiles.id (one settings row per shop profile).
+
+COLUMNS:
+- id (integer, primary key); shop_id (integer, required, unique): Profile reference, shop_profiles.id.
+- For each weekday monday through sunday: {day}_open (string HH:MM), {day}_close (string HH:MM), {day}_closed (boolean). Defaults are generally 09:00-21:00; Sunday closed by default.
+- timezone (string, default Asia/Kolkata): Shop timezone for interpreting business dates/times.
+- tax_type (string, default GST): GST, VAT, or FLAT_RATE label.
+- igst_percentage, sgst_percentage, utgst_percentage, flat_tax_percentage (floats): Configured tax rates.
+- accept_cash, accept_card, accept_upi, accept_bank_transfer, accept_cheque, accept_wallet (booleans): Accepted payment options.
+- card_payment_gateway (string, nullable): Payment gateway label.
+- upi_merchant_id (string, nullable): Sensitive merchant identifier; do not reveal in normal answers.
+- currency_code (string, default INR); language (string, default en); theme_mode and receipt_format (strings): Display/receipt preferences.
+- low_stock_alert_threshold (integer, default 10): Configured low-stock alert setting.
+- send_email_on_sale, send_sms_on_sale, send_notification_on_order (booleans): Notification preferences.
+- enable_inventory_tracking, enable_customer_loyalty, enable_batch_tracking, enable_multi_branch (booleans): Feature toggles.
+- created_at, updated_at (datetimes): Setting timestamps.
+
+QUERY GUIDANCE:
+- shop_id -> shop_profiles.id; scope settings to the authenticated shop.
+- Use timezone when interpreting "today", opening hours, and date boundaries.
+- Distinguish configuration from actual behavior: enabled payment method/settings do not prove a payment was received.
+- Avoid returning merchant identifiers or other secret configuration values.
+
+RETRIEVAL TERMS: business hours, shop opening time, closed day, timezone, tax rate, GST, accepted payment methods, low stock threshold, loyalty enabled, inventory tracking.
+
+EXAMPLE QUESTIONS:
+- What time does my shop open on Monday?
+- Which payment methods does the shop accept?
+- What is the configured low-stock alert threshold?

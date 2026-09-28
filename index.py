@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from fastapi import HTTPException
 from langchain_core.prompts import PromptTemplate
@@ -14,9 +15,17 @@ import redis
 from dotenv import load_dotenv
 
 load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+hf_home = Path(os.getenv("HF_HOME", BASE_DIR / ".cache" / "huggingface"))
+if not hf_home.is_absolute():
+    hf_home = BASE_DIR / hf_home
+os.environ["HF_HOME"] = str(hf_home)
 splitter_technique=RecursiveCharacterTextSplitter(chunk_size=750,chunk_overlap=110)
 embeddings=None  # Lazy initialization
-dir="RAG_Document_Store"
+document_store = Path(os.getenv("RAG_DOCUMENT_STORE", BASE_DIR / "RAG_Document_Store"))
+if not document_store.is_absolute():
+    document_store = BASE_DIR / document_store
+dir = str(document_store)
 os.makedirs(dir,exist_ok=True)
 
 def get_embeddings():

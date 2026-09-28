@@ -1,0 +1,27 @@
+TABLE: festival_events
+
+
+PURPOSE: Festival calendar and stored prior-year top-product data for seasonal retail planning.
+
+RELATIONSHIPS:
+- No foreign-key relationships are declared for this table in the model.
+
+COLUMNS:
+- id (integer, primary key): Festival event ID.
+- festival_name (string, required): Festival name.
+- festival_date (date, required): Festival date.
+- festival_year (integer, required): Festival year.
+- days_until (integer, nullable): Stored days-until value; may need refresh as time passes.
+- top_products_last_year (text, nullable): JSON text with prior-year product/quantity details.
+
+QUERY GUIDANCE:
+- Use festival_date/festival_year for calendar filters.
+- Treat days_until as potentially stale unless the application recalculates it.
+- Parse top_products_last_year as JSON only when needed and validate its shape.
+
+RETRIEVAL TERMS: festival, holiday, seasonal planning, days until festival, Diwali, Holi, Eid, Pongal, last year's top products.
+
+EXAMPLE QUESTIONS:
+- Which festivals are coming up next?
+- How many days until a festival?
+- Which products sold best around a festival last year?

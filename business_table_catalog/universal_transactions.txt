@@ -1,0 +1,31 @@
+TABLE: universal_transactions
+
+
+PURPOSE: Unified journal for shop money in and out, with a transaction type, category, amount, reference, and timestamp.
+
+RELATIONSHIPS:
+- shop_id scopes the transaction to a shop account; it references user_details.id.
+- reference_id is a generic string and has no declared foreign key.
+
+COLUMNS:
+- id (integer, primary key): Transaction ID.
+- shop_id (integer, required): Shop scope; restrict queries to the authenticated shop.
+- tx_type (enum, required): INCOME or EXPENSE.
+- category (string, nullable): Business category examples include SALE, KHATA_REPAY, EXPENSE, PO_PAYMENT, SALARY.
+- amount (numeric 12,2, required): Transaction amount.
+- reference_id (string, nullable): Related invoice/expense or other business record reference.
+- description (string, nullable): Transaction description.
+- tx_date (datetime): Transaction timestamp.
+
+QUERY GUIDANCE:
+- Filter by shop_id, tx_type, category, and tx_date as needed.
+- Aggregate SUM(amount) by type/category for the values recorded in this journal.
+- Do not assume this table is complete or deduplicated against sales, invoices, expenses, and purchase orders; verify write paths before combining totals across tables.
+- Do not call INCOME "sales revenue" unless category/source confirms it.
+
+RETRIEVAL TERMS: cash flow, money in, money out, income, expense, transaction journal, SALE, KHATA_REPAY, PO_PAYMENT, SALARY, tx date.
+
+EXAMPLE QUESTIONS:
+- What income and expenses were recorded this week?
+- Show transaction totals by category this month.
+- How much was recorded for purchase order payments?

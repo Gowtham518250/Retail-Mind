@@ -1,0 +1,38 @@
+TABLE: online_orders
+
+
+PURPOSE: Customer orders submitted through the online store, including status, order value, item payload, and delivery address.
+
+RELATIONSHIPS:
+- shop_id scopes the order to a shop account; it references user_details.id.
+- customer_id is not declared as a foreign key to customers in the model.
+- items_json stores item references as JSON text; no normalized order-item relationship is declared.
+
+COLUMNS:
+- id (integer, primary key): Online order ID.
+- shop_id (integer, required): Shop/owner reference. Apply authenticated shop scope.
+- customer_id (integer, required): Customer-app customer reference; this is not currently a foreign key to customers.
+- order_status (enum, default PENDING): PENDING, ACCEPTED, DISPATCHED, DELIVERED, REJECTED.
+- total_amount (numeric 10,2, required): Total order value.
+- delivery_address (text, nullable): Delivery address supplied for this order.
+- items_json (text, required): JSON list containing order item data such as product_id, name, qty, and price.
+- created_at (datetime): Order creation timestamp.
+
+Important schema notes:
+- The status column is named order_status, not status.
+- There is no order_number column in this model.
+- customer_id is not declared as a foreign key to the business customers table.
+- Parse items_json as JSON if item-level detail is required; do not assume a normalized order-items table from this model.
+
+QUERY GUIDANCE:
+- Order count by state: COUNT(*) grouped/filtered by order_status.
+- Order value: SUM(total_amount); distinguish order value from recognized payments or sales-table revenue.
+- Date questions use created_at with local business-day/timezone boundaries.
+
+RETRIEVAL TERMS: online order, ecommerce, customer app order, pending, accepted, dispatched, delivered, rejected, delivery address, order value, online sales.
+
+EXAMPLE QUESTIONS:
+- How many online orders are pending?
+- What is the value of online orders created today?
+- List orders that have been dispatched but not delivered.
+- Which products were included in an online order?

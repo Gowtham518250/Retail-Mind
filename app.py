@@ -20,7 +20,6 @@ import os
 import time
 import logging
 from performance_middleware import setup_performance_middleware
-
 # ========================
 # LOGGING SETUP
 # ========================
@@ -102,12 +101,13 @@ from security_hardening import router as security_hardening_router
 from observability_service import router as observability_router
 from operations_routes import router as operations_router
 
+#Query retrival
+from query_retrival import app as query_router
 # DB initialization
 from db import engine, get_db
 from models import Base
 from sqlalchemy.orm import Session
 from models import ShopProfile, Product
-
 # ========================
 # APP CREATION
 # ========================
@@ -364,6 +364,8 @@ api.include_router(security_hardening_router, tags=["Security Hardening"])
 api.include_router(observability_router, tags=["Observability"])
 api.include_router(operations_router, prefix="/api", tags=["Operations"])
 
+#query retrival
+api.include_router(query_router, prefix="/api", tags=["Query Retrieval"])
 # 🚀 PERFORMANCE: Setup performance monitoring middleware
 setup_performance_middleware(api)
 

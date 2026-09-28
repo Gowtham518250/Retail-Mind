@@ -1,0 +1,31 @@
+TABLE: upi_ledger
+
+
+PURPOSE: UPI collection records used for payment collection and reconciliation.
+
+COLUMNS:
+- id (integer, primary key): Ledger record ID.
+- shop_id (integer, nullable): Reference to shop_profiles.id.
+- invoice_id (integer, nullable): Reference to invoices.id.
+- upi_id (string, nullable): Merchant UPI identifier receiving funds; sensitive financial identifier.
+- amount (numeric 10,2, required): UPI transaction amount.
+- upi_reference (string, nullable, unique): UPI transaction reference; sensitive identifier.
+- customer_upi (string, nullable): Payer UPI identifier; personal/financial data.
+- status (enum, default PENDING): PENDING, CONFIRM, FAILED, REFUND.
+- payment_date (datetime): Payment timestamp.
+
+RELATIONSHIPS:
+- shop_id -> shop_profiles.id; shop_profiles.shop_id identifies the owning shop.
+- invoice_id -> invoices.id; use invoice ownership to validate scope when joining.
+
+QUERY GUIDANCE:
+- Sum confirmed amounts only when the business definition requires successful collections; status values are CONFIRM, not a generic PAID label.
+- Use payment_date for date filters.
+- Avoid returning upi_id, customer_upi, or upi_reference in ordinary answers.
+
+RETRIEVAL TERMS: UPI, UPI collection, UPI payment, online collection, UPI reconciliation, payment status, UPI amount.
+
+EXAMPLE QUESTIONS:
+- How much UPI payment was confirmed today?
+- How many UPI transactions failed this week?
+- What UPI collections are linked to a specific invoice?

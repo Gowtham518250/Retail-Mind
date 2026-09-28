@@ -1,0 +1,32 @@
+TABLE: sales_by_counter
+
+
+PURPOSE: Associates invoice sales with a shop counter and staff name for counter-level sales reporting.
+
+RELATIONSHIPS:
+- shop_id -> shop_profiles.id.
+- counter_id -> billing_counters.id.
+- invoice_id -> invoices.id.
+
+COLUMNS:
+- id (integer, primary key): Counter-sale record ID.
+- shop_id (integer, nullable): Reference to shop_profiles.id.
+- counter_id (integer, nullable): Reference to billing_counters.id.
+- invoice_id (integer, nullable): Reference to invoices.id.
+- staff_name (string, nullable): Staff name recorded for the sale.
+- counter_number (integer, nullable): Counter number.
+- sale_date (date, nullable): Sale business date.
+- sale_amount (numeric 10,2, nullable): Amount attributed to this counter sale.
+
+QUERY GUIDANCE:
+- Filter by shop_id and sale_date.
+- Use COUNT(*) for recorded counter-sale rows and SUM(sale_amount) for recorded counter revenue.
+- This table may overlap invoice/sales reporting. Do not add its amounts to invoice or sales totals without verifying whether it duplicates them.
+- Avoid using billing counter credentials; this file describes only the business reporting surface.
+
+RETRIEVAL TERMS: counter sales, sales by staff, counter number, staff sales, sale amount by counter, cashier performance.
+
+EXAMPLE QUESTIONS:
+- Which counter recorded the highest sales today?
+- What were sales by staff member this week?
+- How many invoices were processed at each counter?

@@ -1,0 +1,29 @@
+TABLE: customer_loyalty
+
+
+PURPOSE: Current loyalty-point balances and tier assignment for customers.
+
+COLUMNS:
+- id (integer, primary key): Loyalty account ID.
+- customer_id (integer, required): Reference to customers.id.
+- total_points (integer, default 0): Points accumulated.
+- points_redeemed (integer, default 0): Points redeemed.
+- available_points (integer, default 0): Current redeemable points.
+- current_tier_id (integer, nullable): Reference to loyalty_tiers.id.
+- tier_updated_at (datetime, nullable): Last tier update time.
+- last_tier_bump_notified (boolean, default false): Whether tier-up notification was recorded.
+
+RELATIONSHIPS:
+- customer_id -> customers.id -> customers.user_id for shop isolation.
+- current_tier_id -> loyalty_tiers.id.
+
+QUERY GUIDANCE:
+- Use available_points for the current redeemable balance; do not recalculate it from totals without confirming program rules.
+- Join to customers only as needed. Avoid exposing customer contact fields in aggregate loyalty answers.
+
+RETRIEVAL TERMS: loyalty points, points balance, available points, rewards, customer tier, redeemable points, loyalty account.
+
+EXAMPLE QUESTIONS:
+- How many customers have loyalty points?
+- What is a customer's available points balance?
+- How many customers are in each loyalty tier?

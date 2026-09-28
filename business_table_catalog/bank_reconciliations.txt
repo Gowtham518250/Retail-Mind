@@ -1,0 +1,29 @@
+TABLE: bank_reconciliations
+
+
+PURPOSE: Daily comparison between expected UPI collections and the actual amount deposited in the bank.
+
+RELATIONSHIPS:
+- shop_id scopes the record to a shop account; it references user_details.id.
+
+COLUMNS:
+- id (integer, primary key): Reconciliation ID.
+- shop_id (integer, required): Shop scope; filter by authenticated shop.
+- recon_date (date, required): Reconciliation business date.
+- expected_upi_amount (numeric 12,2, default 0): Expected UPI amount.
+- actual_bank_deposit (numeric 12,2, default 0): Actual deposited amount.
+- status (enum, default PENDING): MATCHED, DISCREPANCY, PENDING.
+- notes (text, nullable): Reconciliation notes; may include sensitive details.
+
+QUERY GUIDANCE:
+- Difference = actual_bank_deposit - expected_upi_amount; label the sign clearly.
+- Filter by recon_date and shop_id.
+- Count or group by status to identify pending/discrepant reconciliations.
+- Do not infer transaction-level details; this is a daily summary table.
+
+RETRIEVAL TERMS: bank reconciliation, bank deposit, expected UPI, actual deposit, mismatch, discrepancy, matched, reconciliation date.
+
+EXAMPLE QUESTIONS:
+- Which bank reconciliations have discrepancies?
+- What was the expected and actual UPI deposit yesterday?
+- How many daily reconciliations are still pending?

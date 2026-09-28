@@ -1,0 +1,31 @@
+TABLE: deliveries
+
+
+PURPOSE: Home delivery jobs linked to a shop, customer, and invoice.
+
+COLUMNS:
+- id (integer, primary key): Delivery ID.
+- shop_id (integer, nullable): Reference to shop_profiles.id.
+- customer_id (integer, nullable): Reference to customers.id.
+- invoice_id (integer, nullable): Reference to invoices.id.
+- delivery_address (text, required): Destination address; sensitive personal data.
+- delivery_date (date, nullable): Scheduled delivery date.
+- delivery_time (string, nullable): Scheduled time in HH:MM format.
+- assigned_to (string, nullable): Delivery staff name.
+- special_instructions (text, nullable): Customer/delivery instructions; may be sensitive.
+
+RELATIONSHIPS:
+- customer_id -> customers.id; invoice_id -> invoices.id; shop_id -> shop_profiles.id.
+- This table has no status column. Use delivery_tracking for delivery status.
+
+QUERY GUIDANCE:
+- Use delivery_date for scheduled-delivery questions.
+- Restrict by shop and do not expose address or instructions unless needed and authorized.
+- Join delivery_tracking for the latest status; this table alone cannot answer pending/delivered status.
+
+RETRIEVAL TERMS: home delivery, delivery schedule, delivery date, assigned delivery, delivery address, delivery invoice, delivery customer.
+
+EXAMPLE QUESTIONS:
+- How many deliveries are scheduled today?
+- Which invoices have a delivery scheduled this week?
+- Who is assigned to a delivery?

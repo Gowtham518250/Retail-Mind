@@ -1,0 +1,32 @@
+TABLE: customer_credit_scores
+
+
+PURPOSE: Customer credit-risk indicators and suggested limits used for credit decisions.
+
+COLUMNS:
+- id (integer, primary key): Score record ID.
+- customer_id (integer, required): Reference to customers.id.
+- credit_score (integer, default 50): Score on a 0-100 scale.
+- score_badge (enum, default REGULAR): CAUTION, REGULAR, TRUSTED.
+- suggested_credit_limit (numeric 10,2, default 0): Suggested limit.
+- total_purchases (integer, default 0): Purchase count/measure recorded by the scoring service; verify its meaning before treating as currency.
+- on_time_payments (integer, default 0): Recorded on-time payment factor.
+- late_payments (integer, default 0): Recorded late-payment factor.
+- days_since_last_purchase (integer, default 999): Recency factor.
+- avg_days_to_pay (float, default 0): Average payment-delay factor.
+- last_calculated (datetime, nullable): Last scoring calculation time.
+
+RELATIONSHIPS:
+- customer_id -> customers.id -> customers.user_id for shop scope.
+
+QUERY GUIDANCE:
+- Present these as application-generated indicators, not as a guarantee of repayment or formal credit advice.
+- Do not infer metric units beyond the model/service definition.
+- Avoid exposing customer contact details in score summaries.
+
+RETRIEVAL TERMS: customer credit score, credit risk, trusted customer, caution badge, suggested credit limit, late payments, payment history.
+
+EXAMPLE QUESTIONS:
+- How many customers are marked TRUSTED?
+- Which customers have a low credit score?
+- What suggested credit limits were calculated recently?

@@ -1,0 +1,26 @@
+TABLE: delivery_tracking
+
+
+PURPOSE: Timestamped delivery status updates and optional staff notes/location for a delivery.
+
+COLUMNS:
+- id (integer, primary key): Tracking event ID.
+- delivery_id (integer, required): Parent deliveries.id; deleting parent cascades.
+- status (enum, required): PENDING, OUT, DELIVERED, FAILED, RETURNED.
+- status_timestamp (datetime): Time of status update.
+- staff_name (string, nullable): Staff name recorded for the update.
+- notes (text, nullable): Status notes; may contain personal details.
+- location_lat (float, nullable): Latitude recorded for update.
+- location_lng (float, nullable): Longitude recorded for update.
+
+RELATIONSHIPS:
+- delivery_id -> deliveries.id; apply the delivery's shop scope for tenant isolation.
+- A delivery may have multiple status events. For current status, select the latest event by status_timestamp, not any matching historical status.
+- Location coordinates and notes are sensitive; do not include in general summaries.
+
+RETRIEVAL TERMS: delivery status, tracking, dispatched, out for delivery, delivered, failed delivery, returned, latest status update.
+
+EXAMPLE QUESTIONS:
+- Which deliveries are currently out for delivery?
+- How many deliveries were completed today?
+- What is the latest status of a delivery?

@@ -1,0 +1,35 @@
+TABLE: gift_cards
+
+
+PURPOSE: Digital gift cards issued by a shop, including original/current balances, expiry, and active status.
+
+RELATIONSHIPS:
+- shop_id scopes the gift card to a shop account; it references user_details.id.
+- No customer foreign key is declared for issued_to.
+
+COLUMNS:
+- id (integer, primary key): Gift card record ID.
+- shop_id (integer, required): Shop/owner reference; apply authenticated shop scope.
+- card_code (string, required, unique): Gift card code. Treat as sensitive; do not reveal unless explicitly authorized and necessary.
+- initial_balance (numeric 10,2, required): Value when issued.
+- current_balance (numeric 10,2, required): Remaining balance.
+- issued_to (string, nullable): Recipient name.
+- issued_date (datetime): Issuance timestamp.
+- expiry_date (date, nullable): Expiration date; null means no expiry date is recorded.
+- is_active (boolean, default true): Active/inactive flag.
+- status (enum, default ACTIVE): ACTIVE, REDEEMED, EXPIRED.
+
+QUERY GUIDANCE:
+- Remaining gift-card liability/balance: SUM(current_balance) across the requested active/status scope; clarify whether zero balances are included.
+- Issued value: SUM(initial_balance), not current_balance.
+- Gift-card count: COUNT(*) filtered by shop_id, status, and/or is_active.
+- Expiring cards: filter expiry_date within a date range; exclude null expiry_date.
+- Do not expose card_code in ordinary summary answers.
+
+RETRIEVAL TERMS: gift card, voucher, gift certificate, card balance, remaining balance, issued value, expiry, expiring, active card, redeemed, expired.
+
+EXAMPLE QUESTIONS:
+- How many active gift cards are there?
+- What is the total remaining balance on active gift cards?
+- How much gift-card value was issued this month?
+- Which gift cards expire this month?

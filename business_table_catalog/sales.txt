@@ -1,0 +1,40 @@
+TABLE: sales
+
+
+PURPOSE: Records product sale lines for shop sales reporting, units sold, and revenue.
+
+COLUMNS:
+- id (integer, primary key): Unique sale-row ID.
+- shopkeeper_id (integer, required, indexed): Shop/owner scope for the sale. Use it to restrict a query to the authenticated shop; do not expose owner account data.
+- product_name (string, required): Name of the sold product as recorded on the sale.
+- price (numeric 10,2, required): Per-unit sale price.
+- quantity (integer, required): Units sold on this sale row.
+- total (numeric 10,2, required): Total value of this sale row.
+- sale_date (date, indexed): Business date of the sale.
+
+QUERY GUIDANCE:
+- "How many sales?" means COUNT(*) sale rows unless the user explicitly asks for items/units.
+- "How many items/units sold?" means SUM(quantity).
+- "Revenue / sales amount" means SUM(total), not COUNT(*) and not SUM(price).
+- "Average sale value" means AVG(total) over sale rows.
+- "Sales today" filters sale_date to the shop's current local business date.
+- "Best-selling product" groups sale rows by product_name and sums quantity; for highest revenue, sum total instead.
+
+Useful query concepts (parameterize values and enforce shop scope):
+- Today's row count: COUNT(*) WHERE sale_date = :business_date AND shopkeeper_id = :shop_id.
+- Today's revenue: SUM(total) with the same filters.
+- Today's units: SUM(quantity) with the same filters.
+- Product ranking: GROUP BY product_name, ORDER BY SUM(quantity) DESC.
+
+RELATIONSHIPS:
+- This table does not have a product_id or invoice_id. Product matching is by product_name only.
+- shopkeeper_id is a tenant-scope reference, not a request to retrieve user profile/authentication data.
+
+RETRIEVAL TERMS: sale, sales, sold, transaction, revenue, turnover, amount, quantity, units, daily sales, today, sale date, best seller, top product.
+
+EXAMPLE QUESTIONS:
+- How many sales did my shop make today?
+- What was today's sales revenue?
+- How many units were sold this week?
+- Which product sold the most by quantity this month?
+- Which product generated the most sales value?

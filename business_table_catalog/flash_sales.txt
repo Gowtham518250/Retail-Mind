@@ -1,0 +1,30 @@
+TABLE: flash_sales
+
+
+PURPOSE: Time-limited category discounts and their active schedule.
+
+RELATIONSHIPS:
+- user_id scopes the promotion to a shop account; it references user_details.id.
+- No product or category foreign key is declared; category is stored as text.
+
+COLUMNS:
+- id (integer, primary key): Flash sale ID.
+- user_id (integer, required, indexed): Shop/owner scope; apply authenticated shop filter.
+- category (string, required): Product category targeted by the promotion.
+- discount_pct (float, required): Discount percentage.
+- hours_duration (integer, required): Configured duration in hours.
+- start_time (datetime, default current time): Promotion start.
+- end_time (datetime, required): Promotion end.
+- is_active (boolean, default true): Active flag.
+
+QUERY GUIDANCE:
+- A promotion is currently in its scheduled window only when start_time <= now < end_time; also consider is_active.
+- This table describes promotion configuration, not proof that an order received the discount.
+- Filter by user_id and use the shop timezone for user-facing time descriptions.
+
+RETRIEVAL TERMS: flash sale, promotion, discount, category sale, discount percentage, active offer, start time, end time.
+
+EXAMPLE QUESTIONS:
+- Which flash sales are active now?
+- What discount is configured for a product category?
+- Which promotions end today?

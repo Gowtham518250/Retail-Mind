@@ -1,0 +1,26 @@
+TABLE: khata_history
+
+
+PURPOSE: Individual credit-ledger events for khata balances, including invoice/credit and payment transaction types.
+
+COLUMNS:
+- id (integer, primary key): History record ID.
+- khata_id (integer, required): Parent khata_balances.id; deleting the parent cascades to history.
+- transaction_type (enum, required): INVOICE, PAYMENT, ADJUSTMENT.
+- amount (numeric 12,2, required): Transaction amount.
+
+RELATIONSHIPS:
+- khata_id -> khata_balances.id -> khata_balances.shop_id for shop scope.
+- This model has no transaction timestamp, reference ID, or notes column; do not promise chronological history or invoice-level linkage from this table alone.
+
+QUERY GUIDANCE:
+- Group amount by transaction_type after applying shop scope through khata_balances.
+- Do not assume whether PAYMENT amounts are stored as positive or negative; inspect the ledger service before calculating net balance from history.
+- For the current balance, use khata_balances.khata_balance unless the application explicitly defines history as the source of truth.
+
+RETRIEVAL TERMS: khata history, credit transaction, ledger entry, invoice on credit, khata payment, balance adjustment.
+
+EXAMPLE QUESTIONS:
+- How much was recorded as khata payments?
+- Break down khata transactions by type.
+- Show the ledger entries associated with a customer's khata balance.
