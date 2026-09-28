@@ -95,6 +95,7 @@ from gst_and_giftcards import router as gst_and_giftcards_router
 # Legacy extended features (non-chatbot)
 from new_feature_routers import router as new_features_router
 from debug_routes import router as debug_router
+from query_retrival import app as query_router
 
 # Advanced system features
 from caching_system import router as caching_router
@@ -358,6 +359,7 @@ api.include_router(new_features_router, tags=["Legacy Features"])
 
 # Debug routes (diagnostic helpers)
 api.include_router(debug_router)
+api.include_router(query_router, tags=["Query Retrieval"])
 
 # Advanced System Features
 api.include_router(caching_router,tags=["Caching System"])
