@@ -26,6 +26,29 @@ if database_url:
     config.set_main_option("sqlalchemy.url", normalize_database_url(database_url))
 
 
+def _ensure_alembic_version_column_length(connection) -> None:
+    """Alembic revision IDs can exceed the default 32-char column length.
+
+    Existing production databases can still carry a legacy
+    version_num VARCHAR(32). Widen it before proceeding with migration updates
+    so newer revision names (for example, 008_add_invoice_line_discount_amount)
+    can be stored successfully.
+    """
+    inspector = inspect(connection)
+    tables = set(inspector.get_table_names())
+    if 'alembic_version' not in tables:
+        return
+
+    column = next((col for col in inspector.get_columns('alembic_version') if col['name'] == 'version_num'), None)
+    if column is None:
+        return
+
+    column_length = getattr(column['type'], 'length', None)
+    if column_length is None or column_length < 128:
+        connection.execute(text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"))
+        connection.commit()
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
@@ -55,20 +78,17 @@ def run_migrations_online() -> None:
             tables = set(inspector.get_table_names())
 
             if 'alembic_version' in tables:
+                _ensure_alembic_version_column_length(connection)
                 columns = [col['name'] for col in inspector.get_columns('alembic_version')]
                 if 'version_num' in columns:
-                    connection.execute(text(
-                        "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"
-                    ))
-
-                current_version = connection.execute(
-                    text("SELECT version_num FROM alembic_version LIMIT 1")
-                ).scalar()
-                if current_version is None and 'user_details' in tables:
-                    connection.execute(text(
-                        "INSERT INTO alembic_version (version_num) VALUES ('001_initial_schema')"
-                    ))
-                    connection.commit()
+                    current_version = connection.execute(
+                        text("SELECT version_num FROM alembic_version LIMIT 1")
+                    ).scalar()
+                    if current_version is None and 'user_details' in tables:
+                        connection.execute(text(
+                            "INSERT INTO alembic_version (version_num) VALUES ('001_initial_schema')"
+                        ))
+                        connection.commit()
             elif 'user_details' in tables:
                 connection.execute(text(
                     "CREATE TABLE alembic_version (version_num VARCHAR(128) NOT NULL)"
