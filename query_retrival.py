@@ -26,7 +26,7 @@ from huggingface_hub import hf_hub_download
 from tokenizers import Tokenizer
 
 MODEL_REPO = "Xenova/all-MiniLM-L6-v2"
-MODEL_CACHE = Path(os.getenv("HF_HOME", "/tmp/.cache/huggingface"))
+MODEL_CACHE = Path("/tmp/.cache/huggingface")
 MODEL_CACHE.mkdir(parents=True, exist_ok=True)
 
 TOKENIZER_PATH = hf_hub_download(
