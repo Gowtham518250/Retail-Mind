@@ -274,5 +274,18 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         print(sql)
         raise HTTPException(status_code=400, detail="The generated SQL could not be executed.") from exc
 
-    return {"query": query, "sql": sql, "results": jsonable_encoder([dict(row) for row in rows])}
+    return {
+        "query": query,
+        "generated_sql": sql,
+        "generated_model_response": generated_text,
+        "retrieved_table_information": [
+            {
+                "source": table_paths[index] if index < len(table_paths) else None,
+                "content": content,
+            }
+            for index, content in enumerate(retrived_table_information)
+        ],
+        "sql": sql,
+        "results": jsonable_encoder([dict(row) for row in rows]),
+    }
         
