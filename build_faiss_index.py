@@ -38,10 +38,7 @@ table_catalog = {}
 
 for path in sorted(CATALOG_DIR.glob("*.txt")):
     content = path.read_text(encoding="utf-8").strip()
-    table_catalog[path.stem] = {
-        "source": f"business_table_catalog/{path.name}",
-        "content": content,
-    }
+    table_catalog[path.stem] = content
     start = 0
     while start < len(content):
         end = min(start + 700, len(content))
