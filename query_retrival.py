@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
 from langchain_core.prompts import ChatPromptTemplate
 from groq import Groq
 from db import get_db
@@ -17,25 +17,84 @@ from security import get_current_user as check_current_user
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# Render's source directory is not writable. Use /tmp for Hugging Face caches
-# in Render, and ignore any stale HF_HOME value such as /app/.cache.
-IS_RENDER = Path("/opt/render/project/src").exists()
-if IS_RENDER:
-    HF_HOME = Path("/tmp/.cache/huggingface")
-else:
-    HF_HOME = Path(os.getenv("HF_HOME", BASE_DIR / ".cache" / "huggingface"))
-    if not HF_HOME.is_absolute():
-        HF_HOME = BASE_DIR / HF_HOME
+# CPU-only embedding runtime for small Render instances.
+# Uses the same all-MiniLM-L6-v2 model family as the existing FAISS index,
+# but runs inference with ONNX Runtime instead of PyTorch.
+import numpy as np
+import onnxruntime as ort
+from huggingface_hub import hf_hub_download
+from tokenizers import Tokenizer
 
-HF_HOME.mkdir(parents=True, exist_ok=True)
-os.environ["HF_HOME"] = str(HF_HOME)
-os.environ["XDG_CACHE_HOME"] = str(HF_HOME.parent)
+MODEL_REPO = "Xenova/all-MiniLM-L6-v2"
+MODEL_CACHE = Path(os.getenv("HF_HOME", "/tmp/.cache/huggingface"))
+MODEL_CACHE.mkdir(parents=True, exist_ok=True)
 
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+TOKENIZER_PATH = hf_hub_download(
+    repo_id=MODEL_REPO,
+    filename="tokenizer.json",
+    cache_dir=str(MODEL_CACHE),
+)
+MODEL_PATH = hf_hub_download(
+    repo_id=MODEL_REPO,
+    filename="onnx/model.onnx",
+    cache_dir=str(MODEL_CACHE),
+)
+
+_TOKENIZER = Tokenizer.from_file(TOKENIZER_PATH)
+_TOKENIZER.enable_truncation(max_length=256)
+_SESSION = ort.InferenceSession(
+    MODEL_PATH,
+    providers=["CPUExecutionProvider"],
+)
+
+class MiniLMONNXEmbeddings(Embeddings):
+    """all-MiniLM-L6-v2 embeddings without loading PyTorch."""
+
+    @staticmethod
+    def _embed(text: str) -> list[float]:
+        encoded = _TOKENIZER.encode(text)
+        input_ids = np.asarray([encoded.ids], dtype=np.int64)
+        attention_mask = np.asarray([encoded.attention_mask], dtype=np.int64)
+        token_type_ids = np.asarray([encoded.type_ids], dtype=np.int64)
+
+        inputs = {}
+        input_names = {item.name for item in _SESSION.get_inputs()}
+        if "input_ids" in input_names:
+            inputs["input_ids"] = input_ids
+        if "attention_mask" in input_names:
+            inputs["attention_mask"] = attention_mask
+        if "token_type_ids" in input_names:
+            inputs["token_type_ids"] = token_type_ids
+
+        outputs = _SESSION.run(None, inputs)
+        token_embeddings = outputs[0]
+
+        mask = attention_mask[..., None].astype(np.float32)
+        pooled = (token_embeddings * mask).sum(axis=1) / np.clip(
+            mask.sum(axis=1), 1e-9, None
+        )
+
+        # Match the normalized Sentence-Transformers representation.
+        norm = np.linalg.norm(pooled, axis=1, keepdims=True)
+        pooled = pooled / np.clip(norm, 1e-12, None)
+        return pooled[0].astype(np.float32).tolist()
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed(text)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._embed(text) for text in texts]
+
+embeddings = MiniLMONNXEmbeddings()
 faiss_index = Path(os.getenv("FAISS_INDEX_PATH", BASE_DIR / "faiss_index"))
 if not faiss_index.is_absolute():
     faiss_index = BASE_DIR / faiss_index
-vectorstore = FAISS.load_local(str(faiss_index), embeddings, allow_dangerous_deserialization=True)
+vectorstore = FAISS.load_local(
+    str(faiss_index),
+    embeddings,
+    allow_dangerous_deserialization=True,
+)
+
 app= APIRouter()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 @app.post("/askquery")
