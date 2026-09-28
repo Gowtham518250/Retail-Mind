@@ -149,6 +149,32 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
 
     # FAISS returns chunks, but SQL generation needs complete table context.
     # Expand each selected table using rag_table_catalog.json.
+
+    # In this application, general sales/billing reporting is invoice-based.
+    # Always make the complete invoices catalog available for sales/bill/revenue
+    # questions so the model does not answer from the legacy/raw sales table.
+    sales_intent = re.search(
+        r"\b(sale|sales|bill|bills|revenue|turnover|billed|billing)\b",
+        query,
+        re.IGNORECASE,
+    )
+
+    if sales_intent and "invoices" not in processed_tables:
+        invoice_content = full_table_catalog.get("invoices")
+
+        if isinstance(invoice_content, dict):
+            invoice_content = invoice_content.get("content", "")
+
+        if isinstance(invoice_content, str) and invoice_content.strip():
+            retrived_table_information.append(invoice_content)
+            retrieved_table_records.append({
+                "table": "invoices",
+                "source": "business_table_catalog/invoices.txt",
+                "content": invoice_content,
+                "retrieval": "full_table_catalog_intent",
+            })
+            processed_tables.add("invoices")
+
     for doc in answer:
         source_path = doc.metadata.get("source")
         table_name = doc.metadata.get("table")
@@ -237,6 +263,14 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     - Never invent a relationship or literal user/shop ID.
     - Do not assume a column exists just because it would normally exist in a database.
     - Use the documented date column and business-date/timezone guidance for today/week/month questions.
+    - For general sales/billing questions such as "how many sales did I make today?" or "what is my total sales amount today?", treat invoices as the canonical completed-sale/bill source for this application:
+      - count completed invoices for sale/bill counts;
+      - use invoices.total_amount for billed sales amount;
+      - exclude CANCELLED invoices;
+      - do not count DRAFT invoices as completed sales unless the user explicitly asks for drafts.
+    - Use the legacy sales table only when the user explicitly asks for raw sale rows or a metric that is specifically defined against that table.
+    - For item/unit quantities sold, use invoice_line_items when the question is about billed items/units; do not assume sales rows and invoices are identical because the application can record both.
+    - For "today", use the shop's business date (Asia/Kolkata) rather than the database server timezone.
     - Distinguish COUNT(rows), SUM(quantity), revenue, billed value, cash received, and stock exactly as documented.
     - Generate exactly one read-only SELECT query.
     - Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, REVOKE, COPY, or multiple statements.
@@ -307,6 +341,12 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     # :business_date placeholder to a SQL date expression as well.
     sql = re.sub(
         r":business_date\b",
+        "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    sql = re.sub(
+        r"\bCURRENT_DATE\b",
         "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date",
         sql,
         flags=re.IGNORECASE,
