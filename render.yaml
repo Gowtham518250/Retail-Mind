@@ -2,7 +2,7 @@ services:
   - type: web
     name: retail-mind-api
     env: python
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: "pip install -r requirements.txt && python build_faiss_index.py"
     # Start the API directly; migrations are intentionally not part of the web startup path.
     startCommand: "python production_boot.py"
     envVars:
