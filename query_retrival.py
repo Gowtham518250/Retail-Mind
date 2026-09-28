@@ -126,26 +126,35 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         print("Table:", doc.metadata.get("table"))
         print("Source:", doc.metadata.get("source"))
     table_paths = []
+    retrived_table_information = []
+    retrieved_table_records = []
+    processed_sources = set()
+
+    # Prefer the full catalog file when it exists. If the deployed service
+    # only contains the FAISS index, use the exact retrieved FAISS chunk.
     for doc in answer:
         source_path = doc.metadata.get("source")
-        if source_path  not in table_paths:
+        source_name = Path(str(source_path).replace("\\", "/")).name if source_path else None
+
+        if source_path not in table_paths:
             table_paths.append(source_path)
-    retrived_table_information=[]
-    # If source catalog files are missing in deployment, use FAISS chunk content directly.
-    for path in table_paths:
-        try:
-            source_name = Path(str(path).replace("\\", "/")).name
+
+        if source_name and source_name not in processed_sources:
             catalog_path = BASE_DIR / "business_table_catalog" / source_name
             if catalog_path.suffix == ".txt" and catalog_path.is_file():
-                with catalog_path.open("r", encoding="utf-8") as file:
-                    content = file.read()
+                try:
+                    content = catalog_path.read_text(encoding="utf-8")
                     retrived_table_information.append(content)
-                continue
-            content = str(getattr(doc, "page_content", "") or "").strip()
-            if content:
-                retrived_table_information.append(content)
-        except Exception as e:
-            print(f"Error reading file {path}: {str(e)}")
+                    retrieved_table_records.append({"source": source_path, "content": content})
+                    processed_sources.add(source_name)
+                    continue
+                except Exception as exc:
+                    print(f"Error reading catalog file {catalog_path}: {exc}")
+
+        content = str(getattr(doc, "page_content", "") or "").strip()
+        if content:
+            retrived_table_information.append(content)
+            retrieved_table_records.append({"source": source_path, "content": content})
     print("Retrieved table information:")
     for content in retrived_table_information:
         print(content)
@@ -282,13 +291,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         "query": query,
         "generated_sql": sql,
         "generated_model_response": generated_text,
-        "retrieved_table_information": [
-            {
-                "source": table_paths[index] if index < len(table_paths) else None,
-                "content": content,
-            }
-            for index, content in enumerate(retrived_table_information)
-        ],
+        "retrieved_table_information": retrieved_table_records,
         "sql": sql,
         "results": jsonable_encoder([dict(row) for row in rows]),
     }
