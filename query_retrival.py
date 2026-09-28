@@ -159,13 +159,12 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             table_paths.append(source_path)
 
         if catalog_key and catalog_key not in processed_tables:
-            entry = full_table_catalog.get(catalog_key)
-            if entry and entry.get("content"):
-                content = entry["content"]
+            content = full_table_catalog.get(catalog_key)
+            if content:
                 retrived_table_information.append(content)
                 retrieved_table_records.append({
                     "table": catalog_key,
-                    "source": entry.get("source", source_path),
+                    "source": source_path,
                     "content": content,
                     "retrieval": "full_table_catalog",
                 })
