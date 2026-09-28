@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import requests
@@ -33,8 +34,14 @@ for item in listing.json():
     target.write_text(response.text, encoding="utf-8")
 
 documents = []
+table_catalog = {}
+
 for path in sorted(CATALOG_DIR.glob("*.txt")):
     content = path.read_text(encoding="utf-8").strip()
+    table_catalog[path.stem] = {
+        "source": f"business_table_catalog/{path.name}",
+        "content": content,
+    }
     start = 0
     while start < len(content):
         end = min(start + 700, len(content))
@@ -81,4 +88,17 @@ index_dir = BASE_DIR / "faiss_index"
 index_dir.mkdir(parents=True, exist_ok=True)
 vectorstore = FAISS.from_documents(documents, embeddings)
 vectorstore.save_local(str(index_dir))
-print(f"Built FAISS index with {len(documents)} chunks in {index_dir}")
+
+# Persist the complete catalog separately from the FAISS chunks. FAISS
+# retrieval is chunk-based, while SQL generation needs the full schema text
+# for every selected table.
+catalog_path = BASE_DIR / "rag_table_catalog.json"
+catalog_path.write_text(
+    json.dumps(table_catalog, ensure_ascii=False),
+    encoding="utf-8",
+)
+
+print(
+    f"Built FAISS index with {len(documents)} chunks in {index_dir}; "
+    f"saved {len(table_catalog)} complete tables to {catalog_path}"
+)
