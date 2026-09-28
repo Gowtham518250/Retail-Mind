@@ -1,3 +1,4 @@
+import json
 import re
 import os
 from pathlib import Path
@@ -110,6 +111,22 @@ vectorstore = FAISS.load_local(
     allow_dangerous_deserialization=True,
 )
 
+# Complete table catalog generated alongside the FAISS index. This avoids
+# depending on the original .txt files being present at runtime and lets us
+# expand each retrieved chunk back to the full table definition.
+catalog_json = Path(
+    os.getenv("RAG_TABLE_CATALOG_PATH", str(BASE_DIR / "rag_table_catalog.json"))
+)
+if catalog_json.is_file():
+    try:
+        with catalog_json.open("r", encoding="utf-8") as file:
+            full_table_catalog = json.load(file)
+    except Exception as exc:
+        print(f"Could not load complete RAG catalog {catalog_json}: {exc}")
+        full_table_catalog = {}
+else:
+    full_table_catalog = {}
+
 app= APIRouter()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 @app.post("/askquery")
@@ -128,33 +145,61 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     table_paths = []
     retrived_table_information = []
     retrieved_table_records = []
-    processed_sources = set()
+    processed_tables = set()
 
-    # Prefer the full catalog file when it exists. If the deployed service
-    # only contains the FAISS index, use the exact retrieved FAISS chunk.
+    # FAISS returns chunks, but SQL generation needs complete table context.
+    # Expand each selected table using rag_table_catalog.json.
     for doc in answer:
         source_path = doc.metadata.get("source")
+        table_name = doc.metadata.get("table")
         source_name = Path(str(source_path).replace("\\", "/")).name if source_path else None
+        catalog_key = table_name or (Path(source_name).stem if source_name else None)
 
         if source_path not in table_paths:
             table_paths.append(source_path)
 
-        if source_name and source_name not in processed_sources:
+        if catalog_key and catalog_key not in processed_tables:
+            entry = full_table_catalog.get(catalog_key)
+            if entry and entry.get("content"):
+                content = entry["content"]
+                retrived_table_information.append(content)
+                retrieved_table_records.append({
+                    "table": catalog_key,
+                    "source": entry.get("source", source_path),
+                    "content": content,
+                    "retrieval": "full_table_catalog",
+                })
+                processed_tables.add(catalog_key)
+                continue
+
+        # Legacy fallback for an already-deployed instance without the JSON catalog.
+        if source_name and catalog_key not in processed_tables:
             catalog_path = BASE_DIR / "business_table_catalog" / source_name
             if catalog_path.suffix == ".txt" and catalog_path.is_file():
                 try:
                     content = catalog_path.read_text(encoding="utf-8")
                     retrived_table_information.append(content)
-                    retrieved_table_records.append({"source": source_path, "content": content})
-                    processed_sources.add(source_name)
+                    retrieved_table_records.append({
+                        "table": catalog_key,
+                        "source": source_path,
+                        "content": content,
+                        "retrieval": "catalog_file",
+                    })
+                    processed_tables.add(catalog_key)
                     continue
                 except Exception as exc:
                     print(f"Error reading catalog file {catalog_path}: {exc}")
 
+        # Final fallback: expose the FAISS chunk itself.
         content = str(getattr(doc, "page_content", "") or "").strip()
         if content:
             retrived_table_information.append(content)
-            retrieved_table_records.append({"source": source_path, "content": content})
+            retrieved_table_records.append({
+                "table": catalog_key,
+                "source": source_path,
+                "content": content,
+                "retrieval": "faiss_chunk",
+            })
     print("Retrieved table information:")
     for content in retrived_table_information:
         print(content)
