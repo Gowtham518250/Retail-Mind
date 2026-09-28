@@ -3,7 +3,6 @@ services:
     name: retail-mind-api
     env: python
     buildCommand: "pip install -r requirements.txt"
-    preDeployCommand: "alembic upgrade head"
     startCommand: "python production_boot.py"
     envVars:
       - key: PYTHON_VERSION
