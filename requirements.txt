@@ -57,6 +57,5 @@ groq==0.10.0
 langchain-community==0.3.27
 langchain-core==0.3.66
 langchain-huggingface==0.3.1
-langchain-ollama==0.2.3
 faiss-cpu==1.8.0
 sentence-transformers==3.2.1
