@@ -597,13 +597,62 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         print(sql)
         raise HTTPException(status_code=400, detail="The generated SQL could not be executed.") from exc
 
+    encoded_rows = jsonable_encoder([dict(row) for row in rows])
+
+    def _money(value):
+        try:
+            return f"₹{float(value):,.2f}"
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _build_answer(result_rows):
+        if not result_rows:
+            return "No matching records were found for your question."
+
+        first = result_rows[0]
+        keys = {str(k).lower() for k in first.keys()}
+
+        # Common retail metric responses.
+        if len(result_rows) == 1:
+            for key in ("sales_count", "total_units_sold", "count", "invoice_count", "total_invoices"):
+                if key in keys:
+                    actual = next(k for k in first if str(k).lower() == key)
+                    return f"The answer is {first[actual]}."
+            for key in ("total_sales_amount", "total_revenue", "total_amount", "total", "khata_balance"):
+                if key in keys:
+                    actual = next(k for k in first if str(k).lower() == key)
+                    return f"The total is {_money(first[actual])}."
+
+        if "customer_name" in keys and "khata_balance" in keys:
+            total = sum(float(row.get("khata_balance") or 0) for row in result_rows)
+            return (
+                f"{len(result_rows)} customer(s) have outstanding khata balances, "
+                f"totaling {_money(total)}."
+            )
+
+        if any(k in keys for k in ("product_name", "name")):
+            label_key = next((k for k in first if str(k).lower() in ("product_name", "name")), None)
+            value_key = next(
+                (k for k in first if str(k).lower() in ("revenue", "total", "total_amount", "amount", "quantity", "total_sales_amount")),
+                None,
+            )
+            if label_key and value_key:
+                return f"Found {len(result_rows)} result(s). The top result is {first[label_key]} with {first[value_key]}."
+
+        return f"Found {len(result_rows)} matching result(s)."
+
+    answer_text = _build_answer(encoded_rows)
+
     return {
         "query_engine_version": QUERY_ENGINE_VERSION,
         "query": query,
+        "answer": answer_text,
+        "message": answer_text,
         "generated_sql": sql,
         "generated_model_response": generated_text,
         "retrieved_table_information": retrieved_table_records,
         "sql": sql,
-        "results": jsonable_encoder([dict(row) for row in rows]),
+        "row_count": len(encoded_rows),
+        "results": encoded_rows,
     }
         
