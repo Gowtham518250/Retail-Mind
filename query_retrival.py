@@ -572,7 +572,8 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     print(sql)
 
     if (
-        not re.match(r"^SELECT\b", sql, re.IGNORECASE)
+        not re.match(r"^(?:SELECT|WITH)\b", sql, re.IGNORECASE)
+        or not re.search(r"\bSELECT\b", sql, re.IGNORECASE)
         or ";" in sql
         or re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\b", sql, re.IGNORECASE)
         or re.search(r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export)\s*\(", sql, re.IGNORECASE)
