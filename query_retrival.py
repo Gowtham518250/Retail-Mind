@@ -405,8 +405,8 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
                 "AND sale_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
             )
             generated_text = (
-                "TABLE: sales\\n\\n"
-                "SQL:\\n" + sql
+                "TABLE: sales\n\n"
+                "SQL:\n" + sql
             )
         elif re.search(r"\b(total|amount|revenue|turnover)\b", normalized_query):
             sql = (
@@ -416,8 +416,8 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
                 "AND sale_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
             )
             generated_text = (
-                "TABLE: sales\\n\\n"
-                "SQL:\\n" + sql
+                "TABLE: sales\n\n"
+                "SQL:\n" + sql
             )
 
     print("Generated SQL:")
