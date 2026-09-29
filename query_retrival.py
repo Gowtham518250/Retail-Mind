@@ -18,6 +18,8 @@ from security import get_current_user as check_current_user
 
 BASE_DIR = Path(__file__).resolve().parent
 
+QUERY_ENGINE_VERSION = "2026-09-29-date-aware-sales-v2"
+
 # CPU-only embedding runtime for small Render instances.
 # Uses the same all-MiniLM-L6-v2 model family as the existing FAISS index,
 # but runs inference with ONNX Runtime instead of PyTorch.
@@ -134,6 +136,7 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 @app.post("/askquery")
 async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=Depends(check_current_user)):
     print("🔥 ENDPOINT CALLED")
+    print("QUERY ENGINE VERSION:", QUERY_ENGINE_VERSION)
     print("QUERY:", query)
 
     answer = vectorstore.similarity_search(query, k=6)
@@ -594,6 +597,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         raise HTTPException(status_code=400, detail="The generated SQL could not be executed.") from exc
 
     return {
+        "query_engine_version": QUERY_ENGINE_VERSION,
         "query": query,
         "generated_sql": sql,
         "generated_model_response": generated_text,
