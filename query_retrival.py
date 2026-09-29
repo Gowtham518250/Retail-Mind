@@ -375,15 +375,15 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     # dedicated sales table. This protects the most common sales metrics from
     # an LLM choosing the related invoices table despite the schema guidance.
     if direct_sales_intent:
-        normalized_query = re.sub(r"\\s+", " ", query.lower()).strip()
+        normalized_query = re.sub(r"\s+", " ", query.lower()).strip()
 
         wants_units = bool(
-            re.search(r"\\b(how many|number of|total)\\b.*\\b(items?|units?)\\b.*\\b(sold|sales?)\\b", normalized_query)
-            or re.search(r"\\b(items?|units?)\\b.*\\b(sold|sales?)\\b", normalized_query)
+            re.search(r"\b(how many|number of|total)\b.*\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
+            or re.search(r"\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
         )
         wants_count = bool(
-            re.search(r"\\b(how many|number of)\\b.*\\bsales?\\b", normalized_query)
-            or re.search(r"\\b(count|number)\\s+of\\s+sales?\\b", normalized_query)
+            re.search(r"\b(how many|number of)\b.*\bsales?\b", normalized_query)
+            or re.search(r"\b(count|number)\s+of\s+sales?\b", normalized_query)
         )
 
         if wants_units:
@@ -394,8 +394,8 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
                 "AND sale_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
             )
             generated_text = (
-                "TABLE: sales\\n\\n"
-                "SQL:\\n" + sql
+                "TABLE: sales\n\n"
+                "SQL:\n" + sql
             )
         elif wants_count:
             sql = (
@@ -408,7 +408,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
                 "TABLE: sales\\n\\n"
                 "SQL:\\n" + sql
             )
-        elif re.search(r"\\b(total|amount|revenue|turnover)\\b", normalized_query):
+        elif re.search(r"\b(total|amount|revenue|turnover)\b", normalized_query):
             sql = (
                 "SELECT COALESCE(SUM(total), 0) AS total_sales_amount "
                 "FROM sales "
