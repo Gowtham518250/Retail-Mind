@@ -533,7 +533,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
                 "SELECT COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
                 "FROM invoice_line_items ili "
                 "JOIN invoices i ON i.id = ili.invoice_id "
-                f"WHERE i.{invoice_where.replace('user_id', 'user_id', 1) if False else 'user_id = :user_id'} "
+                "WHERE i.user_id = :user_id "
                 "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
                 + (f" AND i.{invoice_date_filter}" if invoice_date_filter else "")
                 + "), sales_rows AS ("
