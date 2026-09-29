@@ -150,16 +150,18 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     # FAISS returns chunks, but SQL generation needs complete table context.
     # Expand each selected table using rag_table_catalog.json.
 
-    # In this application, general sales/billing reporting is invoice-based.
-    # Always make the complete invoices catalog available for sales/bill/revenue
-    # questions so the model does not answer from the legacy/raw sales table.
-    sales_intent = re.search(
-        r"\b(sale|sales|bill|bills|revenue|turnover|billed|billing)\b",
-        query,
-        re.IGNORECASE,
+    # Route sales-specific questions to the dedicated sales table.
+    # Invoice/bill questions stay on the invoices table. This prevents the
+    # LLM from preferring invoices merely because "sales" is a related concept.
+    direct_sales_intent = bool(
+        re.search(r"\b(sale|sales|sold)\b", query, re.IGNORECASE)
+        and not re.search(r"\b(invoice|invoices|bill|bills|billing)\b", query, re.IGNORECASE)
+    )
+    invoice_intent = bool(
+        re.search(r"\b(invoice|invoices|bill|bills|billing)\b", query, re.IGNORECASE)
     )
 
-    if sales_intent and "invoices" not in processed_tables:
+    if invoice_intent and not direct_sales_intent and "invoices" not in processed_tables:
         invoice_content = full_table_catalog.get("invoices")
 
         if isinstance(invoice_content, dict):
@@ -174,6 +176,22 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
                 "retrieval": "full_table_catalog_intent",
             })
             processed_tables.add("invoices")
+
+    if direct_sales_intent and "sales" not in processed_tables:
+        sales_content = full_table_catalog.get("sales")
+
+        if isinstance(sales_content, dict):
+            sales_content = sales_content.get("content", "")
+
+        if isinstance(sales_content, str) and sales_content.strip():
+            retrived_table_information.append(sales_content)
+            retrieved_table_records.append({
+                "table": "sales",
+                "source": "business_table_catalog/sales.txt",
+                "content": sales_content,
+                "retrieval": "full_table_catalog_intent",
+            })
+            processed_tables.add("sales")
 
     for doc in answer:
         source_path = doc.metadata.get("source")
@@ -263,13 +281,14 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     - Never invent a relationship or literal user/shop ID.
     - Do not assume a column exists just because it would normally exist in a database.
     - Use the documented date column and business-date/timezone guidance for today/week/month questions.
-    - For general sales/billing questions such as "how many sales did I make today?" or "what is my total sales amount today?", treat invoices as the canonical completed-sale/bill source for this application:
-      - count completed invoices for sale/bill counts;
-      - use invoices.total_amount for billed sales amount;
-      - exclude CANCELLED invoices;
-      - do not count DRAFT invoices as completed sales unless the user explicitly asks for drafts.
-    - Use the legacy sales table only when the user explicitly asks for raw sale rows or a metric that is specifically defined against that table.
-    - For item/unit quantities sold, use invoice_line_items when the question is about billed items/units; do not assume sales rows and invoices are identical because the application can record both.
+    - For direct sales questions that use words such as "sale", "sales", or "sold", use the sales table and its documented semantics:
+      - "How many sales?" means COUNT(*) sale rows;
+      - "sales amount", "sales revenue", or "total sales" means SUM(total);
+      - "how many items/units sold" means SUM(quantity);
+      - scope the sales table with shopkeeper_id = :user_id;
+      - filter sale_date by the Asia/Kolkata business date for "today".
+    - Use invoices for explicit invoice/bill/billing questions, including billed value from invoices.total_amount.
+    - Do not combine sales and invoices totals unless the user explicitly asks for a reconciliation; the application can record both and they may overlap.
     - For "today", use the shop's business date (Asia/Kolkata) rather than the database server timezone.
     - Distinguish COUNT(rows), SUM(quantity), revenue, billed value, cash received, and stock exactly as documented.
     - Generate exactly one read-only SELECT query.
@@ -351,6 +370,55 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         sql,
         flags=re.IGNORECASE,
     )
+
+    # Deterministically route the common direct-sales questions to the
+    # dedicated sales table. This protects the most common sales metrics from
+    # an LLM choosing the related invoices table despite the schema guidance.
+    if direct_sales_intent:
+        normalized_query = re.sub(r"\\s+", " ", query.lower()).strip()
+
+        wants_units = bool(
+            re.search(r"\\b(how many|number of|total)\\b.*\\b(items?|units?)\\b.*\\b(sold|sales?)\\b", normalized_query)
+            or re.search(r"\\b(items?|units?)\\b.*\\b(sold|sales?)\\b", normalized_query)
+        )
+        wants_count = bool(
+            re.search(r"\\b(how many|number of)\\b.*\\bsales?\\b", normalized_query)
+            or re.search(r"\\b(count|number)\\s+of\\s+sales?\\b", normalized_query)
+        )
+
+        if wants_units:
+            sql = (
+                "SELECT COALESCE(SUM(quantity), 0) AS total_units_sold "
+                "FROM sales "
+                "WHERE shopkeeper_id = :user_id "
+                "AND sale_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+            )
+            generated_text = (
+                "TABLE: sales\\n\\n"
+                "SQL:\\n" + sql
+            )
+        elif wants_count:
+            sql = (
+                "SELECT COUNT(*) AS sales_count "
+                "FROM sales "
+                "WHERE shopkeeper_id = :user_id "
+                "AND sale_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+            )
+            generated_text = (
+                "TABLE: sales\\n\\n"
+                "SQL:\\n" + sql
+            )
+        elif re.search(r"\\b(total|amount|revenue|turnover)\\b", normalized_query):
+            sql = (
+                "SELECT COALESCE(SUM(total), 0) AS total_sales_amount "
+                "FROM sales "
+                "WHERE shopkeeper_id = :user_id "
+                "AND sale_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+            )
+            generated_text = (
+                "TABLE: sales\\n\\n"
+                "SQL:\\n" + sql
+            )
 
     print("Generated SQL:")
     print(sql)
