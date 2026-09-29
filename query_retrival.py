@@ -1,6 +1,8 @@
 import json
 import re
 import os
+import calendar
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import Form, HTTPException, Depends, APIRouter
@@ -284,7 +286,12 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     - The catalog may contain example placeholders such as :shop_id or :business_date. Ignore those example parameter names: the only runtime parameter available is :user_id. For business-date filters, use the documented date column and a SQL date expression directly.
     - Never invent a relationship or literal user/shop ID.
     - Do not assume a column exists just because it would normally exist in a database.
-    - Use the documented date column and business-date/timezone guidance for today/week/month questions.
+    - Use the documented date column and business-date/timezone guidance for date/range questions.
+    - IMPORTANT: Do not add a date filter unless the user explicitly asks for a date or time range.
+    - If the user says "today", filter to today's Asia/Kolkata business date only.
+    - If the user gives a specific date, filter to that exact date only.
+    - If the user gives a range such as yesterday, this week, last week, this month, or last month, use that exact range.
+    - If no date or range is mentioned, do not silently assume today; answer across the full available period requested by the question.
     - For normal sales questions in this application, use the invoices table because the current sale workflow records completed sales as invoices:
       - count completed/active invoices for sale counts;
       - use invoices.total_amount for billed sales amount;
@@ -388,11 +395,11 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         flags=re.IGNORECASE,
     )
 
-    # For the most common sales metrics, use a deterministic source
-    # preference: current invoices are canonical for the modern sale workflow;
-    # if no qualifying invoice rows exist for that shop/date, fall back to
-    # legacy sales rows. This handles existing legacy data without double-counting
-    # when both stores contain the same business day's activity.
+    # For common sales metrics, use a deterministic source preference:
+    # current invoices are canonical for the modern sale workflow; when there
+    # are no qualifying invoice rows for the requested period, fall back to
+    # legacy sales rows. Crucially, the requested date/range controls the
+    # filter: no date mentioned means no date filter.
     sale_metric_intent = bool(
         re.search(r"\b(sale|sales|sold|revenue|turnover)\b", query, re.IGNORECASE)
         and not re.search(r"\b(invoice|invoices|bill|bills|billing)\b", query, re.IGNORECASE)
@@ -400,6 +407,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     )
     if sale_metric_intent:
         normalized_query = re.sub(r"\s+", " ", query.lower()).strip()
+
         wants_units = bool(
             re.search(r"\b(how many|number of|total)\b.*\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
             or re.search(r"\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
@@ -408,68 +416,154 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             re.search(r"\b(how many|number of)\b.*\bsales?\b", normalized_query)
             or re.search(r"\b(count|number)\s+of\s+sales?\b", normalized_query)
         )
-        business_date_sql = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+
+        def build_date_filters(column_name: str):
+            today_expr = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+
+            if re.search(r"\b(today|todays|today's)\b", normalized_query):
+                return f"{column_name} = {today_expr}", "today"
+
+            if re.search(r"\byesterday\b", normalized_query):
+                return f"{column_name} = ({today_expr} - INTERVAL '1 day')::date", "yesterday"
+
+            # Exact ISO date: 2026-09-20
+            iso_match = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", normalized_query)
+            if iso_match:
+                y, m, d = map(int, iso_match.groups())
+                try:
+                    exact = date(y, m, d).isoformat()
+                    return f"{column_name} = DATE '{exact}'", exact
+                except ValueError:
+                    pass
+
+            # Exact Indian/common date: 20/09/2026 or 20-09-2026
+            dmy_match = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", normalized_query)
+            if dmy_match:
+                d, m, y = map(int, dmy_match.groups())
+                try:
+                    exact = date(y, m, d).isoformat()
+                    return f"{column_name} = DATE '{exact}'", exact
+                except ValueError:
+                    pass
+
+            # Named month + day, with optional year: "September 20" / "September 20, 2026"
+            month_names = {
+                "january": 1, "february": 2, "march": 3, "april": 4,
+                "may": 5, "june": 6, "july": 7, "august": 8,
+                "september": 9, "october": 10, "november": 11, "december": 12,
+            }
+            month_pattern = "|".join(month_names)
+            month_match = re.search(
+                rf"\b({month_pattern})\s+(\d{{1,2}})(?:,\s*(20\d{{2}}))?\b",
+                normalized_query,
+                re.IGNORECASE,
+            )
+            if month_match:
+                month_num = month_names[month_match.group(1).lower()]
+                day_num = int(month_match.group(2))
+                year_num = int(month_match.group(3)) if month_match.group(3) else date.today().year
+                try:
+                    exact = date(year_num, month_num, day_num).isoformat()
+                    return f"{column_name} = DATE '{exact}'", exact
+                except ValueError:
+                    pass
+
+            # Common natural-language ranges.
+            if re.search(r"\b(this week|current week)\b", normalized_query):
+                return (
+                    f"{column_name} >= date_trunc('week', {today_expr})::date "
+                    f"AND {column_name} < (date_trunc('week', {today_expr}) + INTERVAL '7 days')::date",
+                    "this week",
+                )
+
+            if re.search(r"\b(last week|previous week)\b", normalized_query):
+                return (
+                    f"{column_name} >= (date_trunc('week', {today_expr}) - INTERVAL '7 days')::date "
+                    f"AND {column_name} < date_trunc('week', {today_expr})::date",
+                    "last week",
+                )
+
+            if re.search(r"\b(this month|current month)\b", normalized_query):
+                return (
+                    f"{column_name} >= date_trunc('month', {today_expr})::date "
+                    f"AND {column_name} < (date_trunc('month', {today_expr}) + INTERVAL '1 month')::date",
+                    "this month",
+                )
+
+            if re.search(r"\b(last month|previous month)\b", normalized_query):
+                return (
+                    f"{column_name} >= (date_trunc('month', {today_expr}) - INTERVAL '1 month')::date "
+                    f"AND {column_name} < date_trunc('month', {today_expr})::date",
+                    "last month",
+                )
+
+            return "", "all time"
+
+        invoice_date_filter, date_scope = build_date_filters("invoice_date")
+        sales_date_filter, _ = build_date_filters("sale_date")
+
+        invoice_where = (
+            "user_id = :user_id AND status NOT IN ('CANCELLED', 'DRAFT')"
+            + (f" AND {invoice_date_filter}" if invoice_date_filter else "")
+        )
+        sales_where = (
+            "shopkeeper_id = :user_id"
+            + (f" AND {sales_date_filter}" if sales_date_filter else "")
+        )
 
         if wants_count:
             sql = (
                 "WITH invoice_rows AS ("
                 "SELECT COUNT(*)::bigint AS cnt "
                 "FROM invoices "
-                "WHERE user_id = :user_id "
-                "AND status NOT IN ('CANCELLED', 'DRAFT') "
-                f"AND invoice_date = {business_date_sql}"
+                f"WHERE {invoice_where}"
                 "), sales_rows AS ("
                 "SELECT COUNT(*)::bigint AS cnt "
                 "FROM sales "
-                "WHERE shopkeeper_id = :user_id "
-                f"AND sale_date = {business_date_sql}"
+                f"WHERE {sales_where}"
                 ") "
                 "SELECT CASE WHEN invoice_rows.cnt > 0 "
                 "THEN invoice_rows.cnt ELSE sales_rows.cnt END AS sales_count "
                 "FROM invoice_rows CROSS JOIN sales_rows"
             )
-            generated_text = "TABLE: invoices (fallback: sales)\\n\\nSQL:\\n" + sql
+            generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
         elif wants_units:
             sql = (
                 "WITH invoice_rows AS ("
                 "SELECT COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
                 "FROM invoice_line_items ili "
                 "JOIN invoices i ON i.id = ili.invoice_id "
-                "WHERE i.user_id = :user_id "
-                "AND i.status NOT IN ('CANCELLED', 'DRAFT') "
-                f"AND i.invoice_date = {business_date_sql}"
-                "), sales_rows AS ("
+                f"WHERE i.{invoice_where.replace('user_id', 'user_id', 1) if False else 'user_id = :user_id'} "
+                "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+                + (f" AND i.{invoice_date_filter}" if invoice_date_filter else "")
+                + "), sales_rows AS ("
                 "SELECT COALESCE(SUM(quantity), 0)::numeric AS qty "
                 "FROM sales "
-                "WHERE shopkeeper_id = :user_id "
-                f"AND sale_date = {business_date_sql}"
+                f"WHERE {sales_where}"
                 ") "
                 "SELECT CASE WHEN invoice_rows.qty > 0 "
                 "THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
                 "FROM invoice_rows CROSS JOIN sales_rows"
             )
-            generated_text = "TABLE: invoices (fallback: sales)\\n\\nSQL:\\n" + sql
+            generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
         elif re.search(r"\b(total|amount|revenue|turnover)\b", normalized_query):
             sql = (
                 "WITH invoice_rows AS ("
                 "SELECT COUNT(*)::bigint AS cnt, "
                 "COALESCE(SUM(total_amount), 0)::numeric AS total "
                 "FROM invoices "
-                "WHERE user_id = :user_id "
-                "AND status NOT IN ('CANCELLED', 'DRAFT') "
-                f"AND invoice_date = {business_date_sql}"
+                f"WHERE {invoice_where}"
                 "), sales_rows AS ("
                 "SELECT COUNT(*)::bigint AS cnt, "
                 "COALESCE(SUM(total), 0)::numeric AS total "
                 "FROM sales "
-                "WHERE shopkeeper_id = :user_id "
-                f"AND sale_date = {business_date_sql}"
+                f"WHERE {sales_where}"
                 ") "
                 "SELECT CASE WHEN invoice_rows.cnt > 0 "
                 "THEN invoice_rows.total ELSE sales_rows.total END AS total_sales_amount "
                 "FROM invoice_rows CROSS JOIN sales_rows"
             )
-            generated_text = "TABLE: invoices (fallback: sales)\\n\\nSQL:\\n" + sql
+            generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
 
     print("Generated SQL:")
     print(sql)
