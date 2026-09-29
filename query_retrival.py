@@ -388,6 +388,89 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         flags=re.IGNORECASE,
     )
 
+    # For the most common sales metrics, use a deterministic source
+    # preference: current invoices are canonical for the modern sale workflow;
+    # if no qualifying invoice rows exist for that shop/date, fall back to
+    # legacy sales rows. This handles existing legacy data without double-counting
+    # when both stores contain the same business day's activity.
+    sale_metric_intent = bool(
+        re.search(r"\b(sale|sales|sold|revenue|turnover)\b", query, re.IGNORECASE)
+        and not re.search(r"\b(invoice|invoices|bill|bills|billing)\b", query, re.IGNORECASE)
+        and not raw_sales_intent
+    )
+    if sale_metric_intent:
+        normalized_query = re.sub(r"\s+", " ", query.lower()).strip()
+        wants_units = bool(
+            re.search(r"\b(how many|number of|total)\b.*\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
+            or re.search(r"\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
+        )
+        wants_count = bool(
+            re.search(r"\b(how many|number of)\b.*\bsales?\b", normalized_query)
+            or re.search(r"\b(count|number)\s+of\s+sales?\b", normalized_query)
+        )
+        business_date_sql = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+
+        if wants_count:
+            sql = (
+                "WITH invoice_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt "
+                "FROM invoices "
+                "WHERE user_id = :user_id "
+                "AND status NOT IN ('CANCELLED', 'DRAFT') "
+                f"AND invoice_date = {business_date_sql}"
+                "), sales_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt "
+                "FROM sales "
+                "WHERE shopkeeper_id = :user_id "
+                f"AND sale_date = {business_date_sql}"
+                ") "
+                "SELECT CASE WHEN invoice_rows.cnt > 0 "
+                "THEN invoice_rows.cnt ELSE sales_rows.cnt END AS sales_count "
+                "FROM invoice_rows CROSS JOIN sales_rows"
+            )
+            generated_text = "TABLE: invoices (fallback: sales)\\n\\nSQL:\\n" + sql
+        elif wants_units:
+            sql = (
+                "WITH invoice_rows AS ("
+                "SELECT COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
+                "FROM invoice_line_items ili "
+                "JOIN invoices i ON i.id = ili.invoice_id "
+                "WHERE i.user_id = :user_id "
+                "AND i.status NOT IN ('CANCELLED', 'DRAFT') "
+                f"AND i.invoice_date = {business_date_sql}"
+                "), sales_rows AS ("
+                "SELECT COALESCE(SUM(quantity), 0)::numeric AS qty "
+                "FROM sales "
+                "WHERE shopkeeper_id = :user_id "
+                f"AND sale_date = {business_date_sql}"
+                ") "
+                "SELECT CASE WHEN invoice_rows.qty > 0 "
+                "THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
+                "FROM invoice_rows CROSS JOIN sales_rows"
+            )
+            generated_text = "TABLE: invoices (fallback: sales)\\n\\nSQL:\\n" + sql
+        elif re.search(r"\b(total|amount|revenue|turnover)\b", normalized_query):
+            sql = (
+                "WITH invoice_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt, "
+                "COALESCE(SUM(total_amount), 0)::numeric AS total "
+                "FROM invoices "
+                "WHERE user_id = :user_id "
+                "AND status NOT IN ('CANCELLED', 'DRAFT') "
+                f"AND invoice_date = {business_date_sql}"
+                "), sales_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt, "
+                "COALESCE(SUM(total), 0)::numeric AS total "
+                "FROM sales "
+                "WHERE shopkeeper_id = :user_id "
+                f"AND sale_date = {business_date_sql}"
+                ") "
+                "SELECT CASE WHEN invoice_rows.cnt > 0 "
+                "THEN invoice_rows.total ELSE sales_rows.total END AS total_sales_amount "
+                "FROM invoice_rows CROSS JOIN sales_rows"
+            )
+            generated_text = "TABLE: invoices (fallback: sales)\\n\\nSQL:\\n" + sql
+
     print("Generated SQL:")
     print(sql)
 
