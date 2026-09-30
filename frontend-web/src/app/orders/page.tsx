@@ -1,18 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Package, MapPin, Clock, CheckCircle, Truck, ArrowLeft } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  ArrowLeft, Check, CheckCircle2, Clock3, MapPin, Package, RefreshCw,
+  ShoppingBag, Truck, Wifi, WifiOff, XCircle,
+} from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 
 interface OrderItem {
   product_id: number;
+  product_name?: string;
+  name?: string;
   quantity: number;
+  unit_price?: number;
+  price?: number;
 }
 
 interface Order {
   order_id: number;
   shop_id: number;
+  shop_name?: string;
   status: string;
   total_amount: number;
   delivery_address: string;
@@ -20,145 +29,401 @@ interface Order {
   created_at: string;
 }
 
+const STATUS_STEPS = ['PENDING', 'ACCEPTED', 'DISPATCHED', 'DELIVERED'] as const;
+
+const statusMeta: Record<string, {
+  label: string;
+  description: string;
+  icon: typeof Clock3;
+}> = {
+  PENDING: { label: 'Order placed', description: 'Waiting for the shop to accept your order.', icon: Clock3 },
+  ACCEPTED: { label: 'Accepted & preparing', description: 'The shop accepted your order and is preparing it.', icon: Package },
+  DISPATCHED: { label: 'Out for delivery', description: 'Your order has been dispatched.', icon: Truck },
+  DELIVERED: { label: 'Delivered', description: 'Order completed successfully.', icon: CheckCircle2 },
+  REJECTED: { label: 'Order rejected', description: 'The shop could not fulfill this order.', icon: XCircle },
+};
+
+function normalizeStatus(status?: string) {
+  const s = (status || 'PENDING').toUpperCase();
+  if (s === 'CONFIRMED') return 'ACCEPTED';
+  if (s === 'SHIPPED') return 'DISPATCHED';
+  if (s === 'CANCELLED') return 'REJECTED';
+  return s;
+}
+
+function buildWebSocketUrl(customerId: string, token: string) {
+  const url = new URL(API_BASE);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = '/ws/customer/' + encodeURIComponent(customerId);
+  url.search = '?token=' + encodeURIComponent(token);
+  return url.toString();
+}
+
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [live, setLive] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [notice, setNotice] = useState('');
   const router = useRouter();
 
-  useEffect(() => {
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(false);
+  const orderCountRef = useRef(0);
+
+  const fetchOrders = useCallback(async (showSpinner = false) => {
     const token = localStorage.getItem('customerToken');
     if (!token) {
       router.push('/auth');
       return;
     }
+    if (showSpinner) setRefreshing(true);
 
-    const fetchOrders = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/store/my-orders`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+    try {
+      const response = await fetch(API_BASE + '/store/my-orders', {
+        cache: 'no-store',
+        headers: { Authorization: 'Bearer ' + token },
+      });
 
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            localStorage.removeItem('customerToken');
-            router.push('/auth');
-            return;
-          }
-          throw new Error('Failed to load orders');
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('customerToken');
+          localStorage.removeItem('customerId');
+          router.push('/auth');
+          return;
         }
-
-        const data = await response.json();
-        setOrders(data.orders || []);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+        throw new Error('Failed to load your orders.');
       }
-    };
 
-    fetchOrders();
+      const data = await response.json();
+      const nextOrders = Array.isArray(data.orders) ? data.orders : [];
+      if (!mountedRef.current) return;
+
+      setOrders(nextOrders);
+      orderCountRef.current = nextOrders.length;
+      setError('');
+      setLastUpdated(new Date());
+    } catch (err: any) {
+      if (mountedRef.current && orderCountRef.current === 0) {
+        setError(err.message || 'Unable to load your orders.');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
   }, [router]);
 
-  const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
-    PENDING:   { color: '#facc15', bg: 'rgba(250,204,21,0.12)', icon: <Clock size={14} /> },
-    CONFIRMED: { color: '#22d3ee', bg: 'rgba(34,211,238,0.12)', icon: <CheckCircle size={14} /> },
-    SHIPPED:   { color: '#818cf8', bg: 'rgba(129,140,248,0.12)', icon: <Truck size={14} /> },
-    DELIVERED: { color: '#10b981', bg: 'rgba(16,185,129,0.12)', icon: <CheckCircle size={14} /> },
-    CANCELLED: { color: '#f87171', bg: 'rgba(248,113,113,0.12)', icon: <Package size={14} /> },
-  };
+  const mergeRealtimeOrder = useCallback((payload: any) => {
+    const id = Number(payload?.order_id);
+    if (!id) return;
+
+    setOrders(prev => {
+      const found = prev.find(order => order.order_id === id);
+      const nextStatus = normalizeStatus(payload.status);
+
+      if (!found) {
+        return [{
+          order_id: id,
+          shop_id: Number(payload.shop_id || 0),
+          shop_name: payload.shop_name || 'Retail Mind Shop',
+          status: nextStatus,
+          total_amount: Number(payload.total_amount || 0),
+          delivery_address: payload.delivery_address || '',
+          items: Array.isArray(payload.items) ? payload.items : [],
+          created_at: payload.created_at || new Date().toISOString(),
+        }, ...prev];
+      }
+
+      return prev.map(order => order.order_id === id ? {
+        ...order,
+        status: nextStatus,
+        total_amount: payload.total_amount ?? order.total_amount,
+        items: Array.isArray(payload.items) && payload.items.length ? payload.items : order.items,
+        shop_name: payload.shop_name || order.shop_name,
+        created_at: payload.created_at || order.created_at,
+      } : order);
+    });
+
+    setLastUpdated(new Date());
+
+    const nextMeta = statusMeta[normalizeStatus(payload.status)];
+    if (nextMeta) {
+      setNotice('Order #' + id + ': ' + nextMeta.label);
+      window.setTimeout(() => setNotice(''), 3500);
+    }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    if (pollTimerRef.current) return;
+    fetchOrders(false);
+    pollTimerRef.current = setInterval(() => fetchOrders(false), 8000);
+  }, [fetchOrders]);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const connectRealtime = useCallback(() => {
+    const token = localStorage.getItem('customerToken');
+    const customerId = localStorage.getItem('customerId');
+
+    if (!token || !customerId || !mountedRef.current) {
+      startPolling();
+      return;
+    }
+
+    try {
+      socketRef.current?.close();
+
+      const socket = new WebSocket(buildWebSocketUrl(customerId, token));
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        if (!mountedRef.current) return;
+        setLive(true);
+        stopPolling();
+
+        heartbeatRef.current = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) socket.send('ping');
+        }, 20000);
+      };
+
+      socket.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'order_status_changed' || payload.type === 'online_order_created') {
+            mergeRealtimeOrder(payload);
+          }
+        } catch {
+          // Keep the connection alive when a non-JSON heartbeat payload arrives.
+        }
+      };
+
+      socket.onerror = () => {
+        if (mountedRef.current) setLive(false);
+      };
+
+      socket.onclose = () => {
+        if (heartbeatRef.current) {
+          clearInterval(heartbeatRef.current);
+          heartbeatRef.current = null;
+        }
+        if (!mountedRef.current) return;
+
+        setLive(false);
+        startPolling();
+
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = setTimeout(connectRealtime, 5000);
+      };
+    } catch {
+      setLive(false);
+      startPolling();
+      reconnectTimerRef.current = setTimeout(connectRealtime, 5000);
+    }
+  }, [mergeRealtimeOrder, startPolling, stopPolling]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    fetchOrders();
+    connectRealtime();
+
+    return () => {
+      mountedRef.current = false;
+      stopPolling();
+      socketRef.current?.close();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, [connectRealtime, fetchOrders, stopPolling]);
+
+  const sortedOrders = useMemo(
+    () => [...orders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [orders],
+  );
 
   return (
-    <div className="container" style={{ padding: '40px 20px' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:32 }}>
-        <button onClick={() => router.back()} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'8px 12px', color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-          <ArrowLeft size={16} /> Back
-        </button>
-        <h1 style={{ fontSize:'1.75rem', fontWeight:700 }}>My Orders</h1>
+    <div className="container orders-page">
+      <div className="orders-topbar">
+        <div>
+          <div className="orders-kicker">Customer account</div>
+          <h1>My Orders</h1>
+          <p>Track every order, status change, delivery step and item in one place.</p>
+        </div>
+
+        <div className="orders-live-stack">
+          <span className={'live-pill ' + (live ? 'live' : 'offline')}>
+            {live ? <Wifi size={14} /> : <WifiOff size={14} />}
+            {live ? 'Live updates' : 'Fallback sync'}
+          </span>
+          <button className="orders-refresh" onClick={() => fetchOrders(true)} disabled={refreshing}>
+            <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
+      <div className="orders-subbar">
+        <button className="hero-cta orders-back" onClick={() => router.back()}>
+          <ArrowLeft size={16} /> Back
+        </button>
+        <span>
+          {lastUpdated
+            ? 'Updated ' + lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : 'Syncing…'}
+        </span>
+      </div>
+
+      <AnimatePresence>
+        {notice && (
+          <motion.div
+            className="orders-live-notice"
+            initial={{ opacity: 0, y: -12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12 }}
+          >
+            <CheckCircle2 size={17} /> {notice}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {[1, 2, 3].map(i => (
-            <div key={i} style={{ height: '120px', background: 'rgba(255,255,255,0.05)', borderRadius: '16px', animation: 'pulse 1.5s infinite' }} />
-          ))}
+        <div className="orders-grid">
+          {[1, 2, 3].map(i => <div key={i} className="order-skeleton" />)}
         </div>
-      ) : error ? (
-        <div style={{ padding: '20px', background: 'rgba(255,0,0,0.1)', color: '#ff4444', borderRadius: '12px' }}>
-          {error}
+      ) : error && !sortedOrders.length ? (
+        <div className="orders-error">
+          <XCircle size={28} />
+          <h2>Couldn't load your orders</h2>
+          <p>{error}</p>
+          <button className="hero-cta" onClick={() => fetchOrders(true)}>
+            <RefreshCw size={15} /> Try again
+          </button>
         </div>
-      ) : orders.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: '24px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📦</div>
-          <h2 style={{ marginBottom: '8px' }}>No orders yet</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>Looks like you haven't placed any orders.</p>
-          <button className="btn-primary" onClick={() => router.push('/')}>Start Shopping</button>
+      ) : !sortedOrders.length ? (
+        <div className="orders-empty">
+          <div className="orders-empty-icon"><ShoppingBag size={42} /></div>
+          <h2>No orders yet</h2>
+          <p>Your placed orders will appear here with live status updates.</p>
+          <button className="hero-cta" onClick={() => router.push('/')}>Start shopping</button>
         </div>
       ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {orders.map(order => {
-            const sc = statusConfig[order.status] || statusConfig['PENDING'];
+        <div className="orders-grid">
+          {sortedOrders.map(order => {
+            const status = normalizeStatus(order.status);
+            const meta = statusMeta[status] || statusMeta.PENDING;
+            const Icon = meta.icon;
+            const currentIndex = STATUS_STEPS.indexOf(status as any);
+            const rejected = status === 'REJECTED';
+
             return (
-              <div key={order.order_id} style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                borderRadius: 20,
-                padding: 24,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-                transition: 'border-color 0.2s',
-              }}>
-                {/* Order header */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', borderBottom:'1px solid rgba(255,255,255,0.08)', paddingBottom:16, marginBottom:16 }}>
+              <motion.article
+                key={order.order_id}
+                layout
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+                className={'order-card ' + (rejected ? 'rejected' : '')}
+              >
+                <div className="order-card-head">
                   <div>
-                    <div style={{ fontWeight:700, fontSize:16 }}>Order #{order.order_id}</div>
-                    <div style={{ fontSize:13, color:'var(--text-secondary)', marginTop:4 }}>
-                      <Clock size={12} style={{ display:'inline', verticalAlign:'middle', marginRight:4 }} />
-                      {new Date(order.created_at).toLocaleString()}
-                    </div>
+                    <span className="order-number">ORDER #{order.order_id}</span>
+                    <h2>{order.shop_name || 'Shop #' + order.shop_id}</h2>
+                    <p>{new Date(order.created_at).toLocaleString()}</p>
                   </div>
-                  <span style={{ display:'flex', alignItems:'center', gap:6, background:sc.bg, color:sc.color, padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:700, letterSpacing:'0.5px' }}>
-                    {sc.icon} {order.status}
-                  </span>
+                  <div className="order-status-badge">
+                    <Icon size={16} /> {meta.label}
+                  </div>
                 </div>
 
-                {/* Items */}
-                <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
-                  {order.items.map((item, idx) => (
-                    <div key={idx} style={{ display:'flex', justifyContent:'space-between', fontSize:14, color:'var(--text-secondary)' }}>
-                      <span><Package size={13} style={{ display:'inline', verticalAlign:'middle', marginRight:6 }} />Product #{item.product_id}</span>
-                      <span style={{ color:'#fff', fontWeight:600 }}>× {item.quantity}</span>
-                    </div>
-                  ))}
+                <div className="order-status-banner">
+                  <div className="status-banner-icon"><Icon size={24} /></div>
+                  <div>
+                    <strong>{meta.label}</strong>
+                    <span>{meta.description}</span>
+                  </div>
                 </div>
 
-                {/* Footer */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:16 }}>
-                  <div style={{ flex:1, marginRight:16 }}>
-                    <div style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.5px' }}>Delivery Address</div>
-                    <div style={{ fontSize:13, display:'flex', alignItems:'flex-start', gap:6 }}>
-                      <MapPin size={14} style={{ color:'var(--fk-blue)', flexShrink:0, marginTop:1 }} />
-                      <span style={{ display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' as const, overflow:'hidden' }}>{order.delivery_address}</span>
+                <div className="order-timeline">
+                  {STATUS_STEPS.map((step, index) => {
+                    const StepIcon = statusMeta[step].icon;
+                    const reached = !rejected && currentIndex >= index;
+
+                    return (
+                      <div className={'timeline-node ' + (reached ? 'reached' : '')} key={step}>
+                        <div className="timeline-node-dot">
+                          {reached ? <Check size={14} /> : <StepIcon size={14} />}
+                        </div>
+                        <span>{statusMeta[step].label}</span>
+                        {index < STATUS_STEPS.length - 1 && (
+                          <div className={'timeline-connector ' + (reached && currentIndex > index ? 'filled' : '')} />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {rejected && (
+                    <div className="timeline-rejected">
+                      <XCircle size={15} /> Rejected
                     </div>
-                  </div>
-                  <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.5px' }}>Total</div>
-                    <div style={{ fontSize:22, fontWeight:800, color:'var(--fk-blue)' }}>₹{order.total_amount.toFixed(2)}</div>
-                  </div>
+                  )}
                 </div>
-              </div>
+
+                <div className="order-card-content">
+                  <section>
+                    <h3><Package size={15} /> Items</h3>
+                    <div className="order-items">
+                      {order.items.map((item, idx) => {
+                        const name = item.product_name || item.name || 'Product #' + item.product_id;
+                        const price = Number(item.unit_price ?? item.price ?? 0);
+                        return (
+                          <div className="order-item-row" key={order.order_id + '-' + item.product_id + '-' + idx}>
+                            <div>
+                              <strong>{name}</strong>
+                              <span>Qty ×{item.quantity}</span>
+                            </div>
+                            <strong>₹{(price * item.quantity).toFixed(2)}</strong>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="order-card-grid">
+                    <div>
+                      <h3><MapPin size={15} /> Delivery address</h3>
+                      <p>{order.delivery_address}</p>
+                    </div>
+                    <div>
+                      <h3><ShoppingBag size={15} /> Total</h3>
+                      <p className="order-total">₹{Number(order.total_amount).toFixed(2)}</p>
+                    </div>
+                  </section>
+                </div>
+
+                <div className="order-card-footer">
+                  <span>Live order tracking stays active while your account is connected.</span>
+                  <button
+                    className="hero-cta"
+                    onClick={() => router.push('/shop/' + order.shop_id + '/order-success?orderId=' + order.order_id)}
+                  >
+                    Track order <Truck size={15} />
+                  </button>
+                </div>
+              </motion.article>
             );
           })}
         </div>
       )}
-      <style>{`
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }
