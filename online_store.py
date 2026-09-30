@@ -16,7 +16,7 @@ import secrets
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -448,9 +448,22 @@ def place_order(
     db: Session = Depends(get_db),
     current_user: dict = Depends(customer_only),
     _rl: None = Depends(check_rate_limit),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     """Place an online order at a specific shop"""
     customer_id = current_user["user_id"]
+
+    # Durable request deduplication for retries/double taps.
+    replay_key = None
+    if idempotency_key and idempotency_key.strip():
+        from idempotency_manager import IdempotencyManager
+        replay_key = f"customer:{customer_id}:shop:{data.shop_id}:{idempotency_key.strip()}"
+        cached = IdempotencyManager.get_cached_response(
+            replay_key,
+            "online_order_create",
+        )
+        if cached is not None:
+            return cached
 
     # Validate shop.
     # Browse requests already fall back to shops whose online-store flag is not enabled,
@@ -523,7 +536,7 @@ def place_order(
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
-    return {
+    response = {
         "message": "Order placed successfully! The shop will confirm shortly.",
         "order_id": order.id,
         "shop_name": profile.shop_name,
@@ -532,15 +545,60 @@ def place_order(
         "status": "PENDING",
     }
 
+    if replay_key:
+        try:
+            from idempotency_manager import IdempotencyManager
+            IdempotencyManager.set_cached_response(
+                replay_key,
+                "online_order_create",
+                response,
+            )
+        except Exception as e:
+            logger.warning("Online order idempotency cache write failed: %s", e)
+
+    try:
+        from audit_logging import AuditService, AuditAction
+        AuditService.log_action(
+            db=db,
+            user_id=customer_id,
+            action=AuditAction.CREATE,
+            table_name="online_orders",
+            record_id=order.id,
+            new_values={
+                "shop_id": data.shop_id,
+                "customer_id": customer_id,
+                "total_amount": total_amount,
+                "status": "PENDING",
+                "items": order_items,
+            },
+            description=f"Online order #{order.id} created by customer",
+        )
+    except Exception as e:
+        logger.warning("Online order audit log failed for #%s: %s", order.id, e)
+
+    return response
+
 
 @router.post("/guest-order")
 def place_guest_order(
     data: GuestOrder,
     db: Session = Depends(get_db),
     _rl: None = Depends(check_rate_limit),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     """Place an online order as a guest (no auth required)"""
     logger.info(f"Received guest order: shop_id={data.shop_id}, customer={data.customer_name}, phone={data.phone}, items_count={len(data.items)}")
+
+    replay_key = None
+    if idempotency_key and idempotency_key.strip():
+        from idempotency_manager import IdempotencyManager
+        replay_key = f"guest:{data.phone}:shop:{data.shop_id}:{idempotency_key.strip()}"
+        cached = IdempotencyManager.get_cached_response(
+            replay_key,
+            "guest_online_order_create",
+        )
+        if cached is not None:
+            return cached
     
     # 1. Verify Firebase Phone Auth Token (if provided)
     if data.firebase_id_token:
@@ -688,13 +746,48 @@ def place_guest_order(
     except Exception as e:
         logger.error(f"Failed to send FCM notification: {e}")
 
-    return {
+    response = {
         "message": "Guest order placed successfully!",
         "order_id": order.id,
         "shop_name": profile.shop_name,
         "total_amount": total_amount,
+        "items": order_items,
         "status": "PENDING",
     }
+
+    if replay_key:
+        try:
+            from idempotency_manager import IdempotencyManager
+            IdempotencyManager.set_cached_response(
+                replay_key,
+                "guest_online_order_create",
+                response,
+            )
+        except Exception as e:
+            logger.warning("Guest order idempotency cache write failed: %s", e)
+
+    try:
+        from audit_logging import AuditService, AuditAction
+        AuditService.log_action(
+            db=db,
+            user_id=data.shop_id,
+            action=AuditAction.CREATE,
+            table_name="online_orders",
+            record_id=order.id,
+            new_values={
+                "shop_id": data.shop_id,
+                "customer_id": customer_id,
+                "total_amount": total_amount,
+                "status": "PENDING",
+                "items": order_items,
+                "guest_phone": data.phone,
+            },
+            description=f"Guest online order #{order.id} created",
+        )
+    except Exception as e:
+        logger.warning("Guest online order audit log failed for #%s: %s", order.id, e)
+
+    return response
 
 
 @router.get("/my-orders")
@@ -708,20 +801,21 @@ def get_my_orders(
         OnlineOrder.customer_id == customer_id
     ).order_by(OnlineOrder.created_at.desc()).all()
 
-    return {
-        "orders": [
-            {
-                "order_id": o.id,
-                "shop_id": o.shop_id,
-                "status": o.order_status,
-                "total_amount": float(o.total_amount),
-                "delivery_address": o.delivery_address,
-                "items": json.loads(o.items_json),
-                "created_at": o.created_at,
-            }
-            for o in orders
-        ]
-    }
+    result = []
+    for o in orders:
+        profile = db.query(ShopProfile).filter(ShopProfile.shop_id == o.shop_id).first()
+        result.append({
+            "order_id": o.id,
+            "shop_id": o.shop_id,
+            "shop_name": profile.shop_name if profile else f"Shop #{o.shop_id}",
+            "status": o.order_status,
+            "total_amount": float(o.total_amount),
+            "delivery_address": o.delivery_address,
+            "items": json.loads(o.items_json),
+            "created_at": o.created_at,
+        })
+
+    return {"orders": result}
 
 
 @router.get("/order/{order_id}/track")
@@ -746,8 +840,12 @@ def track_order(
     STATUS_STEPS = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
     current_step = STATUS_STEPS.index(order.order_status) if order.order_status in STATUS_STEPS else 0
 
+    profile = db.query(ShopProfile).filter(ShopProfile.shop_id == order.shop_id).first()
+
     return {
         "order_id": order.id,
+        "shop_id": order.shop_id,
+        "shop_name": profile.shop_name if profile else f"Shop #{order.shop_id}",
         "status": order.order_status,
         "progress_step": current_step + 1,
         "total_steps": len(STATUS_STEPS),
@@ -786,8 +884,12 @@ def guest_track_order(
     STATUS_STEPS = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
     current_step = STATUS_STEPS.index(order.order_status) if order.order_status in STATUS_STEPS else 0
 
+    profile = db.query(ShopProfile).filter(ShopProfile.shop_id == order.shop_id).first()
+
     return {
         "order_id": order.id,
+        "shop_id": order.shop_id,
+        "shop_name": profile.shop_name if profile else f"Shop #{order.shop_id}",
         "status": order.order_status,
         "progress_step": current_step + 1,
         "total_steps": len(STATUS_STEPS),
@@ -958,6 +1060,7 @@ def update_order_status(
                 if product:
                     product.current_stock = (product.current_stock or 0) + item["quantity"]
 
+    previous_status = str(order.order_status)
     order.order_status = new_status
     try:
         db.commit()
@@ -965,8 +1068,24 @@ def update_order_status(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
 
+    try:
+        from audit_logging import AuditService, AuditAction
+        AuditService.log_action(
+            db=db,
+            user_id=shop_id,
+            action=AuditAction.UPDATE,
+            table_name="online_orders",
+            record_id=order.id,
+            old_values={"status": previous_status},
+            new_values={"status": new_status},
+            description=f"Online order #{order.id} status changed {previous_status} -> {new_status}",
+        )
+    except Exception as e:
+        logger.warning("Order status audit log failed for #%s: %s", order.id, e)
+
     return {
         "message": f"Order #{order_id} status updated to {new_status}.",
         "order_id": order_id,
         "new_status": new_status,
+        "updated_at": datetime.utcnow().isoformat(),
     }
