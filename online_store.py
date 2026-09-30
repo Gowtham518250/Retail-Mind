@@ -54,6 +54,7 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
 
 logger = logging.getLogger(__name__)
 from realtime import publish_realtime_event
+from audit_logging import AuditAction, AuditService
 
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
@@ -913,6 +914,8 @@ def update_order_status(
         raise HTTPException(status_code=400, detail=f"Invalid action. Choose from: {list(ACTION_MAP.keys())}")
 
     previous_status = order.order_status
+    restored_inventory = []
+    linked_invoice = None
 
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
@@ -1009,6 +1012,11 @@ def update_order_status(
                 ).first()
                 if product:
                     product.current_stock = (product.current_stock or 0) + item["quantity"]
+                    restored_inventory.append({
+                        "product_id": product.id,
+                        "quantity": item["quantity"],
+                        "new_stock": float(product.current_stock),
+                    })
 
     order.order_status = new_status
     try:
@@ -1016,6 +1024,36 @@ def update_order_status(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
+
+    try:
+        AuditService.log_action(
+            db=db,
+            user_id=shop_id,
+            action=AuditAction.UPDATE,
+            table_name="online_orders",
+            record_id=order.id,
+            old_values={"status": previous_status},
+            new_values={"status": new_status},
+            description=f"Online order #{order.id} changed from {previous_status} to {new_status}",
+        )
+        if linked_invoice is not None:
+            AuditService.log_action(
+                db=db,
+                user_id=shop_id,
+                action=AuditAction.UPDATE,
+                table_name="invoices",
+                record_id=linked_invoice.id,
+                new_values={
+                    "payment_status": "PAID",
+                    "paid_amount": float(linked_invoice.paid_amount or 0),
+                },
+                description=f"Online order #{order.id} marked invoice paid on delivery",
+            )
+    except Exception as audit_error:
+        logger.warning(
+            "Online order audit logging failed after commit: %s",
+            audit_error,
+        )
 
     publish_realtime_event({
         "event_id": str(uuid4()),
@@ -1027,6 +1065,30 @@ def update_order_status(
         "status": new_status,
         "total_amount": float(order.total_amount),
     })
+
+    if linked_invoice is not None and new_status == "DELIVERED":
+        publish_realtime_event({
+            "event_id": str(uuid4()),
+            "type": "payment.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "amount": float(order.total_amount),
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "payment_status": "PAID",
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+
+    if restored_inventory:
+        publish_realtime_event({
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": shop_id,
+            "reference_type": "ONLINE_ORDER_REJECT",
+            "reference_id": str(order.id),
+            "changes": restored_inventory,
+        })
 
     return {
         "message": f"Order #{order_id} status updated to {new_status}.",
