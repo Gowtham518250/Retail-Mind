@@ -172,6 +172,21 @@ export default function AuthPage() {
             </div>
             <span className={styles.logoText}>{t('brand')}</span>
           </motion.div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'rgba(255,255,255,.72)' }}>
+              <span>🌐</span>
+              <select
+                value={language}
+                onChange={e => setLanguage(e.target.value as any)}
+                style={{ border: '1px solid rgba(255,255,255,.12)', borderRadius: 9, padding: '6px 8px', background: 'rgba(255,255,255,.05)', color: '#fff' }}
+                aria-label={t('language')}
+              >
+                {WEB_LANGUAGES.map(item => (
+                  <option key={item.code} value={item.code} style={{ color: '#111' }}>{item.native}</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <AnimatePresence mode="wait">
 
