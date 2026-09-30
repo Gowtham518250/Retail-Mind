@@ -103,12 +103,18 @@ from batch_operations import router as batch_operations_router
 from security_hardening import router as security_hardening_router
 from observability_service import router as observability_router
 from operations_routes import router as operations_router
+from realtime_events import router as realtime_events_router
 
 # DB initialization
 from db import engine, get_db
 from models import Base
 from sqlalchemy.orm import Session
 from models import ShopProfile, Product
+# Import audit model before create_all so the existing audit table is registered.
+try:
+    from audit_logging import AuditLog  # noqa: F401
+except Exception as _audit_model_import_error:
+    logger.warning(f"Audit model registration skipped: {_audit_model_import_error}")
 
 # ========================
 # APP CREATION
@@ -339,6 +345,7 @@ api.include_router(authentication_router, prefix="/auth", tags=["Authentication"
 api.include_router(auth_hardening_router, tags=["Authentication Hardened"])
 api.include_router(session_router, tags=["Session Management"])
 api.include_router(logs_router, tags=["Client Logging"])
+api.include_router(realtime_events_router, tags=["Realtime"])
 
 # Core ERP
 api.include_router(bill_router, prefix="/bill", tags=["Bill Generation"])
