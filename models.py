@@ -190,6 +190,22 @@ class OnlineCustomerAuth(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class CustomerPasswordReset(Base):
+    """One-time password reset tokens for online storefront customers."""
+    __tablename__ = "customer_password_resets"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    customer_id = Column(
+        Integer,
+        ForeignKey("online_customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(128), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
 class User(Base):
     __tablename__ = "user_details"
     
