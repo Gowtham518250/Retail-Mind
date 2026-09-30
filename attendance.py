@@ -103,9 +103,23 @@ def _session_breakdown(attendance):
 
     active_session = session_data.get("active_session")
     if active_session and attendance.check_in_time and not attendance.check_out_time:
+        # An active session starts with working_hours=0 in the database, but
+        # the UI/payroll must still show elapsed time after an app-data clear.
+        # Update the existing session entry when it is already present in the
+        # session metadata instead of only adding elapsed time for a missing key.
         elapsed = (_local_now().replace(tzinfo=None) - attendance.check_in_time).total_seconds() / 3600
         elapsed = max(0.0, elapsed)
-        if active_session not in sessions_out:
+        existing = sessions_out.get(active_session)
+        if existing is not None:
+            previous_hours = float(existing.get("working_hours") or 0.0)
+            existing["check_in_time"] = existing.get(
+                "check_in_time",
+                attendance.check_in_time.isoformat(),
+            )
+            existing["check_out_time"] = None
+            existing["working_hours"] = elapsed
+            total_hours += elapsed - previous_hours
+        else:
             match = next((x for x in ATTENDANCE_SESSIONS if x[0] == active_session), None)
             sessions_out[active_session] = {
                 "label": match[3] if match else active_session.title(),
@@ -114,7 +128,7 @@ def _session_breakdown(attendance):
                 "check_out_time": None,
                 "working_hours": elapsed,
             }
-        total_hours += elapsed
+            total_hours += elapsed
 
     if not sessions_out and attendance.working_hours:
         # Fall back for rows saved before per-session meta existed.
