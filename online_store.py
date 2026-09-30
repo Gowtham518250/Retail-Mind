@@ -534,68 +534,63 @@ def place_order(
 
 
 @router.post("/guest-order")
-def place_guest_order(
+async def place_guest_order(
     data: GuestOrder,
     db: Session = Depends(get_db),
     _rl: None = Depends(check_rate_limit),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
-    """Place an online order as a guest (no auth required)"""
-    logger.info(f"Received guest order: shop_id={data.shop_id}, customer={data.customer_name}, phone={data.phone}, items_count={len(data.items)}")
-    
-    # 1. Verify Firebase Phone Auth Token (if provided)
+    """Place a guest order atomically with retry-safe idempotency and realtime owner updates."""
+    logger.info(
+        "Received guest order: shop_id=%s, customer=%s, phone=%s, items_count=%s",
+        data.shop_id, data.customer_name, data.phone, len(data.items),
+    )
+
+    scoped_key = (
+        f"guest:{data.phone}:{data.shop_id}:{idempotency_key.strip()}"
+        if idempotency_key and idempotency_key.strip()
+        else None
+    )
+    if scoped_key:
+        cached = IdempotencyManager.get_cached_response(scoped_key, "guest_order_create")
+        if cached:
+            return {**cached, "idempotent_replay": True}
+
     if data.firebase_id_token:
         try:
             import firebase_admin
             if not firebase_admin._apps:
                 raise HTTPException(status_code=503, detail="Firebase not configured. Please contact support.")
-                
             from firebase_admin import auth
             decoded_token = auth.verify_id_token(data.firebase_id_token)
-            phone_number = decoded_token.get('phone_number')
-            
+            phone_number = decoded_token.get("phone_number")
             if not phone_number:
                 raise HTTPException(status_code=400, detail="Invalid token: No phone number associated with this login.")
-                
-            # Ensure the verified phone matches the one provided (stripping non-digits for comparison if needed, or exact match)
-            # Firebase phone numbers include country code (e.g., +919876543210).
-            # We check if the provided phone is a substring of the verified phone to allow local format (e.g., 9876543210)
             if data.phone not in phone_number:
-                logger.warning(f"Verified phone number does not match provided phone number: {data.phone} vs {phone_number}")
-                
+                logger.warning(
+                    "Verified phone number does not match provided phone number: %s vs %s",
+                    data.phone, phone_number,
+                )
         except HTTPException:
-            raise  # Re-raise — a rejected token must not silently fall through
+            raise
         except Exception as e:
-            logger.error(f"Firebase token verification failed: {e}")
+            logger.error("Firebase token verification failed: %s", e)
             logger.warning("Falling back to unverified phone number for guest order.")
     else:
-        logger.info(f"No Firebase token provided for guest checkout, proceeding with unverified phone {data.phone}")
+        logger.info("No Firebase token provided for guest checkout, proceeding with phone %s", data.phone)
 
-    # 2. Validate shop
-    try:
-        profile = db.query(ShopProfile).filter(
-            ShopProfile.shop_id == data.shop_id,
-            ShopProfile.is_online_store_enabled == True,
-        ).first()
-        if not profile:
-            profile = db.query(ShopProfile).filter(
-                ShopProfile.shop_id == data.shop_id,
-            ).first()
-            if profile:
-                logger.warning(
-                    "Shop found for guest order but online ordering flag is disabled for shop_id=%s; allowing fallback checkout.",
-                    data.shop_id,
-                )
-        if not profile:
-            logger.error(f"Shop not found: shop_id={data.shop_id}")
-            raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error validating shop: {e}")
-        raise HTTPException(status_code=500, detail="Error validating shop.")
+    profile = db.query(ShopProfile).filter(
+        ShopProfile.shop_id == data.shop_id,
+        ShopProfile.is_online_store_enabled == True,
+    ).first()
+    if not profile:
+        profile = db.query(ShopProfile).filter(ShopProfile.shop_id == data.shop_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
 
-    # 3. Find or create guest customer in OnlineCustomerAuth
-    customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
+    customer = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.phone == data.phone
+    ).first()
     if not customer:
         import secrets
         customer = OnlineCustomerAuth(
@@ -604,20 +599,16 @@ def place_guest_order(
             phone=data.phone,
             address=sanitize_input(data.delivery_address, "address"),
             password=hash_password(secrets.token_urlsafe(32)),
-            is_active=False  # Mark as guest/inactive
+            is_active=False,
         )
         db.add(customer)
-        try:
-            db.commit()
-            db.refresh(customer)
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Failed to register guest customer: {str(e)}")
-        
-    customer_id = customer.id
+        db.flush()
+    else:
+        customer.user_name = sanitize_input(data.customer_name, "name")
+        customer.address = sanitize_input(data.delivery_address, "address")
 
-    # 3. Validate items and calculate total
-    order_items = []
+    order_items: list[dict] = []
+    inventory_events: list[dict] = []
     total_amount = 0.0
 
     for item in data.items:
@@ -628,12 +619,13 @@ def place_guest_order(
         ).first()
         if not product:
             raise HTTPException(status_code=404, detail=f"Product ID {item.product_id} not found.")
-        if product.current_stock < item.quantity:
+        if product.current_stock is not None and product.current_stock < item.quantity:
             raise HTTPException(
                 status_code=400,
-                detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
+                detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}",
             )
-        product.current_stock -= item.quantity
+        previous_stock = float(product.current_stock or 0)
+        product.current_stock = previous_stock - item.quantity
         discount = get_active_discount(db, data.shop_id, product.category)
         price = float(product.unit_price)
         if discount > 0:
@@ -648,11 +640,18 @@ def place_guest_order(
             "line_total": line_total,
             "discount_pct": discount,
         })
+        inventory_events.append({
+            "product_id": product.id,
+            "product_name": product.product_name,
+            "previous_stock": previous_stock,
+            "new_stock": float(product.current_stock),
+            "quantity": item.quantity,
+            "reason": "GUEST_ONLINE_ORDER",
+        })
 
-    # 4. Create Order
     order = OnlineOrder(
         shop_id=data.shop_id,
-        customer_id=customer_id,
+        customer_id=customer.id,
         total_amount=total_amount,
         delivery_address=sanitize_input(data.delivery_address, "address"),
         items_json=json.dumps(order_items),
@@ -663,38 +662,67 @@ def place_guest_order(
         db.commit()
         db.refresh(order)
     except Exception as e:
-        logger.error(f"Failed to save guest order (shop_id={data.shop_id}, phone={data.phone}): {e}")
         db.rollback()
+        logger.error("Failed to save guest order: %s", e)
         raise HTTPException(status_code=500, detail="Unable to place your order right now. Please try again later.")
-    
-    # 5. Send FCM Push Notification to Shop Owner
-    try:
-        from firebase_admin import messaging
-        shop_owner = db.query(User).filter(User.id == data.shop_id).first()
-        if shop_owner and shop_owner.fcm_token:
-            message = messaging.Message(
-                notification=messaging.Notification(
-                    title="New Online Order! 🎉",
-                    body=f"You received a new order for ₹{total_amount:.2f} from {customer.user_name}.",
-                ),
-                data={
-                    "order_id": str(order.id),
-                    "type": "NEW_ORDER"
-                },
-                token=shop_owner.fcm_token,
-            )
-            messaging.send(message)
-            logger.info(f"FCM notification sent to shop owner {shop_owner.id}")
-    except Exception as e:
-        logger.error(f"Failed to send FCM notification: {e}")
 
-    return {
+    response = {
         "message": "Guest order placed successfully!",
         "order_id": order.id,
         "shop_name": profile.shop_name,
         "total_amount": total_amount,
         "status": "PENDING",
+        "inventory_updated": True,
+        "inventory_events": inventory_events,
+        "created_at": order.created_at.isoformat() if order.created_at else datetime.utcnow().isoformat(),
     }
+    if scoped_key:
+        IdempotencyManager.set_cached_response(scoped_key, "guest_order_create", response)
+
+    try:
+        AuditService.log_action(
+            db=db,
+            action=AuditAction.CREATE,
+            table_name="online_orders",
+            record_id=order.id,
+            new_values={"shop_id": data.shop_id, "customer_id": customer.id, "total_amount": total_amount, "status": "PENDING"},
+            description=f"Guest online order #{order.id} placed",
+        )
+    except Exception as audit_error:
+        logger.warning("Guest order audit logging failed: %s", audit_error)
+
+    await event_hub.owner_event(data.shop_id, {
+        "type": "online_order_created",
+        "order_id": order.id,
+        "customer_id": customer.id,
+        "shop_id": data.shop_id,
+        "status": "PENDING",
+        "total_amount": total_amount,
+        "items": order_items,
+        "inventory": inventory_events,
+        "created_at": response["created_at"],
+        "guest": True,
+    })
+
+    # Push remains best-effort; realtime websocket is the immediate channel.
+    try:
+        from firebase_admin import messaging
+        shop_owner = db.query(User).filter(User.id == data.shop_id).first()
+        if shop_owner and shop_owner.fcm_token:
+            messaging.send(
+                messaging.Message(
+                    notification=messaging.Notification(
+                        title="New Online Order! 🎉",
+                        body=f"You received a new order for ₹{total_amount:.2f} from {customer.user_name}.",
+                    ),
+                    data={"order_id": str(order.id), "type": "NEW_ORDER"},
+                    token=shop_owner.fcm_token,
+                )
+            )
+    except Exception as e:
+        logger.info("Owner FCM notification skipped/failed: %s", e)
+
+    return response
 
 
 @router.get("/my-orders")
