@@ -10,7 +10,7 @@ import uuid as uuid_lib
 from db import get_db
 from models import User, ShopProfile
 from audit_logging import AuditLog
-from security import get_current_user
+from security import get_current_user, owner_only
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
