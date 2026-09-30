@@ -127,6 +127,7 @@ export default function MyOrdersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [liveNotice, setLiveNotice] = useState('');
   const previousStatusRef = useRef<Map<number, string>>(new Map());
 
   const fetchOrders = useCallback(async (showLoader = false) => {
@@ -162,7 +163,9 @@ export default function MyOrdersPage() {
       // Keep the UI live even though the backend currently exposes REST polling.
       for (const order of nextOrders) {
         const previous = previousStatusRef.current.get(order.order_id);
-        if (previous && previous !== order.status && typeof window !== 'undefined') {
+        if (previous && previous !== order.status) {
+          setLiveNotice(`Order #${order.order_id} updated to ${statusMeta[order.status]?.title || order.status}.`);
+          window.setTimeout(() => setLiveNotice(''), 3200);
           window.dispatchEvent(new CustomEvent('retailmind:order-updated', {
             detail: { orderId: order.order_id, status: order.status },
           }));
@@ -276,6 +279,28 @@ export default function MyOrdersPage() {
           Refresh
         </button>
       </div>
+
+      <AnimatePresence>
+        {liveNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            style={{
+              marginBottom: 14,
+              padding: '11px 14px',
+              borderRadius: 14,
+              border: '1px solid rgba(34,197,94,0.2)',
+              background: 'rgba(34,197,94,0.08)',
+              color: '#86efac',
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            ✓ {liveNotice}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div style={{
         display: 'flex',
