@@ -4,8 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 export type WebLanguage = 'en' | 'te' | 'hi' | 'ta' | 'kn' | 'ml' | 'mr' | 'gu' | 'bn' | 'pa';
 
-type TranslationKey = keyof typeof translations.en;
-
 const translations = {
   en: {
     brand: 'RetailShop', orders: 'Orders', profile: 'Profile', cart: 'Cart',
@@ -175,7 +173,7 @@ export const WEB_LANGUAGES: { code: WebLanguage; label: string; native: string }
 type LanguageContextValue = {
   language: WebLanguage;
   setLanguage: (language: WebLanguage) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: string) => string;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
