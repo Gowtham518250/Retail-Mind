@@ -29,18 +29,21 @@
    Name: SECRET_KEY
    Value: (Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))")
    
-   Name: SENDER_EMAIL
-   Value: your-email@gmail.com
+   Name: EMAIL_PROVIDER
+   Value: brevo
    
-   Name: SENDER_PASSWORD
-   Value: your-app-password (NOT your Gmail password, use App Password)
-   (Get from: https://myaccount.google.com/apppasswords)
+   Name: BREVO_API_KEY
+   Value: your Brevo API key
    
-   Name: SMTP_SERVER
-   Value: smtp.gmail.com
+   Name: BREVO_SENDER_EMAIL
+   Value: your verified sender email
    
-   Name: SMTP_PORT
-   Value: 587
+   Name: BREVO_SENDER_NAME
+   Value: Retail Mind
+   
+   IMPORTANT:
+   Render Free blocks outbound SMTP ports 25/465/587.
+   Do not use Gmail SMTP for the production Render service.
    
    Name: REDIS_URL
    Value: redis://default:password@redis-host:6379
