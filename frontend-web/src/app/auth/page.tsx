@@ -58,6 +58,7 @@ export default function AuthPage() {
       if (!res.ok) throw new Error(data.detail || data.message || 'Login failed. Check your credentials.');
 
       localStorage.setItem('customerToken', data.access_token);
+      if (data.customer_id != null) localStorage.setItem('customerId', String(data.customer_id));
       localStorage.setItem('customerName', data.customer?.name || data.name || email);
       router.replace('/');
     } catch (err: any) {
@@ -104,6 +105,7 @@ export default function AuthPage() {
       if (!res.ok) throw new Error(data.detail || data.message || 'Registration failed. Please try again.');
 
       localStorage.setItem('customerToken', data.access_token);
+      if (data.customer_id != null) localStorage.setItem('customerId', String(data.customer_id));
       localStorage.setItem('customerName', data.name || name);
       router.replace('/');
     } catch (err: any) {
