@@ -1038,6 +1038,7 @@ class OnlineOrder(Base):
     total_amount = Column(Numeric(10, 2), nullable=False)
     delivery_address = Column(Text)
     items_json = Column(Text, nullable=False) # JSON: [{product_id, name, qty, price}, ...]
+    idempotency_key = Column(String(128), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
 class WhatsappOrder(Base):

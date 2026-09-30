@@ -18,6 +18,7 @@ from db import get_db
 from realtime import publish_realtime_event
 from models import Product, StockMovement, Invoice, InvoiceLineItem
 from security import get_current_user as check_current_user
+from audit_logging import AuditAction, AuditService
 
 router = APIRouter(prefix="/api/inventory-sync", tags=["inventory sync"])
 logger = logging.getLogger(__name__)
@@ -148,6 +149,28 @@ def deduct_stock_with_idempotency(
         db.commit()
         db.refresh(product)
 
+        try:
+            AuditService.log_action(
+                db=db,
+                user_id=user_id,
+                action=AuditAction.UPDATE,
+                table_name="products",
+                record_id=product.id,
+                old_values={"current_stock": float(previous_stock)},
+                new_values={
+                    "current_stock": float(product.current_stock),
+                    "quantity": float(request.quantity),
+                    "reason": request.reason,
+                    "reference_id": request.reference_id,
+                },
+                description=f"Inventory stock deducted for product {product.id}",
+            )
+        except Exception as audit_error:
+            logger.warning(
+                "Inventory audit logging failed after commit: %s",
+                audit_error,
+            )
+
         publish_realtime_event({
             "event_id": str(uuid4()),
             "type": "inventory.changed",
@@ -273,6 +296,27 @@ def deduct_stock_batch(
                 })
         
         db.commit()
+
+        for change in inventory_changes:
+            try:
+                AuditService.log_action(
+                    db=db,
+                    user_id=user_id,
+                    action=AuditAction.UPDATE,
+                    table_name="products",
+                    record_id=int(change["product_id"]),
+                    new_values=change,
+                    description=(
+                        f"Batch inventory deduction for product "
+                        f"{change['product_id']}"
+                    ),
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Batch inventory audit logging failed for product %s: %s",
+                    change.get("product_id"),
+                    audit_error,
+                )
 
         if inventory_changes:
             publish_realtime_event({

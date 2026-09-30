@@ -122,6 +122,7 @@ class PlaceOrder(BaseModel):
     shop_id: int
     items: List[OrderItem] = Field(..., min_length=1)
     delivery_address: str = Field(..., min_length=5)
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
 
 class GuestOrder(BaseModel):
     shop_id: int
@@ -129,6 +130,7 @@ class GuestOrder(BaseModel):
     phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     delivery_address: str = Field(..., min_length=5, max_length=500)
     items: List[OrderItem] = Field(..., min_length=1, max_length=50)
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
 
 
@@ -455,6 +457,27 @@ def place_order(
     """Place an online order at a specific shop"""
     customer_id = current_user["user_id"]
 
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    if idempotency_key:
+        existing_order = db.query(OnlineOrder).filter(
+            OnlineOrder.shop_id == data.shop_id,
+            OnlineOrder.customer_id == customer_id,
+            OnlineOrder.idempotency_key == idempotency_key,
+        ).first()
+        if existing_order:
+            profile = db.query(ShopProfile).filter(
+                ShopProfile.shop_id == data.shop_id
+            ).first()
+            return {
+                "message": "Order already placed.",
+                "order_id": existing_order.id,
+                "shop_name": profile.shop_name if profile else "",
+                "total_amount": float(existing_order.total_amount),
+                "items": json.loads(existing_order.items_json),
+                "status": existing_order.order_status,
+                "duplicate": True,
+            }
+
     # Validate shop.
     # Browse requests already fall back to shops whose online-store flag is not enabled,
     # so order placement should also allow those shops when the shop record exists.
@@ -522,6 +545,7 @@ def place_order(
         delivery_address=delivery_address,
         items_json=json.dumps(order_items),
         order_status="PENDING",
+        idempotency_key=idempotency_key,
     )
     db.add(order)
     try:
@@ -596,6 +620,30 @@ def place_guest_order(
             logger.warning("Falling back to unverified phone number for guest order.")
     else:
         logger.info(f"No Firebase token provided for guest checkout, proceeding with unverified phone {data.phone}")
+
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    if idempotency_key:
+        existing_order = db.query(OnlineOrder).filter(
+            OnlineOrder.shop_id == data.shop_id,
+            OnlineOrder.idempotency_key == idempotency_key,
+        ).first()
+        if existing_order:
+            existing_customer = db.query(OnlineCustomerAuth).filter(
+                OnlineCustomerAuth.id == existing_order.customer_id
+            ).first()
+            if existing_customer and existing_customer.phone == data.phone:
+                profile = db.query(ShopProfile).filter(
+                    ShopProfile.shop_id == data.shop_id
+                ).first()
+                return {
+                    "message": "Guest order already placed.",
+                    "order_id": existing_order.id,
+                    "shop_name": profile.shop_name if profile else "",
+                    "total_amount": float(existing_order.total_amount),
+                    "items": json.loads(existing_order.items_json),
+                    "status": existing_order.order_status,
+                    "duplicate": True,
+                }
 
     # 2. Validate shop
     try:
@@ -690,6 +738,7 @@ def place_guest_order(
         delivery_address=sanitize_input(data.delivery_address, "address"),
         items_json=json.dumps(order_items),
         order_status="PENDING",
+        idempotency_key=idempotency_key,
     )
     db.add(order)
     try:

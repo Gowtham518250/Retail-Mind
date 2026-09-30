@@ -195,6 +195,9 @@ try:
         "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
         "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
         "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS address TEXT",
+        # online_orders — idempotent checkout retries
+        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
+        "CREATE INDEX IF NOT EXISTS ix_online_orders_idempotency_key ON online_orders(idempotency_key)",
     ]
     for migration_sql in safe_migrations:
         try:
