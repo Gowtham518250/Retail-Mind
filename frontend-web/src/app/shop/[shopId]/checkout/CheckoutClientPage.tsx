@@ -109,19 +109,45 @@ export default function CheckoutClientPage() {
     setSubmitError('');
     setIsSubmitting(true);
 
-    const payload = {
-      shop_id: shopId,
-      customer_name: form.name.trim(),
-      phone: form.phone.trim(),
-      delivery_address: combinedAddress,
-      items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
-      payment_method: 'COD',
-    };
+    const customerToken = localStorage.getItem('customerToken');
+    const isAuthenticatedCustomer = Boolean(customerToken);
+
+    const payload = isAuthenticatedCustomer
+      ? {
+          shop_id: shopId,
+          items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+          delivery_address: combinedAddress,
+        }
+      : {
+          shop_id: shopId,
+          customer_name: form.name.trim(),
+          phone: form.phone.trim(),
+          delivery_address: combinedAddress,
+          items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+          payment_method: 'COD',
+        };
+
+    const idempotencyStorageKey = `retailmind:checkout-key:${shopId}`;
+    let idempotencyKey = sessionStorage.getItem(idempotencyStorageKey);
+    if (!idempotencyKey) {
+      idempotencyKey =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      sessionStorage.setItem(idempotencyStorageKey, idempotencyKey);
+    }
 
     try {
-      const res = await fetch(`${API_BASE}/store/guest-order`, {
+      const endpoint = isAuthenticatedCustomer ? '/store/order' : '/store/guest-order';
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+          ...(isAuthenticatedCustomer && customerToken
+            ? { Authorization: `Bearer ${customerToken}` }
+            : {}),
+        },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -148,6 +174,7 @@ export default function CheckoutClientPage() {
         ...placedOrder,
         tracking_token: data.tracking_token,
       }));
+      sessionStorage.removeItem(idempotencyStorageKey);
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
     } catch (err: any) {
