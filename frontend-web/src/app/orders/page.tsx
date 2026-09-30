@@ -235,12 +235,12 @@ export default function MyOrdersPage() {
               marginBottom: 14,
             }}
           >
-            <ArrowLeft size={16} /> Back
+            <ArrowLeft size={16} /> {t('orders_back')}
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h1 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.5rem)', fontWeight: 800, margin: 0 }}>
-              My Orders
+              {t('orders_title')}
             </h1>
             {activeCount > 0 && (
               <span style={{
@@ -258,7 +258,7 @@ export default function MyOrdersPage() {
           </div>
 
           <p style={{ color: 'var(--text-secondary)', margin: '7px 0 0' }}>
-            Your order timeline updates automatically while the shop processes it.
+            {t('orders_live')}
           </p>
         </div>
 
@@ -278,7 +278,7 @@ export default function MyOrdersPage() {
           }}
         >
           <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
-          Refresh
+          {t('orders_refresh')}
         </button>
       </div>
 
