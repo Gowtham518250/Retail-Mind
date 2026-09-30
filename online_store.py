@@ -837,14 +837,25 @@ def get_incoming_orders(
 
 
 @router.post("/owner/orders/{order_id}/action")
-def update_order_status(
+async def update_order_status(
     order_id: int,
     action: str = Query(..., description="ACCEPT, DISPATCH, DELIVER, REJECT"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
-    """Owner: Accept, Dispatch, Deliver, or Reject an order"""
+    """Owner: change order status and publish realtime updates."""
     shop_id = current_user["user_id"]
+    scoped_key = (
+        f"{shop_id}:{order_id}:{action.upper()}:{idempotency_key.strip()}"
+        if idempotency_key and idempotency_key.strip()
+        else None
+    )
+    if scoped_key:
+        cached = IdempotencyManager.get_cached_response(scoped_key, "online_order_status")
+        if cached:
+            return {**cached, "idempotent_replay": True}
+
     order = db.query(OnlineOrder).with_for_update().filter(
         OnlineOrder.id == order_id,
         OnlineOrder.shop_id == shop_id,
@@ -852,30 +863,44 @@ def update_order_status(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
 
-    ACTION_MAP = {
+    old_status = str(order.order_status)
+    action_upper = action.upper()
+    action_map = {
         "ACCEPT": "ACCEPTED",
         "DISPATCH": "DISPATCHED",
         "DELIVER": "DELIVERED",
         "REJECT": "REJECTED",
     }
-    new_status = ACTION_MAP.get(action.upper())
+    new_status = action_map.get(action_upper)
     if not new_status:
-        raise HTTPException(status_code=400, detail=f"Invalid action. Choose from: {list(ACTION_MAP.keys())}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action. Choose from: {list(action_map.keys())}",
+        )
 
-    if order.order_status in ("DELIVERED", "REJECTED"):
+    if old_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
-        
-    if order.order_status != "PENDING" and new_status == "ACCEPTED":
+    if old_status != "PENDING" and new_status == "ACCEPTED":
         raise HTTPException(status_code=409, detail="Order is already accepted or finalized.")
+    if old_status == "PENDING" and new_status == "DISPATCHED":
+        raise HTTPException(status_code=409, detail="Accept the order before dispatching it.")
 
-    # 🟢 On ACCEPT: record sales immediately in dashboard 🟢──────────────────
-    if new_status == "ACCEPTED":
+    try:
         items = json.loads(order.items_json)
-        customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == order.customer_id).first()
-        customer_name = customer.user_name if customer else "Online Customer"
-        customer_phone = customer.phone if customer else ""
+    except Exception:
+        items = []
 
-        # 1. Write one sales row per item → appears in Sales Dashboard
+    customer = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == order.customer_id
+    ).first()
+    customer_name = customer.user_name if customer else "Online Customer"
+    customer_phone = customer.phone if customer else ""
+
+    inventory_events: list[dict] = []
+
+    # ACCEPT creates the canonical sale/invoice/journal exactly once because
+    # this transition is only valid from PENDING.
+    if new_status == "ACCEPTED":
         for item in items:
             sale_entry = sales(
                 shopkeeper_id=shop_id,
@@ -887,7 +912,6 @@ def update_order_status(
             )
             db.add(sale_entry)
 
-        # 2. Create Invoice (ACCEPTED = COD/pending payment)
         invoice_num = f"ONL-{order.id}-{int(datetime.now().timestamp())}"
         invoice = Invoice(
             user_id=shop_id,
@@ -903,39 +927,36 @@ def update_order_status(
             status="SENT",
             payment_status="UNPAID",
             source="ONLINE_ORDER",
-            notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}"
+            notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}",
         )
         db.add(invoice)
         db.flush()
 
-        # 3. Create InvoiceLineItems
         for item in items:
-            db_line = InvoiceLineItem(
-                invoice_id=invoice.id,
-                product_id=item.get("product_id"),
-                description=item.get("product_name", "Item"),
-                quantity=item.get("quantity", 1),
-                unit_price=item.get("unit_price", 0),
-                line_total=item.get("line_total", 0),
+            db.add(
+                InvoiceLineItem(
+                    invoice_id=invoice.id,
+                    product_id=item.get("product_id"),
+                    description=item.get("product_name", "Item"),
+                    quantity=item.get("quantity", 1),
+                    unit_price=item.get("unit_price", 0),
+                    line_total=item.get("line_total", 0),
+                )
             )
-            db.add(db_line)
 
-        # 4. Write to universal P&L journal
-        tx = UniversalTransaction(
-            shop_id=shop_id,
-            tx_type="INCOME",
-            category="SALE",
-            amount=float(order.total_amount),
-            reference_id=f"ONL-{order.id}",
-            description=f"Online Order Accepted: #{order.id} | {customer_name}",
-            tx_date=datetime.now(),
+        db.add(
+            UniversalTransaction(
+                shop_id=shop_id,
+                tx_type="INCOME",
+                category="SALE",
+                amount=float(order.total_amount),
+                reference_id=f"ONL-{order.id}",
+                description=f"Online Order Accepted: #{order.id} | {customer_name}",
+                tx_date=datetime.now(),
+            )
         )
-        db.add(tx)
 
-    # 🟢 On DELIVER: only mark invoice as PAID (stock deducted at order placement) 🟢
     if new_status == "DELIVERED":
-
-        # Mark the linked invoice as PAID
         linked_invoice = db.query(Invoice).filter(
             Invoice.source == "ONLINE_ORDER",
             Invoice.notes.like(f"%Online Order #{order.id}%"),
@@ -945,28 +966,91 @@ def update_order_status(
             linked_invoice.payment_status = "PAID"
             linked_invoice.paid_amount = float(order.total_amount)
             linked_invoice.status = "PAID"
-            
-    # 🟢 On REJECT: restore reserved stock 🟢
+
     if new_status == "REJECTED":
-        items = json.loads(order.items_json)
         for item in items:
-            if item.get("product_id"):
-                product = db.query(Product).with_for_update().filter(
-                    Product.id == item["product_id"],
-                    Product.user_id == shop_id,
-                ).first()
-                if product:
-                    product.current_stock = (product.current_stock or 0) + item["quantity"]
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 0)
+            if not product_id or quantity <= 0:
+                continue
+            product = db.query(Product).with_for_update().filter(
+                Product.id == product_id,
+                Product.user_id == shop_id,
+            ).first()
+            if product:
+                previous_stock = float(product.current_stock or 0)
+                product.current_stock = previous_stock + quantity
+                inventory_events.append({
+                    "product_id": product.id,
+                    "product_name": product.product_name,
+                    "previous_stock": previous_stock,
+                    "new_stock": float(product.current_stock),
+                    "quantity": quantity,
+                    "reason": "ONLINE_ORDER_REJECT_RESTORE",
+                })
 
     order.order_status = new_status
     try:
         db.commit()
+        db.refresh(order)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update order status: {str(e)}",
+        )
 
-    return {
+    response = {
         "message": f"Order #{order_id} status updated to {new_status}.",
         "order_id": order_id,
+        "previous_status": old_status,
         "new_status": new_status,
+        "status": new_status,
+        "shop_id": shop_id,
+        "customer_id": order.customer_id,
+        "total_amount": float(order.total_amount),
+        "items": items,
+        "inventory_events": inventory_events,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
     }
+    if scoped_key:
+        IdempotencyManager.set_cached_response(scoped_key, "online_order_status", response)
+
+    try:
+        AuditService.log_action(
+            db=db,
+            user_id=shop_id,
+            action=AuditAction.UPDATE,
+            table_name="online_orders",
+            record_id=order.id,
+            old_values={"status": old_status},
+            new_values={"status": new_status},
+            description=f"Order #{order.id}: {old_status} -> {new_status}",
+        )
+    except Exception as audit_error:
+        logger.warning("Order audit logging failed: %s", audit_error)
+
+    await event_hub.customer_event(order.customer_id, {
+        "type": "order_status_changed",
+        "order_id": order.id,
+        "shop_id": shop_id,
+        "status": new_status,
+        "previous_status": old_status,
+        "total_amount": float(order.total_amount),
+        "items": items,
+        "inventory_events": inventory_events,
+        "created_at": response["created_at"],
+    })
+    await event_hub.owner_event(shop_id, {
+        "type": "order_status_changed",
+        "order_id": order.id,
+        "shop_id": shop_id,
+        "status": new_status,
+        "previous_status": old_status,
+        "total_amount": float(order.total_amount),
+        "items": items,
+        "inventory_events": inventory_events,
+        "created_at": response["created_at"],
+    })
+
+    return response
