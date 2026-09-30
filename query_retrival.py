@@ -473,7 +473,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             sql,
             flags=re.IGNORECASE,
         )
-        sql = re.sub(r"\bCURRENT_DATE\s*-\s*INTERVAL\s*'1\\s*day'", ":business_date", sql, flags=re.IGNORECASE)
+        sql = re.sub(r"\bCURRENT_DATE\s*-\s*INTERVAL\s*'1\s*day'", ":business_date", sql, flags=re.IGNORECASE)
         sql = re.sub(r"\bCURRENT_DATE\b", ":business_date", sql, flags=re.IGNORECASE)
     elif re.search(r"\b(yesterday|yesterday's)\b", normalized_query):
         sql = re.sub(
@@ -494,7 +494,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             sql,
             flags=re.IGNORECASE,
         )
-        sql = re.sub(r"\bCURRENT_DATE\s*-\s*INTERVAL\s*'1\\s*day'", ":previous_business_date", sql, flags=re.IGNORECASE)
+        sql = re.sub(r"\bCURRENT_DATE\s*-\s*INTERVAL\s*'1\s*day'", ":previous_business_date", sql, flags=re.IGNORECASE)
         sql = re.sub(r"\bCURRENT_DATE\b", ":previous_business_date", sql, flags=re.IGNORECASE)
 
     # For common sales metrics, use a deterministic source preference:
