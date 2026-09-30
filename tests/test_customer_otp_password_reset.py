@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/retail_mind_test")
 os.environ["SECRET_KEY"] = "customer-otp-reset-test-secret-key-1234567890"
+os.environ["ALLOWED_HOSTS"] = "testserver,localhost,127.0.0.1"
 os.environ["SENDER_EMAIL"] = "test@example.com"
 os.environ["SENDER_PASSWORD"] = "test-password"
 
@@ -48,7 +49,6 @@ def test_customer_otp_reset_end_to_end(monkeypatch):
         "/store/customer/request-password-reset-otp",
         json={"email": "customer-otp-reset@example.com"},
     )
-    print("OTP REQUEST RESPONSE:", request_response.status_code, request_response.text)
     assert request_response.status_code == 200
     assert "otp" in request_response.json()["message"].lower()
 
