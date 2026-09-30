@@ -408,7 +408,7 @@ def reset_customer_password(
         CustomerPasswordReset.token_hash == token_hash,
         CustomerPasswordReset.used == False,
         CustomerPasswordReset.expires_at > datetime.utcnow(),
-    ).first()
+    ).with_for_update().first()
 
     if not reset_row:
         raise HTTPException(
