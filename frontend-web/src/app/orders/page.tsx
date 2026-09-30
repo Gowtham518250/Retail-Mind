@@ -8,6 +8,7 @@ import {
   ShoppingBag, Truck, Wifi, WifiOff, XCircle,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
+import { useWebLanguage } from '../../context/LanguageContext';
 
 interface OrderItem {
   product_id: number;
@@ -31,16 +32,12 @@ interface Order {
 
 const STATUS_STEPS = ['PENDING', 'ACCEPTED', 'DISPATCHED', 'DELIVERED'] as const;
 
-const statusMeta: Record<string, {
-  label: string;
-  description: string;
-  icon: typeof Clock3;
-}> = {
-  PENDING: { label: 'Order placed', description: 'Waiting for the shop to accept your order.', icon: Clock3 },
-  ACCEPTED: { label: 'Accepted & preparing', description: 'The shop accepted your order and is preparing it.', icon: Package },
-  DISPATCHED: { label: 'Out for delivery', description: 'Your order has been dispatched.', icon: Truck },
-  DELIVERED: { label: 'Delivered', description: 'Order completed successfully.', icon: CheckCircle2 },
-  REJECTED: { label: 'Order rejected', description: 'The shop could not fulfill this order.', icon: XCircle },
+const statusMeta: Record<string, { label: keyof ReturnType<typeof useWebLanguage>['t']; description: keyof ReturnType<typeof useWebLanguage>['t']; icon: typeof Clock3 }> = {
+  PENDING: { label: 'orderPlaced', description: 'orderPlacedDesc', icon: Clock3 },
+  ACCEPTED: { label: 'acceptedPreparing', description: 'acceptedPreparingDesc', icon: Package },
+  DISPATCHED: { label: 'outForDelivery', description: 'outForDeliveryDesc', icon: Truck },
+  DELIVERED: { label: 'delivered', description: 'deliveredDesc', icon: CheckCircle2 },
+  REJECTED: { label: 'rejected', description: 'rejectedDesc', icon: XCircle },
 };
 
 function normalizeStatus(status?: string) {
@@ -60,6 +57,7 @@ function buildWebSocketUrl(customerId: string, token: string) {
 }
 
 export default function MyOrdersPage() {
+  const { t } = useWebLanguage();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -155,10 +153,10 @@ export default function MyOrdersPage() {
 
     const nextMeta = statusMeta[normalizeStatus(payload.status)];
     if (nextMeta) {
-      setNotice('Order #' + id + ': ' + nextMeta.label);
+      setNotice('Order #' + id + ': ' + t(nextMeta.label));
       window.setTimeout(() => setNotice(''), 3500);
     }
-  }, []);
+  }, [t]);
 
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return;
@@ -256,31 +254,31 @@ export default function MyOrdersPage() {
     <div className="container orders-page">
       <div className="orders-topbar">
         <div>
-          <div className="orders-kicker">Customer account</div>
-          <h1>My Orders</h1>
-          <p>Track every order, status change, delivery step and item in one place.</p>
+          <div className="orders-kicker">{t('customerAccount')}</div>
+          <h1>{t('myOrders')}</h1>
+          <p>{t('trackEveryOrder')}</p>
         </div>
 
         <div className="orders-live-stack">
           <span className={'live-pill ' + (live ? 'live' : 'offline')}>
             {live ? <Wifi size={14} /> : <WifiOff size={14} />}
-            {live ? 'Live updates' : 'Fallback sync'}
+            {live ? t('liveUpdates') : t('fallbackSync')}
           </span>
           <button className="orders-refresh" onClick={() => fetchOrders(true)} disabled={refreshing}>
             <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
-            Refresh
+            {t('refresh')}
           </button>
         </div>
       </div>
 
       <div className="orders-subbar">
         <button className="hero-cta orders-back" onClick={() => router.back()}>
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} /> {t('back')}
         </button>
         <span>
           {lastUpdated
             ? 'Updated ' + lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : 'Syncing…'}
+            : t('syncing')}
         </span>
       </div>
 
@@ -304,18 +302,18 @@ export default function MyOrdersPage() {
       ) : error && !sortedOrders.length ? (
         <div className="orders-error">
           <XCircle size={28} />
-          <h2>Couldn't load your orders</h2>
+          <h2>{t('couldntLoadOrders')}</h2>
           <p>{error}</p>
           <button className="hero-cta" onClick={() => fetchOrders(true)}>
-            <RefreshCw size={15} /> Try again
+            <RefreshCw size={15} /> {t('tryAgain')}
           </button>
         </div>
       ) : !sortedOrders.length ? (
         <div className="orders-empty">
           <div className="orders-empty-icon"><ShoppingBag size={42} /></div>
-          <h2>No orders yet</h2>
-          <p>Your placed orders will appear here with live status updates.</p>
-          <button className="hero-cta" onClick={() => router.push('/')}>Start shopping</button>
+          <h2>{t('noOrders')}</h2>
+          <p>{t('ordersEmpty')}</p>
+          <button className="hero-cta" onClick={() => router.push('/')}>{t('startShopping')}</button>
         </div>
       ) : (
         <div className="orders-grid">
@@ -342,15 +340,15 @@ export default function MyOrdersPage() {
                     <p>{new Date(order.created_at).toLocaleString()}</p>
                   </div>
                   <div className="order-status-badge">
-                    <Icon size={16} /> {meta.label}
+                    <Icon size={16} /> {t(meta.label)}
                   </div>
                 </div>
 
                 <div className="order-status-banner">
                   <div className="status-banner-icon"><Icon size={24} /></div>
                   <div>
-                    <strong>{meta.label}</strong>
-                    <span>{meta.description}</span>
+                    <strong>{t(meta.label)}</strong>
+                    <span>{t(meta.description)}</span>
                   </div>
                 </div>
 
@@ -364,7 +362,7 @@ export default function MyOrdersPage() {
                         <div className="timeline-node-dot">
                           {reached ? <Check size={14} /> : <StepIcon size={14} />}
                         </div>
-                        <span>{statusMeta[step].label}</span>
+                        <span>{t(statusMeta[step].label)}</span>
                         {index < STATUS_STEPS.length - 1 && (
                           <div className={'timeline-connector ' + (reached && currentIndex > index ? 'filled' : '')} />
                         )}
@@ -380,7 +378,7 @@ export default function MyOrdersPage() {
 
                 <div className="order-card-content">
                   <section>
-                    <h3><Package size={15} /> Items</h3>
+                    <h3><Package size={15} /> {t('items')}</h3>
                     <div className="order-items">
                       {order.items.map((item, idx) => {
                         const name = item.product_name || item.name || 'Product #' + item.product_id;
@@ -389,7 +387,7 @@ export default function MyOrdersPage() {
                           <div className="order-item-row" key={order.order_id + '-' + item.product_id + '-' + idx}>
                             <div>
                               <strong>{name}</strong>
-                              <span>Qty ×{item.quantity}</span>
+                              <span>{t('qty')} ×{item.quantity}</span>
                             </div>
                             <strong>₹{(price * item.quantity).toFixed(2)}</strong>
                           </div>
@@ -400,23 +398,23 @@ export default function MyOrdersPage() {
 
                   <section className="order-card-grid">
                     <div>
-                      <h3><MapPin size={15} /> Delivery address</h3>
+                      <h3><MapPin size={15} /> {t('deliveryAddress')}</h3>
                       <p>{order.delivery_address}</p>
                     </div>
                     <div>
-                      <h3><ShoppingBag size={15} /> Total</h3>
+                      <h3><ShoppingBag size={15} /> {t('total')}</h3>
                       <p className="order-total">₹{Number(order.total_amount).toFixed(2)}</p>
                     </div>
                   </section>
                 </div>
 
                 <div className="order-card-footer">
-                  <span>Live order tracking stays active while your account is connected.</span>
+                  <span>Your live order tracking stays active while your account is connected.</span>
                   <button
                     className="hero-cta"
                     onClick={() => router.push('/shop/' + order.shop_id + '/order-success?orderId=' + order.order_id)}
                   >
-                    Track order <Truck size={15} />
+                    {t('trackOrder')} <Truck size={15} />
                   </button>
                 </div>
               </motion.article>
