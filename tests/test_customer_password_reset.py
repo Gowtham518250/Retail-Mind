@@ -1,7 +1,7 @@
 import os
 from urllib.parse import parse_qs, urlparse
 
-os.environ["DATABASE_URL"] = "sqlite:///./customer_password_reset_test.db"
+os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/retail_mind_test")
 os.environ["FRONTEND_URL"] = "https://shop.example.com"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["SENDER_EMAIL"] = "test@example.com"
