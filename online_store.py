@@ -325,8 +325,10 @@ def request_customer_password_reset_otp(
     _rl: None = Depends(check_rate_limit),
 ):
     """Generate and email a backend-owned OTP for an online customer."""
+    normalized_email = data.email.strip().lower()
+
     user = db.query(OnlineCustomerAuth).filter(
-        OnlineCustomerAuth.email == data.email
+        func.lower(OnlineCustomerAuth.email) == normalized_email
     ).first()
 
     # Keep enumeration-resistant response behavior.
@@ -367,13 +369,20 @@ def request_customer_password_reset_otp(
         if not sent:
             db.rollback()
             logger.error(
-                "Customer password reset OTP delivery failed for customer_id=%s",
+                "Customer password reset OTP delivery failed for customer_id=%s email=%s",
                 user.id,
+                user.email,
             )
-            return _customer_reset_generic_message()
+            raise HTTPException(
+                status_code=503,
+                detail="Password reset email could not be delivered. Please try again later.",
+            )
 
         db.commit()
-        return _customer_reset_generic_message()
+        return {
+            "success": True,
+            **_customer_reset_generic_message(),
+        }
     except Exception:
         db.rollback()
         logger.exception(
@@ -390,8 +399,10 @@ def verify_customer_password_reset_otp(
     _rl: None = Depends(check_rate_limit),
 ):
     """Verify the backend-generated OTP and issue a short-lived reset token."""
+    normalized_email = data.email.strip().lower()
+
     user = db.query(OnlineCustomerAuth).filter(
-        OnlineCustomerAuth.email == data.email
+        func.lower(OnlineCustomerAuth.email) == normalized_email
     ).first()
 
     if not user or not user.is_active:
