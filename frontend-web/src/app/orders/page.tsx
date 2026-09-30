@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -145,6 +145,7 @@ export default function MyOrdersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [liveConnected, setLiveConnected] = useState(false);
   const router = useRouter();
 
   const fetchOrders = useCallback(async (silent = false) => {
@@ -191,15 +192,121 @@ export default function MyOrdersPage() {
   useEffect(() => {
     void fetchOrders();
 
-    // Fast fallback realtime channel: the current backend exposes REST
-    // status endpoints but no customer WebSocket/SSE stream. Polling every
-    // 5 seconds keeps the customer account visibly in sync with owner actions
-    // without requiring a manual refresh.
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let reconnectDelayMs = 1000;
+
+    const scheduleReconnect = () => {
+      if (stopped || reconnectTimer !== null) return;
+
+      const delay = reconnectDelayMs;
+      reconnectDelayMs = Math.min(reconnectDelayMs * 2, 30000);
+
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        void connectRealtime();
+      }, delay);
+    };
+
+    const connectRealtime = async () => {
+      if (stopped) return;
+
+      try {
+        const token = localStorage.getItem('customerToken');
+        if (!token) {
+          stopped = true;
+          router.push('/auth');
+          return;
+        }
+
+        const ticketResponse = await fetch(
+          `${API_BASE}/api/ws/token?shop_id=0`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-store',
+          }
+        );
+
+        if (!ticketResponse.ok) {
+          if (ticketResponse.status === 401 || ticketResponse.status === 403) {
+            stopped = true;
+            localStorage.removeItem('customerToken');
+            router.push('/auth');
+            return;
+          }
+          throw new Error('Realtime ticket request failed');
+        }
+
+        const ticketData = await ticketResponse.json();
+        const wsBase = API_BASE
+          .replace(/^https:/, 'wss:')
+          .replace(/^http:/, 'ws:');
+
+        const wsUrl =
+          `${wsBase}/api/ws/live/${encodeURIComponent(ticketData.user_id)}/${encodeURIComponent(ticketData.shop_id)}?ticket=${encodeURIComponent(ticketData.token)}`;
+
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          if (stopped) return;
+          reconnectDelayMs = 1000;
+          setLiveConnected(true);
+        };
+
+        socket.onmessage = (message) => {
+          try {
+            const event = JSON.parse(message.data);
+
+            if (event?.type === 'order.status_changed') {
+              const orderId = Number(event.order_id);
+              const nextStatus = String(event.status || '').toUpperCase();
+
+              setOrders((current) =>
+                current.map((order) =>
+                  order.order_id === orderId
+                    ? { ...order, status: nextStatus }
+                    : order
+                )
+              );
+              setError('');
+              setLastUpdated(new Date());
+            } else if (event?.type === 'order.created') {
+              // A new order is already persisted; REST reconciliation gives the
+              // customer the complete new order payload and keeps ordering stable.
+              void fetchOrders(true);
+            }
+          } catch {
+            // Ignore malformed realtime payloads; the REST fallback remains authoritative.
+          }
+        };
+
+        socket.onerror = () => {
+          setLiveConnected(false);
+        };
+
+        socket.onclose = () => {
+          setLiveConnected(false);
+          socket = null;
+          scheduleReconnect();
+        };
+      } catch {
+        setLiveConnected(false);
+        scheduleReconnect();
+      }
+    };
+
+    void connectRealtime();
+
+    // Deployment-safe fallback: REST reconciliation runs less frequently because
+    // the WebSocket is the primary update path.
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         void fetchOrders(true);
       }
-    }, 5000);
+    }, 30000);
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') void fetchOrders(true);
@@ -208,10 +315,27 @@ export default function MyOrdersPage() {
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
+      stopped = true;
+      setLiveConnected(false);
+
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+
+      if (socket) {
+        try {
+          socket.close();
+        } catch {
+          // ignore cleanup errors
+        }
+        socket = null;
+      }
+
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, router]);
 
   const activeCount = useMemo(
     () => orders.filter((order) => !['DELIVERED', 'REJECTED'].includes(order.status)).length,
@@ -242,9 +366,9 @@ export default function MyOrdersPage() {
         </div>
 
         <div className="orders-live-status" aria-live="polite">
-          <span className="live-dot" />
+          <span className={`live-dot ${liveConnected ? '' : 'offline'}`} />
           <Wifi size={14} />
-          Live updates
+          {liveConnected ? 'Live updates' : 'Reconnecting…'}
           <button
             className="refresh-orders-btn"
             onClick={() => void fetchOrders(true)}
