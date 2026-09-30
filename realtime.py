@@ -277,7 +277,6 @@ realtime_manager = _RealtimeManager()
 redis_event_bridge = _RedisEventBridge()
 
 _publisher: Optional[redis.Redis] = None
-_publisher_init_lock = asyncio.Lock()
 
 
 def _get_sync_publisher() -> redis.Redis:
