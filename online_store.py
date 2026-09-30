@@ -13,6 +13,9 @@ import math
 import json
 import logging
 import secrets
+import hashlib
+import os
+from urllib.parse import quote
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
 from uuid import uuid4
@@ -23,7 +26,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db import get_db
-from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction, OnlineCustomerAuth, sales
+from models import (
+    User,
+    ShopProfile,
+    Product,
+    OnlineOrder,
+    Invoice,
+    InvoiceLineItem,
+    UniversalTransaction,
+    OnlineCustomerAuth,
+    CustomerPasswordReset,
+    sales,
+)
 from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
@@ -102,9 +116,11 @@ class CustomerLoginPhone(BaseModel):
     password: str
 
 class CustomerForgot(BaseModel):
-    # Support forgot by email or phone
+    # Support forgot by email or phone. The web storefront uses email because
+    # the reset link is delivered through the account email address.
     email: Optional[str] = None
     phone: Optional[str] = None
+    shop_id: Optional[int] = Field(None, ge=1)
 
     @field_validator("email")
     def validate_email(cls, v):
@@ -113,6 +129,10 @@ class CustomerForgot(BaseModel):
         if "@" not in v or "." not in v.split("@")[-1]:
             raise ValueError("value is not a valid email address")
         return v.lower().strip()
+
+class CustomerResetPassword(BaseModel):
+    token: str = Field(..., min_length=32, max_length=200)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 class OrderItem(BaseModel):
     product_id: int
@@ -268,50 +288,160 @@ def customer_login_phone(
 @router.post("/customer/forgot-password")
 def forgot_password(
     data: CustomerForgot,
+    request: Request,
     db: Session = Depends(get_db),
     _rl: None = Depends(check_rate_limit),
 ):
-    """Generate a new temporary password and email it to the customer.
+    """Create a one-time reset link for an online storefront customer.
 
-    🔧 FIX: this previously queried the customer and then did nothing with
-    the result — no email was ever sent, no password was ever changed. It
-    just returned a generic success message regardless, which made the
-    "forgot password" flow completely non-functional while looking like
-    it worked from the client's perspective.
-
-    Always returns the same generic message whether or not the account
-    exists, to avoid leaking which emails are registered.
+    The account password is not changed until the customer presents the
+    one-time token from the email link and chooses a new password.
     """
     user = None
     if data.email:
-        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
+        user = db.query(OnlineCustomerAuth).filter(
+            OnlineCustomerAuth.email == data.email
+        ).first()
     elif data.phone:
-        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
+        user = db.query(OnlineCustomerAuth).filter(
+            OnlineCustomerAuth.phone == data.phone
+        ).first()
 
-    if user and user.email:
+    if user and user.email and EmailNotificationService:
         try:
-            # Generate a secure, random temporary password (not a
-            # predictable/short one) and store only its bcrypt hash.
-            temp_password = secrets.token_urlsafe(9)  # ~12 char URL-safe string
-            user.password = hash_password(temp_password)
+            # Invalidate any previous reset links for this customer.
+            db.query(CustomerPasswordReset).filter(
+                CustomerPasswordReset.customer_id == user.id,
+                CustomerPasswordReset.used == False,
+            ).update({"used": True}, synchronize_session=False)
+
+            raw_token = secrets.token_urlsafe(48)
+            token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+            reset_row = CustomerPasswordReset(
+                customer_id=user.id,
+                token_hash=token_hash,
+                expires_at=datetime.utcnow() + timedelta(minutes=30),
+                used=False,
+            )
+            db.add(reset_row)
             db.commit()
 
-            if EmailNotificationService:
-                subject, body = EmailNotificationService.welcome_credentials_template(
-                    user.user_name, temp_password, "Customer (Password Reset)"
-                )
-                EmailNotificationService.create_notification(
-                    db=db,
-                    recipient_email=user.email,
-                    subject=subject,
-                    body=body,
-                    event_type="PASSWORD_RESET",
-                )
-        except Exception as e:
-            logger.error(f"Failed to process password reset for customer: {e}")
-            db.rollback()
+            configured_frontend = (
+                os.getenv("NEXTJS_FRONTEND_URL")
+                or os.getenv("FRONTEND_URL")
+                or os.getenv("PUBLIC_BASE_URL")
+            )
+            frontend_origin = (
+                configured_frontend.rstrip("/")
+                if configured_frontend
+                else "https://retail-mind-web.onrender.com"
+            )
+            reset_url = (
+                f"{frontend_origin}/auth?resetToken={quote(raw_token)}"
+                + (f"&shop_id={data.shop_id}" if data.shop_id else "")
+            )
 
-    return {"message": "If this account is registered with an email, a new password has been sent to it."}
+            subject = "Reset your Retail Mind customer password"
+            body = (
+                f"Hello {user.user_name},\n\n"
+                "We received a request to reset your Retail Mind customer password.\n\n"
+                f"Reset your password here:\n{reset_url}\n\n"
+                "This link expires in 30 minutes and can be used only once. "
+                "If you did not request this, you can safely ignore this email.\n\n"
+                "Retail Mind"
+            )
+            html_body = f"""
+<html>
+<body style="font-family:Arial,sans-serif;line-height:1.6;color:#1f2937">
+  <div style="max-width:560px;margin:24px auto;padding:28px;border:1px solid #e5e7eb;border-radius:16px">
+    <h2 style="margin-top:0;color:#2563eb">Reset your password</h2>
+    <p>Hello {user.user_name},</p>
+    <p>We received a request to reset your Retail Mind customer password.</p>
+    <p>
+      <a href="{reset_url}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px">
+        Reset password
+      </a>
+    </p>
+    <p style="font-size:13px;color:#6b7280">This link expires in 30 minutes and can be used only once.</p>
+    <p style="font-size:13px;color:#6b7280">If you did not request this, you can safely ignore this email.</p>
+  </div>
+</body>
+</html>
+"""
+            sent = EmailNotificationService.send_email(
+                recipient_email=user.email,
+                subject=subject,
+                body=body,
+                html_body=html_body,
+            )
+            if not sent:
+                db.query(CustomerPasswordReset).filter(
+                    CustomerPasswordReset.token_hash == token_hash
+                ).delete(synchronize_session=False)
+                db.commit()
+                logger.error(
+                    "Customer password reset email delivery failed for customer_id=%s",
+                    user.id,
+                )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to create customer password reset challenge for customer_id=%s",
+                user.id,
+            )
+
+    # Keep the response generic so callers cannot enumerate customer accounts.
+    return {
+        "message": "If this account is registered with an email, a password reset link has been sent to it."
+    }
+
+
+@router.post("/customer/reset-password")
+def reset_customer_password(
+    data: CustomerResetPassword,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
+):
+    """Consume a one-time customer reset token and set the new password."""
+    token_hash = hashlib.sha256(data.token.strip().encode("utf-8")).hexdigest()
+    reset_row = db.query(CustomerPasswordReset).filter(
+        CustomerPasswordReset.token_hash == token_hash,
+        CustomerPasswordReset.used == False,
+        CustomerPasswordReset.expires_at > datetime.utcnow(),
+    ).with_for_update().first()
+
+    if not reset_row:
+        raise HTTPException(
+            status_code=400,
+            detail="Reset link is invalid or expired. Please request a new one.",
+        )
+
+    user = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == reset_row.customer_id
+    ).with_for_update().first()
+
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="Customer account is unavailable.")
+
+    user.password = hash_password(data.new_password)
+    reset_row.used = True
+
+    # Invalidate any other outstanding reset tokens for this customer.
+    db.query(CustomerPasswordReset).filter(
+        CustomerPasswordReset.customer_id == user.id,
+        CustomerPasswordReset.id != reset_row.id,
+        CustomerPasswordReset.used == False,
+    ).update({"used": True}, synchronize_session=False)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to reset password. Please try again.")
+
+    return {
+        "message": "Password reset successfully. You can now sign in with your new password."
+    }
 
 
 # =====================

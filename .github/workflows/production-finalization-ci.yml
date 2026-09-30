@@ -12,6 +12,23 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: retail_mind_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d retail_mind_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/retail_mind_test
+      SECRET_KEY: ci-password-reset-secret-key-for-tests-only-1234567890
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +42,26 @@ jobs:
       - name: Compile production modules
         run: |
           python -m py_compile             app.py             invoices_billing.py             inventory_sync_service.py             online_store.py             backup_recovery.py             realtime.py             audit_logging.py
-      - name: Run focused realtime/inventory tests
+      - name: Run focused production tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_realtime.py
+        run: |
+          pytest -q tests/test_realtime.py
+          pytest -q tests/test_customer_password_reset.py
+
+  customer-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend-web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build customer web
+        run: npm run build

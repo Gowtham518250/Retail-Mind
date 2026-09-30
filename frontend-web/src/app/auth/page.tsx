@@ -15,15 +15,27 @@ export default function AuthPage() {
   const [email, setEmail]     = useState('');
   const [phone, setPhone]     = useState('');
   const [password, setPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [name, setName]       = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Redirect if already logged in
+  // A reset email opens this page with ?resetToken=... so the same
+  // customer auth screen can safely complete the password change.
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('customerToken')) {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('resetToken') || '';
+    if (token) {
+      setResetToken(token);
+      setView('reset');
+      return;
+    }
+    if (localStorage.getItem('customerToken')) {
       router.replace('/');
     }
   }, [router]);
@@ -113,31 +125,59 @@ export default function AuthPage() {
     }
   };
 
-  // ── Forgot Password ───────────────────────────────────────────────────────
-  // 🔧 FIX: now sends `email` (the backend's /store/customer/forgot-password
-  // was previously a no-op stub that didn't send anything regardless of
-  // what was posted to it — that's fixed server-side too. It now generates
-  // and emails a real temporary password.)
+  // ── Forgot Password / Set New Password ─────────────────────────────────────
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
     setLoading(true);
     setError('');
     setSuccess('');
+
     try {
+      if (resetToken) {
+        if (resetPassword.length < 8) {
+          throw new Error('New password must be at least 8 characters long.');
+        }
+        if (resetPassword !== resetPasswordConfirm) {
+          throw new Error('Passwords do not match.');
+        }
+
+        const res = await fetch(`${API_BASE}/store/customer/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: resetToken,
+            new_password: resetPassword,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.message || 'Password reset failed. Please request a new link.');
+
+        setSuccess('Password reset successfully. You can now sign in with your new password.');
+        setResetToken('');
+        setResetPassword('');
+        setResetPasswordConfirm('');
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        throw new Error('Please enter a valid email address.');
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const shopId = params.get('shop_id');
       const res = await fetch(`${API_BASE}/store/customer/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          ...(shopId && /^\\d+$/.test(shopId) ? { shop_id: Number(shopId) } : {}),
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Reset failed. Please try again.');
-      setSuccess('If this email is registered, a new password has been sent to it.');
+      if (!res.ok) throw new Error(data.detail || data.message || 'Reset request failed. Please try again.');
+      setSuccess('If this email is registered, a password reset link has been sent to it.');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Password reset failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -381,8 +421,12 @@ export default function AuthPage() {
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>Reset password</h1>
-                <p className={styles.authSubtitle}>Enter your registered email — we&apos;ll send you a new password</p>
+                <h1 className={styles.authTitle}>{resetToken ? 'Choose a new password' : 'Reset password'}</h1>
+                <p className={styles.authSubtitle}>
+                  {resetToken
+                    ? 'Create a new password for your Retail Mind customer account.'
+                    : 'Enter your registered email and we&apos;ll send you a secure reset link.'}
+                </p>
 
                 <form onSubmit={handleReset} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -398,32 +442,77 @@ export default function AuthPage() {
                     )}
                   </AnimatePresence>
 
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email</label>
-                    <div className={styles.inputWrap}>
-                      <Mail size={17} className={styles.inputIcon} />
-                      <input
-                        id="reset-email"
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        className={styles.input}
-                        placeholder="Registered email"
-                        required
-                        autoComplete="email"
-                      />
+                  {!resetToken ? (
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.label}>Email</label>
+                      <div className={styles.inputWrap}>
+                        <Mail size={17} className={styles.inputIcon} />
+                        <input
+                          id="reset-email"
+                          type="email"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          className={styles.input}
+                          placeholder="Registered email"
+                          required
+                          autoComplete="email"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.label}>New password</label>
+                        <div className={styles.inputWrap}>
+                          <Lock size={17} className={styles.inputIcon} />
+                          <input
+                            id="reset-new-password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={resetPassword}
+                            onChange={e => setResetPassword(e.target.value)}
+                            className={styles.input}
+                            placeholder="Minimum 8 characters"
+                            required
+                            minLength={8}
+                            autoComplete="new-password"
+                          />
+                          <button type="button" className={styles.eyeBtn} onClick={() => setShowPassword(v => !v)} tabIndex={-1}>
+                            {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.label}>Confirm new password</label>
+                        <div className={styles.inputWrap}>
+                          <Lock size={17} className={styles.inputIcon} />
+                          <input
+                            id="reset-confirm-password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={resetPasswordConfirm}
+                            onChange={e => setResetPasswordConfirm(e.target.value)}
+                            className={styles.input}
+                            placeholder="Re-enter your new password"
+                            required
+                            minLength={8}
+                            autoComplete="new-password"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
                     type="submit"
-                    disabled={loading || !!success}
+                    disabled={loading || !!success && !!resetToken}
                     className={styles.submitBtn}
                     id="reset-submit"
                   >
-                    {loading ? <span className={styles.spinner} /> : 'Send New Password'}
+                    {loading
+                      ? <span className={styles.spinner} />
+                      : resetToken ? 'Set New Password' : 'Send Reset Link'}
                   </motion.button>
                 </form>
 
