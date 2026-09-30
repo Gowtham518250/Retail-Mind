@@ -103,6 +103,7 @@ from batch_operations import router as batch_operations_router
 from security_hardening import router as security_hardening_router
 from observability_service import router as observability_router
 from operations_routes import router as operations_router
+from realtime import router as realtime_router
 
 # DB initialization
 from db import engine, get_db
@@ -374,6 +375,7 @@ api.include_router(batch_operations_router, tags=["Batch Operations"])
 api.include_router(security_hardening_router, tags=["Security Hardening"])
 api.include_router(observability_router, tags=["Observability"])
 api.include_router(operations_router, prefix="/api", tags=["Operations"])
+api.include_router(realtime_router)
 
 # 🚀 PERFORMANCE: Setup performance monitoring middleware
 setup_performance_middleware(api)

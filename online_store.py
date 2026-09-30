@@ -15,6 +15,7 @@ import logging
 import secrets
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
@@ -52,6 +53,7 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
     return 0.0
 
 logger = logging.getLogger(__name__)
+from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
@@ -523,6 +525,16 @@ def place_order(
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.created",
+        "shop_id": data.shop_id,
+        "order_id": order.id,
+        "customer_id": customer_id,
+        "status": "PENDING",
+        "total_amount": float(total_amount),
+    })
+
     return {
         "message": "Order placed successfully! The shop will confirm shortly.",
         "order_id": order.id,
@@ -687,6 +699,16 @@ def place_guest_order(
             logger.info(f"FCM notification sent to shop owner {shop_owner.id}")
     except Exception as e:
         logger.error(f"Failed to send FCM notification: {e}")
+
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.created",
+        "shop_id": data.shop_id,
+        "order_id": order.id,
+        "customer_id": customer.id,
+        "status": "PENDING",
+        "total_amount": float(total_amount),
+    })
 
     return {
         "message": "Guest order placed successfully!",
@@ -862,6 +884,8 @@ def update_order_status(
     if not new_status:
         raise HTTPException(status_code=400, detail=f"Invalid action. Choose from: {list(ACTION_MAP.keys())}")
 
+    previous_status = order.order_status
+
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
         
@@ -964,6 +988,17 @@ def update_order_status(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
+
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.status_changed",
+        "shop_id": shop_id,
+        "order_id": order_id,
+        "customer_id": order.customer_id,
+        "previous_status": previous_status,
+        "status": new_status,
+        "total_amount": float(order.total_amount),
+    })
 
     return {
         "message": f"Order #{order_id} status updated to {new_status}.",

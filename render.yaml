@@ -26,6 +26,12 @@ services:
         value: brevo
       - key: BREVO_API_KEY
         sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REALTIME_REDIS_CHANNEL
+        value: retail-mind:realtime:events
+      - key: REALTIME_TICKET_TTL_SECONDS
+        value: "120"
 
   - type: static
     name: retail-mind-frontend
