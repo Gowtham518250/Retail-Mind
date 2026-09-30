@@ -6,11 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Lock, Phone, ShoppingBag, ArrowRight, User, Mail, CheckCircle } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import styles from './auth.module.css';
+import { useWebLanguage } from '../../context/LanguageContext';
 
 type View = 'login' | 'register' | 'reset';
 
 export default function AuthPage() {
   const router = useRouter();
+  const { t } = useWebLanguage();
   const [view, setView] = useState<View>('login');
   const [email, setEmail]     = useState('');
   const [phone, setPhone]     = useState('');
@@ -168,7 +170,7 @@ export default function AuthPage() {
             <div className={styles.logoIcon}>
               <ShoppingBag size={22} />
             </div>
-            <span className={styles.logoText}>RetailShop</span>
+            <span className={styles.logoText}>{t('brand')}</span>
           </motion.div>
 
           <AnimatePresence mode="wait">
@@ -182,8 +184,8 @@ export default function AuthPage() {
                 exit={{ opacity: 0, x: 24 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>Welcome back</h1>
-                <p className={styles.authSubtitle}>Sign in to continue shopping</p>
+                <h1 className={styles.authTitle}>{t('welcomeBack')}</h1>
+                <p className={styles.authSubtitle}>{t('signInContinue')}</p>
 
                 <form onSubmit={handleLogin} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -201,7 +203,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email</label>
+                    <label className={styles.label}>{t('email')}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -219,8 +221,8 @@ export default function AuthPage() {
 
                   <div className={styles.fieldGroup}>
                     <div className={styles.labelRow}>
-                      <label className={styles.label}>Password</label>
-                      <span className={styles.link} onClick={() => switchView('reset')}>Forgot password?</span>
+                      <label className={styles.label}>{t('password')}</label>
+                      <span className={styles.link} onClick={() => switchView('reset')}>{t('forgotPassword')}</span>
                     </div>
                     <div className={styles.inputWrap}>
                       <Lock size={17} className={styles.inputIcon} />
@@ -248,13 +250,13 @@ export default function AuthPage() {
                     className={styles.submitBtn}
                     id="login-submit"
                   >
-                    {loading ? <span className={styles.spinner} /> : <>Sign In <ArrowRight size={17} /></>}
+                    {loading ? <span className={styles.spinner} /> : <>{t('signIn')} <ArrowRight size={17} /></>}
                   </motion.button>
                 </form>
 
                 <p className={styles.switchText}>
-                  New here?{' '}
-                  <span className={styles.link} onClick={() => switchView('register')}>Create an account</span>
+                  {t('newHere')}{' '}
+                  <span className={styles.link} onClick={() => switchView('register')}>{t('createNewAccount')}</span>
                 </p>
               </motion.div>
             )}
@@ -268,7 +270,7 @@ export default function AuthPage() {
                 exit={{ opacity: 0, x: -24 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>Create account</h1>
+                <h1 className={styles.authTitle}>{t('createAccount')}</h1>
                 <p className={styles.authSubtitle}>Join thousands of happy shoppers</p>
 
                 <form onSubmit={handleRegister} className={styles.form} noValidate>
@@ -281,7 +283,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Full Name</label>
+                    <label className={styles.label}>{t('fullName')}</label>
                     <div className={styles.inputWrap}>
                       <User size={17} className={styles.inputIcon} />
                       <input
@@ -299,7 +301,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email</label>
+                    <label className={styles.label}>{t('email')}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -316,7 +318,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Mobile Number</label>
+                    <label className={styles.label}>{t('phone')}</label>
                     <div className={styles.inputWrap}>
                       <Phone size={17} className={styles.inputIcon} />
                       <input
@@ -363,12 +365,12 @@ export default function AuthPage() {
                     className={styles.submitBtn}
                     id="reg-submit"
                   >
-                    {loading ? <span className={styles.spinner} /> : <>Create Account <ArrowRight size={17} /></>}
+                    {loading ? <span className={styles.spinner} /> : <>{t('createAccount')} <ArrowRight size={17} /></>}
                   </motion.button>
                 </form>
 
                 <p className={styles.switchText}>
-                  Already a member?{' '}
+                  {t('alreadyMember')}{' '}
                   <span className={styles.link} onClick={() => switchView('login')}>Sign in</span>
                 </p>
               </motion.div>
@@ -383,7 +385,7 @@ export default function AuthPage() {
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>Reset password</h1>
+                <h1 className={styles.authTitle}>{t('resetPassword')}</h1>
                 <p className={styles.authSubtitle}>Enter your registered email — we&apos;ll send you a new password</p>
 
                 <form onSubmit={handleReset} className={styles.form} noValidate>
@@ -425,12 +427,12 @@ export default function AuthPage() {
                     className={styles.submitBtn}
                     id="reset-submit"
                   >
-                    {loading ? <span className={styles.spinner} /> : 'Send New Password'}
+                    {loading ? <span className={styles.spinner} /> : '{t('sendNewPassword')}'}
                   </motion.button>
                 </form>
 
                 <p className={styles.switchText}>
-                  <span className={styles.link} onClick={() => switchView('login')}>← Back to Sign In</span>
+                  <span className={styles.link} onClick={() => switchView('login')}>← {t('backToSignIn')}</span>
                 </p>
               </motion.div>
             )}
