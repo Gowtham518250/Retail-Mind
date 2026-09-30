@@ -27,8 +27,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/retail_mind_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/retail_mind_test?sslmode=disable
       SECRET_KEY: ci-password-reset-secret-key-for-tests-only-1234567890
+      GROQ_API_KEY: ci-groq-api-key-not-used-by-tests
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,7 +48,7 @@ jobs:
           PYTHONPATH: .
         run: |
           pytest -q tests/test_realtime.py
-          pytest -q tests/test_customer_password_reset.py
+          pytest -q tests/test_customer_otp_password_reset.py
 
   customer-web:
     runs-on: ubuntu-latest

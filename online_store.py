@@ -36,6 +36,7 @@ from models import (
     UniversalTransaction,
     OnlineCustomerAuth,
     CustomerPasswordReset,
+    CustomerPasswordResetOtp,
     sales,
 )
 from security import (
@@ -116,8 +117,7 @@ class CustomerLoginPhone(BaseModel):
     password: str
 
 class CustomerForgot(BaseModel):
-    # Support forgot by email or phone. The web storefront uses email because
-    # the reset link is delivered through the account email address.
+    """Legacy compatibility payload for the customer password-reset request."""
     email: Optional[str] = None
     phone: Optional[str] = None
     shop_id: Optional[int] = Field(None, ge=1)
@@ -130,9 +130,28 @@ class CustomerForgot(BaseModel):
             raise ValueError("value is not a valid email address")
         return v.lower().strip()
 
+class CustomerPasswordResetOtpRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    def validate_email(cls, v):
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("value is not a valid email address")
+        return v
+
+class CustomerVerifyPasswordResetOtp(BaseModel):
+    email: str
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+    @field_validator("email")
+    def validate_email(cls, v):
+        return v.strip().lower()
+
 class CustomerResetPassword(BaseModel):
-    token: str = Field(..., min_length=32, max_length=200)
+    reset_token: str = Field(..., min_length=32, max_length=200)
     new_password: str = Field(..., min_length=8, max_length=128)
+
 
 class OrderItem(BaseModel):
     product_id: int
@@ -285,114 +304,143 @@ def customer_login_phone(
     }
 
 
-@router.post("/customer/forgot-password")
-def forgot_password(
-    data: CustomerForgot,
-    request: Request,
+def _customer_reset_generic_message():
+    return {
+        "message": "If this account is registered with an email, a password reset OTP has been sent."
+    }
+
+
+def _generate_customer_reset_otp() -> str:
+    return f"{secrets.randbelow(900000) + 100000:06d}"
+
+
+def _customer_reset_token_hash(value: str) -> str:
+    return hashlib.sha256(value.strip().encode("utf-8")).hexdigest()
+
+
+@router.post("/customer/request-password-reset-otp")
+def request_customer_password_reset_otp(
+    data: CustomerPasswordResetOtpRequest,
     db: Session = Depends(get_db),
     _rl: None = Depends(check_rate_limit),
 ):
-    """Create a one-time reset link for an online storefront customer.
+    """Generate and email a backend-owned OTP for an online customer."""
+    user = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.email == data.email
+    ).first()
 
-    The account password is not changed until the customer presents the
-    one-time token from the email link and chooses a new password.
-    """
-    user = None
-    if data.email:
-        user = db.query(OnlineCustomerAuth).filter(
-            OnlineCustomerAuth.email == data.email
-        ).first()
-    elif data.phone:
-        user = db.query(OnlineCustomerAuth).filter(
-            OnlineCustomerAuth.phone == data.phone
-        ).first()
+    # Keep enumeration-resistant response behavior.
+    if not user or not user.email or not EmailNotificationService:
+        return _customer_reset_generic_message()
 
-    if user and user.email and EmailNotificationService:
-        try:
-            # Invalidate any previous reset links for this customer.
-            db.query(CustomerPasswordReset).filter(
-                CustomerPasswordReset.customer_id == user.id,
-                CustomerPasswordReset.used == False,
-            ).update({"used": True}, synchronize_session=False)
+    existing = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.used == False,
+    ).all()
+    for challenge in existing:
+        challenge.used = True
 
-            raw_token = secrets.token_urlsafe(48)
-            token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-            reset_row = CustomerPasswordReset(
-                customer_id=user.id,
-                token_hash=token_hash,
-                expires_at=datetime.utcnow() + timedelta(minutes=30),
-                used=False,
-            )
-            db.add(reset_row)
-            db.commit()
+    otp = _generate_customer_reset_otp()
+    challenge = CustomerPasswordResetOtp(
+        customer_id=user.id,
+        otp_hash=_customer_reset_token_hash(otp),
+        otp_expires_at=datetime.utcnow() + timedelta(minutes=10),
+        otp_attempts=0,
+        verified_at=None,
+        reset_token_hash=None,
+        reset_token_expires_at=None,
+        used=False,
+    )
+    db.add(challenge)
 
-            configured_frontend = (
-                os.getenv("NEXTJS_FRONTEND_URL")
-                or os.getenv("FRONTEND_URL")
-                or os.getenv("PUBLIC_BASE_URL")
-            )
-            frontend_origin = (
-                configured_frontend.rstrip("/")
-                if configured_frontend
-                else "https://retail-mind-web.onrender.com"
-            )
-            reset_url = (
-                f"{frontend_origin}/auth?resetToken={quote(raw_token)}"
-                + (f"&shop_id={data.shop_id}" if data.shop_id else "")
-            )
+    subject, body = EmailNotificationService.send_otp_template(
+        otp,
+        "Customer Password Reset",
+    )
 
-            subject = "Reset your Retail Mind customer password"
-            body = (
-                f"Hello {user.user_name},\n\n"
-                "We received a request to reset your Retail Mind customer password.\n\n"
-                f"Reset your password here:\n{reset_url}\n\n"
-                "This link expires in 30 minutes and can be used only once. "
-                "If you did not request this, you can safely ignore this email.\n\n"
-                "Retail Mind"
-            )
-            html_body = f"""
-<html>
-<body style="font-family:Arial,sans-serif;line-height:1.6;color:#1f2937">
-  <div style="max-width:560px;margin:24px auto;padding:28px;border:1px solid #e5e7eb;border-radius:16px">
-    <h2 style="margin-top:0;color:#2563eb">Reset your password</h2>
-    <p>Hello {user.user_name},</p>
-    <p>We received a request to reset your Retail Mind customer password.</p>
-    <p>
-      <a href="{reset_url}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px">
-        Reset password
-      </a>
-    </p>
-    <p style="font-size:13px;color:#6b7280">This link expires in 30 minutes and can be used only once.</p>
-    <p style="font-size:13px;color:#6b7280">If you did not request this, you can safely ignore this email.</p>
-  </div>
-</body>
-</html>
-"""
-            sent = EmailNotificationService.send_email(
-                recipient_email=user.email,
-                subject=subject,
-                body=body,
-                html_body=html_body,
-            )
-            if not sent:
-                db.query(CustomerPasswordReset).filter(
-                    CustomerPasswordReset.token_hash == token_hash
-                ).delete(synchronize_session=False)
-                db.commit()
-                logger.error(
-                    "Customer password reset email delivery failed for customer_id=%s",
-                    user.id,
-                )
-        except Exception:
+    try:
+        sent = EmailNotificationService.send_email(
+            recipient_email=user.email,
+            subject=subject,
+            body=body,
+        )
+        if not sent:
             db.rollback()
-            logger.exception(
-                "Failed to create customer password reset challenge for customer_id=%s",
+            logger.error(
+                "Customer password reset OTP delivery failed for customer_id=%s",
                 user.id,
             )
+            return _customer_reset_generic_message()
 
-    # Keep the response generic so callers cannot enumerate customer accounts.
+        db.commit()
+        return _customer_reset_generic_message()
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Customer password reset OTP request failed for customer_id=%s",
+            user.id,
+        )
+        return _customer_reset_generic_message()
+
+
+@router.post("/customer/verify-password-reset-otp")
+def verify_customer_password_reset_otp(
+    data: CustomerVerifyPasswordResetOtp,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
+):
+    """Verify the backend-generated OTP and issue a short-lived reset token."""
+    user = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.email == data.email
+    ).first()
+
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset OTP.",
+        )
+
+    challenge = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.used == False,
+        CustomerPasswordResetOtp.otp_expires_at > datetime.utcnow(),
+    ).order_by(CustomerPasswordResetOtp.id.desc()).with_for_update().first()
+
+    if not challenge:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset OTP.",
+        )
+
+    if challenge.otp_attempts >= 5:
+        challenge.used = True
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail="Too many incorrect OTP attempts. Request a new OTP.",
+        )
+
+    if challenge.otp_hash != _customer_reset_token_hash(data.otp):
+        challenge.otp_attempts += 1
+        if challenge.otp_attempts >= 5:
+            challenge.used = True
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset OTP.",
+        )
+
+    reset_token = secrets.token_urlsafe(48)
+    challenge.reset_token_hash = _customer_reset_token_hash(reset_token)
+    challenge.reset_token_expires_at = datetime.utcnow() + timedelta(minutes=10)
+    challenge.verified_at = datetime.utcnow()
+    challenge.otp_attempts = challenge.otp_attempts
+    db.commit()
+
     return {
-        "message": "If this account is registered with an email, a password reset link has been sent to it."
+        "message": "OTP verified successfully.",
+        "reset_token": reset_token,
+        "expires_in": 600,
     }
 
 
@@ -402,46 +450,63 @@ def reset_customer_password(
     db: Session = Depends(get_db),
     _rl: None = Depends(check_rate_limit),
 ):
-    """Consume a one-time customer reset token and set the new password."""
-    token_hash = hashlib.sha256(data.token.strip().encode("utf-8")).hexdigest()
-    reset_row = db.query(CustomerPasswordReset).filter(
-        CustomerPasswordReset.token_hash == token_hash,
-        CustomerPasswordReset.used == False,
-        CustomerPasswordReset.expires_at > datetime.utcnow(),
+    """Consume the verified OTP reset token and set the customer password."""
+    token_hash = _customer_reset_token_hash(data.reset_token)
+
+    challenge = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.reset_token_hash == token_hash,
+        CustomerPasswordResetOtp.used == False,
+        CustomerPasswordResetOtp.verified_at.isnot(None),
+        CustomerPasswordResetOtp.reset_token_expires_at > datetime.utcnow(),
     ).with_for_update().first()
 
-    if not reset_row:
+    if not challenge:
         raise HTTPException(
             status_code=400,
-            detail="Reset link is invalid or expired. Please request a new one.",
+            detail="Password reset authorization is invalid or expired. Request a new OTP.",
         )
 
     user = db.query(OnlineCustomerAuth).filter(
-        OnlineCustomerAuth.id == reset_row.customer_id
+        OnlineCustomerAuth.id == challenge.customer_id
     ).with_for_update().first()
 
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Customer account is unavailable.")
 
     user.password = hash_password(data.new_password)
-    reset_row.used = True
+    challenge.used = True
 
-    # Invalidate any other outstanding reset tokens for this customer.
-    db.query(CustomerPasswordReset).filter(
-        CustomerPasswordReset.customer_id == user.id,
-        CustomerPasswordReset.id != reset_row.id,
-        CustomerPasswordReset.used == False,
+    db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.id != challenge.id,
+        CustomerPasswordResetOtp.used == False,
     ).update({"used": True}, synchronize_session=False)
 
     try:
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail="Unable to reset password. Please try again.")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to reset password. Please try again.",
+        )
 
     return {
         "message": "Password reset successfully. You can now sign in with your new password."
     }
+
+
+@router.post("/customer/forgot-password")
+def forgot_password(
+    data: CustomerForgot,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
+):
+    """Compatibility alias for clients that still call /forgot-password."""
+    if not data.email:
+        return _customer_reset_generic_message()
+    request = CustomerPasswordResetOtpRequest(email=data.email)
+    return request_customer_password_reset_otp(request, db, _rl)
 
 
 # =====================

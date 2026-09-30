@@ -18,23 +18,32 @@ export default function AuthPage() {
   const [resetPassword, setResetPassword] = useState('');
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   const [resetToken, setResetToken] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
+  const [resetStep, setResetStep] = useState<'request' | 'verify' | 'password'>('request');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [name, setName]       = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // A reset email opens this page with ?resetToken=... so the same
-  // customer auth screen can safely complete the password change.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('resetToken') || '';
-    if (token) {
-      setResetToken(token);
+    const resetRequested = params.get('view') === 'reset';
+    const emailParam = params.get('email') || '';
+
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+
+    if (resetRequested || emailParam) {
       setView('reset');
+      setResetStep('request');
       return;
     }
+
     if (localStorage.getItem('customerToken')) {
       router.replace('/');
     }
@@ -43,10 +52,26 @@ export default function AuthPage() {
   const switchView = (v: View) => {
     setError('');
     setSuccess('');
+    if (v === 'reset') {
+      setResetStep('request');
+      setResetOtp('');
+      setResetToken('');
+      setResetPassword('');
+      setResetPasswordConfirm('');
+      setResendCooldown(0);
+    }
     setView(v);
   };
 
   const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setResendCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
 
   // ── Login ────────────────────────────────────────────────────────────────
   // 🔧 FIX: switched from phone+password to email+password. The backend's
@@ -125,7 +150,24 @@ export default function AuthPage() {
     }
   };
 
-  // ── Forgot Password / Set New Password ─────────────────────────────────────
+  // ── Customer Password Reset: backend OTP → verification → password ──────
+  const requestResetOtp = async () => {
+    if (!isValidEmail(email)) {
+      throw new Error('Please enter a valid email address.');
+    }
+
+    const res = await fetch(`${API_BASE}/store/customer/request-password-reset-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send OTP.');
+    setResetStep('verify');
+    setResendCooldown(30);
+    setSuccess('A 6-digit OTP has been sent to your registered email address.');
+  };
+
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -133,51 +175,76 @@ export default function AuthPage() {
     setSuccess('');
 
     try {
-      if (resetToken) {
-        if (resetPassword.length < 8) {
-          throw new Error('New password must be at least 8 characters long.');
-        }
-        if (resetPassword !== resetPasswordConfirm) {
-          throw new Error('Passwords do not match.');
-        }
-
-        const res = await fetch(`${API_BASE}/store/customer/reset-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token: resetToken,
-            new_password: resetPassword,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || data.message || 'Password reset failed. Please request a new link.');
-
-        setSuccess('Password reset successfully. You can now sign in with your new password.');
-        setResetToken('');
-        setResetPassword('');
-        setResetPasswordConfirm('');
+      if (resetStep === 'request') {
+        await requestResetOtp();
         return;
       }
 
-      if (!isValidEmail(email)) {
-        throw new Error('Please enter a valid email address.');
+      if (resetStep === 'verify') {
+        if (!/^\d{6}$/.test(resetOtp)) {
+          throw new Error('Enter the 6-digit OTP from your email.');
+        }
+
+        const res = await fetch(`${API_BASE}/store/customer/verify-password-reset-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            otp: resetOtp,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.message || 'OTP verification failed.');
+        setResetToken(data.reset_token || '');
+        setResetStep('password');
+        setResetPassword('');
+        setResetPasswordConfirm('');
+        setSuccess('OTP verified. Create your new password.');
+        return;
       }
 
-      const params = new URLSearchParams(window.location.search);
-      const shopId = params.get('shop_id');
-      const res = await fetch(`${API_BASE}/store/customer/forgot-password`, {
+      if (!resetToken) {
+        throw new Error('Reset authorization expired. Request a new OTP.');
+      }
+
+      if (resetPassword.length < 8) {
+        throw new Error('New password must be at least 8 characters long.');
+      }
+      if (resetPassword !== resetPasswordConfirm) {
+        throw new Error('Passwords do not match.');
+      }
+
+      const res = await fetch(`${API_BASE}/store/customer/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
-          ...(shopId && /^\\d+$/.test(shopId) ? { shop_id: Number(shopId) } : {}),
+          reset_token: resetToken,
+          new_password: resetPassword,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Reset request failed. Please try again.');
-      setSuccess('If this email is registered, a password reset link has been sent to it.');
+      if (!res.ok) throw new Error(data.detail || data.message || 'Password reset failed.');
+      setSuccess('Password reset successfully. You can now sign in.');
+      setResetToken('');
+      setResetOtp('');
+      setResetPassword('');
+      setResetPasswordConfirm('');
     } catch (err: any) {
       setError(err.message || 'Password reset failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendResetOtp = async () => {
+    if (resendCooldown > 0 || loading) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await requestResetOtp();
+    } catch (err: any) {
+      setError(err.message || 'Unable to resend OTP.');
     } finally {
       setLoading(false);
     }
@@ -421,11 +488,20 @@ export default function AuthPage() {
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>{resetToken ? 'Choose a new password' : 'Reset password'}</h1>
+                <h1 className={styles.authTitle}>
+                  {resetStep === 'request'
+                    ? 'Reset your password'
+                    : resetStep === 'verify'
+                      ? 'Verify your OTP'
+                      : 'Create a new password'}
+                </h1>
+
                 <p className={styles.authSubtitle}>
-                  {resetToken
-                    ? 'Create a new password for your Retail Mind customer account.'
-                    : 'Enter your registered email and we&apos;ll send you a secure reset link.'}
+                  {resetStep === 'request'
+                    ? 'We will send a 6-digit OTP to your registered email.'
+                    : resetStep === 'verify'
+                      ? `Enter the OTP sent to ${email}.`
+                      : 'Set a new password for your customer account.'}
                 </p>
 
                 <form onSubmit={handleReset} className={styles.form} noValidate>
@@ -442,9 +518,9 @@ export default function AuthPage() {
                     )}
                   </AnimatePresence>
 
-                  {!resetToken ? (
+                  {resetStep === 'request' && (
                     <div className={styles.fieldGroup}>
-                      <label className={styles.label}>Email</label>
+                      <label className={styles.label}>Registered email</label>
                       <div className={styles.inputWrap}>
                         <Mail size={17} className={styles.inputIcon} />
                         <input
@@ -453,13 +529,48 @@ export default function AuthPage() {
                           value={email}
                           onChange={e => setEmail(e.target.value)}
                           className={styles.input}
-                          placeholder="Registered email"
+                          placeholder="you@example.com"
                           required
                           autoComplete="email"
                         />
                       </div>
                     </div>
-                  ) : (
+                  )}
+
+                  {resetStep === 'verify' && (
+                    <>
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.label}>6-digit OTP</label>
+                        <div className={styles.inputWrap}>
+                          <CheckCircle size={17} className={styles.inputIcon} />
+                          <input
+                            id="reset-otp"
+                            type="text"
+                            inputMode="numeric"
+                            value={resetOtp}
+                            onChange={e => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            className={styles.input}
+                            placeholder="000000"
+                            maxLength={6}
+                            autoComplete="one-time-code"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className={styles.link}
+                        onClick={() => void resendResetOtp()}
+                        disabled={resendCooldown > 0 || loading}
+                        style={{ background: 'none', border: 0, padding: 0, alignSelf: 'flex-start' }}
+                      >
+                        {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+                      </button>
+                    </>
+                  )}
+
+                  {resetStep === 'password' && (
                     <>
                       <div className={styles.fieldGroup}>
                         <label className={styles.label}>New password</label>
@@ -506,13 +617,17 @@ export default function AuthPage() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
                     type="submit"
-                    disabled={loading || !!success && !!resetToken}
+                    disabled={loading}
                     className={styles.submitBtn}
                     id="reset-submit"
                   >
                     {loading
                       ? <span className={styles.spinner} />
-                      : resetToken ? 'Set New Password' : 'Send Reset Link'}
+                      : resetStep === 'request'
+                        ? 'Send OTP'
+                        : resetStep === 'verify'
+                          ? 'Verify OTP'
+                          : 'Reset Password'}
                   </motion.button>
                 </form>
 

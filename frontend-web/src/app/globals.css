@@ -1459,3 +1459,60 @@ img { display: block; max-width: 100%; }
   .order-card-footer{grid-template-columns:1fr}
   .order-footer-status{text-align:left;align-self:auto}
 }
+
+
+/* Customer orders — clean mainstream Indian e-commerce layout */
+.orders-fk-page{min-height:100vh;background:#f5f7fb;color:#172337;padding:24px 16px 56px}
+.orders-fk-shell{max-width:1120px;margin:0 auto}
+.orders-fk-topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:16px}
+.orders-fk-brand{display:flex;align-items:center;gap:12px}
+.orders-fk-back{width:40px;height:40px;border-radius:10px;border:1px solid #d8dee9;background:#fff;color:#172337;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.orders-fk-back:hover{background:#f8fbff}
+.orders-fk-brand-title{font-size:25px;font-weight:800;letter-spacing:-.03em}
+.orders-fk-brand-subtitle{font-size:12px;color:#6d7788;margin-top:3px}
+.orders-fk-live{display:flex;align-items:center;gap:7px;border:1px solid #d8e8ff;background:#fff;border-radius:8px;padding:8px 10px;color:#44536a;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,.04)}
+.orders-fk-live-dot{width:8px;height:8px;border-radius:999px;background:#23b26d;box-shadow:0 0 0 4px rgba(35,178,109,.10)}
+.orders-fk-live-dot.offline{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.10)}
+.orders-fk-refresh{border:0;background:transparent;color:#2874f0;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer}
+.orders-fk-refresh:hover{background:#eef5ff}
+.orders-fk-refresh:disabled{opacity:.55}
+.orders-fk-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.orders-fk-stat{background:#fff;border:1px solid #e1e7ef;border-radius:10px;padding:14px 16px;box-shadow:0 2px 8px rgba(31,45,61,.04)}
+.orders-fk-stat span{display:block;font-size:11px;color:#7a8798;margin-bottom:5px}
+.orders-fk-stat strong{font-size:20px;color:#172337}
+.orders-fk-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border:1px solid #e1e7ef;border-radius:10px;padding:9px 10px;margin-bottom:10px;box-shadow:0 2px 8px rgba(31,45,61,.04)}
+.orders-fk-tabs{display:flex;gap:4px;overflow:auto}
+.orders-fk-tab{border:0;background:transparent;color:#657286;padding:9px 13px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.orders-fk-tab:hover{background:#f4f7fb;color:#172337}
+.orders-fk-tab.active{background:#2874f0;color:#fff}
+.orders-fk-search{display:flex;align-items:center;gap:8px;background:#f7f9fc;border:1px solid #dbe2eb;border-radius:7px;padding:8px 10px;min-width:260px;color:#8793a5}
+.orders-fk-search input{border:0;outline:0;background:transparent;color:#172337;width:100%;font-size:12px}
+.orders-fk-search input::placeholder{color:#929dad}
+.orders-fk-updated{font-size:11px;color:#7d8898;text-align:right;margin:0 3px 10px}
+.orders-fk-warning{display:flex;gap:8px;align-items:center;padding:10px 12px;border:1px solid #f1ddb0;background:#fffaf0;color:#8a6500;border-radius:8px;font-size:12px;margin-bottom:10px}
+.orders-fk-list{display:flex;flex-direction:column;gap:10px}
+.orders-fk-card{background:#fff;border:1px solid #dfe5ee;border-radius:10px;overflow:hidden;box-shadow:0 3px 10px rgba(31,45,61,.06)}
+.orders-fk-card-top{display:flex;justify-content:space-between;gap:18px;padding:15px 16px 12px;border-bottom:1px solid #edf1f5}
+.orders-fk-order-number{font-size:14px;font-weight:800;color:#172337}
+.orders-fk-order-date{font-size:11px;color:#7d8898;margin-top:4px}
+.orders-fk-card-total{text-align:right}.orders-fk-card-total span{display:block;font-size:10px;color:#8894a4}.orders-fk-card-total strong{display:block;margin-top:2px;font-size:15px;color:#172337}
+.orders-fk-item-preview{display:flex;align-items:center;gap:12px;padding:13px 16px}
+.orders-fk-product-icon{width:52px;height:52px;border-radius:7px;background:#f1f5fa;color:#2874f0;display:flex;align-items:center;justify-content:center;flex:none}
+.orders-fk-product-icon.small{width:38px;height:38px;border-radius:6px}
+.orders-fk-item-copy{min-width:0;display:flex;flex-direction:column;gap:4px}.orders-fk-item-copy strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.orders-fk-item-copy span{font-size:11px;color:#7b8798}
+.orders-fk-status{margin-left:auto;display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:6px 9px;font-size:10px;font-weight:800;white-space:nowrap}
+.orders-fk-status.pending{background:#fff8df;color:#8c6800}.orders-fk-status.accepted{background:#eefaf3;color:#17824d}.orders-fk-status.dispatched{background:#eef5ff;color:#2467d0}.orders-fk-status.delivered{background:#eaf8f0;color:#118149}.orders-fk-status.rejected{background:#fff0f0;color:#c53c3c}
+.orders-fk-card .order-timeline{margin:0;padding:12px 16px 15px;background:#fbfcfe;max-width:none}
+.orders-fk-card .timeline-label{font-size:10px;color:#6f7d8f}.orders-fk-card .timeline-description{font-size:9px;color:#8b95a5}.orders-fk-card .timeline-node{width:28px;height:28px;background:#fff}.orders-fk-card .timeline-line{top:13px}.orders-fk-card .rejected-banner{margin-top:0}
+.orders-fk-card-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;border-top:1px solid #edf1f5}
+.orders-fk-delivery{display:flex;align-items:flex-start;gap:7px;min-width:0;color:#637083;font-size:11px;line-height:1.45}.orders-fk-delivery svg{color:#2874f0;flex:none;margin-top:1px}
+.orders-fk-details-btn{border:0;background:#fff;color:#2874f0;font-size:11px;font-weight:800;display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap}
+.orders-fk-details{border-top:1px solid #edf1f5;background:#fbfcfe;padding:14px 16px}
+.orders-fk-details-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.orders-fk-details-grid>div{background:#fff;border:1px solid #e5eaf1;border-radius:7px;padding:10px}.orders-fk-details-grid span{display:block;font-size:9px;color:#8994a4;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}.orders-fk-details-grid strong{font-size:11px;color:#26354a;line-height:1.35}
+.orders-fk-items{display:flex;flex-direction:column;gap:6px}.orders-fk-detail-item{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e5eaf1;border-radius:7px;padding:9px}.orders-fk-detail-name{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}.orders-fk-detail-name strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.orders-fk-detail-name span{font-size:10px;color:#7c8796}
+.orders-fk-empty{background:#fff;border:1px solid #e0e6ee;border-radius:12px;padding:56px 20px;text-align:center;box-shadow:0 2px 8px rgba(31,45,61,.04)}.orders-fk-empty-icon{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#eef5ff;color:#2874f0;margin:0 auto 14px}.orders-fk-empty h2{margin:0 0 6px;font-size:19px;color:#172337}.orders-fk-empty p{max-width:520px;margin:0 auto 18px;color:#778394;font-size:12px;line-height:1.6}
+.orders-fk-primary-btn{border:0;background:#2874f0;color:#fff;border-radius:6px;padding:10px 18px;font-size:12px;font-weight:800;cursor:pointer}.orders-fk-primary-btn:hover{background:#1f63cf}
+.orders-fk-skeleton{height:245px;background:#fff;border:1px solid #e3e8ef;border-radius:10px;padding:18px;animation:orders-fk-skeleton 1.4s infinite}.orders-fk-skeleton .sk-line{height:12px;background:#edf1f6;border-radius:6px;margin-bottom:10px}.orders-fk-skeleton .wide{width:38%}.orders-fk-skeleton .medium{width:25%}.orders-fk-skeleton .sk-block{height:165px;background:#f5f7fa;border-radius:8px;margin-top:20px}
+@keyframes orders-fk-skeleton{0%,100%{opacity:.68}50%{opacity:1}}
+@media(max-width:850px){.orders-fk-stats{grid-template-columns:repeat(2,1fr)}.orders-fk-toolbar{flex-direction:column;align-items:stretch}.orders-fk-search{min-width:0}.orders-fk-details-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.orders-fk-page{padding:15px 10px 36px}.orders-fk-topbar{align-items:flex-start;flex-direction:column}.orders-fk-live{align-self:stretch;justify-content:center}.orders-fk-card-top{padding:13px}.orders-fk-item-preview{padding:12px 13px}.orders-fk-status{font-size:9px}.orders-fk-card-actions{padding:10px 13px;align-items:flex-start}.orders-fk-delivery{max-width:65%}.orders-fk-details{padding:12px 13px}}
