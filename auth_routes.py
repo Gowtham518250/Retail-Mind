@@ -153,6 +153,10 @@ class StoreResetOTPRequestLegacy(BaseModel):
     otp: str
 
 
+class RequestPasswordReset(BaseModel):
+    email: str
+
+
 PASSWORD_RESET_OTP_PURPOSE = "PASSWORD_RESET_OTP"
 OWNER_VERIFICATION_OTP_PURPOSE = "OWNER_VERIFICATION_OTP"
 
@@ -462,10 +466,6 @@ def verify_reset_otp(request: VerifyResetOTPRequest, db: Session = Depends(get_d
         raise HTTPException(status_code=500, detail="Failed to reset password")
 
     return {"msg": "Password reset successfully"}
-
-
-class RequestPasswordReset(BaseModel):
-    email: str
 
 
 class ResetPasswordRequest(BaseModel):
