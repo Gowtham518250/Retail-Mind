@@ -253,6 +253,7 @@ api.add_middleware(
         "Accept-Language",
         "Content-Language",
         "X-Device-ID",
+        "Idempotency-Key",
     ],
 )
 
