@@ -1436,3 +1436,7 @@ img { display: block; max-width: 100%; }
   .order-timeline{overflow-x:auto;grid-template-columns:repeat(4,120px);padding-bottom:16px}
   .timeline-connector{right:-50%}
 }
+
+.nav-language-control{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);border-radius:11px;padding:7px 9px;color:#fff;font-size:12px}
+.nav-language-control select{border:0;outline:0;background:transparent;color:#fff;font:inherit;cursor:pointer;max-width:78px}
+.nav-language-control option{color:#111;background:#fff}
