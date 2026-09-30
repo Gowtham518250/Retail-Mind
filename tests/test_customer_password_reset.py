@@ -3,7 +3,7 @@ from urllib.parse import parse_qs, urlparse
 
 os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/retail_mind_test")
 os.environ["FRONTEND_URL"] = "https://shop.example.com"
-os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["SECRET_KEY"] = "customer-password-reset-test-secret-key-1234567890"
 os.environ["SENDER_EMAIL"] = "test@example.com"
 os.environ["SENDER_PASSWORD"] = "test-password"
 
