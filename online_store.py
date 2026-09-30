@@ -16,13 +16,16 @@ import secrets
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db import get_db
 from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction, OnlineCustomerAuth, sales
+from idempotency_manager import IdempotencyManager
+from realtime_events import event_hub
+from audit_logging import AuditService, AuditAction
 from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
@@ -443,36 +446,36 @@ def browse_shop_products(
 # ORDER PLACEMENT
 # =====================
 @router.post("/order")
-def place_order(
+async def place_order(
     data: PlaceOrder,
     db: Session = Depends(get_db),
     current_user: dict = Depends(customer_only),
     _rl: None = Depends(check_rate_limit),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
-    """Place an online order at a specific shop"""
+    """Place an online order atomically with retry-safe idempotency and realtime updates."""
     customer_id = current_user["user_id"]
+    scoped_key = (
+        f"{customer_id}:{data.shop_id}:{idempotency_key.strip()}"
+        if idempotency_key and idempotency_key.strip()
+        else None
+    )
+    if scoped_key:
+        cached = IdempotencyManager.get_cached_response(scoped_key, "online_order_create")
+        if cached:
+            return {**cached, "idempotent_replay": True}
 
-    # Validate shop.
-    # Browse requests already fall back to shops whose online-store flag is not enabled,
-    # so order placement should also allow those shops when the shop record exists.
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == data.shop_id,
         ShopProfile.is_online_store_enabled == True,
     ).first()
     if not profile:
-        profile = db.query(ShopProfile).filter(
-            ShopProfile.shop_id == data.shop_id,
-        ).first()
-        if profile:
-            logger.warning(
-                "Shop found but online ordering flag is disabled for shop_id=%s; allowing fallback order placement.",
-                data.shop_id,
-            )
+        profile = db.query(ShopProfile).filter(ShopProfile.shop_id == data.shop_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
 
-    # Validate all items and calculate total
-    order_items = []
+    order_items: list[dict] = []
+    inventory_events: list[dict] = []
     total_amount = 0.0
 
     for item in data.items:
@@ -483,18 +486,22 @@ def place_order(
         ).first()
         if not product:
             raise HTTPException(status_code=404, detail=f"Product ID {item.product_id} not found in this shop.")
-        if product.current_stock < item.quantity:
+        if product.current_stock is not None and product.current_stock < item.quantity:
             raise HTTPException(
                 status_code=400,
-                detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
+                detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}",
             )
-        product.current_stock -= item.quantity
+
+        previous_stock = float(product.current_stock or 0)
+        product.current_stock = previous_stock - item.quantity
+
         discount = get_active_discount(db, data.shop_id, product.category)
         price = float(product.unit_price)
         if discount > 0:
             price = round(price * (1.0 - discount / 100.0), 2)
         line_total = price * item.quantity
         total_amount += line_total
+
         order_items.append({
             "product_id": product.id,
             "product_name": product.product_name,
@@ -503,34 +510,81 @@ def place_order(
             "line_total": line_total,
             "discount_pct": discount,
         })
-
-    delivery_address = sanitize_input(data.delivery_address, "delivery_address")
+        inventory_events.append({
+            "product_id": product.id,
+            "product_name": product.product_name,
+            "previous_stock": previous_stock,
+            "new_stock": float(product.current_stock),
+            "quantity": item.quantity,
+            "reason": "ONLINE_ORDER",
+        })
 
     order = OnlineOrder(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
-        delivery_address=delivery_address,
+        delivery_address=sanitize_input(data.delivery_address, "delivery_address"),
         items_json=json.dumps(order_items),
         order_status="PENDING",
     )
     db.add(order)
+
     try:
         db.commit()
         db.refresh(order)
     except Exception as e:
-        logger.error(f"Failed to save online order (shop_id={data.shop_id}, customer_id={customer_id}): {e}")
         db.rollback()
+        logger.error("Failed to save online order (shop_id=%s, customer_id=%s): %s", data.shop_id, customer_id, e)
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
-    return {
+    response = {
         "message": "Order placed successfully! The shop will confirm shortly.",
         "order_id": order.id,
         "shop_name": profile.shop_name,
         "total_amount": total_amount,
         "items": order_items,
         "status": "PENDING",
+        "inventory_updated": True,
+        "inventory_events": inventory_events,
+        "created_at": order.created_at.isoformat() if order.created_at else datetime.utcnow().isoformat(),
     }
+    if scoped_key:
+        IdempotencyManager.set_cached_response(scoped_key, "online_order_create", response)
+
+    try:
+        AuditService.log_action(
+            db=db,
+            user_id=customer_id,
+            action=AuditAction.CREATE,
+            table_name="online_orders",
+            record_id=order.id,
+            new_values={"shop_id": data.shop_id, "total_amount": total_amount, "status": "PENDING"},
+            description=f"Online order #{order.id} placed",
+        )
+    except Exception as audit_error:
+        logger.warning("Online order audit logging failed: %s", audit_error)
+
+    await event_hub.owner_event(data.shop_id, {
+        "type": "online_order_created",
+        "order_id": order.id,
+        "customer_id": customer_id,
+        "shop_id": data.shop_id,
+        "status": "PENDING",
+        "total_amount": total_amount,
+        "items": order_items,
+        "inventory": inventory_events,
+        "created_at": response["created_at"],
+    })
+    await event_hub.customer_event(customer_id, {
+        "type": "order_status_changed",
+        "order_id": order.id,
+        "shop_id": data.shop_id,
+        "status": "PENDING",
+        "total_amount": total_amount,
+        "items": order_items,
+        "created_at": response["created_at"],
+    })
+    return response
 
 
 @router.post("/guest-order")
@@ -730,40 +784,31 @@ def get_my_orders(
     db: Session = Depends(get_db),
     current_user: dict = Depends(customer_only),
 ):
-    """Customer: View all their orders"""
+    """Customer: View all their orders from the backend source of truth."""
     customer_id = current_user["user_id"]
     orders = db.query(OnlineOrder).filter(
         OnlineOrder.customer_id == customer_id
     ).order_by(OnlineOrder.created_at.desc()).all()
 
-    return {
-        "orders": [
-            {
-                "order_id": o.id,
-                "shop_id": o.shop_id,
-                "status": o.order_status,
-                "total_amount": float(o.total_amount),
-                "delivery_address": o.delivery_address,
-                "items": json.loads(o.items_json),
-                "created_at": o.created_at,
-            }
-            for o in orders
-        ]
-    }
-
-
-@router.get("/order/{order_id}/track")
+    shop_cache: dict[int, str] = {}
+    result = []
+    for order in orders:
+        if order.shop_id not in shop_cache:
+            profile = db.query(ShopProfile).filter(ShopProfile.shop_id == order.shop_id).first()
+            shop_cache[order.shop_id] = profile.shop_name if profile else f"Shop #{order.shop_id}"
+        try:
+            items = json.loads(order.items_json)
+        except@router.get("/order/{order_id}/track")
 def track_order(
     order_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user_dict),
 ):
-    """Track a specific order by ID"""
+    """Track an authenticated customer or owner order with a UI-ready timeline."""
     order = db.query(OnlineOrder).filter(OnlineOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
 
-    # Security: only the customer who placed the order or the shop owner can view it
     uid = current_user["user_id"]
     role = current_user.get("role", ROLE_OWNER)
     if role == ROLE_CUSTOMER and order.customer_id != uid:
@@ -771,24 +816,41 @@ def track_order(
     if role == ROLE_OWNER and order.shop_id != uid:
         raise HTTPException(status_code=403, detail="You do not have access to this order.")
 
-    STATUS_STEPS = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
-    current_step = STATUS_STEPS.index(order.order_status) if order.order_status in STATUS_STEPS else 0
+    status = str(order.order_status)
+    steps = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
+    current_step = steps.index(status) if status in steps else 0
+    timeline = [
+        {"status": step, "completed": index <= current_step and status != "REJECTED"}
+        for index, step in enumerate(steps)
+    ]
+    if status == "REJECTED":
+        timeline = (
+            [{"status": step, "completed": False} for step in steps]
+            + [{"status": "REJECTED", "completed": True}]
+        )
+
+    try:
+        items = json.loads(order.items_json)
+    except Exception:
+        items = []
+
+    profile = db.query(ShopProfile).filter(ShopProfile.shop_id == order.shop_id).first()
 
     return {
         "order_id": order.id,
-        "status": order.order_status,
+        "shop_id": order.shop_id,
+        "shop_name": profile.shop_name if profile else f"Shop #{order.shop_id}",
+        "status": status,
         "progress_step": current_step + 1,
-        "total_steps": len(STATUS_STEPS),
+        "total_steps": len(steps),
+        "timeline": timeline,
         "total_amount": float(order.total_amount),
         "delivery_address": order.delivery_address,
-        "items": json.loads(order.items_json),
-        "created_at": order.created_at,
+        "items": items,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
     }
 
 
-# =====================
-# OWNER ORDER MANAGEMENT
-# =====================
 @router.get("/order/{order_id}/guest-track")
 def guest_track_order(
     order_id: int,
