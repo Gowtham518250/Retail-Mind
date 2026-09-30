@@ -206,6 +206,26 @@ class CustomerPasswordReset(Base):
     used = Column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
+class CustomerPasswordResetOtp(Base):
+    """Database-backed OTP challenge for online customer password resets."""
+    __tablename__ = "customer_password_reset_otps"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    customer_id = Column(
+        Integer,
+        ForeignKey("online_customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    otp_hash = Column(String(128), nullable=False)
+    otp_expires_at = Column(DateTime, nullable=False, index=True)
+    otp_attempts = Column(Integer, nullable=False, default=0)
+    verified_at = Column(DateTime, nullable=True)
+    reset_token_hash = Column(String(128), nullable=True, unique=True, index=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
+    used = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
 class User(Base):
     __tablename__ = "user_details"
     
