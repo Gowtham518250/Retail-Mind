@@ -1,4 +1,5 @@
 import os
+import re
 
 os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/retail_mind_test")
 os.environ["SECRET_KEY"] = "customer-otp-reset-test-secret-key-1234567890"
@@ -53,8 +54,9 @@ def test_customer_otp_reset_end_to_end(monkeypatch):
     assert "otp" in request_response.json()["message"].lower()
 
     body = sent["body"]
-    otp = body.split("\n\n", 1)[1].split("\n", 1)[0].strip()
-    assert len(otp) == 6 and otp.isdigit()
+    otp_match = re.search(r"(?<!\\d)\\d{6}(?!\\d)", body)
+    assert otp_match is not None
+    otp = otp_match.group(0)
 
     verify_response = client.post(
         "/store/customer/verify-password-reset-otp",
