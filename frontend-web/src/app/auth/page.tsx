@@ -163,6 +163,11 @@ export default function AuthPage() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send OTP.');
+    if (data.success !== true || data.email_sent !== true) {
+      throw new Error(
+        'We could not send a reset OTP for this email. Please make sure this is the email registered on the customer account.'
+      );
+    }
     setResetStep('verify');
     setResendCooldown(30);
     setSuccess('A 6-digit OTP has been sent to your registered email address.');
