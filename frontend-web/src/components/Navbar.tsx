@@ -3,11 +3,13 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { ShoppingBag, User, Package } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { WEB_LANGUAGES, useWebLanguage } from '../context/LanguageContext';
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toggleCart, itemCount } = useCart();
+  const { language, setLanguage, t } = useWebLanguage();
 
   if (pathname === '/auth') return null;
 
@@ -29,24 +31,37 @@ export default function Navbar() {
 
         {/* Nav actions */}
         <div className="nav-actions">
+          <label className="nav-language-control" aria-label={t('language')}>
+            <span>🌐</span>
+            <select
+              value={language}
+              onChange={e => setLanguage(e.target.value as any)}
+            >
+              {WEB_LANGUAGES.map(item => (
+                <option key={item.code} value={item.code}>
+                  {item.native}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="nav-icon-btn"
             onClick={() => router.push('/orders')}
             aria-label="My orders"
-            title="My Orders"
+            title={t('orders')}
           >
             <Package size={20} />
-            <span className="nav-icon-label">Orders</span>
+            <span className="nav-icon-label">{t('orders')}</span>
           </button>
 
           <button
             className="nav-icon-btn"
             onClick={() => router.push('/profile')}
             aria-label="Profile"
-            title="Profile"
+            title={t('profile')}
           >
             <User size={20} />
-            <span className="nav-icon-label">Profile</span>
+            <span className="nav-icon-label">{t('profile')}</span>
           </button>
 
           <button
@@ -56,7 +71,7 @@ export default function Navbar() {
             id="navbar-cart-btn"
           >
             <ShoppingBag size={19} />
-            <span>Cart</span>
+            <span>{t('cart')}</span>
             {itemCount > 0 && (
               <span className="cart-badge" aria-live="polite">{itemCount}</span>
             )}
