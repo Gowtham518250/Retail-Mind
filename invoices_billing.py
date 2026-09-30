@@ -12,7 +12,7 @@ from typing import Optional, List
 from datetime import datetime, date, timedelta, timezone
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func
@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from db import get_db
 from models import (
     Invoice, InvoiceLineItem, Product, Customer,
-    UniversalTransaction, StockMovement
+    UniversalTransaction, StockMovement, Payment, PaymentMethod, PaymentStatus, InvoiceStatus
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 
@@ -83,6 +83,13 @@ class InvoiceSyncCreate(BaseModel):
                     raise ValueError(f'Invalid product name: {item.product_name}')
         return v
 
+class PaymentCaptureCreate(BaseModel):
+    invoice_id: Optional[int] = None
+    reference_id: Optional[str] = None
+    amount: Decimal = Field(..., gt=0)
+    payer_name: Optional[str] = None
+    source: str = Field('payment_detection', max_length=50)
+    timestamp: Optional[str] = None
 class InvoiceLineItemResponse(BaseModel):
     id: int
     product_id: Optional[int]
@@ -595,6 +602,142 @@ def get_overdue_invoices(
     }
 
 
+@router.post("/payments")
+def record_detected_payment(
+    data: PaymentCaptureCreate,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    """
+    Record one confirmed detected payment against an existing invoice.
+    The database idempotency key is durable, so an online retry or offline
+    replay cannot create a second Payment row.
+    """
+    shop_id = resolve_shop_id(current_user)
+    key = idempotency_key.strip()
+    if not key or len(key) > 128:
+        raise HTTPException(status_code=400, detail="Invalid Idempotency-Key")
+
+    existing = db.query(Payment).filter(Payment.idempotency_key == key).first()
+    if existing:
+        existing_invoice = db.query(Invoice).filter(
+            Invoice.id == existing.invoice_id, Invoice.user_id == shop_id
+        ).first()
+        if not existing_invoice:
+            raise HTTPException(status_code=409, detail="Idempotency key belongs to another shop")
+        return {
+            "status": "ALREADY_PROCESSED",
+            "payment_id": existing.id,
+            "invoice_id": existing.invoice_id,
+            "amount": float(existing.amount),
+            "reference_id": existing.reference_number,
+            "idempotency_key": key,
+        }
+
+    invoice = None
+    if data.invoice_id is not None:
+        invoice = db.query(Invoice).filter(
+            Invoice.id == data.invoice_id, Invoice.user_id == shop_id
+        ).with_for_update().first()
+    elif data.reference_id:
+        invoice = db.query(Invoice).filter(
+            Invoice.user_id == shop_id, Invoice.invoice_number == sanitize_input(data.reference_id, "reference_id")
+        ).with_for_update().first()
+
+    if invoice is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "INVOICE_MATCH_REQUIRED",
+                "message": "Confirmed payment requires an unambiguous invoice match before it is recorded.",
+            },
+        )
+
+    amount = Decimal(str(data.amount))
+    current_paid = Decimal(str(invoice.paid_amount or 0))
+    total = Decimal(str(invoice.total_amount))
+    outstanding = total - current_paid
+    tolerance = Decimal("0.01")
+    if outstanding <= tolerance:
+        raise HTTPException(status_code=409, detail="Invoice is already fully paid")
+    if amount > outstanding + tolerance:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payment exceeds invoice outstanding amount of {outstanding}",
+        )
+
+    reference = sanitize_input(data.reference_id or "", "reference_id") or None
+    if reference:
+        duplicate_reference = db.query(Payment).join(Invoice).filter(
+            Invoice.user_id == shop_id,
+            Payment.reference_number == reference,
+        ).first()
+        if duplicate_reference:
+            if duplicate_reference.invoice_id == invoice.id and abs(Decimal(str(duplicate_reference.amount)) - amount) <= tolerance:
+                return {
+                    "status": "ALREADY_PROCESSED",
+                    "payment_id": duplicate_reference.id,
+                    "invoice_id": duplicate_reference.invoice_id,
+                    "amount": float(duplicate_reference.amount),
+                    "reference_id": duplicate_reference.reference_number,
+                    "idempotency_key": key,
+                }
+            raise HTTPException(
+                status_code=409,
+                detail="Payment reference has already been recorded for another invoice",
+            )
+
+    payment_date = _parse_client_timestamp(data.timestamp) or datetime.utcnow()
+    payment = Payment(
+        invoice_id=invoice.id,
+        payment_method=PaymentMethod.ONLINE,
+        amount=amount,
+        payment_date=payment_date,
+        reference_number=reference,
+        idempotency_key=key,
+        notes=sanitize_input(
+            f"source={data.source}; payer={data.payer_name or ''}",
+            "payment_notes",
+        ),
+    )
+    db.add(payment)
+
+    new_paid = current_paid + amount
+    invoice.paid_amount = new_paid
+    invoice.payment_method = PaymentMethod.ONLINE.value
+    invoice.payment_status = PaymentStatus.PAID if new_paid >= total - tolerance else PaymentStatus.PARTIAL
+    if invoice.payment_status == PaymentStatus.PAID:
+        invoice.status = InvoiceStatus.PAID
+
+    try:
+        db.commit()
+        db.refresh(payment)
+        db.refresh(invoice)
+    except IntegrityError:
+        db.rollback()
+        replay = db.query(Payment).filter(Payment.idempotency_key == key).first()
+        if replay:
+            return {
+                "status": "ALREADY_PROCESSED",
+                "payment_id": replay.id,
+                "invoice_id": replay.invoice_id,
+                "amount": float(replay.amount),
+                "reference_id": replay.reference_number,
+                "idempotency_key": key,
+            }
+        raise HTTPException(status_code=409, detail="Duplicate payment detected")
+
+    return {
+        "status": "RECORDED",
+        "payment_id": payment.id,
+        "invoice_id": invoice.id,
+        "amount": float(payment.amount),
+        "paid_amount": float(invoice.paid_amount),
+        "payment_status": invoice.payment_status.value if hasattr(invoice.payment_status, "value") else str(invoice.payment_status),
+        "reference_id": payment.reference_number,
+        "idempotency_key": key,
+    }
 @router.get("/payments")
 def get_invoice_payments(
     invoice_id: Optional[int] = None,
