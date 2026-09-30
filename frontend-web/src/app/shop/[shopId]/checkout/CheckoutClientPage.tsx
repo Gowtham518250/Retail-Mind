@@ -119,9 +119,15 @@ export default function CheckoutClientPage() {
     };
 
     try {
+      const requestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const res = await fetch(`${API_BASE}/store/guest-order`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': requestId,
+        },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
