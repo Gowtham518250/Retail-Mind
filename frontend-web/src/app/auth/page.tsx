@@ -6,13 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Lock, Phone, ShoppingBag, ArrowRight, User, Mail, CheckCircle } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import styles from './auth.module.css';
-import { useWebLanguage } from '../../context/LanguageContext';
+import { WEB_LANGUAGES, useWebLanguage } from '../../context/LanguageContext';
 
 type View = 'login' | 'register' | 'reset';
 
 export default function AuthPage() {
   const router = useRouter();
-  const { t } = useWebLanguage();
+  const { t, language, setLanguage } = useWebLanguage();
   const [view, setView] = useState<View>('login');
   const [email, setEmail]     = useState('');
   const [phone, setPhone]     = useState('');
