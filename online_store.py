@@ -193,9 +193,14 @@ def register_customer(
         raise HTTPException(status_code=409, detail="Phone number already registered. Please login instead.")
 
     # ── Uniqueness check by EMAIL only when email is provided ────────────
-    if data.email:
+    normalized_registration_email = (
+        data.email.strip().lower() if data.email and data.email.strip() else None
+    )
+
+    if normalized_registration_email:
         existing_email = db.query(OnlineCustomerAuth).filter(
-            OnlineCustomerAuth.email == data.email
+            func.lower(func.trim(OnlineCustomerAuth.email)) ==
+            normalized_registration_email
         ).first()
         if existing_email:
             raise HTTPException(status_code=409, detail="Email already registered.")
@@ -203,7 +208,7 @@ def register_customer(
     name = sanitize_input(data.name, "name")
     customer = OnlineCustomerAuth(
         user_name=name,
-        email=data.email,  # may be None if not provided
+        email=normalized_registration_email,
         phone=data.phone,
         city=data.city,
         address=data.address,
@@ -260,7 +265,11 @@ def customer_login(
     if data.phone:
         user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
     if not user and data.email:
-        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
+        normalized_login_email = data.email.strip().lower()
+        user = db.query(OnlineCustomerAuth).filter(
+            func.lower(func.trim(OnlineCustomerAuth.email)) ==
+            normalized_login_email
+        ).first()
 
     if not user or not verify_password(data.password, user.password):
         record_login_failure(ip)
@@ -327,8 +336,11 @@ def request_customer_password_reset_otp(
     """Generate and email a backend-owned OTP for an online customer."""
     normalized_email = data.email.strip().lower()
 
+    # Match normalized input against normalized stored data. This handles
+    # existing accounts whose email was stored with different casing or
+    # accidental leading/trailing spaces before registration was normalized.
     user = db.query(OnlineCustomerAuth).filter(
-        func.lower(OnlineCustomerAuth.email) == normalized_email
+        func.lower(func.trim(OnlineCustomerAuth.email)) == normalized_email
     ).first()
 
     # Keep enumeration-resistant response behavior, but do not make the
@@ -416,7 +428,7 @@ def verify_customer_password_reset_otp(
     normalized_email = data.email.strip().lower()
 
     user = db.query(OnlineCustomerAuth).filter(
-        func.lower(OnlineCustomerAuth.email) == normalized_email
+        func.lower(func.trim(OnlineCustomerAuth.email)) == normalized_email
     ).first()
 
     if not user or not user.is_active:
