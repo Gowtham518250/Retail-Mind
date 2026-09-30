@@ -29,7 +29,7 @@ jobs:
       - name: Compile realtime backend
         run: python -m compileall -q realtime.py online_store.py app.py
       - name: Run realtime tests
-        run: pytest -q tests/test_realtime.py
+        run: PYTHONPATH=. pytest -q tests/test_realtime.py
 
   customer-web:
     runs-on: ubuntu-latest
