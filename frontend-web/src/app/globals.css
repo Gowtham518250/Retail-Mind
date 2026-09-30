@@ -1374,3 +1374,65 @@ img { display: block; max-width: 100%; }
   display: flex; align-items: center; padding: 2px;
 }
 .timeline-refresh-row button:hover { color: var(--text-primary); }
+
+
+/* Realtime customer order experience */
+.orders-page{padding:38px 20px 90px;max-width:1100px}
+.orders-topbar{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:18px}
+.orders-kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--fk-blue);font-weight:800}
+.orders-topbar h1{font-size:clamp(2rem,4vw,3rem);margin:6px 0 8px}
+.orders-topbar p{margin:0;color:var(--text-secondary);max-width:720px;line-height:1.65}
+.orders-live-stack{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.live-pill{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-size:12px;font-weight:800}
+.live-pill.live{color:#6ee7b7;background:rgba(16,185,129,.1)}
+.live-pill.offline{color:#fbbf24;background:rgba(251,191,36,.08)}
+.orders-refresh{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#fff;padding:9px 13px;border-radius:11px;cursor:pointer}
+.orders-subbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;color:var(--text-secondary);font-size:12px}
+.orders-back{margin:0}
+.orders-live-notice{display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:14px;margin-bottom:18px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.24);color:#dbeafe}
+.orders-grid{display:flex;flex-direction:column;gap:18px}
+.order-card{background:linear-gradient(145deg,rgba(255,255,255,.05),rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.09);border-radius:24px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.24)}
+.order-card.rejected{border-color:rgba(248,113,113,.25)}
+.order-card-head{display:flex;justify-content:space-between;gap:20px;padding:22px 24px;border-bottom:1px solid rgba(255,255,255,.07)}
+.order-number{font-size:11px;letter-spacing:.12em;font-weight:800;color:var(--text-secondary)}
+.order-card-head h2{margin:6px 0 4px;font-size:20px}
+.order-card-head p{margin:0;color:var(--text-secondary);font-size:12px}
+.order-status-badge{display:flex;align-items:center;gap:8px;align-self:flex-start;padding:8px 12px;border-radius:999px;background:rgba(99,102,241,.12);color:#c7d2fe;border:1px solid rgba(99,102,241,.25);font-size:12px;font-weight:800;white-space:nowrap}
+.order-status-banner{display:flex;align-items:center;gap:14px;margin:18px 24px;padding:16px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}
+.status-banner-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:rgba(34,211,238,.11);color:#67e8f9}
+.order-status-banner strong{display:block;font-size:15px}
+.order-status-banner span{display:block;color:var(--text-secondary);font-size:12px;margin-top:3px}
+.order-timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0 24px 20px}
+.timeline-node{position:relative;display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center;color:var(--text-secondary);font-size:10px;z-index:1}
+.timeline-node.reached{color:#fff}
+.timeline-node-dot{width:30px;height:30px;display:grid;place-items:center;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.timeline-node.reached .timeline-node-dot{background:rgba(59,130,246,.2);border-color:rgba(59,130,246,.35);color:#93c5fd}
+.timeline-connector{position:absolute;height:2px;left:50%;right:-50%;top:15px;background:rgba(255,255,255,.08);z-index:-1}
+.timeline-connector.filled{background:linear-gradient(90deg,#60a5fa,#22d3ee)}
+.timeline-rejected{grid-column:1/-1;justify-content:center;display:flex;gap:7px;align-items:center;color:#fca5a5;font-weight:800;margin-top:10px}
+.order-card-content{padding:0 24px 20px;display:flex;flex-direction:column;gap:20px}
+.order-card-content section h3{display:flex;align-items:center;gap:7px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-secondary);margin:0 0 10px}
+.order-items{display:flex;flex-direction:column;gap:10px}
+.order-item-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
+.order-item-row strong{font-size:14px}
+.order-item-row span{display:block;color:var(--text-secondary);font-size:12px;margin-top:3px}
+.order-card-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.order-card-grid>div{padding:14px;border-radius:15px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+.order-card-grid p{margin:0;color:#e5e7eb;line-height:1.55;font-size:13px}
+.order-total{font-size:24px!important;font-weight:900!important;color:#67e8f9}
+.order-card-footer{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 24px;background:rgba(255,255,255,.02);border-top:1px solid rgba(255,255,255,.06);font-size:11px;color:var(--text-secondary)}
+.order-skeleton{height:330px;border-radius:24px;background:linear-gradient(90deg,rgba(255,255,255,.03),rgba(255,255,255,.07),rgba(255,255,255,.03));background-size:200% 100%;animation:orderShimmer 1.5s infinite}
+.orders-error,.orders-empty{display:grid;place-items:center;text-align:center;min-height:330px;padding:34px;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025)}
+.orders-error svg{color:#fca5a5}
+.orders-error h2,.orders-empty h2{margin:10px 0 6px}
+.orders-error p,.orders-empty p{color:var(--text-secondary);max-width:480px;line-height:1.6}
+.orders-empty-icon{display:grid;place-items:center;width:78px;height:78px;border-radius:25px;background:rgba(99,102,241,.1);color:#a5b4fc}
+@keyframes orderShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@media(max-width:760px){
+  .orders-topbar{align-items:flex-start;flex-direction:column}
+  .orders-live-stack{justify-content:flex-start}
+  .order-card-head,.order-card-footer{flex-direction:column;align-items:flex-start}
+  .order-card-grid{grid-template-columns:1fr}
+  .order-timeline{overflow-x:auto;grid-template-columns:repeat(4,120px);padding-bottom:16px}
+  .timeline-connector{right:-50%}
+}
