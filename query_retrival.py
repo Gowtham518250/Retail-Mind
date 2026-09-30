@@ -442,37 +442,52 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     # leaving legitimate name columns on other tables untouched.
     sql = _repair_known_schema_aliases(sql)
 
-    # Normalize catalog example placeholders to the single authenticated
-    # parameter supported by this endpoint.
+    # Normalize the tenant placeholder to the authenticated user.
     sql = re.sub(r":shop_id\b", ":user_id", sql, flags=re.IGNORECASE)
-    # The endpoint binds only :user_id. Convert the catalog's example
-    # :business_date placeholder to a SQL date expression as well.
-    # Normalize business-date placeholders before the generic CURRENT_DATE
-    # rule. The target columns are DATE columns, so keep the expression as DATE.
-    sql = re.sub(
-        r":business_date\b",
-        "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date",
-        sql,
-        flags=re.IGNORECASE,
-    )
-    sql = re.sub(
-        r"\bCURRENT_DATE\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\b",
-        "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date",
-        sql,
-        flags=re.IGNORECASE,
-    )
-    sql = re.sub(
-        r"\(\s*\((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date\)\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)",
-        r"(\1)",
-        sql,
-        flags=re.IGNORECASE,
-    )
-    sql = re.sub(
-        r"\bCURRENT_DATE\b",
-        "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date",
-        sql,
-        flags=re.IGNORECASE,
-    )
+
+    # Business dates are supplied by the application in Asia/Kolkata.
+    # Do not let the model/database server choose the meaning of "today".
+    normalized_query = re.sub(r"\s+", " ", query.lower()).strip()
+    if re.search(r"\b(today|todays|today's)\b", normalized_query):
+        sql = re.sub(
+            r"\(\s*\(?\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)?\s*::date\s*-\s*INTERVAL\s*'1\s*day'\s*\)?\s*::date",
+            ":business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date\s*-\s*INTERVAL\s*'1\s*day'",
+            ":business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date",
+            ":business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(r"\bCURRENT_DATE\b", ":business_date", sql, flags=re.IGNORECASE)
+    elif re.search(r"\b(yesterday|yesterday's)\b", normalized_query):
+        sql = re.sub(
+            r"\(\s*\(?\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)?\s*::date\s*-\s*INTERVAL\s*'1\s*day'\s*\)?\s*::date",
+            ":previous_business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date\s*-\s*INTERVAL\s*'1\s*day'",
+            ":previous_business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date",
+            ":previous_business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(r"\bCURRENT_DATE\b", ":previous_business_date", sql, flags=re.IGNORECASE)
 
     # For common sales metrics, use a deterministic source preference:
     # current invoices are canonical for the modern sale workflow; when there
@@ -497,13 +512,13 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         )
 
         def build_date_filters(column_name: str):
-            today_expr = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+            today_expr = "CAST(:business_date AS date)"
 
             if re.search(r"\b(today|todays|today's)\b", normalized_query):
                 return f"{column_name} = {today_expr}", "today"
 
             if re.search(r"\byesterday\b", normalized_query):
-                return f"{column_name} = ({today_expr} - INTERVAL '1 day')::date", "yesterday"
+                return f"{column_name} = CAST(:previous_business_date AS date)", "yesterday"
 
             # Exact ISO date: 2026-09-20
             iso_match = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", normalized_query)
@@ -663,7 +678,15 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         )
 
     try:
-        rows = db.execute(text(sql), {"user_id": user_id}).mappings().all()
+        business_date, previous_business_date = _business_dates()
+        rows = db.execute(
+            text(sql),
+            {
+                "user_id": user_id,
+                "business_date": business_date,
+                "previous_business_date": previous_business_date,
+            },
+        ).mappings().all()
     except Exception as exc:
         db.rollback()
         print("SQL execution failed:")
