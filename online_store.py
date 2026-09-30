@@ -944,9 +944,22 @@ def update_order_status(
     action: str = Query(..., description="ACCEPT, DISPATCH, DELIVER, REJECT"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     """Owner: Accept, Dispatch, Deliver, or Reject an order"""
     shop_id = current_user["user_id"]
+
+    replay_key = None
+    if idempotency_key and idempotency_key.strip():
+        from idempotency_manager import IdempotencyManager
+        replay_key = f"owner:{shop_id}:order:{order_id}:action:{action.upper()}:{idempotency_key.strip()}"
+        cached = IdempotencyManager.get_cached_response(
+            replay_key,
+            "online_order_status_update",
+        )
+        if cached is not None:
+            return cached
+
     order = db.query(OnlineOrder).with_for_update().filter(
         OnlineOrder.id == order_id,
         OnlineOrder.shop_id == shop_id,
@@ -1083,9 +1096,22 @@ def update_order_status(
     except Exception as e:
         logger.warning("Order status audit log failed for #%s: %s", order.id, e)
 
-    return {
+    response = {
         "message": f"Order #{order_id} status updated to {new_status}.",
         "order_id": order_id,
         "new_status": new_status,
         "updated_at": datetime.utcnow().isoformat(),
     }
+
+    if replay_key:
+        try:
+            from idempotency_manager import IdempotencyManager
+            IdempotencyManager.set_cached_response(
+                replay_key,
+                "online_order_status_update",
+                response,
+            )
+        except Exception as e:
+            logger.warning("Order status idempotency cache write failed for #%s: %s", order_id, e)
+
+    return response
