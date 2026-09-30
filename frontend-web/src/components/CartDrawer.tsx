@@ -3,10 +3,12 @@
 import { useParams, useRouter } from 'next/navigation';
 import { ShoppingCart, X, Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function CartDrawer() {
   const { cartItems, isCartOpen, toggleCart, updateQuantity, removeFromCart, cartTotal } = useCart();
   const router = useRouter();
+  const { t } = useLanguage();
   const params = useParams();
   const shopId = Number(params?.shopId || 8);
 
@@ -41,7 +43,7 @@ export default function CartDrawer() {
         <div className="cart-head">
           <div className="cart-head-left">
             <ShoppingCart size={20} />
-            <h2 className="cart-head-title">Your Cart</h2>
+            <h2 className="cart-head-title">{t('cart_title')}</h2>
             {cartItems.length > 0 && (
               <span className="cart-count-pill">{cartItems.reduce((s, i) => s + i.quantity, 0)}</span>
             )}
@@ -55,8 +57,8 @@ export default function CartDrawer() {
           {cartItems.length === 0 ? (
             <div className="cart-empty">
               <ShoppingCart size={52} style={{ opacity: 0.2 }} />
-              <p>Your cart is empty</p>
-              <small>Add items from the store to get started</small>
+              <p>{t('cart_empty')}</p>
+              <small>{t('cart_add_start')}</small>
             </div>
           ) : (
             <div className="cart-items-list">
@@ -88,13 +90,13 @@ export default function CartDrawer() {
         {cartItems.length > 0 && (
           <div className="cart-foot">
             <div className="cart-total-row">
-              <span className="cart-total-label">Subtotal</span>
+              <span className="cart-total-label">{t('cart_subtotal')}</span>
               <span className="cart-total-val">₹{cartTotal.toFixed(2)}</span>
             </div>
-            <p className="cart-total-note">Taxes included. Delivery charges calculated at checkout.</p>
+            <p className="cart-total-note">{t('cart_note')}</p>
 
             <button className="place-order-btn" onClick={handleCheckout} id="checkout-btn">
-              Proceed to Checkout <ArrowRight size={16} />
+              {t('cart_checkout')} <ArrowRight size={16} />
             </button>
           </div>
         )}

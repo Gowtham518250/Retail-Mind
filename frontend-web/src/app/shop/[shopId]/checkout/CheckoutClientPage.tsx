@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -38,6 +38,13 @@ export default function CheckoutClientPage() {
   const [locationError, setLocationError] = useState('');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const savedName = localStorage.getItem('customerName') || '';
+    if (localStorage.getItem('customerToken') && savedName) {
+      setForm((prev) => prev.name ? prev : { ...prev, name: savedName });
+    }
+  }, []);
 
   const deliveryFee = cartTotal >= 499 || cartTotal === 0 ? 0 : 29;
   const grandTotal = cartTotal + deliveryFee;
@@ -94,8 +101,9 @@ export default function CheckoutClientPage() {
 
   const validate = () => {
     const next: Partial<Record<keyof FormState, string>> = {};
-    if (form.name.trim().length < 2) next.name = 'Enter your full name';
-    if (!/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10-digit phone number';
+    const isAuthenticatedCustomer = Boolean(localStorage.getItem('customerToken'));
+    if (!isAuthenticatedCustomer && form.name.trim().length < 2) next.name = 'Enter your full name';
+    if (!isAuthenticatedCustomer && !/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10-digit phone number';
     if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = 'Enter a valid email';
     if (!form.city.trim()) next.city = 'City is required';
     if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
@@ -109,19 +117,45 @@ export default function CheckoutClientPage() {
     setSubmitError('');
     setIsSubmitting(true);
 
-    const payload = {
-      shop_id: shopId,
-      customer_name: form.name.trim(),
-      phone: form.phone.trim(),
-      delivery_address: combinedAddress,
-      items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
-      payment_method: 'COD',
-    };
+    const customerToken = localStorage.getItem('customerToken');
+    const isAuthenticatedCustomer = Boolean(customerToken);
+
+    const payload = isAuthenticatedCustomer
+      ? {
+          shop_id: shopId,
+          items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+          delivery_address: combinedAddress,
+        }
+      : {
+          shop_id: shopId,
+          customer_name: form.name.trim(),
+          phone: form.phone.trim(),
+          delivery_address: combinedAddress,
+          items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+          payment_method: 'COD',
+        };
+
+    const idempotencyStorageKey = `retailmind:checkout-key:${shopId}`;
+    let idempotencyKey = sessionStorage.getItem(idempotencyStorageKey);
+    if (!idempotencyKey) {
+      idempotencyKey =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      sessionStorage.setItem(idempotencyStorageKey, idempotencyKey);
+    }
 
     try {
-      const res = await fetch(`${API_BASE}/store/guest-order`, {
+      const endpoint = isAuthenticatedCustomer ? '/store/order' : '/store/guest-order';
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+          ...(isAuthenticatedCustomer && customerToken
+            ? { Authorization: `Bearer ${customerToken}` }
+            : {}),
+        },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -133,7 +167,7 @@ export default function CheckoutClientPage() {
         total_amount: data.total_amount,
         status: data.status || 'PENDING',
         payment_method: 'COD',
-        customer_name: form.name.trim(),
+        customer_name: form.name.trim() || localStorage.getItem('customerName') || 'Customer',
         phone: form.phone.trim(),
         delivery_address: combinedAddress,
         items: cartItems.map((item) => ({
@@ -148,6 +182,7 @@ export default function CheckoutClientPage() {
         ...placedOrder,
         tracking_token: data.tracking_token,
       }));
+      sessionStorage.removeItem(idempotencyStorageKey);
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
     } catch (err: any) {

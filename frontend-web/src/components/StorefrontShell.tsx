@@ -8,12 +8,14 @@ import { useCart } from '../context/CartContext';
 import { API_BASE } from '../lib/api';
 import type { ShopProduct, ShopResponse } from '../lib/types';
 import ProductCard from './ProductCard';
+import { useLanguage } from '../context/LanguageContext';
 
 interface StorefrontShellProps {
   shopId: number;
 }
 
 export default function StorefrontShell({ shopId }: StorefrontShellProps) {
+  const { t } = useLanguage();
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [shop, setShop] = useState<ShopResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,7 +100,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
           className="shop-hero-card"
         >
           <div className="shop-hero-copy">
-            <div className="hero-pill">Premium local storefront</div>
+            <div className="hero-pill">{t('store_premium', 'Premium local storefront')}</div>
             <h1>{shop?.shop_name || 'Retail Mind Storefront'}</h1>
             <p>
               {shop?.shop_tagline || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
@@ -124,11 +126,11 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
               </div>
               <div className="shop-stat-card">
                 <ShieldCheck size={18} />
-                <span>Secure checkout</span>
+                <span>{t('store_secure', 'Secure checkout')}</span>
               </div>
               <div className="shop-stat-card">
                 <Sparkles size={18} />
-                <span>Fast dispatch</span>
+                <span>{t('store_fast', 'Fast dispatch')}</span>
               </div>
             </div>
           </div>
@@ -155,7 +157,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by product, category or keyword"
+              placeholder={t('store_search', 'Search by product, category or keyword')}
             />
           </label>
 
@@ -163,10 +165,10 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
             <div className="store-filter-group">
               <SlidersHorizontal size={16} />
               <select value={sortBy} onChange={(event) => setSortBy(event.target.value as any)}>
-                <option value="featured">Featured</option>
-                <option value="price-low">Price: Low to High</option>
-                <option value="price-high">Price: High to Low</option>
-                <option value="discount">Best discount</option>
+                <option value="featured">{t('store_featured', 'Featured')}</option>
+                <option value="price-low">{t('store_low', 'Price: Low to High')}</option>
+                <option value="price-high">{t('store_high', 'Price: High to Low')}</option>
+                <option value="discount">{t('store_discount', 'Best discount')}</option>
               </select>
             </div>
           </div>
@@ -187,8 +189,8 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
         <section id="products" className="store-product-section">
           <div className="section-heading">
             <div>
-              <p className="section-eyebrow">Curated for you</p>
-              <h2>Popular picks</h2>
+              <p className="section-eyebrow">{t('store_curated', 'Curated for you')}</p>
+              <h2>{t('store_popular', 'Popular picks')}</h2>
             </div>
             <div className="section-badge">{filteredProducts.length} items</div>
           </div>
@@ -202,7 +204,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
           ) : error ? (
             <div className="store-empty-state">{error}</div>
           ) : filteredProducts.length === 0 ? (
-            <div className="store-empty-state">No products match your search yet. Try another keyword.</div>
+            <div className="store-empty-state">{t('store_no_results', 'No products match your search yet. Try another keyword.')}</div>
           ) : (
             <div className="store-product-grid">
               {filteredProducts.map((product) => (

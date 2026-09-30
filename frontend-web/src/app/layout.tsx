@@ -4,6 +4,7 @@ import './globals.css';
 import Navbar from '../components/Navbar';
 import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
+import { LanguageProvider } from '../context/LanguageContext';
 
 export const metadata: Metadata = {
   title: "RetailShop",
@@ -28,15 +29,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <CartProvider>
-          <Navbar />
-          <main className="page-transition">
-            <Suspense fallback={<div className="page-loading">Loading...</div>}>
-              {children}
-            </Suspense>
-          </main>
-          <CartDrawer />
-        </CartProvider>
+        <LanguageProvider>
+          <CartProvider>
+            <Navbar />
+            <main className="page-transition">
+              <Suspense fallback={<div className="page-loading">Loading...</div>}>
+                {children}
+              </Suspense>
+            </main>
+            <CartDrawer />
+          </CartProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

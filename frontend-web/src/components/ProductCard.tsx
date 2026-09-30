@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ShoppingCart, Sparkles, Package2 } from 'lucide-react';
 import type { ShopProduct } from '../lib/types';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ProductCardProps {
   product: ShopProduct;
@@ -20,6 +21,7 @@ export default function ProductCard({
   justAdded,
   onAddToCart,
 }: ProductCardProps) {
+  const { t } = useLanguage();
   const discount = product.original_price && product.original_price > product.price
     ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
     : product.discount_pct || 0;
@@ -42,23 +44,23 @@ export default function ProductCard({
         )}
 
         {discount > 0 && (
-          <span className="store-badge discount">{discount}% OFF</span>
+          <span className="store-badge discount">{discount}% {t('product_off')}</span>
         )}
         {isOutOfStock ? (
-          <span className="store-badge sold-out">Out of stock</span>
+          <span className="store-badge sold-out">{t('product_out')}</span>
         ) : (
-          <span className="store-badge stock">In stock</span>
+          <span className="store-badge stock">{t('product_in')}</span>
         )}
       </div>
 
       <div className="store-product-body">
         <div className="store-product-topline">
-          <span className="store-category-pill">{product.category || 'Featured'}</span>
+          <span className="store-category-pill">{product.category || t('product_featured')}</span>
           <span className="store-rating-pill"><Sparkles size={12} /> 4.8</span>
         </div>
 
         <h3 className="store-product-title">{product.name}</h3>
-        <p className="store-product-desc">{product.description || 'Freshly curated for your daily essentials.'}</p>
+        <p className="store-product-desc">{product.description || t('product_desc')}</p>
 
         <div className="store-price-row">
           <div>
@@ -68,7 +70,7 @@ export default function ProductCard({
             )}
           </div>
           <div className="store-stock-text">
-            {product.stock_available !== undefined ? `${product.stock_available} left` : 'Ready to ship'}
+            {product.stock_available !== undefined ? `${product.stock_available} {t('product_left')}` : t('product_ready')}
           </div>
         </div>
 
@@ -79,7 +81,7 @@ export default function ProductCard({
             disabled={isOutOfStock}
           >
             <ShoppingCart size={16} />
-            {justAdded ? 'Added' : inCartCount > 0 ? `In cart ×${inCartCount}` : 'Add to cart'}
+            {justAdded ? t('product_added') : inCartCount > 0 ? `${t('product_in_cart')} ×${inCartCount}` : t('product_add')}
           </button>
           <Link href={`/shop/${shopId}/product/${product.id}`} className="store-link-btn">
             View
