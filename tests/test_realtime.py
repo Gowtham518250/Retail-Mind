@@ -70,3 +70,36 @@ def test_customer_shop_scope_can_be_restricted():
         customer,
         {"shop_id": 8, "customer_id": 42, "type": "order.status_changed"},
     )
+
+
+def test_owner_receives_inventory_events_for_own_shop():
+    manager = _RealtimeManager()
+    owner = _connection(user_id=7, role=ROLE_OWNER, shop_id=7)
+
+    event = {
+        "shop_id": 7,
+        "type": "inventory.changed",
+        "product_id": 123,
+        "new_stock": 4,
+    }
+
+    assert manager._should_deliver(owner, event)
+    assert not manager._should_deliver(
+        _connection(user_id=8, role=ROLE_OWNER, shop_id=8),
+        event,
+    )
+
+
+def test_customer_does_not_receive_shop_inventory_events():
+    manager = _RealtimeManager()
+    customer = _connection(user_id=42, role=ROLE_CUSTOMER, shop_id=0)
+
+    assert not manager._should_deliver(
+        customer,
+        {
+            "shop_id": 7,
+            "type": "inventory.changed",
+            "product_id": 123,
+            "new_stock": 4,
+        },
+    )

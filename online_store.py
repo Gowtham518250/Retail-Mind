@@ -475,6 +475,7 @@ def place_order(
 
     # Validate all items and calculate total
     order_items = []
+    inventory_changes = []
     total_amount = 0.0
 
     for item in data.items:
@@ -491,6 +492,11 @@ def place_order(
                 detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
             )
         product.current_stock -= item.quantity
+        inventory_changes.append({
+            "product_id": product.id,
+            "quantity": item.quantity,
+            "new_stock": float(product.current_stock),
+        })
         discount = get_active_discount(db, data.shop_id, product.category)
         price = float(product.unit_price)
         if discount > 0:
@@ -533,6 +539,14 @@ def place_order(
         "customer_id": customer_id,
         "status": "PENDING",
         "total_amount": float(total_amount),
+    })
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "inventory.changed",
+        "shop_id": data.shop_id,
+        "reference_type": "ONLINE_ORDER",
+        "reference_id": str(order.id),
+        "changes": inventory_changes,
     })
 
     return {
@@ -630,6 +644,7 @@ def place_guest_order(
 
     # 3. Validate items and calculate total
     order_items = []
+    inventory_changes = []
     total_amount = 0.0
 
     for item in data.items:
@@ -646,6 +661,11 @@ def place_guest_order(
                 detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
             )
         product.current_stock -= item.quantity
+        inventory_changes.append({
+            "product_id": product.id,
+            "quantity": item.quantity,
+            "new_stock": float(product.current_stock),
+        })
         discount = get_active_discount(db, data.shop_id, product.category)
         price = float(product.unit_price)
         if discount > 0:
@@ -708,6 +728,14 @@ def place_guest_order(
         "customer_id": customer.id,
         "status": "PENDING",
         "total_amount": float(total_amount),
+    })
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "inventory.changed",
+        "shop_id": data.shop_id,
+        "reference_type": "ONLINE_ORDER",
+        "reference_id": str(order.id),
+        "changes": inventory_changes,
     })
 
     return {
