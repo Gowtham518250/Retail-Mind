@@ -182,8 +182,8 @@ export default function AuthPage() {
                 exit={{ opacity: 0, x: 24 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>{t('auth_welcome', t('auth_welcome', 'Welcome back'))}</h1>
-                <p className={styles.authSubtitle}>{t('auth_login_subtitle', t('auth_login_subtitle', 'Sign in to continue shopping'))}</p>
+                <h1 className={styles.authTitle}>{t('auth_welcome', 'Welcome back')}</h1>
+                <p className={styles.authSubtitle}>{t('auth_login_subtitle', 'Sign in to continue shopping')}</p>
 
                 <form onSubmit={handleLogin} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -201,7 +201,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>{t('auth_email', t('auth_email', 'Email'))}</label>
+                    <label className={styles.label}>{t('auth_email', 'Email')}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -219,8 +219,8 @@ export default function AuthPage() {
 
                   <div className={styles.fieldGroup}>
                     <div className={styles.labelRow}>
-                      <label className={styles.label}>{t('auth_password', t('auth_password', 'Password'))}</label>
-                      <span className={styles.link} onClick={() => switchView('reset')}>{t('auth_forgot', t('auth_forgot', 'Forgot password?'))}</span>
+                      <label className={styles.label}>{t('auth_password', 'Password')}</label>
+                      <span className={styles.link} onClick={() => switchView('reset')}>{t('auth_forgot', 'Forgot password?')}</span>
                     </div>
                     <div className={styles.inputWrap}>
                       <Lock size={17} className={styles.inputIcon} />
@@ -254,7 +254,7 @@ export default function AuthPage() {
 
                 <p className={styles.switchText}>
                   New here?{' '}
-                  <span className={styles.link} onClick={() => switchView('register')}>{t('auth_create_link', t('auth_create_link', 'Create an account'))}</span>
+                  <span className={styles.link} onClick={() => switchView('register')}>{t('auth_create_link', 'Create an account')}</span>
                 </p>
               </motion.div>
             )}
@@ -268,8 +268,8 @@ export default function AuthPage() {
                 exit={{ opacity: 0, x: -24 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>{t('auth_create', t('auth_create', 'Create account'))}</h1>
-                <p className={styles.authSubtitle}>{t('auth_register_subtitle', t('auth_register_subtitle', 'Join thousands of happy shoppers'))}</p>
+                <h1 className={styles.authTitle}>{t('auth_create', 'Create account')}</h1>
+                <p className={styles.authSubtitle}>{t('auth_register_subtitle', 'Join thousands of happy shoppers')}</p>
 
                 <form onSubmit={handleRegister} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -281,7 +281,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>{t('auth_name', t('auth_name', 'Full Name'))}</label>
+                    <label className={styles.label}>{t('auth_name', 'Full Name')}</label>
                     <div className={styles.inputWrap}>
                       <User size={17} className={styles.inputIcon} />
                       <input
@@ -299,7 +299,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>{t('auth_email', t('auth_email', 'Email'))}</label>
+                    <label className={styles.label}>{t('auth_email', 'Email')}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -316,7 +316,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>{t('auth_phone', t('auth_phone', 'Mobile Number'))}</label>
+                    <label className={styles.label}>{t('auth_phone', 'Mobile Number')}</label>
                     <div className={styles.inputWrap}>
                       <Phone size={17} className={styles.inputIcon} />
                       <input
@@ -335,7 +335,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>{t('auth_password', t('auth_password', 'Password'))}</label>
+                    <label className={styles.label}>{t('auth_password', 'Password')}</label>
                     <div className={styles.inputWrap}>
                       <Lock size={17} className={styles.inputIcon} />
                       <input
@@ -369,7 +369,7 @@ export default function AuthPage() {
 
                 <p className={styles.switchText}>
                   Already a member?{' '}
-                  <span className={styles.link} onClick={() => switchView('login')}>{t('auth_signin_link', t('auth_signin_link', 'Sign in'))}</span>
+                  <span className={styles.link} onClick={() => switchView('login')}>{t('auth_signin_link', 'Sign in')}</span>
                 </p>
               </motion.div>
             )}
@@ -383,8 +383,8 @@ export default function AuthPage() {
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>{t('auth_reset', t('auth_reset', 'Reset password'))}</h1>
-                <p className={styles.authSubtitle}>{t('auth_reset_subtitle', t('auth_reset_subtitle', 'Enter your registered email — we&apos;ll send you a new password'))}</p>
+                <h1 className={styles.authTitle}>{t('auth_reset', 'Reset password')}</h1>
+                <p className={styles.authSubtitle}>{t('auth_reset_subtitle', 'Enter your registered email — we&apos;ll send you a new password')}</p>
 
                 <form onSubmit={handleReset} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -401,7 +401,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>{t('auth_email', t('auth_email', 'Email'))}</label>
+                    <label className={styles.label}>{t('auth_email', 'Email')}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -430,7 +430,7 @@ export default function AuthPage() {
                 </form>
 
                 <p className={styles.switchText}>
-                  <span className={styles.link} onClick={() => switchView('login')}>{t('auth_back', t('auth_back', '← Back to Sign In'))}</span>
+                  <span className={styles.link} onClick={() => switchView('login')}>{t('auth_back', '← Back to Sign In')}</span>
                 </p>
               </motion.div>
             )}
