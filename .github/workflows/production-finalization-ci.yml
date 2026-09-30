@@ -29,6 +29,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/retail_mind_test
       SECRET_KEY: ci-password-reset-secret-key-for-tests-only-1234567890
+      GROQ_API_KEY: ci-groq-api-key-not-used-by-tests
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
