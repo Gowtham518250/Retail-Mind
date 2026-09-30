@@ -334,7 +334,7 @@ def forgot_password(
             frontend_origin = (
                 configured_frontend.rstrip("/")
                 if configured_frontend
-                else str(request.base_url).rstrip("/")
+                else "https://retail-mind-web.onrender.com"
             )
             reset_url = (
                 f"{frontend_origin}/auth?resetToken={quote(raw_token)}"
