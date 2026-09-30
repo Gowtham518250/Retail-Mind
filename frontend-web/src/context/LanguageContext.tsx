@@ -151,31 +151,66 @@ const translations = {
     estimatedDelivery: 'மதிப்பிடப்பட்ட டெலிவரி', payment: 'பணம் செலுத்தல்',
     signOut: 'வெளியேறு', language: 'மொழி',
   },
-  kn: {
-    ...{} as any
-  },
-  ml: {
-    ...{} as any
-  },
-  mr: {
-    ...{} as any
-  },
-  gu: {
-    ...{} as any
-  },
-  bn: {
-    ...{} as any
-  },
-  pa: {
-    ...{} as any
-  },
+  kn: {},
+  ml: {},
+  mr: {},
+  gu: {},
+  bn: {},
+  pa: {},
 } as const;
 
-const extraLocales: WebLanguage[] = ['kn','ml','mr','gu','bn','pa'];
-for (const locale of extraLocales) {
-  (translations as Record<string, Record<string, string>>)[locale] =
-    (translations.en as Record<string, string>);
+export const WEB_LANGUAGES: { code: WebLanguage; label: string; native: string }[] = [
+  { code: 'en', label: 'English', native: 'English' },
+  { code: 'te', label: 'Telugu', native: 'తెలుగు' },
+  { code: 'hi', label: 'Hindi', native: 'हिन्दी' },
+  { code: 'ta', label: 'Tamil', native: 'தமிழ்' },
+  { code: 'kn', label: 'Kannada', native: 'ಕನ್ನಡ' },
+  { code: 'ml', label: 'Malayalam', native: 'മലയാളം' },
+  { code: 'mr', label: 'Marathi', native: 'मराठी' },
+  { code: 'gu', label: 'Gujarati', native: 'ગુજરાતી' },
+  { code: 'bn', label: 'Bengali', native: 'বাংলা' },
+  { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ' },
+];
+
+type LanguageContextValue = {
+  language: WebLanguage;
+  setLanguage: (language: WebLanguage) => void;
+  t: (key: TranslationKey) => string;
+};
+
+const LanguageContext = createContext<LanguageContextValue | null>(null);
+
+export function LanguageProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguageState] = useState<WebLanguage>('en');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('webLanguage') as WebLanguage | null;
+    if (saved && WEB_LANGUAGES.some(item => item.code === saved)) {
+      setLanguageState(saved);
+    }
+  }, []);
+
+  const setLanguage = useCallback((next: WebLanguage) => {
+    setLanguageState(next);
+    localStorage.setItem('webLanguage', next);
+  }, []);
+
+  const value = useMemo(() => ({
+    language,
+    setLanguage,
+    t: (key: TranslationKey) =>
+      ((translations as any)[language]?.[key] ?? (translations.en as any)[key] ?? key) as string,
+  }), [language, setLanguage]);
+
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
+
+export function useWebLanguage() {
+  const context = useContext(LanguageContext);
+  if (!context) throw new Error('useWebLanguage must be used inside LanguageProvider');
+  return context;
+}const extraLocales: WebLanguage[] = ['kn', 'ml', 'mr', 'gu', 'bn', 'pa'];
+
 
 export const WEB_LANGUAGES: { code: WebLanguage; label: string; native: string }[] = [
   { code: 'en', label: 'English', native: 'English' },
