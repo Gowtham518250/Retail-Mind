@@ -25,7 +25,26 @@ jobs:
       - name: Compile production modules
         run: |
           python -m py_compile             app.py             invoices_billing.py             inventory_sync_service.py             online_store.py             backup_recovery.py             realtime.py             audit_logging.py
-      - name: Run focused realtime/inventory tests
+      - name: Run focused production tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_realtime.py
+        run: |
+          pytest -q tests/test_realtime.py
+          pytest -q tests/test_customer_password_reset.py
+
+  customer-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend-web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build customer web
+        run: npm run build
