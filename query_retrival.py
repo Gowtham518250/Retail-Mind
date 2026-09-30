@@ -2,6 +2,7 @@ import json
 import re
 import os
 import calendar
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -201,11 +202,14 @@ app= APIRouter()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 @app.post("/askquery")
 async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=Depends(check_current_user)):
+    started = time.perf_counter()
     print("🔥 ENDPOINT CALLED")
     print("QUERY ENGINE VERSION:", QUERY_ENGINE_VERSION)
     print("QUERY:", query)
 
+    retrieval_started = time.perf_counter()
     answer = vectorstore.similarity_search(query, k=6)
+    retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
     print("Relevant database information:")
     for doc in answer:
@@ -404,6 +408,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             retrieved_table_information=retrived_table_information_str,
             question=query
         )
+    llm_started = time.perf_counter()
     try:
         completion = client.chat.completions.create(
             model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
@@ -429,6 +434,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         print(f"Exception: {exc}")
         raise HTTPException(status_code=502, detail="The SQL generation service is temporarily unavailable.") from exc
 
+    llm_ms = (time.perf_counter() - llm_started) * 1000
     generated_text = "".join(generated_parts).strip()
     sql_match = re.search(r"\bSQL\s*:\s*(.+)", generated_text, re.IGNORECASE | re.DOTALL)
     if not sql_match:
@@ -677,6 +683,7 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             detail="Generated SQL must be a single read-only SELECT scoped with the authenticated :user_id parameter.",
         )
 
+    db_started = time.perf_counter()
     try:
         business_date, previous_business_date = _business_dates()
         rows = db.execute(
@@ -695,6 +702,10 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         print("SQL:")
         print(sql)
         raise HTTPException(status_code=400, detail="The generated SQL could not be executed.") from exc
+
+    db_ms = (time.perf_counter() - db_started) * 1000
+    total_ms = (time.perf_counter() - started) * 1000
+    print(f"ASKQUERY TIMING retrieval={retrieval_ms:.1f}ms llm={llm_ms:.1f}ms db={db_ms:.1f}ms total={total_ms:.1f}ms")
 
     encoded_rows = jsonable_encoder([dict(row) for row in rows])
 
