@@ -1073,7 +1073,7 @@ def update_order_status(
                 if product:
                     product.current_stock = (product.current_stock or 0) + item["quantity"]
 
-    previous_status = str(order.order_status)
+    previous_status = getattr(order.order_status, "value", str(order.order_status))
     order.order_status = new_status
     try:
         db.commit()
