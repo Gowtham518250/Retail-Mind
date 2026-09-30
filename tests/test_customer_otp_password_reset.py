@@ -48,6 +48,7 @@ def test_customer_otp_reset_end_to_end(monkeypatch):
         "/store/customer/request-password-reset-otp",
         json={"email": "customer-otp-reset@example.com"},
     )
+    print("OTP REQUEST RESPONSE:", request_response.status_code, request_response.text)
     assert request_response.status_code == 200
     assert "otp" in request_response.json()["message"].lower()
 
