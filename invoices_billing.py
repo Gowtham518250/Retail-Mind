@@ -27,6 +27,7 @@ from models import (
     UniversalTransaction, StockMovement
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
+from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
 logger = logging.getLogger(__name__)
@@ -234,6 +235,7 @@ def sync_offline_invoice(
         db.add(invoice)
         db.flush()
 
+        inventory_changes = []
         if data.line_items and len(data.line_items) > 0:
             for item in data.line_items:
                 line_total = item.quantity * item.unit_price
@@ -262,6 +264,11 @@ def sync_offline_invoice(
                             )
                         logger.info(f"Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
                         product.current_stock = max(Decimal("0"), current_stock - item.quantity)
+                        inventory_changes.append({
+                            "product_id": product.id,
+                            "quantity": float(item.quantity),
+                            "new_stock": float(product.current_stock),
+                        })
                         mov = StockMovement(
                             product_id=product.id,
                             movement_type="OUT",
@@ -284,6 +291,11 @@ def sync_offline_invoice(
                                 detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Required: {item.quantity}"
                             )
                         product.current_stock = max(Decimal("0"), current_stock - item.quantity)
+                        inventory_changes.append({
+                            "product_id": product.id,
+                            "quantity": float(item.quantity),
+                            "new_stock": float(product.current_stock),
+                        })
                         mov = StockMovement(
                             product_id=product.id,
                             movement_type="OUT",
@@ -305,6 +317,43 @@ def sync_offline_invoice(
         db.add(tx)
 
         db.commit()
+
+        publish_realtime_event({
+            "event_id": str(uuid.uuid4()),
+            "type": "invoice.created",
+            "shop_id": shop_id,
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "customer_id": customer_id,
+            "total_amount": float(invoice.total_amount),
+            "paid_amount": float(invoice.paid_amount),
+            "payment_status": invoice.payment_status,
+            "source": invoice.source,
+        })
+
+        if data.paid_amount > 0:
+            publish_realtime_event({
+                "event_id": str(uuid.uuid4()),
+                "type": "payment.updated",
+                "shop_id": shop_id,
+                "invoice_id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "customer_id": customer_id,
+                "amount": float(invoice.paid_amount),
+                "payment_status": invoice.payment_status,
+                "source": "OFFLINE_SYNC",
+            })
+
+        if inventory_changes:
+            publish_realtime_event({
+                "event_id": str(uuid.uuid4()),
+                "type": "inventory.changed",
+                "shop_id": shop_id,
+                "reference_type": "INVOICE_SYNC",
+                "reference_id": invoice_number,
+                "changes": inventory_changes,
+            })
+
         line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
         payload = {
             "id": invoice.id,
