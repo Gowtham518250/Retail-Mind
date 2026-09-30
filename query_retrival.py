@@ -18,7 +18,7 @@ from security import get_current_user as check_current_user
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-09-29-date-aware-sales-v2"
+QUERY_ENGINE_VERSION = "2026-09-30-schema-guard-v1"
 
 # CPU-only embedding runtime for small Render instances.
 # Uses the same all-MiniLM-L6-v2 model family as the existing FAISS index,
@@ -57,6 +57,63 @@ _SESSION = ort.InferenceSession(
     MODEL_PATH,
     providers=["CPUExecutionProvider"],
 )
+
+def _repair_known_schema_aliases(sql: str) -> str:
+    """Repair narrowly-scoped column aliases that are known from the catalog.
+
+    Text-to-SQL models sometimes normalize a field such as customers.customer_name
+    to the generic customers.name. Do not perform global replacements because
+    other tables may legitimately have a column named "name".
+    """
+    customer_aliases = set()
+
+    # Capture aliases used specifically for the customers table:
+    #   FROM customers c
+    #   FROM customers AS c
+    #   JOIN customers c
+    #   JOIN customers AS c
+    customer_table_pattern = re.compile(
+        r"\b(?:FROM|JOIN)\s+(?:public\.)?customers"
+        r"(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?"
+        r"(?=\s|\.|,|\)|$)",
+        re.IGNORECASE,
+    )
+
+    for match in customer_table_pattern.finditer(sql):
+        alias = match.group(1)
+        if alias:
+            customer_aliases.add(alias)
+
+    repaired_sql = sql
+
+    # Direct table reference: customers.name -> customers.customer_name.
+    repaired_sql, direct_count = re.subn(
+        r"\b(?:public\.)?customers\.name\b",
+        lambda m: m.group(0).rsplit(".", 1)[0] + ".customer_name",
+        repaired_sql,
+        flags=re.IGNORECASE,
+    )
+
+    # Aliased reference: c.name -> c.customer_name, but ONLY when c was
+    # explicitly bound to the customers table in this query.
+    alias_count = 0
+    for alias in customer_aliases:
+        repaired_sql, count = re.subn(
+            rf"\b{re.escape(alias)}\.name\b",
+            f"{alias}.customer_name",
+            repaired_sql,
+            flags=re.IGNORECASE,
+        )
+        alias_count += count
+
+    if direct_count or alias_count:
+        print(
+            "🛠️ SQL schema repair:",
+            f"customers.name -> customer_name ({direct_count + alias_count} replacement(s))",
+        )
+
+    return repaired_sql
+
 
 class MiniLMONNXEmbeddings(Embeddings):
     """all-MiniLM-L6-v2 embeddings without loading PyTorch."""
@@ -308,6 +365,9 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     - Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, REVOKE, COPY, or multiple statements.
     - The query must contain the authenticated parameter :user_id somewhere in its scope logic.
     - If the catalog is insufficient, do not invent a schema or relationship.
+    - CUSTOMER SCHEMA SAFETY: the customers table uses customer_name for the customer name.
+      There is NO customers.name column. When the customers table is aliased as c, use c.customer_name.
+      Verify every customers column against the supplied catalog before returning SQL.
 
     Retrieved complete table information:
 
@@ -365,6 +425,11 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
 
     sql = sql_match.group(1).strip().strip("`").strip()
     sql = re.sub(r";\s*$", "", sql)
+
+    # Apply a narrow schema repair before execution. This catches common LLM
+    # normalization such as c.name when c is the customers table, while
+    # leaving legitimate name columns on other tables untouched.
+    sql = _repair_known_schema_aliases(sql)
 
     # Normalize catalog example placeholders to the single authenticated
     # parameter supported by this endpoint.
