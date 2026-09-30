@@ -243,14 +243,29 @@ class EmailNotificationService:
                 recipient_email, subject, body, html_body
             )
 
-        if provider == "smtp" or provider == "auto":
+        # Render free web services cannot reach SMTP ports 25/465/587.
+        # Do not silently fall back to SMTP in production, because that makes
+        # the API appear to work while the message is never delivered.
+        if provider == "auto" and (
+            os.getenv("RENDER_SERVICE_ID")
+            or os.getenv("RENDER")
+            or os.getenv("RENDER_SERVICE_NAME")
+        ):
+            cls.logger.error(
+                "No HTTPS email provider is configured for Render. "
+                "Set EMAIL_PROVIDER=brevo and BREVO_API_KEY/BREVO_SENDER_EMAIL."
+            )
+            return False
+
+        if provider == "smtp":
             return cls._send_via_smtp(
                 recipient_email, subject, body, html_body
             )
 
         cls.logger.error(
-            "Unsupported EMAIL_PROVIDER=%r. Use brevo, smtp, or auto.",
+            "No usable email provider configured. EMAIL_PROVIDER=%r BREVO_API_KEY=%s",
             provider,
+            "configured" if cls.BREVO_API_KEY else "missing",
         )
         return False
 
