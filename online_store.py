@@ -383,13 +383,19 @@ def request_customer_password_reset_otp(
             "success": True,
             **_customer_reset_generic_message(),
         }
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception:
         db.rollback()
         logger.exception(
             "Customer password reset OTP request failed for customer_id=%s",
             user.id,
         )
-        return _customer_reset_generic_message()
+        raise HTTPException(
+            status_code=503,
+            detail="Password reset email could not be delivered. Please try again later.",
+        )
 
 
 @router.post("/customer/verify-password-reset-otp")
