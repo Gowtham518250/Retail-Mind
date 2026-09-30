@@ -331,9 +331,16 @@ def request_customer_password_reset_otp(
         func.lower(OnlineCustomerAuth.email) == normalized_email
     ).first()
 
-    # Keep enumeration-resistant response behavior.
+    # Keep enumeration-resistant response behavior, but do not make the
+    # frontend believe an OTP was sent when this customer has no matching
+    # account/email. The caller can keep the same generic wording while using
+    # success=false to avoid advancing to OTP verification.
     if not user or not user.email or not EmailNotificationService:
-        return _customer_reset_generic_message()
+        return {
+            "success": False,
+            "email_sent": False,
+            **_customer_reset_generic_message(),
+        }
 
     existing = db.query(CustomerPasswordResetOtp).filter(
         CustomerPasswordResetOtp.customer_id == user.id,
@@ -381,6 +388,7 @@ def request_customer_password_reset_otp(
         db.commit()
         return {
             "success": True,
+            "email_sent": True,
             **_customer_reset_generic_message(),
         }
     except HTTPException:
