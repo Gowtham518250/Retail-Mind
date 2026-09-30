@@ -32,7 +32,7 @@ interface Order {
 
 const STATUS_STEPS = ['PENDING', 'ACCEPTED', 'DISPATCHED', 'DELIVERED'] as const;
 
-const statusMeta: Record<string, { label: keyof ReturnType<typeof useWebLanguage>['t']; description: keyof ReturnType<typeof useWebLanguage>['t']; icon: typeof Clock3 }> = {
+const statusMeta: Record<string, { label: string; description: string; icon: typeof Clock3 }> = {
   PENDING: { label: 'orderPlaced', description: 'orderPlacedDesc', icon: Clock3 },
   ACCEPTED: { label: 'acceptedPreparing', description: 'acceptedPreparingDesc', icon: Package },
   DISPATCHED: { label: 'outForDelivery', description: 'outForDeliveryDesc', icon: Truck },
