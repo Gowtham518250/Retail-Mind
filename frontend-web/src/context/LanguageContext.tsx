@@ -57,6 +57,13 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     store_curated: 'Curated for you',
     store_popular: 'Popular picks',
     store_no_results: 'No products match your search yet. Try another keyword.',
+
+    cart_title: 'Your Cart',
+    cart_empty: 'Your cart is empty',
+    cart_add_start: 'Add items from the store to get started',
+    cart_subtotal: 'Subtotal',
+    cart_note: 'Taxes included. Delivery charges calculated at checkout.',
+    cart_checkout: 'Proceed to Checkout',
   },
   te: {
     nav_orders: 'ఆర్డర్లు',
@@ -96,6 +103,13 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     store_curated: 'మీ కోసం ఎంపిక',
     store_popular: 'ప్రముఖ ఎంపికలు',
     store_no_results: 'మీ శోధనకు సరిపోయే ఉత్పత్తులు లేవు.',
+
+    cart_title: 'మీ కార్ట్',
+    cart_empty: 'మీ కార్ట్ ఖాళీగా ఉంది',
+    cart_add_start: 'ప్రారంభించడానికి స్టోర్ నుంచి ఉత్పత్తులు జోడించండి',
+    cart_subtotal: 'ఉప మొత్తం',
+    cart_note: 'పన్నులు చేర్చబడ్డాయి. డెలివరీ ఛార్జీలు చెకౌట్‌లో లెక్కించబడతాయి.',
+    cart_checkout: 'చెకౌట్‌కు వెళ్లండి',
   },
   hi: {
     nav_orders: 'ऑर्डर',
@@ -135,6 +149,13 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     store_curated: 'आपके लिए चुना गया',
     store_popular: 'लोकप्रिय विकल्प',
     store_no_results: 'आपकी खोज से मेल खाने वाले उत्पाद नहीं मिले।',
+
+    cart_title: 'आपकी कार्ट',
+    cart_empty: 'आपकी कार्ट खाली है',
+    cart_add_start: 'शुरू करने के लिए स्टोर से सामान जोड़ें',
+    cart_subtotal: 'उप-योग',
+    cart_note: 'टैक्स शामिल हैं। डिलीवरी शुल्क चेकआउट पर लगेगा।',
+    cart_checkout: 'चेकआउट पर जाएं',
   },
   ta: {
     nav_orders: 'ஆர்டர்கள்',
@@ -174,6 +195,13 @@ const translations: Record<LanguageCode, Record<string, string>> = {
     store_curated: 'உங்களுக்காக தேர்வு',
     store_popular: 'பிரபலமான தேர்வுகள்',
     store_no_results: 'உங்கள் தேடலுக்கு பொருத்தமான பொருட்கள் இல்லை.',
+
+    cart_title: 'உங்கள் கார்ட்',
+    cart_empty: 'உங்கள் கார்ட் காலியாக உள்ளது',
+    cart_add_start: 'தொடங்க கடையிலிருந்து பொருட்களை சேர்க்கவும்',
+    cart_subtotal: 'கூட்டுத்தொகை',
+    cart_note: 'வரி சேர்க்கப்பட்டுள்ளது. டெலிவரி கட்டணம் செக்அவுட்டில் கணக்கிடப்படும்.',
+    cart_checkout: 'செக்அவுட்டுக்கு செல்லவும்',
   },
 };
 
