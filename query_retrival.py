@@ -352,7 +352,9 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
     - JOINs are allowed only when the retrieved catalog explicitly documents the relationship.
     - For tables with user_id, scope using user_id = :user_id.
     - For the sales table, shopkeeper_id is the authenticated shop owner scope, so use shopkeeper_id = :user_id.
-    - The catalog may contain example placeholders such as :shop_id or :business_date. Ignore those example parameter names: the only runtime parameter available is :user_id. For business-date filters, use the documented date column and a SQL date expression directly.
+    - The catalog may contain example placeholders such as :shop_id or :business_date. Treat them as documented parameter semantics. Runtime parameters are :user_id, :business_date, and :previous_business_date.
+    - CRITICAL DATE RULE: for "today" / "today's", use the documented date column with = :business_date. NEVER subtract one day for "today". NEVER use CURRENT_DATE, CURRENT_TIMESTAMP, AT TIME ZONE, or INTERVAL arithmetic to decide today's date.
+    - For "yesterday" / "yesterday's", use the documented date column with = :previous_business_date.
     - Never invent a relationship or literal user/shop ID.
     - Do not assume a column exists just because it would normally exist in a database.
     - Use the documented date column and business-date/timezone guidance for date/range questions.
