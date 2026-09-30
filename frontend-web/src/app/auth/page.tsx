@@ -6,11 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Lock, Phone, ShoppingBag, ArrowRight, User, Mail, CheckCircle } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import styles from './auth.module.css';
+import { useLanguage } from '../../context/LanguageContext';
 
 type View = 'login' | 'register' | 'reset';
 
 export default function AuthPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [view, setView] = useState<View>('login');
   const [email, setEmail]     = useState('');
   const [phone, setPhone]     = useState('');
@@ -43,7 +45,7 @@ export default function AuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+      setError(t('auth_invalid_email', 'Please enter a valid email address.'));
       return;
     }
     setLoading(true);
@@ -55,7 +57,7 @@ export default function AuthPage() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Login failed. Check your credentials.');
+      if (!res.ok) throw new Error(data.detail || data.message || t('auth_login_failed', 'Login failed. Check your credentials.'));
 
       localStorage.setItem('customerToken', data.access_token);
       localStorage.setItem('customerName', data.customer?.name || data.name || email);
@@ -77,19 +79,19 @@ export default function AuthPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim().length < 2) {
-      setError('Name must be at least 2 characters long.');
+      setError(t('auth_name_min', 'Name must be at least 2 characters long.'));
       return;
     }
     if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+      setError(t('auth_invalid_email', 'Please enter a valid email address.'));
       return;
     }
     if (!/^\d{10}$/.test(phone)) {
-      setError('Please enter a valid 10-digit phone number.');
+      setError(t('auth_invalid_phone', 'Please enter a valid 10-digit phone number.'));
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+      setError(t('auth_password_min', 'Password must be at least 6 characters long.'));
       return;
     }
     setLoading(true);
@@ -101,7 +103,7 @@ export default function AuthPage() {
         body: JSON.stringify({ name, email, phone, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Registration failed. Please try again.');
+      if (!res.ok) throw new Error(data.detail || data.message || t('auth_register_failed', 'Registration failed. Please try again.'));
 
       localStorage.setItem('customerToken', data.access_token);
       localStorage.setItem('customerName', data.name || name);
@@ -121,7 +123,7 @@ export default function AuthPage() {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+      setError(t('auth_invalid_email', 'Please enter a valid email address.'));
       return;
     }
     setLoading(true);
@@ -134,8 +136,8 @@ export default function AuthPage() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Reset failed. Please try again.');
-      setSuccess('If this email is registered, a new password has been sent to it.');
+      if (!res.ok) throw new Error(data.detail || data.message || t('auth_reset_failed', 'Reset failed. Please try again.'));
+      setSuccess(t('auth_reset_success', 'If this email is registered, a new password has been sent to it.'));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -180,8 +182,8 @@ export default function AuthPage() {
                 exit={{ opacity: 0, x: 24 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>Welcome back</h1>
-                <p className={styles.authSubtitle}>Sign in to continue shopping</p>
+                <h1 className={styles.authTitle}>{t('auth_welcome', t('auth_welcome', 'Welcome back'))}</h1>
+                <p className={styles.authSubtitle}>{t('auth_login_subtitle', t('auth_login_subtitle', 'Sign in to continue shopping'))}</p>
 
                 <form onSubmit={handleLogin} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -199,7 +201,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email</label>
+                    <label className={styles.label}>{t('auth_email', t('auth_email', 'Email'))}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -217,8 +219,8 @@ export default function AuthPage() {
 
                   <div className={styles.fieldGroup}>
                     <div className={styles.labelRow}>
-                      <label className={styles.label}>Password</label>
-                      <span className={styles.link} onClick={() => switchView('reset')}>Forgot password?</span>
+                      <label className={styles.label}>{t('auth_password', t('auth_password', 'Password'))}</label>
+                      <span className={styles.link} onClick={() => switchView('reset')}>{t('auth_forgot', t('auth_forgot', 'Forgot password?'))}</span>
                     </div>
                     <div className={styles.inputWrap}>
                       <Lock size={17} className={styles.inputIcon} />
@@ -252,7 +254,7 @@ export default function AuthPage() {
 
                 <p className={styles.switchText}>
                   New here?{' '}
-                  <span className={styles.link} onClick={() => switchView('register')}>Create an account</span>
+                  <span className={styles.link} onClick={() => switchView('register')}>{t('auth_create_link', t('auth_create_link', 'Create an account'))}</span>
                 </p>
               </motion.div>
             )}
@@ -266,8 +268,8 @@ export default function AuthPage() {
                 exit={{ opacity: 0, x: -24 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>Create account</h1>
-                <p className={styles.authSubtitle}>Join thousands of happy shoppers</p>
+                <h1 className={styles.authTitle}>{t('auth_create', t('auth_create', 'Create account'))}</h1>
+                <p className={styles.authSubtitle}>{t('auth_register_subtitle', t('auth_register_subtitle', 'Join thousands of happy shoppers'))}</p>
 
                 <form onSubmit={handleRegister} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -279,7 +281,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Full Name</label>
+                    <label className={styles.label}>{t('auth_name', t('auth_name', 'Full Name'))}</label>
                     <div className={styles.inputWrap}>
                       <User size={17} className={styles.inputIcon} />
                       <input
@@ -297,7 +299,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email</label>
+                    <label className={styles.label}>{t('auth_email', t('auth_email', 'Email'))}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -314,7 +316,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Mobile Number</label>
+                    <label className={styles.label}>{t('auth_phone', t('auth_phone', 'Mobile Number'))}</label>
                     <div className={styles.inputWrap}>
                       <Phone size={17} className={styles.inputIcon} />
                       <input
@@ -333,7 +335,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Password</label>
+                    <label className={styles.label}>{t('auth_password', t('auth_password', 'Password'))}</label>
                     <div className={styles.inputWrap}>
                       <Lock size={17} className={styles.inputIcon} />
                       <input
@@ -367,7 +369,7 @@ export default function AuthPage() {
 
                 <p className={styles.switchText}>
                   Already a member?{' '}
-                  <span className={styles.link} onClick={() => switchView('login')}>Sign in</span>
+                  <span className={styles.link} onClick={() => switchView('login')}>{t('auth_signin_link', t('auth_signin_link', 'Sign in'))}</span>
                 </p>
               </motion.div>
             )}
@@ -381,8 +383,8 @@ export default function AuthPage() {
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.28 }}
               >
-                <h1 className={styles.authTitle}>Reset password</h1>
-                <p className={styles.authSubtitle}>Enter your registered email — we&apos;ll send you a new password</p>
+                <h1 className={styles.authTitle}>{t('auth_reset', t('auth_reset', 'Reset password'))}</h1>
+                <p className={styles.authSubtitle}>{t('auth_reset_subtitle', t('auth_reset_subtitle', 'Enter your registered email — we&apos;ll send you a new password'))}</p>
 
                 <form onSubmit={handleReset} className={styles.form} noValidate>
                   <AnimatePresence>
@@ -399,7 +401,7 @@ export default function AuthPage() {
                   </AnimatePresence>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email</label>
+                    <label className={styles.label}>{t('auth_email', t('auth_email', 'Email'))}</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
@@ -423,12 +425,12 @@ export default function AuthPage() {
                     className={styles.submitBtn}
                     id="reset-submit"
                   >
-                    {loading ? <span className={styles.spinner} /> : 'Send New Password'}
+                    {loading ? <span className={styles.spinner} /> : t('auth_send_password', 'Send New Password')}
                   </motion.button>
                 </form>
 
                 <p className={styles.switchText}>
-                  <span className={styles.link} onClick={() => switchView('login')}>← Back to Sign In</span>
+                  <span className={styles.link} onClick={() => switchView('login')}>{t('auth_back', t('auth_back', '← Back to Sign In'))}</span>
                 </p>
               </motion.div>
             )}
