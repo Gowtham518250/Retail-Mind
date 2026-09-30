@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from db import get_db
 from models import (
     Invoice, InvoiceLineItem, Product, Customer,
-    UniversalTransaction, StockMovement, Payment, PaymentMethod, PaymentStatus
+    UniversalTransaction, StockMovement, Payment, PaymentMethod, PaymentStatus, InvoiceStatus
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 
