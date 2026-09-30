@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface OrderItem {
   product_id: number;
@@ -122,6 +123,7 @@ function money(value: number) {
 
 export default function MyOrdersPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -164,7 +166,7 @@ export default function MyOrdersPage() {
       for (const order of nextOrders) {
         const previous = previousStatusRef.current.get(order.order_id);
         if (previous && previous !== order.status) {
-          setLiveNotice(`Order #${order.order_id} updated to ${statusMeta[order.status]?.title || order.status}.`);
+          setLiveNotice(`Order #${order.order_id} updated to ${t(`status_${order.status}`) || order.status}.`);
           window.setTimeout(() => setLiveNotice(''), 3200);
           window.dispatchEvent(new CustomEvent('retailmind:order-updated', {
             detail: { orderId: order.order_id, status: order.status },
@@ -317,7 +319,7 @@ export default function MyOrdersPage() {
           background: activeCount > 0 ? '#22c55e' : '#64748b',
           boxShadow: activeCount > 0 ? '0 0 0 5px rgba(34,197,94,0.08)' : 'none',
         }} />
-        Live order updates enabled
+        {t('orders_live')}
         {lastUpdated ? ` · checked ${lastUpdated.toLocaleTimeString('en-IN')}` : ''}
       </div>
 
@@ -377,11 +379,11 @@ export default function MyOrdersPage() {
           }}
         >
           <Sparkles size={38} color="#a5b4fc" style={{ marginBottom: 12 }} />
-          <h2 style={{ margin: '0 0 8px' }}>Your order space is ready</h2>
+          <h2 style={{ margin: '0 0 8px' }}>{t('orders_empty_title')}</h2>
           <p style={{ color: 'var(--text-secondary)', margin: '0 auto 24px', maxWidth: 470 }}>
-            Place your first order and follow every stage from confirmation to delivery here.
+            {t('orders_empty_text')}
           </p>
-          <button className="btn-primary" onClick={() => router.push('/')}>Start shopping</button>
+          <button className="btn-primary" onClick={() => router.push('/')}>{t('orders_start')}</button>
         </motion.div>
       ) : (
         <div style={{ display: 'grid', gap: 18 }}>
@@ -389,6 +391,8 @@ export default function MyOrdersPage() {
             {orders.map((order) => {
               const status = order.status in statusMeta ? order.status : 'PENDING';
               const meta = statusMeta[status];
+              const localizedTitle = t(`status_${status}`);
+              const localizedDescription = t(`status_${status}_desc`);
               const Icon = meta.icon;
               const currentIndex = getStepIndex(status);
               const rejected = status === 'REJECTED';
@@ -526,7 +530,7 @@ export default function MyOrdersPage() {
                     </div>
 
                     <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '14px 2px 22px' }}>
-                      {meta.description}
+                      {localizedDescription}
                     </p>
 
                     <div style={{
@@ -594,7 +598,7 @@ export default function MyOrdersPage() {
                           fontWeight: 750,
                           marginBottom: 7,
                         }}>
-                          Delivery address
+                          {t('delivery_address')}
                         </div>
                         <div style={{
                           display: 'flex',
@@ -618,7 +622,7 @@ export default function MyOrdersPage() {
                           fontWeight: 750,
                           marginBottom: 7,
                         }}>
-                          Total
+                          {t('total')}
                         </div>
                         <div style={{
                           fontSize: 24,
