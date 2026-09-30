@@ -2,8 +2,9 @@ import json
 import re
 import os
 import calendar
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import Form, HTTPException, Depends, APIRouter
 from fastapi.encoders import jsonable_encoder
@@ -18,7 +19,15 @@ from security import get_current_user as check_current_user
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-09-30-schema-guard-v1"
+QUERY_ENGINE_VERSION = "2026-09-30-schema-guard-v2"
+
+BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
+
+
+def _business_dates():
+    """Return today and yesterday using the shop business timezone."""
+    today = datetime.now(BUSINESS_TZ).date()
+    return today, today - timedelta(days=1)
 
 # CPU-only embedding runtime for small Render instances.
 # Uses the same all-MiniLM-L6-v2 model family as the existing FAISS index,
