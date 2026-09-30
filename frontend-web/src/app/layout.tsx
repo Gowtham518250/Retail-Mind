@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import './globals.css';
 import Navbar from '../components/Navbar';
 import { CartProvider } from '../context/CartContext';
+import { LanguageProvider } from '../context/LanguageContext';
 import CartDrawer from '../components/CartDrawer';
 
 export const metadata: Metadata = {
@@ -28,7 +29,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <CartProvider>
+        <LanguageProvider>
+          <CartProvider>
           <Navbar />
           <main className="page-transition">
             <Suspense fallback={<div className="page-loading">Loading...</div>}>
@@ -36,7 +38,8 @@ export default function RootLayout({
             </Suspense>
           </main>
           <CartDrawer />
-        </CartProvider>
+          </CartProvider>
+        </LanguageProvider>
       </body>
     </html>
   );
