@@ -142,115 +142,324 @@ class VerifyResetOTPRequest(BaseModel):
     otp: str
     password: str
 
+
+class OwnerOTPRequest(BaseModel):
+    email: str
+    purpose: Optional[str] = "Owner Verification"
+
+
+class StoreResetOTPRequestLegacy(BaseModel):
+    email: str
+    otp: str
+
+
+PASSWORD_RESET_OTP_PURPOSE = "PASSWORD_RESET_OTP"
+OWNER_VERIFICATION_OTP_PURPOSE = "OWNER_VERIFICATION_OTP"
+
+
+def _hash_otp(otp: str) -> str:
+    return hashlib.sha256(otp.strip().encode()).hexdigest()
+
+
+def _new_otp() -> str:
+    return f"{secrets.randbelow(900000) + 100000:06d}"
+
+
+def _delete_pending_otps(db: Session, user_id: int, purpose: str) -> None:
+    db.query(PasswordReset).filter(
+        PasswordReset.user_id == user_id,
+        PasswordReset.description == purpose,
+    ).delete(synchronize_session=False)
+
+
+def _store_db_otp(db: Session, user_id: int, otp: str, purpose: str, minutes: int = 10) -> None:
+    _delete_pending_otps(db, user_id, purpose)
+    db.add(
+        PasswordReset(
+            user_id=user_id,
+            token_hash=_hash_otp(otp),
+            expires_at=datetime.utcnow() + timedelta(minutes=minutes),
+            description=purpose,
+        )
+    )
+
+
+def _find_db_otp(db: Session, user_id: int, otp: str, purpose: str):
+    return db.query(PasswordReset).filter(
+        PasswordReset.user_id == user_id,
+        PasswordReset.description == purpose,
+        PasswordReset.token_hash == _hash_otp(otp),
+        PasswordReset.expires_at > datetime.utcnow(),
+    ).order_by(PasswordReset.id.desc()).first()
+
+
 otp_cache = {}
 
+
 @router.post("/send-otp")
-def send_otp(request: SendOTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    otp_code = str(random.randint(100000, 999999))
-    
-    # 🔒 SECURITY FIX: Hash OTP before storing in memory
-    otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
-    
-    # Store hash in memory for 10 minutes instead of plain text
-    otp_cache[request.email] = {
-        "otp_hash": otp_hash,  # Store hash instead of plain text
-        "expires_at": time.time() + 600
+def send_otp(
+    request: SendOTPRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    normalized_email = request.email.strip().lower()
+    if not normalized_email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    otp_code = _new_otp()
+    otp_cache[normalized_email] = {
+        "otp_hash": _hash_otp(otp_code),
+        "expires_at": time.time() + 600,
     }
-    
-    # Send email synchronously for testing so we can surface SMTP errors immediately
-    subject, body = EmailNotificationService.send_otp_template(otp_code, request.purpose)
+
+    subject, body = EmailNotificationService.send_otp_template(
+        otp_code,
+        request.purpose or "Verification",
+    )
+
     try:
         success = EmailNotificationService.send_email(
-            recipient_email=request.email,
+            recipient_email=normalized_email,
             subject=subject,
-            body=body
+            body=body,
         )
         if not success:
-            logger.error("Failed to send OTP email to %s", request.email)
-            raise HTTPException(status_code=500, detail="Failed to send OTP email; check server logs")
-        logger.info("OTP generation request for %s (email sent)", request.email)
-    except Exception as e:
-        logger.exception("Failed while sending OTP email: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to send OTP email; check server logs")
-
-    return {"msg": "OTP sent successfully (email dispatched)"}
-
-@router.post("/verify-otp")
-def verify_otp(request: VerifyOTPRequest):
-    record = otp_cache.get(request.email)
-    
-    if not record:
-        raise HTTPException(status_code=400, detail="OTP not requested or expired")
-    
-    if time.time() > record["expires_at"]:
-        del otp_cache[request.email]
-        raise HTTPException(status_code=400, detail="OTP expired")
-        
-    # 🔒 SECURITY FIX: Verify by comparing hashes instead of plain text
-    request_otp_hash = hashlib.sha256(request.otp.encode()).hexdigest()
-    if record["otp_hash"] != request_otp_hash:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-        
-    # Clear OTP after successful verification
-    del otp_cache[request.email]
-    
-    return {"msg": "OTP verified successfully"}
-
-
-@router.post("/store-reset-otp")
-def store_reset_otp(request: StoreResetOTPRequest):
-    """Store a frontend-generated OTP (hashed) for later verification during password reset.
-    Expected flow: frontend generates OTP, calls this endpoint, sends email locally, then user submits OTP+new password to verify endpoint.
-    """
-    try:
-        otp_code = request.otp.strip()
-        if not otp_code or len(otp_code) < 4:
-            raise HTTPException(status_code=400, detail="Invalid OTP provided")
-
-        otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
-        # store for 10 minutes
-        otp_cache[request.email.strip().lower()] = {
-            "otp_hash": otp_hash,
-            "expires_at": time.time() + 600
-        }
-        return {"msg": "OTP stored for verification"}
+            otp_cache.pop(normalized_email, None)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to send OTP email. Check backend email configuration.",
+            )
+        logger.info("Backend OTP sent successfully to %s", normalized_email)
+        return {"msg": "OTP sent successfully"}
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Failed to store reset OTP: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to store OTP")
+        otp_cache.pop(normalized_email, None)
+        logger.exception("Failed while sending OTP email: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send OTP email. Check backend email configuration.",
+        )
+
+
+@router.post("/verify-otp")
+def verify_otp(request: VerifyOTPRequest):
+    normalized_email = request.email.strip().lower()
+    record = otp_cache.get(normalized_email)
+
+    if not record:
+        raise HTTPException(status_code=400, detail="OTP not requested or expired")
+
+    if time.time() > record["expires_at"]:
+        otp_cache.pop(normalized_email, None)
+        raise HTTPException(status_code=400, detail="OTP expired")
+
+    if record["otp_hash"] != _hash_otp(request.otp):
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    otp_cache.pop(normalized_email, None)
+    return {"msg": "OTP verified successfully"}
+
+
+@router.post("/send-owner-otp")
+def send_owner_otp(
+    request: OwnerOTPRequest,
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    normalized_email = request.email.strip().lower()
+    user = db.query(User).filter(User.id == current_user).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Authenticated user not found")
+
+    if (user.email or "").strip().lower() != normalized_email:
+        raise HTTPException(status_code=403, detail="Verification email does not match the logged-in account")
+
+    otp_code = _new_otp()
+    _store_db_otp(
+        db,
+        user_id=user.id,
+        otp=otp_code,
+        purpose=OWNER_VERIFICATION_OTP_PURPOSE,
+    )
+
+    subject, body = EmailNotificationService.send_otp_template(
+        otp_code,
+        request.purpose or "Owner Verification",
+    )
+
+    try:
+        success = EmailNotificationService.send_email(
+            recipient_email=normalized_email,
+            subject=subject,
+            body=body,
+        )
+        if not success:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to send owner verification OTP. Check backend email configuration.",
+            )
+        db.commit()
+        return {"msg": "Owner verification OTP sent successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception("Owner OTP email failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send owner verification OTP. Check backend email configuration.",
+        )
+
+
+@router.post("/verify-owner-otp")
+def verify_owner_otp(
+    request: VerifyOTPRequest,
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    normalized_email = request.email.strip().lower()
+    user = db.query(User).filter(User.id == current_user).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Authenticated user not found")
+
+    if (user.email or "").strip().lower() != normalized_email:
+        raise HTTPException(status_code=403, detail="Verification email does not match the logged-in account")
+
+    record = _find_db_otp(
+        db,
+        user_id=user.id,
+        otp=request.otp,
+        purpose=OWNER_VERIFICATION_OTP_PURPOSE,
+    )
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired owner verification OTP")
+
+    try:
+        db.delete(record)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to complete owner verification")
+
+    return {"msg": "Owner verification OTP verified successfully"}
+
+
+@router.post("/request-password-reset-otp")
+def request_password_reset_otp(
+    request: RequestPasswordReset,
+    db: Session = Depends(get_db),
+):
+    email = request.email.strip().lower()
+    user = db.query(User).filter(User.email.ilike(email)).first()
+
+    # Deliberately keep the response generic so account existence is not disclosed.
+    if not user:
+        return {"msg": "If the email exists, a password-reset OTP has been sent"}
+
+    otp_code = _new_otp()
+    _store_db_otp(
+        db,
+        user_id=user.id,
+        otp=otp_code,
+        purpose=PASSWORD_RESET_OTP_PURPOSE,
+    )
+
+    subject, body = EmailNotificationService.send_otp_template(
+        otp_code,
+        "Password Reset",
+    )
+
+    try:
+        success = EmailNotificationService.send_email(
+            recipient_email=email,
+            subject=subject,
+            body=body,
+        )
+        if not success:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to send password-reset OTP. Check backend email configuration.",
+            )
+        db.commit()
+        return {"msg": "If the email exists, a password-reset OTP has been sent"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception("Password-reset OTP email failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send password-reset OTP. Check backend email configuration.",
+        )
+
+
+class CheckResetOTPRequest(BaseModel):
+    email: str
+    otp: str
+
+
+@router.post("/check-reset-otp")
+def check_reset_otp(
+    request: CheckResetOTPRequest,
+    db: Session = Depends(get_db),
+):
+    email = request.email.strip().lower()
+    user = db.query(User).filter(User.email.ilike(email)).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset OTP")
+
+    record = _find_db_otp(
+        db,
+        user_id=user.id,
+        otp=request.otp,
+        purpose=PASSWORD_RESET_OTP_PURPOSE,
+    )
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset OTP")
+
+    return {"msg": "Reset OTP verified successfully"}
+
+
+@router.post("/store-reset-otp")
+def store_reset_otp_legacy(request: StoreResetOTPRequestLegacy):
+    # Kept only as a compatibility response for older clients.
+    # New clients must use /request-password-reset-otp so the backend generates
+    # and emails the OTP. The server never accepts a client-generated OTP.
+    raise HTTPException(
+        status_code=410,
+        detail="Client-generated reset OTPs are no longer supported. Request a new OTP.",
+    )
 
 
 @router.post("/verify-reset-otp")
 def verify_reset_otp(request: VerifyResetOTPRequest, db: Session = Depends(get_db)):
-    """Verify a frontend-generated OTP and reset the user's password if valid."""
+    """Verify a backend-generated password-reset OTP and reset the user's password."""
     email = request.email.strip().lower()
-    record = otp_cache.get(email)
-    if not record:
-        raise HTTPException(status_code=400, detail="OTP not requested or expired")
-
-    if time.time() > record["expires_at"]:
-        del otp_cache[email]
-        raise HTTPException(status_code=400, detail="OTP expired")
-
-    request_otp_hash = hashlib.sha256(request.otp.encode()).hexdigest()
-    if record["otp_hash"] != request_otp_hash:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-
-    # OTP valid — perform password reset
     user = db.query(User).filter(User.email.ilike(email)).first()
     if not user:
-        # Do not reveal whether email exists
-        del otp_cache[email]
-        raise HTTPException(status_code=400, detail="User not found")
+        raise HTTPException(status_code=400, detail="Invalid or expired reset OTP")
+
+    record = _find_db_otp(
+        db,
+        user_id=user.id,
+        otp=request.otp,
+        purpose=PASSWORD_RESET_OTP_PURPOSE,
+    )
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset OTP")
 
     user.password = hash_password(request.password)
     try:
-        # remove the stored OTP
-        del otp_cache[email]
+        db.delete(record)
+        # Also invalidate any older reset OTPs for this user.
+        _delete_pending_otps(db, user.id, PASSWORD_RESET_OTP_PURPOSE)
         db.commit()
     except Exception:
         db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to reset password")
 
     return {"msg": "Password reset successfully"}
 
