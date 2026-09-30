@@ -9,6 +9,7 @@ import uuid as uuid_lib
 
 from db import get_db
 from models import User, ShopProfile
+from audit_logging import AuditLog
 from security import get_current_user
 
 router = APIRouter()
@@ -561,3 +562,31 @@ def _is_valid_operation_id(operation_id: str) -> bool:
         return True
     except ValueError:
         return False
+
+@router.get("/audit/history")
+def get_audit_history(
+    current_user: dict = Depends(owner_only),
+    db: Session = Depends(get_db),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Owner audit history for important changes such as online orders."""
+    rows = db.query(AuditLog).filter(
+        AuditLog.user_id == current_user["user_id"]
+    ).order_by(AuditLog.timestamp.desc()).limit(limit).all()
+
+    return {
+        "entries": [
+            {
+                "id": row.id,
+                "action": row.action,
+                "table_name": row.table_name,
+                "record_id": row.record_id,
+                "old_values": row.old_values,
+                "new_values": row.new_values,
+                "status": row.status,
+                "description": row.description,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+            }
+            for row in rows
+        ]
+    }
