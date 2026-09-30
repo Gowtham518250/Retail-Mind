@@ -10,6 +10,7 @@ Covers:
 import os
 import qrcode
 import base64
+import json
 from io import BytesIO
 from typing import Optional
 from datetime import datetime, timezone
@@ -29,23 +30,46 @@ router = APIRouter(prefix="/shop", tags=["Shop Settings"])
 # =====================
 class ShopProfileCreate(BaseModel):
     shop_name: str = Field(..., min_length=2, max_length=100)
+    shop_tagline: Optional[str] = None
+    shop_type: Optional[str] = None
     address: Optional[str] = None
+    location: Optional[str] = None
     phone: Optional[str] = Field(None, min_length=10, max_length=10, pattern=r"^\d{10}$")
+    email: Optional[str] = None
+    website: Optional[str] = None
     upi_id: Optional[str] = None
     gst_number: Optional[str] = None
+    shop_categories: Optional[object] = None
+    contact_person_name: Optional[str] = None
+    contact_person_phone: Optional[str] = None
+    contact_person_email: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
     logo_url: Optional[str] = None
 
 class ShopProfileUpdate(BaseModel):
     shop_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    shop_tagline: Optional[str] = None
+    shop_type: Optional[str] = None
     address: Optional[str] = None
+    location: Optional[str] = None
     phone: Optional[str] = Field(None, min_length=10, max_length=10, pattern=r"^\d{10}$")
+    email: Optional[str] = None
+    website: Optional[str] = None
     upi_id: Optional[str] = None
     gst_number: Optional[str] = None
+    shop_categories: Optional[object] = None
+    contact_person_name: Optional[str] = None
+    contact_person_phone: Optional[str] = None
+    contact_person_email: Optional[str] = None
     logo_url: Optional[str] = None
     is_online_store_enabled: Optional[bool] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
 
 class ShopProfileResponse(BaseModel):
     id: int
@@ -53,13 +77,24 @@ class ShopProfileResponse(BaseModel):
     shop_name: str
     address: Optional[str]
     phone: Optional[str]
+    email: Optional[str] = None
+    website: Optional[str] = None
+    shop_tagline: Optional[str] = None
+    shop_type: Optional[str] = None
+    location: Optional[str] = None
     upi_id: Optional[str]
     gst_number: Optional[str]
+    shop_categories: Optional[str] = None
+    contact_person_name: Optional[str] = None
+    contact_person_phone: Optional[str] = None
+    contact_person_email: Optional[str] = None
     logo_url: Optional[str]
     is_online_store_enabled: bool
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -110,10 +145,22 @@ def create_shop_profile(
     profile = ShopProfile(
         shop_id=owner_id,
         shop_name=shop_name,
+        shop_tagline=data.shop_tagline,
+        shop_type=data.shop_type,
         address=address,
+        location=data.location,
         phone=data.phone,
+        email=data.email,
+        website=data.website,
         upi_id=data.upi_id,
         gst_number=data.gst_number,
+        shop_categories=json.dumps(data.shop_categories) if isinstance(data.shop_categories, (list, dict)) else data.shop_categories,
+        contact_person_name=data.contact_person_name,
+        contact_person_phone=data.contact_person_phone,
+        contact_person_email=data.contact_person_email,
+        city=data.city,
+        state=data.state,
+        postal_code=data.postal_code,
         logo_url=data.logo_url,
     )
     db.add(profile)
@@ -155,6 +202,8 @@ def update_shop_profile(
     for key, value in update_data.items():
         if isinstance(value, str):
             value = sanitize_input(value, key)
+        if key == "shop_categories" and isinstance(value, (list, dict)):
+            value = json.dumps(value)
         setattr(profile, key, value)
 
     try:
