@@ -47,7 +47,7 @@ jobs:
           PYTHONPATH: .
         run: |
           pytest -q tests/test_realtime.py
-          pytest -q tests/test_customer_password_reset.py
+          pytest -q tests/test_customer_otp_password_reset.py
 
   customer-web:
     runs-on: ubuntu-latest
