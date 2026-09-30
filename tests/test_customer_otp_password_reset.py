@@ -54,7 +54,7 @@ def test_customer_otp_reset_end_to_end(monkeypatch):
     assert "otp" in request_response.json()["message"].lower()
 
     body = sent["body"]
-    otp_match = re.search(r"(?<!\\d)\\d{6}(?!\\d)", body)
+    otp_match = re.search(r"(?<!\d)\d{6}(?!\d)", body)
     assert otp_match is not None
     otp = otp_match.group(0)
 
