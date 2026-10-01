@@ -25,7 +25,7 @@ def _parse_money(text: str) -> float | None:
 
 def _extract_shop_hint(text: str) -> str | None:
     patterns = [
-        r"(?:at|from|in)\s+(?:the\s+)?(?:shop|store)\s+(.+?)(?:\s+(?:for|with|under|below|less|upto)\b|$)",
+        r"(?:at|from|in|with)\s+(?:the\s+)?(?:shop|store)\s+(.+?)(?:\s+(?:for|with|under|below|less|upto)\b|$)",
         r"(?:shop|store)\s*[:=-]\s*(.+?)(?:\s+(?:for|with|under|below|less|upto)\b|$)",
     ]
     for pattern in patterns:
@@ -60,7 +60,7 @@ def _extract_product_terms(text: str) -> str:
     shop_hint = _extract_shop_hint(text)
     if shop_hint:
         cleaned = cleaned.replace(shop_hint, " ")
-    cleaned = re.sub(r"\b(?:at|from|in)\s+(?:the\s+)?(?:shop|store)\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:at|from|in|with)\s+(?:the\s+)?(?:shop|store)\b", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .,?!")
     return cleaned
 
