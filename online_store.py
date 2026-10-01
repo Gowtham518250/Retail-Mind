@@ -185,37 +185,56 @@ def register_customer(
 ):
     """Register a new customer account — supports phone-only (no email required)"""
 
-    # ── Uniqueness check by PHONE (primary) ──────────────────────────────
-    existing_phone = db.query(OnlineCustomerAuth).filter(
-        OnlineCustomerAuth.phone == data.phone
-    ).first()
-    if existing_phone:
-        raise HTTPException(status_code=409, detail="Phone number already registered. Please login instead.")
-
-    # ── Uniqueness check by EMAIL only when email is provided ────────────
+    # ── Normalize the account identity once ───────────────────────────────
     normalized_registration_email = (
         data.email.strip().lower() if data.email and data.email.strip() else None
     )
+    name = sanitize_input(data.name, "name")
 
+    # ── Phone is the primary customer identity. ──────────────────────────
+    # Guest checkout historically created an inactive placeholder account
+    # using the customer's phone. When that same customer later registers,
+    # upgrade the placeholder in-place so the existing orders stay attached
+    # to the same customer_id instead of being lost from order history.
+    existing_phone = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.phone == data.phone
+    ).first()
+
+    if existing_phone:
+        if existing_phone.is_active:
+            raise HTTPException(
+                status_code=409,
+                detail="Phone number already registered. Please login instead.",
+            )
+
+        existing_phone.user_name = name
+        existing_phone.email = normalized_registration_email
+        existing_phone.city = data.city
+        existing_phone.address = data.address
+        existing_phone.password = hash_password(data.password)
+        existing_phone.is_active = True
+        customer = existing_phone
+    else:
+        customer = OnlineCustomerAuth(
+            user_name=name,
+            email=normalized_registration_email,
+            phone=data.phone,
+            city=data.city,
+            address=data.address,
+            password=hash_password(data.password),
+            is_active=data.is_active if data.is_active is not None else True,
+        )
+        db.add(customer)
+
+    # ── Email must remain unique when supplied. ──────────────────────────
     if normalized_registration_email:
         existing_email = db.query(OnlineCustomerAuth).filter(
             func.lower(func.trim(OnlineCustomerAuth.email)) ==
             normalized_registration_email
         ).first()
-        if existing_email:
+        if existing_email and existing_email.id != customer.id:
             raise HTTPException(status_code=409, detail="Email already registered.")
 
-    name = sanitize_input(data.name, "name")
-    customer = OnlineCustomerAuth(
-        user_name=name,
-        email=normalized_registration_email,
-        phone=data.phone,
-        city=data.city,
-        address=data.address,
-        password=hash_password(data.password),
-        is_active=data.is_active if data.is_active is not None else True,
-    )
-    db.add(customer)
     try:
         db.commit()
         db.refresh(customer)
@@ -282,7 +301,44 @@ def customer_login(
         "token_type": "bearer",
         "customer_id": user.id,
         "name": user.user_name,
-        "customer": {"id": user.id, "name": user.user_name, "phone": user.phone},
+        "email": user.email,
+        "phone": user.phone,
+        "address": user.address,
+        "city": user.city,
+        "customer": {
+            "id": user.id,
+            "name": user.user_name,
+            "email": user.email,
+            "phone": user.phone,
+            "address": user.address,
+            "city": user.city,
+        },
+    }
+
+
+@router.get("/customer/me")
+def get_current_customer(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(customer_only),
+):
+    """Return the authenticated storefront customer's account profile."""
+    customer_id = int(current_user["user_id"])
+    user = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == customer_id,
+        OnlineCustomerAuth.is_active == True,
+    ).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Customer account is no longer available.")
+
+    return {
+        "customer": {
+            "id": user.id,
+            "name": user.user_name,
+            "email": user.email,
+            "phone": user.phone,
+            "address": user.address,
+            "city": user.city,
+        }
     }
 
 
@@ -1045,6 +1101,12 @@ def get_my_orders(
             {
                 "order_id": o.id,
                 "shop_id": o.shop_id,
+                "shop_name": (
+                    db.query(ShopProfile.shop_name)
+                    .filter(ShopProfile.shop_id == o.shop_id)
+                    .scalar()
+                    or f"Shop #{o.shop_id}"
+                ),
                 "status": o.order_status,
                 "total_amount": float(o.total_amount),
                 "delivery_address": o.delivery_address,
@@ -1078,14 +1140,28 @@ def track_order(
     STATUS_STEPS = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
     current_step = STATUS_STEPS.index(order.order_status) if order.order_status in STATUS_STEPS else 0
 
+    customer = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == order.customer_id
+    ).first()
+    shop_name = (
+        db.query(ShopProfile.shop_name)
+        .filter(ShopProfile.shop_id == order.shop_id)
+        .scalar()
+        or f"Shop #{order.shop_id}"
+    )
+
     return {
         "order_id": order.id,
+        "shop_id": order.shop_id,
+        "shop_name": shop_name,
         "status": order.order_status,
         "progress_step": current_step + 1,
         "total_steps": len(STATUS_STEPS),
         "total_amount": float(order.total_amount),
         "delivery_address": order.delivery_address,
         "items": json.loads(order.items_json),
+        "customer_name": customer.user_name if customer else "Customer",
+        "customer_phone": customer.phone if customer else "",
         "created_at": order.created_at,
     }
 
@@ -1345,6 +1421,9 @@ def update_order_status(
         "previous_status": previous_status,
         "status": new_status,
         "total_amount": float(order.total_amount),
+        "delivery_address": order.delivery_address,
+        "items": json.loads(order.items_json),
+        "created_at": order.created_at,
     })
 
     if linked_invoice is not None and new_status == "DELIVERED":
