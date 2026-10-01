@@ -3,15 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import StorefrontShell from '../components/StorefrontShell';
+import MarketplaceShell from '../components/MarketplaceShell';
 
 export default function Home() {
   const searchParams = useSearchParams();
-  const [shopId, setShopId] = useState<number>(8);
+  const [shopId, setShopId] = useState<number | null>(null);
 
   useEffect(() => {
-    const requested = Number(searchParams?.get('shop_id') || '8');
-    setShopId(Number.isFinite(requested) && requested > 0 ? requested : 8);
+    const raw = searchParams?.get('shop_id');
+    const requested = raw ? Number(raw) : NaN;
+    setShopId(Number.isFinite(requested) && requested > 0 ? requested : null);
   }, [searchParams]);
 
-  return <StorefrontShell shopId={shopId} />;
+  return shopId ? <StorefrontShell shopId={shopId} /> : <MarketplaceShell />;
 }
