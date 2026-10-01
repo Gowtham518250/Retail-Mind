@@ -208,6 +208,7 @@ try:
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
         "CREATE INDEX IF NOT EXISTS ix_online_orders_idempotency_key ON online_orders(idempotency_key)",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS branch_id INTEGER",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50)",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0",
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS branch_id INTEGER",
