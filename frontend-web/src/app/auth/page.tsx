@@ -26,6 +26,7 @@ export default function AuthPage() {
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [redirectPath, setRedirectPath] = useState('/');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -33,6 +34,12 @@ export default function AuthPage() {
     const params = new URLSearchParams(window.location.search);
     const resetRequested = params.get('view') === 'reset';
     const emailParam = params.get('email') || '';
+    const requestedNext = params.get('next') || '/';
+    const safeNext = requestedNext.startsWith('/') && !requestedNext.startsWith('//')
+      ? requestedNext
+      : '/';
+
+    setRedirectPath(safeNext);
 
     if (emailParam) {
       setEmail(emailParam);
@@ -45,7 +52,7 @@ export default function AuthPage() {
     }
 
     if (localStorage.getItem('customerToken')) {
-      router.replace('/');
+      router.replace(safeNext);
     }
   }, [router]);
 
@@ -96,7 +103,8 @@ export default function AuthPage() {
 
       localStorage.setItem('customerToken', data.access_token);
       localStorage.setItem('customerName', data.customer?.name || data.name || email);
-      router.replace('/');
+      localStorage.setItem('customerEmail', data.customer?.email || data.email || email);
+      router.replace(redirectPath);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -142,7 +150,8 @@ export default function AuthPage() {
 
       localStorage.setItem('customerToken', data.access_token);
       localStorage.setItem('customerName', data.name || name);
-      router.replace('/');
+      localStorage.setItem('customerEmail', email);
+      router.replace(redirectPath);
     } catch (err: any) {
       setError(err.message);
     } finally {
