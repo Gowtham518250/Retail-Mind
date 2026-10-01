@@ -21,7 +21,10 @@ export default function MarketplaceShell() {
   const loadShops = async () => {
     setLoading(true);
     try {
-      const res = await fetch(API_BASE + '/store/shops/nearby?limit=60', { cache: 'no-store' });
+      const res = await fetch(
+        API_BASE + '/store/marketplace/search?mode=shops&limit=60',
+        { cache: 'no-store' },
+      );
       const data = await res.json();
       setShops(data.shops || []);
       setProducts([]);
@@ -148,7 +151,7 @@ export default function MarketplaceShell() {
           </div>
           <div className={styles.list}>
             {ai.map((item, index) => (
-              <Link key={item.product_id} href={'/?shop_id=' + item.shop_id} className={styles.aiCard}>
+              <Link key={item.product_id} href={'/shop/' + item.shop_id} className={styles.aiCard}>
                 <span className={styles.rank}>{index + 1}</span>
                 <div className={styles.resultMain}>
                   <div className={styles.productTitle}>{item.product_name}</div>
@@ -176,7 +179,7 @@ export default function MarketplaceShell() {
             </div>
             <div className={styles.shopGrid}>
               {shops.map((shop) => (
-                <Link key={shop.shop_id} href={'/?shop_id=' + shop.shop_id} className={styles.shopCard}>
+                <Link key={shop.shop_id} href={'/shop/' + shop.shop_id} className={styles.shopCard}>
                   <div className={styles.shopIcon}><Store size={23} /></div>
                   <div className={styles.shopNameLarge}>{shop.shop_name}</div>
                   <div className={styles.shopAddress}>{shop.city || shop.address || 'Online shop'}</div>
@@ -200,7 +203,7 @@ export default function MarketplaceShell() {
             </div>
             <div className={styles.list}>
               {products.map((product) => (
-                <Link key={String(product.product_id) + '-' + String(product.shop_id)} href={'/?shop_id=' + product.shop_id} className={styles.productCard}>
+                <Link key={String(product.product_id) + '-' + String(product.shop_id)} href={'/shop/' + product.shop_id} className={styles.productCard}>
                   <div className={styles.productIcon}><ShoppingBag size={20} /></div>
                   <div className={styles.resultMain}>
                     <div className={styles.productTitle}>{product.product_name}</div>
@@ -222,13 +225,13 @@ export default function MarketplaceShell() {
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.sectionEyebrow}>DISCOVER</span>
-              <h2>Online shops near you</h2>
+              <h2>Discover online shops</h2>
             </div>
             <span className={styles.count}>{shops.length} shops</span>
           </div>
           <div className={styles.shopGrid}>
             {shops.map((shop) => (
-              <Link key={shop.shop_id} href={'/?shop_id=' + shop.shop_id} className={styles.shopCard}>
+              <Link key={shop.shop_id} href={'/shop/' + shop.shop_id} className={styles.shopCard}>
                 <div className={styles.shopIcon}><Store size={23} /></div>
                 <div className={styles.shopNameLarge}>{shop.shop_name}</div>
                 <div className={styles.shopAddress}>{shop.city || shop.address || 'Online shop'}</div>

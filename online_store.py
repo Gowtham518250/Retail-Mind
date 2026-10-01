@@ -729,6 +729,7 @@ def marketplace_search(
                 ShopProfile.is_online_store_enabled == True,
                 ShopProfile.is_active == True,
                 Product.is_active == True,
+                Product.current_stock > 0,
                 or_(*conditions),
             )
         )
@@ -790,6 +791,7 @@ def ai_shopping_recommendations(
             ShopProfile.is_online_store_enabled == True,
             ShopProfile.is_active == True,
             Product.is_active == True,
+            Product.current_stock > 0,
             or_(*conditions),
         )
     )
