@@ -1285,12 +1285,38 @@ def place_guest_order(
 
     # 4. Create Order
     online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
-    total_amount = round(items_subtotal + online_setup_fee, 2)
+    discount_amount = 0.0
+    coupon_code = (data.coupon_code or "").strip().upper() or None
+    if coupon_code:
+        from models import RetailCoupon
+        from growth_suite import _coupon_value
+        coupon = db.query(RetailCoupon).filter(
+            RetailCoupon.shop_id == data.shop_id,
+            RetailCoupon.code == coupon_code,
+            RetailCoupon.is_active.is_(True),
+        ).first()
+        now = datetime.now(timezone.utc)
+        if not coupon:
+            raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
+        if coupon.starts_at and coupon.starts_at > now:
+            raise HTTPException(status_code=400, detail="Coupon is not active yet.")
+        if coupon.expires_at and coupon.expires_at < now:
+            raise HTTPException(status_code=400, detail="Coupon has expired.")
+        if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
+            raise HTTPException(status_code=400, detail="Coupon usage limit reached.")
+        discount_amount = _coupon_value(coupon, items_subtotal)
+        if discount_amount <= 0:
+            raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
+        coupon.used_count = int(coupon.used_count or 0) + 1
+
+    total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
     order = OnlineOrder(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
         online_setup_fee=online_setup_fee,
+        coupon_code=coupon_code,
+        discount_amount=discount_amount,
         delivery_address=sanitize_input(data.delivery_address, "address"),
         items_json=json.dumps(order_items),
         order_status="PENDING",
@@ -1348,6 +1374,9 @@ def place_guest_order(
         "message": "Guest order placed successfully!",
         "order_id": order.id,
         "shop_name": profile.shop_name,
+        "discount_amount": discount_amount,
+        "coupon_code": coupon_code,
+        "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "status": "PENDING",
     }
