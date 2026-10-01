@@ -1175,6 +1175,22 @@ class UniversalTransaction(Base):
 
 # ==================== GIFTCARDS ====================
 
+class AIQueryHistory(Base):
+    """Persistent owner-scoped history for natural-language Retail Mind queries."""
+    __tablename__ = "ai_query_history"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    user_id = Column(
+        Integer,
+        ForeignKey("user_details.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    result_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
 class GiftCard(Base):
     """Digital Gift Cards issued by the shop"""
     __tablename__ = "gift_cards"
