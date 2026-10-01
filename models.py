@@ -1065,6 +1065,9 @@ class ShopProfile(Base):
     upi_ids = Column(Text)  # JSON string
     shop_categories = Column(Text)  # JSON string
     is_online_store_enabled = Column(Boolean, default=False)
+    # Marketplace reputation is maintained from verified customer order reviews.
+    rating_score = Column(Float, nullable=False, default=0.0)
+    rating_count = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, default=True)
     
     # Additional Business Details
@@ -1100,6 +1103,19 @@ class OnlineOrder(Base):
     items_json = Column(Text, nullable=False) # JSON: [{product_id, name, qty, price}, ...]
     idempotency_key = Column(String(128), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
+
+class ShopReview(Base):
+    """Verified customer review attached to a completed online order."""
+    __tablename__ = "shop_reviews"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("online_orders.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("online_customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    rating = Column(Integer, nullable=False)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
 class WhatsappOrder(Base):
     """Customer orders placed via WhatsApp and shared to the app"""
