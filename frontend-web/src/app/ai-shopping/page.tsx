@@ -198,8 +198,8 @@ export default function AiShoppingPage() {
 
           <div className={styles.visual} aria-hidden="true">
             <div className={styles.visualHalo} />
-            <div className={styles.visualOrbit orbitOne} />
-            <div className={styles.visualOrbit orbitTwo} />
+            <div className={`${styles.visualOrbit} ${styles.orbitOne}`} />
+            <div className={`${styles.visualOrbit} ${styles.orbitTwo}`} />
             <div className={styles.core}>
               <div className={styles.coreInner}>
                 <Bot size={42} />
