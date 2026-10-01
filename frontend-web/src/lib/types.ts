@@ -17,6 +17,7 @@ export interface ShopResponse {
   shop_phone?: string;
   shop_address?: string;
   products: ShopProduct[];
+  online_setup_fee?: number;
 }
 
 export interface GuestOrderPayload {
