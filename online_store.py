@@ -1084,6 +1084,9 @@ def place_order(
         if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
             raise HTTPException(status_code=400, detail="Coupon usage limit reached.")
         discount_amount = _coupon_value(coupon, items_subtotal)
+        if discount_amount <= 0:
+            raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
+        coupon.used_count = int(coupon.used_count or 0) + 1
 
     total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
 
@@ -1954,4 +1957,5 @@ def update_order_status(
         "message": f"Order #{order_id} status updated to {new_status}.",
         "order_id": order_id,
         "new_status": new_status,
+        "loyalty_points_awarded": loyalty_points_awarded,
     }
