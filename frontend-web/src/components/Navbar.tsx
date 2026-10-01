@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingBag, User, Package, LogIn } from 'lucide-react';
+import { ShoppingBag, User, Package, LogIn, Sparkles } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function Navbar() {
@@ -47,6 +47,16 @@ export default function Navbar() {
 
         {/* Nav actions */}
         <div className="nav-actions">
+          <button
+            className="nav-icon-btn ai-nav-btn"
+            onClick={() => router.push('/ai-shopping')}
+            aria-label="AI Shopping"
+            title="AI Shopping"
+          >
+            <Sparkles size={20} />
+            <span className="nav-icon-label">AI Shop</span>
+          </button>
+
           {signedIn ? (
             <>
               <button
