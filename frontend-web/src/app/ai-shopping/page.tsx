@@ -113,9 +113,9 @@ export default function AiShoppingPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.ambient ambientOne} />
-      <div className={styles.ambient ambientTwo} />
-      <div className={styles.ambient ambientThree} />
+      <div className={`${styles.ambient} ${styles.ambientOne}`} />
+      <div className={`${styles.ambient} ${styles.ambientTwo}`} />
+      <div className={`${styles.ambient} ${styles.ambientThree}`} />
 
       <section className={styles.hero}>
         <div className={styles.navRow}>
@@ -206,7 +206,7 @@ export default function AiShoppingPage() {
               </div>
             </div>
 
-            <div className={styles.signal signalOne}>
+            <div className={`${styles.signal} ${styles.signalOne}`}>
               <Package size={16} />
               <div>
                 <strong>Live inventory</strong>
@@ -214,7 +214,7 @@ export default function AiShoppingPage() {
               </div>
             </div>
 
-            <div className={styles.signal signalTwo}>
+            <div className={`${styles.signal} ${styles.signalTwo}`}>
               <Star size={16} />
               <div>
                 <strong>Compare ratings</strong>
@@ -222,7 +222,7 @@ export default function AiShoppingPage() {
               </div>
             </div>
 
-            <div className={styles.signal signalThree}>
+            <div className={`${styles.signal} ${styles.signalThree}`}>
               <Store size={16} />
               <div>
                 <strong>Open shop</strong>
