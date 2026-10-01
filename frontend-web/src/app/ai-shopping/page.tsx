@@ -198,15 +198,15 @@ export default function AiShoppingPage() {
 
           <div className={styles.visual} aria-hidden="true">
             <div className={styles.visualHalo} />
-            <div className={styles.visualOrbit orbitOne} />
-            <div className={styles.visualOrbit orbitTwo} />
+            <div className={`${styles.visualOrbit} ${styles.orbitOne}`} />
+            <div className={`${styles.visualOrbit} ${styles.orbitTwo}`} />
             <div className={styles.core}>
               <div className={styles.coreInner}>
                 <Bot size={42} />
               </div>
             </div>
 
-            <div className={styles.signal signalOne}>
+            <div className={`${styles.signal} ${styles.signalOne}`}>
               <Package size={16} />
               <div>
                 <strong>Live inventory</strong>
@@ -214,7 +214,7 @@ export default function AiShoppingPage() {
               </div>
             </div>
 
-            <div className={styles.signal signalTwo}>
+            <div className={`${styles.signal} ${styles.signalTwo}`}>
               <Star size={16} />
               <div>
                 <strong>Compare ratings</strong>
@@ -222,7 +222,7 @@ export default function AiShoppingPage() {
               </div>
             </div>
 
-            <div className={styles.signal signalThree}>
+            <div className={`${styles.signal} ${styles.signalThree}`}>
               <Store size={16} />
               <div>
                 <strong>Open shop</strong>
