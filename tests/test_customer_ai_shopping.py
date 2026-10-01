@@ -15,3 +15,11 @@ def test_customer_ai_route_exists():
         path == "/store/customer-ai" and "GET" in methods
         for path, methods in routes
     )
+
+
+def test_customer_ai_uses_current_orm_field_names():
+    from models import Product, ShopProfile
+
+    assert hasattr(ShopProfile, "shop_id")
+    assert hasattr(Product, "user_id")
+    assert hasattr(Product, "unit_price")
