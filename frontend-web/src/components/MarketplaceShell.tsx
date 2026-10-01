@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search, Sparkles, Store, ShoppingBag, Star, ArrowRight, Bot, Boxes, Truck, Zap, MapPin } from 'lucide-react';
 import { API_BASE } from '../lib/api';
@@ -9,6 +10,7 @@ import styles from './MarketplaceShell.module.css';
 type ResultMode = 'all' | 'shops' | 'products' | 'ai';
 
 export default function MarketplaceShell() {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<ResultMode>('all');
   const [shops, setShops] = useState<any[]>([]);
@@ -133,8 +135,13 @@ export default function MarketplaceShell() {
                   key={value}
                   className={mode === value ? styles.modeActive : styles.mode}
                   onClick={() => {
-                    setMode(value as ResultMode);
-                    if (query.trim()) void runSearch();
+                    if (value === 'ai') {
+                      router.push('/ai-shopping');
+                      return;
+                    }
+                    const nextMode = value as ResultMode;
+                    setMode(nextMode);
+                    if (query.trim()) void runSearch(nextMode);
                   }}
                 >
                   {value === 'ai' ? <Bot size={14} /> : null}
