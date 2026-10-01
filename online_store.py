@@ -35,6 +35,7 @@ from models import (
     InvoiceLineItem,
     UniversalTransaction,
     OnlineCustomerAuth,
+    OnlineOrderDeliveryOtp,
     CustomerPasswordReset,
     CustomerPasswordResetOtp,
     sales,
@@ -171,6 +172,15 @@ class GuestOrder(BaseModel):
     items: List[OrderItem] = Field(..., min_length=1, max_length=50)
     idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
+class OwnerOrderAction(BaseModel):
+    """Optional verification payload for owner order state changes."""
+    customer_otp: Optional[str] = Field(
+        None,
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{6}$",
+    )
+
 
 
 # =====================
@@ -1244,10 +1254,136 @@ def get_incoming_orders(
 
 
 
+@router.post("/owner/orders/{order_id}/delivery-otp")
+def request_order_delivery_otp(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    """Send a backend-generated OTP to the customer's registered email before delivery."""
+    shop_id = current_user["user_id"]
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == order_id,
+        OnlineOrder.shop_id == shop_id,
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+
+    if order.order_status != "DISPATCHED":
+        raise HTTPException(
+            status_code=409,
+            detail="Customer delivery OTP can only be requested for a dispatched order.",
+        )
+
+    customer = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == order.customer_id,
+        OnlineCustomerAuth.is_active == True,
+    ).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer account not found.")
+
+    customer_email = (customer.email or "").strip().lower()
+    if not customer_email:
+        raise HTTPException(
+            status_code=409,
+            detail="Customer does not have a registered email address. Add an email to the customer account before delivery.",
+        )
+    if not EmailNotificationService:
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured on the server.",
+        )
+
+    now = datetime.utcnow()
+    latest = db.query(OnlineOrderDeliveryOtp).filter(
+        OnlineOrderDeliveryOtp.order_id == order.id,
+        OnlineOrderDeliveryOtp.customer_id == customer.id,
+        OnlineOrderDeliveryOtp.used == False,
+    ).order_by(OnlineOrderDeliveryOtp.id.desc()).first()
+    if latest and latest.created_at and now - latest.created_at < timedelta(seconds=60):
+        remaining = 60 - int((now - latest.created_at).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"Please wait {max(1, remaining)} seconds before requesting another delivery OTP.",
+        )
+
+    # Invalidate every older challenge for this order before issuing a new one.
+    db.query(OnlineOrderDeliveryOtp).filter(
+        OnlineOrderDeliveryOtp.order_id == order.id,
+        OnlineOrderDeliveryOtp.customer_id == customer.id,
+        OnlineOrderDeliveryOtp.used == False,
+    ).update({"used": True}, synchronize_session=False)
+
+    otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    challenge = OnlineOrderDeliveryOtp(
+        order_id=order.id,
+        customer_id=customer.id,
+        otp_hash=hashlib.sha256(otp.encode("utf-8")).hexdigest(),
+        otp_expires_at=now + timedelta(minutes=10),
+        otp_attempts=0,
+        used=False,
+        created_at=now,
+    )
+    db.add(challenge)
+
+    subject, body = EmailNotificationService.send_otp_template(
+        otp,
+        f"Order #{order.id} Delivery Verification",
+    )
+
+    try:
+        sent = EmailNotificationService.send_email(
+            recipient_email=customer_email,
+            subject=subject,
+            body=body,
+        )
+        if not sent:
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Customer delivery OTP email could not be delivered. Please try again.",
+            )
+
+        db.commit()
+        return {
+            "success": True,
+            "message": "Delivery OTP sent to the customer's registered email.",
+            "email": _mask_delivery_email(customer_email),
+            "expires_in": 600,
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(
+            "Customer delivery OTP request failed for order_id=%s: %s",
+            order.id,
+            e,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Customer delivery OTP email could not be delivered. Please try again.",
+        )
+
+
+def _mask_delivery_email(email: str) -> str:
+    normalized = email.strip().lower()
+    local, sep, domain = normalized.partition("@")
+    if not sep or not local or not domain:
+        return "***"
+    if len(local) <= 2:
+        masked_local = local[0] + "***"
+    else:
+        masked_local = local[0] + "***" + local[-1]
+    return f"{masked_local}@{domain}"
+
+
 @router.post("/owner/orders/{order_id}/action")
 def update_order_status(
     order_id: int,
     action: str = Query(..., description="ACCEPT, DISPATCH, DELIVER, REJECT"),
+    data: Optional[OwnerOrderAction] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
@@ -1276,7 +1412,13 @@ def update_order_status(
 
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
-        
+
+    if new_status == "DELIVERED" and order.order_status != "DISPATCHED":
+        raise HTTPException(
+            status_code=409,
+            detail="Order must be dispatched before it can be marked delivered.",
+        )
+
     if order.order_status != "PENDING" and new_status == "ACCEPTED":
         raise HTTPException(status_code=409, detail="Order is already accepted or finalized.")
 
@@ -1344,10 +1486,57 @@ def update_order_status(
         )
         db.add(tx)
 
-    # 🟢 On DELIVER: only mark invoice as PAID (stock deducted at order placement) 🟢
+    # 🟢 On DELIVER: verify the OTP emailed to the customer, then mark invoice as PAID.
     if new_status == "DELIVERED":
+        customer_otp = (data.customer_otp if data else None)
+        if not customer_otp:
+            raise HTTPException(
+                status_code=400,
+                detail="Customer delivery OTP is required before marking this order delivered.",
+            )
 
-        # Mark the linked invoice as PAID
+        challenge = db.query(OnlineOrderDeliveryOtp).filter(
+            OnlineOrderDeliveryOtp.order_id == order.id,
+            OnlineOrderDeliveryOtp.customer_id == order.customer_id,
+            OnlineOrderDeliveryOtp.used == False,
+            OnlineOrderDeliveryOtp.otp_expires_at > datetime.utcnow(),
+        ).order_by(OnlineOrderDeliveryOtp.id.desc()).with_for_update().first()
+
+        if not challenge:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid customer delivery OTP was found. Send a new OTP and try again.",
+            )
+
+        if challenge.otp_attempts >= 5:
+            challenge.used = True
+            db.commit()
+            raise HTTPException(
+                status_code=429,
+                detail="Too many incorrect OTP attempts. Send a new delivery OTP.",
+            )
+
+        expected_hash = hashlib.sha256(customer_otp.strip().encode("utf-8")).hexdigest()
+        if challenge.otp_hash != expected_hash:
+            challenge.otp_attempts += 1
+            attempts_left = max(0, 5 - challenge.otp_attempts)
+            if challenge.otp_attempts >= 5:
+                challenge.used = True
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid customer delivery OTP."
+                    if attempts_left == 0
+                    else f"Invalid customer delivery OTP. {attempts_left} attempt(s) remaining."
+                ),
+            )
+
+        # Consume the challenge in the same transaction as the delivery update.
+        challenge.used = True
+        challenge.verified_at = datetime.utcnow()
+
+        # Mark the linked invoice as PAID.
         linked_invoice = db.query(Invoice).filter(
             Invoice.source == "ONLINE_ORDER",
             Invoice.notes.like(f"%Online Order #{order.id}%"),
