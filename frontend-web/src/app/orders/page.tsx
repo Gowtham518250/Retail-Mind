@@ -180,6 +180,7 @@ export default function MyOrdersPage() {
   >('ALL');
   const [query, setQuery] = useState('');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
   const router = useRouter();
 
   const fetchOrders = useCallback(
@@ -429,6 +430,61 @@ export default function MyOrdersPage() {
       return next;
     });
   };
+  const requestReturn = async (order: Order) => {
+    if (order.status !== 'DELIVERED' || returningOrderId !== null) return;
+    const reason = window.prompt(
+      'Tell the shop why you want to return this order:',
+      '',
+    )?.trim();
+
+    if (!reason) return;
+
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      router.push('/auth');
+      return;
+    }
+
+    setReturningOrderId(order.order_id);
+    try {
+      const response = await fetch(API_BASE + '/store/returns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({
+          order_id: order.order_id,
+          reason,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('customerToken');
+        router.push('/auth');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.detail || 'Unable to submit the return request.',
+        );
+      }
+
+      setError(
+        'Return request submitted for Order #' +
+          order.order_id +
+          '. The shop will review it.',
+      );
+    } catch (err: any) {
+      setError(err?.message || 'Unable to submit the return request.');
+    } finally {
+      setReturningOrderId(null);
+    }
+  };
+
 
   return (
     <div className="orders-fk-page">
@@ -657,10 +713,30 @@ export default function MyOrdersPage() {
                         <MapPin size={16} />
                         <span>{order.delivery_address}</span>
                       </div>
-                      <button
-                        className="orders-fk-details-btn"
-                        onClick={() => toggleOrder(order.order_id)}
-                      >
+                      <div className="orders-fk-details-actions">
+                        {order.status === 'DELIVERED' && (
+                          <button
+                            className="orders-fk-details-btn"
+                            onClick={() => void requestReturn(order)}
+                            disabled={returningOrderId === order.order_id}
+                          >
+                            {returningOrderId === order.order_id
+                              ? 'Submitting…'
+                              : 'Return order'}
+                            <RefreshCw
+                              size={14}
+                              className={
+                                returningOrderId === order.order_id
+                                  ? 'spin'
+                                  : ''
+                              }
+                            />
+                          </button>
+                        )}
+                        <button
+                          className="orders-fk-details-btn"
+                          onClick={() => toggleOrder(order.order_id)}
+                        >
                         {isOpen ? 'Hide details' : 'View details'}
                         {isOpen ? (
                           <ChevronUp size={16} />
@@ -668,7 +744,7 @@ export default function MyOrdersPage() {
                           <ChevronDown size={16} />
                         )}
                       </button>
-                    </div>
+                      </div>
 
                     {isOpen && (
                       <div className="orders-fk-details">
