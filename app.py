@@ -198,6 +198,7 @@ try:
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_version INTEGER DEFAULT 0",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+        "UPDATE shop_profiles SET is_active = TRUE WHERE is_active IS NULL",
         # online_customers — extra fields for delivery
         "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
         "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
