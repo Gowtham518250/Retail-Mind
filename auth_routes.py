@@ -144,11 +144,11 @@ class VerifyResetOTPRequest(BaseModel):
 
 
 class OwnerOTPRequest(BaseModel):
-    email: str
+    email: Optional[str] = None
     purpose: Optional[str] = "Owner Verification"
 
 class ResetWorkerPinRequest(BaseModel):
-    email: str
+    email: Optional[str] = None
     otp: str
     worker_id: int
     new_pin: str
@@ -331,13 +331,13 @@ def send_owner_otp(
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    normalized_email = request.email.strip().lower()
     user = db.query(User).filter(User.id == current_user).first()
     if not user:
         raise HTTPException(status_code=401, detail="Authenticated user not found")
 
-    if (user.email or "").strip().lower() != normalized_email:
-        raise HTTPException(status_code=403, detail="Verification email does not match the logged-in account")
+    normalized_email = (user.email or "").strip().lower()
+    if not normalized_email:
+        raise HTTPException(status_code=400, detail="Owner account has no registered email")
 
     otp_code = _new_otp()
     _store_db_otp(
