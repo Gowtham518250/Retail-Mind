@@ -1107,7 +1107,6 @@ def place_order(
         "shop_name": profile.shop_name,
         "subtotal": round(items_subtotal, 2),
         "online_setup_fee": online_setup_fee,
-        "subtotal": round(items_subtotal, 2),
         "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "items": order_items,
@@ -1184,17 +1183,11 @@ def place_guest_order(
             ShopProfile.is_online_store_enabled == True,
         ).first()
         if not profile:
-            profile = db.query(ShopProfile).filter(
-                ShopProfile.shop_id == data.shop_id,
-            ).first()
-            if profile:
-                logger.warning(
-                    "Shop found for guest order but online ordering flag is disabled for shop_id=%s; allowing fallback checkout.",
-                    data.shop_id,
-                )
-        if not profile:
-            logger.error(f"Shop not found: shop_id={data.shop_id}")
-            raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+            logger.error(f"Shop not found or Online Shopping disabled: shop_id={data.shop_id}")
+            raise HTTPException(
+                status_code=404,
+                detail="Shop not found or Online Shopping is disabled.",
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -1327,6 +1320,8 @@ def place_guest_order(
         "message": "Guest order placed successfully!",
         "order_id": order.id,
         "shop_name": profile.shop_name,
+        "subtotal": round(items_subtotal, 2),
+        "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "status": "PENDING",
     }
@@ -1355,6 +1350,8 @@ def get_my_orders(
                     or f"Shop #{o.shop_id}"
                 ),
                 "status": o.order_status,
+                "subtotal": round(float(o.total_amount) - float(getattr(o, "online_setup_fee", 0) or 0), 2),
+                "online_setup_fee": float(getattr(o, "online_setup_fee", 0) or 0),
                 "total_amount": float(o.total_amount),
                 "delivery_address": o.delivery_address,
                 "items": json.loads(o.items_json),
