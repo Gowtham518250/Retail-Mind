@@ -190,6 +190,30 @@ class OnlineCustomerAuth(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class OnlineOrderDeliveryOtp(Base):
+    """One-time customer verification challenge required before an owner marks an online order delivered."""
+    __tablename__ = "online_order_delivery_otps"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    order_id = Column(
+        Integer,
+        ForeignKey("online_orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    customer_id = Column(
+        Integer,
+        ForeignKey("online_customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    otp_hash = Column(String(128), nullable=False)
+    otp_expires_at = Column(DateTime, nullable=False, index=True)
+    otp_attempts = Column(Integer, nullable=False, default=0)
+    used = Column(Boolean, nullable=False, default=False, index=True)
+    verified_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
 class CustomerPasswordReset(Base):
     """One-time password reset tokens for online storefront customers."""
     __tablename__ = "customer_password_resets"
