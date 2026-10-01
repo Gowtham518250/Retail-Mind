@@ -1,13 +1,31 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingBag, User, Package } from 'lucide-react';
+import { ShoppingBag, User, Package, LogIn } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toggleCart, itemCount } = useCart();
+  const [signedIn, setSignedIn] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+
+  useEffect(() => {
+    const syncAuth = () => {
+      setSignedIn(Boolean(localStorage.getItem('customerToken')));
+      setCustomerName(localStorage.getItem('customerName') || '');
+    };
+
+    syncAuth();
+    window.addEventListener('storage', syncAuth);
+    window.addEventListener('focus', syncAuth);
+    return () => {
+      window.removeEventListener('storage', syncAuth);
+      window.removeEventListener('focus', syncAuth);
+    };
+  }, []);
 
   if (pathname === '/auth') return null;
 
@@ -29,25 +47,41 @@ export default function Navbar() {
 
         {/* Nav actions */}
         <div className="nav-actions">
-          <button
-            className="nav-icon-btn"
-            onClick={() => router.push('/orders')}
-            aria-label="My orders"
-            title="My Orders"
-          >
-            <Package size={20} />
-            <span className="nav-icon-label">Orders</span>
-          </button>
+          {signedIn ? (
+            <>
+              <button
+                className="nav-icon-btn"
+                onClick={() => router.push('/orders')}
+                aria-label="My orders"
+                title="My Orders"
+              >
+                <Package size={20} />
+                <span className="nav-icon-label">Orders</span>
+              </button>
 
-          <button
-            className="nav-icon-btn"
-            onClick={() => router.push('/profile')}
-            aria-label="Profile"
-            title="Profile"
-          >
-            <User size={20} />
-            <span className="nav-icon-label">Profile</span>
-          </button>
+              <button
+                className="nav-icon-btn"
+                onClick={() => router.push('/profile')}
+                aria-label="Profile"
+                title="Profile"
+              >
+                <User size={20} />
+                <span className="nav-icon-label">
+                  {customerName ? customerName.split(' ')[0] : 'Account'}
+                </span>
+              </button>
+            </>
+          ) : (
+            <button
+              className="nav-icon-btn nav-signin-btn"
+              onClick={() => router.push('/auth')}
+              aria-label="Sign in"
+              title="Sign in"
+            >
+              <LogIn size={19} />
+              <span className="nav-icon-label">Sign in</span>
+            </button>
+          )}
 
           <button
             className="cart-toggle-btn"
