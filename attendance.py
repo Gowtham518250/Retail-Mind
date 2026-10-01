@@ -39,6 +39,21 @@ def _local_now():
     return datetime.now(ATTENDANCE_TZ)
 
 
+def _serialize_attendance_time(value):
+    """Serialize DB-naive attendance timestamps as explicit IST offsets.
+
+    Production attendance rows are stored as naive datetimes representing
+    Asia/Kolkata wall-clock time. Returning them without an offset makes
+    clients incorrectly interpret them as UTC. Keep the database unchanged,
+    but make the API contract explicit.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=ATTENDANCE_TZ)
+    return value.isoformat()
+
+
 def _session_for_time(value=None):
     value = value or _local_now()
     hour = value.hour
@@ -612,8 +627,8 @@ def get_employee_attendance(
             "employee_id": r.employee_id,
             "worker_id": r.worker_id,
             "attendance_date": str(r.attendance_date),
-            "check_in_time": r.check_in_time.isoformat() if r.check_in_time else None,
-            "check_out_time": r.check_out_time.isoformat() if r.check_out_time else None,
+            "check_in_time": _serialize_attendance_time(r.check_in_time),
+            "check_out_time": _serialize_attendance_time(r.check_out_time),
             "status": r.status,
             "working_hours": float(r.working_hours or 0.0),  # last/active session only - kept for backward compat
             "total_working_hours": total_hours,               # correct value to use for payroll
