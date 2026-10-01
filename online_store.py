@@ -1885,6 +1885,19 @@ def update_order_status(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
 
+    loyalty_points_awarded = 0
+    if new_status == "DELIVERED":
+        try:
+            from growth_suite import _award_delivery_points
+            loyalty_points_awarded = int(_award_delivery_points(db, order) or 0)
+            db.commit()
+        except Exception as loyalty_error:
+            db.rollback()
+            logger.warning(
+                "Online order loyalty award failed after delivery: %s",
+                loyalty_error,
+            )
+
     try:
         AuditService.log_action(
             db=db,
