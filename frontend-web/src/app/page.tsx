@@ -1,19 +1,24 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import StorefrontShell from '../components/StorefrontShell';
+import { useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import MarketplaceShell from '../components/MarketplaceShell';
 
 export default function Home() {
   const searchParams = useSearchParams();
-  const [shopId, setShopId] = useState<number | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
-    const raw = searchParams?.get('shop_id');
-    const requested = raw ? Number(raw) : NaN;
-    setShopId(Number.isFinite(requested) && requested > 0 ? requested : null);
-  }, [searchParams]);
+    const requested = Number(searchParams?.get('shop_id') || '0');
+    if (Number.isFinite(requested) && requested > 0) {
+      router.replace('/shop/' + requested);
+    }
+  }, [router, searchParams]);
 
-  return shopId ? <StorefrontShell shopId={shopId} /> : <MarketplaceShell />;
+  const requested = Number(searchParams?.get('shop_id') || '0');
+  if (Number.isFinite(requested) && requested > 0) {
+    return <div className="page-loading">Opening shop…</div>;
+  }
+
+  return <MarketplaceShell />;
 }
