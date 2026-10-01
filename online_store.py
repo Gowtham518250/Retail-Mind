@@ -670,7 +670,7 @@ def marketplace_search(
             db.query(ShopProfile)
             .filter(
                 ShopProfile.is_online_store_enabled == True,
-                ShopProfile.is_active == True,
+                (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
             )
             .order_by(ShopProfile.shop_name.asc())
             .limit(limit)
@@ -682,7 +682,7 @@ def marketplace_search(
             db.query(ShopProfile)
             .filter(
                 ShopProfile.is_online_store_enabled == True,
-                ShopProfile.is_active == True,
+                (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
                 or_(
                     ShopProfile.shop_name.ilike(like),
                     ShopProfile.city.ilike(like),
@@ -727,7 +727,7 @@ def marketplace_search(
             .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
             .filter(
                 ShopProfile.is_online_store_enabled == True,
-                ShopProfile.is_active == True,
+                (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
                 Product.is_active == True,
                 Product.current_stock > 0,
                 or_(*conditions),
@@ -789,7 +789,7 @@ def ai_shopping_recommendations(
         .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
         .filter(
             ShopProfile.is_online_store_enabled == True,
-            ShopProfile.is_active == True,
+            (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
             Product.is_active == True,
             Product.current_stock > 0,
             or_(*conditions),
@@ -863,7 +863,7 @@ def find_nearby_shops(
     2. ?lat=19.0&lng=72.8&radius_km=5 — GPS radius (Haversine formula)
     Only returns shops with is_online_store_enabled=True
     """
-    query = db.query(ShopProfile).filter(ShopProfile.is_online_store_enabled == True, ShopProfile.is_active == True)
+    query = db.query(ShopProfile).filter(ShopProfile.is_online_store_enabled == True, (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)))
 
     if city:
         city_clean = sanitize_input(city, "city")
@@ -933,7 +933,7 @@ def browse_shop_products(
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == shop_id_int,
         ShopProfile.is_online_store_enabled == True,
-        ShopProfile.is_active == True,
+        (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
     ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Shop not found or Online Shopping is disabled.")
@@ -1014,7 +1014,7 @@ def place_order(
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == data.shop_id,
         ShopProfile.is_online_store_enabled == True,
-        ShopProfile.is_active == True,
+        (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
     ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Shop not found or Online Shopping is disabled.")
