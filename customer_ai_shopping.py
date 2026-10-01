@@ -99,7 +99,7 @@ def customer_ai_shopping(
 
     base = (
         db.query(Product, ShopProfile)
-        .join(ShopProfile, ShopProfile.user_id == Product.user_id)
+        .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
         .filter(
             Product.is_active.is_(True),
             Product.current_stock > 0,
@@ -109,7 +109,7 @@ def customer_ai_shopping(
     )
 
     if budget is not None:
-        base = base.filter(Product.price <= budget)
+        base = base.filter(Product.unit_price <= budget)
 
     if shop_hint:
         base = base.filter(ShopProfile.shop_name.ilike(f"%{shop_hint}%"))
@@ -187,7 +187,7 @@ def customer_ai_shopping(
                 "category": getattr(product, "category", None),
                 "price": float(product.price or 0),
                 "stock_available": float(product.current_stock or 0),
-                "shop_id": shop.user_id,
+                "shop_id": shop.shop_id,
                 "shop_name": shop.shop_name,
                 "shop_tagline": getattr(shop, "shop_tagline", None),
                 "shop_address": getattr(shop, "address", None),
