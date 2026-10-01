@@ -15,6 +15,7 @@ import logging
 import secrets
 import hashlib
 import os
+import re
 from urllib.parse import quote
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
@@ -23,7 +24,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from db import get_db
 from models import (
@@ -36,6 +37,7 @@ from models import (
     UniversalTransaction,
     OnlineCustomerAuth,
     OnlineOrderDeliveryOtp,
+    ShopReview,
     CustomerPasswordReset,
     CustomerPasswordResetOtp,
     sales,
@@ -180,6 +182,39 @@ class OwnerOrderAction(BaseModel):
         max_length=6,
         pattern=r"^\d{6}$",
     )
+
+
+class OrderRating(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = Field(None, max_length=500)
+
+
+_SHOPPING_STOP_WORDS = {
+    "a","an","the","for","of","in","on","at","to","with","from","near","me",
+    "shop","shops","store","stores","product","products","item","items",
+    "cheap","cheapest","low","lowest","price","prices","budget","best","top",
+    "good","highest","rated","rating","ratings","under","below","less","than",
+    "show","find","give","want","need","please","available","online","nearby",
+}
+
+
+def _shopping_tokens(query: str) -> list[str]:
+    tokens = re.findall(r"[a-z0-9]+", query.lower())
+    return [t for t in tokens if len(t) >= 2 and t not in _SHOPPING_STOP_WORDS][:6]
+
+
+def _extract_max_price(query: str) -> Optional[float]:
+    match = re.search(
+        r"(?:under|below|less\s+than|upto|up\s+to)\s*(?:₹|rs\.?\s*)?(\d+(?:\.\d+)?)",
+        query.lower(),
+    )
+    return float(match.group(1)) if match else None
+
+
+def _shop_reputation(shop: ShopProfile) -> dict:
+    rating = float(getattr(shop, "rating_score", 0.0) or 0.0)
+    count = int(getattr(shop, "rating_count", 0) or 0)
+    return {"rating": round(rating, 2), "rating_count": count}
 
 
 
@@ -615,6 +650,200 @@ def forgot_password(
 # =====================
 # SHOP DISCOVERY
 # =====================
+@router.get("/marketplace/search")
+def marketplace_search(
+    q: str = Query("", max_length=80),
+    mode: str = Query("all", pattern=r"^(all|shops|products)$"),
+    limit: int = Query(24, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Global online marketplace search.
+
+    Only shops that explicitly enabled online shopping are visible.
+    """
+    query = sanitize_input(q or "", "q").strip()
+    shops = []
+    products = []
+
+    if not query:
+        shop_rows = (
+            db.query(ShopProfile)
+            .filter(
+                ShopProfile.is_online_store_enabled == True,
+                ShopProfile.is_active == True,
+            )
+            .order_by(ShopProfile.shop_name.asc())
+            .limit(limit)
+            .all()
+        )
+    else:
+        like = f"%{query}%"
+        shop_rows = (
+            db.query(ShopProfile)
+            .filter(
+                ShopProfile.is_online_store_enabled == True,
+                ShopProfile.is_active == True,
+                or_(
+                    ShopProfile.shop_name.ilike(like),
+                    ShopProfile.city.ilike(like),
+                    ShopProfile.address.ilike(like),
+                ),
+            )
+            .order_by(ShopProfile.shop_name.asc())
+            .limit(limit)
+            .all()
+        )
+
+    if mode in ("all", "shops"):
+        shops = [
+            {
+                "shop_id": shop.shop_id,
+                "shop_name": shop.shop_name,
+                "tagline": shop.shop_tagline or "",
+                "address": shop.address or "",
+                "city": shop.city or "",
+                "phone": shop.phone or "",
+                "logo_url": shop.logo_url,
+                **_shop_reputation(shop),
+            }
+            for shop in shop_rows
+        ]
+
+    if mode in ("all", "products") and query:
+        tokens = _shopping_tokens(query)
+        max_price = _extract_max_price(query)
+        conditions = []
+        for token in tokens or [query.lower()]:
+            token_like = f"%{token}%"
+            conditions.append(
+                or_(
+                    Product.product_name.ilike(token_like),
+                    Product.category.ilike(token_like),
+                    Product.description.ilike(token_like),
+                )
+            )
+        product_query = (
+            db.query(Product, ShopProfile)
+            .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
+            .filter(
+                ShopProfile.is_online_store_enabled == True,
+                ShopProfile.is_active == True,
+                Product.is_active == True,
+                or_(*conditions),
+            )
+        )
+        if max_price is not None:
+            product_query = product_query.filter(Product.unit_price <= max_price)
+        rows = product_query.order_by(Product.unit_price.asc()).limit(limit * 3).all()
+        products = [
+            {
+                "product_id": product.id,
+                "product_name": product.product_name,
+                "category": product.category,
+                "price": float(product.unit_price),
+                "stock_available": int(product.current_stock or 0),
+                "shop_id": shop.shop_id,
+                "shop_name": shop.shop_name,
+                "shop_address": shop.address or "",
+                **_shop_reputation(shop),
+            }
+            for product, shop in rows
+        ]
+
+    return {"query": query, "mode": mode, "shops": shops, "products": products}
+
+
+@router.get("/ai/recommend")
+def ai_shopping_recommendations(
+    q: str = Query(..., min_length=2, max_length=120),
+    limit: int = Query(10, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    """Customer shopping assistant.
+
+    This is a deterministic AI-style ranking layer: it understands common
+    shopping intents (cheap/budget/under-price/highest-rated) and searches
+    every online-enabled shop before ranking the best matches.
+    """
+    query = sanitize_input(q, "q").strip()
+    lower = query.lower()
+    wants_low_price = any(word in lower for word in ("cheap", "cheapest", "low price", "lowest price", "budget", "affordable"))
+    wants_rating = any(word in lower for word in ("best", "highest rated", "top rated", "rating", "rated"))
+    max_price = _extract_max_price(query)
+    tokens = _shopping_tokens(query)
+
+    conditions = []
+    for token in tokens or [query.lower()]:
+        like = f"%{token}%"
+        conditions.append(
+            or_(
+                Product.product_name.ilike(like),
+                Product.category.ilike(like),
+                Product.description.ilike(like),
+            )
+        )
+
+    product_query = (
+        db.query(Product, ShopProfile)
+        .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
+        .filter(
+            ShopProfile.is_online_store_enabled == True,
+            ShopProfile.is_active == True,
+            Product.is_active == True,
+            or_(*conditions),
+        )
+    )
+    if max_price is not None:
+        product_query = product_query.filter(Product.unit_price <= max_price)
+
+    rows = product_query.limit(250).all()
+    candidates = []
+    for product, shop in rows:
+        rating = float(getattr(shop, "rating_score", 0.0) or 0.0)
+        rating_count = int(getattr(shop, "rating_count", 0) or 0)
+        price = float(product.unit_price)
+        candidates.append({
+            "product_id": product.id,
+            "product_name": product.product_name,
+            "category": product.category,
+            "price": price,
+            "stock_available": int(product.current_stock or 0),
+            "shop_id": shop.shop_id,
+            "shop_name": shop.shop_name,
+            "shop_address": shop.address or "",
+            "rating": round(rating, 2),
+            "rating_count": rating_count,
+        })
+
+    if wants_low_price:
+        candidates.sort(key=lambda x: (x["price"], -x["rating"], -x["rating_count"]))
+    elif wants_rating:
+        candidates.sort(key=lambda x: (-x["rating"], -x["rating_count"], x["price"]))
+    else:
+        candidates.sort(key=lambda x: (x["price"], -x["rating"], -x["rating_count"]))
+
+    recommendations = candidates[:limit]
+    if not recommendations:
+        response = "I couldn't find that product in any shop that has Online Shopping enabled."
+    elif wants_low_price:
+        response = f"I found {len(recommendations)} matching options and ranked them by lowest price, then shop rating."
+    elif wants_rating:
+        response = f"I found {len(recommendations)} matching options and ranked them by shop rating, then price."
+    else:
+        response = f"I found {len(recommendations)} matching options and ranked them by price and shop rating."
+
+    return {
+        "query": query,
+        "intent": {
+            "low_price": wants_low_price,
+            "rating_priority": wants_rating,
+            "max_price": max_price,
+        },
+        "response": response,
+        "recommendations": recommendations,
+    }
+
+
 @router.get("/shops/nearby")
 def find_nearby_shops(
     city: Optional[str] = None,
@@ -632,7 +861,7 @@ def find_nearby_shops(
     2. ?lat=19.0&lng=72.8&radius_km=5 — GPS radius (Haversine formula)
     Only returns shops with is_online_store_enabled=True
     """
-    query = db.query(ShopProfile).filter(ShopProfile.is_online_store_enabled == True)
+    query = db.query(ShopProfile).filter(ShopProfile.is_online_store_enabled == True, ShopProfile.is_active == True)
 
     if city:
         city_clean = sanitize_input(city, "city")
@@ -676,6 +905,7 @@ def find_nearby_shops(
                 "address": s.address,
                 "phone": s.phone,
                 "logo_url": s.logo_url,
+                **_shop_reputation(s),
             }
             for s in all_shops
         ],
@@ -697,18 +927,14 @@ def browse_shop_products(
     except ValueError:
         shop_id_int = 1
 
-    # Try online-enabled first, fallback to any shop profile
+    # Marketplace visibility is opt-in: disabled shops are never exposed.
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == shop_id_int,
         ShopProfile.is_online_store_enabled == True,
+        ShopProfile.is_active == True,
     ).first()
     if not profile:
-        # Fallback: show products even if online store flag not set
-        profile = db.query(ShopProfile).filter(
-            ShopProfile.shop_id == shop_id_int,
-        ).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Shop not found.")
+        raise HTTPException(status_code=404, detail="Shop not found or Online Shopping is disabled.")
 
     # Show ALL active products (even if stock is 0 — shopkeeper may not have updated)
     q = db.query(Product).filter(
@@ -725,6 +951,11 @@ def browse_shop_products(
         "shop_tagline": profile.shop_tagline or "",
         "shop_phone": profile.phone or "",
         "shop_address": profile.address or "",
+        "shop_city": profile.city or "",
+        "shop_logo_url": profile.logo_url,
+        "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),
+        "rating_count": int(getattr(profile, "rating_count", 0) or 0),
+        "is_online": True,
         "products": [
             (lambda p, discount: {
                 "id": p.id,
@@ -776,24 +1007,14 @@ def place_order(
                 "duplicate": True,
             }
 
-    # Validate shop.
-    # Browse requests already fall back to shops whose online-store flag is not enabled,
-    # so order placement should also allow those shops when the shop record exists.
+    # Online ordering is opt-in and enforced server-side.
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == data.shop_id,
         ShopProfile.is_online_store_enabled == True,
+        ShopProfile.is_active == True,
     ).first()
     if not profile:
-        profile = db.query(ShopProfile).filter(
-            ShopProfile.shop_id == data.shop_id,
-        ).first()
-        if profile:
-            logger.warning(
-                "Shop found but online ordering flag is disabled for shop_id=%s; allowing fallback order placement.",
-                data.shop_id,
-            )
-    if not profile:
-        raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+        raise HTTPException(status_code=404, detail="Shop not found or Online Shopping is disabled.")
 
     # Validate all items and calculate total
     order_items = []
@@ -1213,6 +1434,58 @@ def guest_track_order(
         "delivery_address": order.delivery_address,
         "items": json.loads(order.items_json),
         "created_at": order.created_at,
+    }
+
+
+@router.post("/order/{order_id}/rating")
+def rate_completed_order(
+    order_id: int,
+    data: OrderRating,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(customer_only),
+):
+    customer_id = current_user["user_id"]
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == order_id,
+        OnlineOrder.customer_id == customer_id,
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    if order.order_status != "DELIVERED":
+        raise HTTPException(status_code=409, detail="You can rate an order only after delivery.")
+
+    existing = db.query(ShopReview).filter(ShopReview.order_id == order.id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="This order has already been rated.")
+
+    review = ShopReview(
+        order_id=order.id,
+        shop_id=order.shop_id,
+        customer_id=customer_id,
+        rating=data.rating,
+        comment=sanitize_input(data.comment or "", "comment") or None,
+    )
+    db.add(review)
+
+    shop = db.query(ShopProfile).filter(ShopProfile.shop_id == order.shop_id).with_for_update().first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop profile not found.")
+    current_count = int(getattr(shop, "rating_count", 0) or 0)
+    current_score = float(getattr(shop, "rating_score", 0.0) or 0.0)
+    shop.rating_score = round(((current_score * current_count) + data.rating) / (current_count + 1), 2)
+    shop.rating_count = current_count + 1
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to save your rating right now.")
+
+    return {
+        "success": True,
+        "shop_id": order.shop_id,
+        "rating": shop.rating_score,
+        "rating_count": shop.rating_count,
     }
 
 
