@@ -34,6 +34,7 @@ interface OrderItem {
 interface Order {
   order_id: number;
   shop_id: number;
+  shop_name?: string;
   status: string;
   total_amount: number;
   delivery_address: string;
@@ -303,7 +304,13 @@ export default function MyOrdersPage() {
               setOrders((current) =>
                 current.map((order) =>
                   order.order_id === orderId
-                    ? { ...order, status: nextStatus }
+                    ? {
+                        ...order,
+                        status: nextStatus,
+                        total_amount: Number(event.total_amount ?? order.total_amount),
+                        delivery_address: event.delivery_address || order.delivery_address,
+                        items: Array.isArray(event.items) ? event.items : order.items,
+                      }
                     : order,
                 ),
               );
@@ -676,7 +683,7 @@ export default function MyOrdersPage() {
                           </div>
                           <div>
                             <span>Shop</span>
-                            <strong>#{order.shop_id}</strong>
+                            <strong>{order.shop_name || `Shop #${order.shop_id}`}</strong>
                           </div>
                           <div>
                             <span>Items</span>
