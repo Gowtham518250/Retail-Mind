@@ -745,6 +745,7 @@ export default function MyOrdersPage() {
                         )}
                       </button>
                       </div>
+                    </div>
 
                     {isOpen && (
                       <div className="orders-fk-details">
