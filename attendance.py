@@ -21,15 +21,16 @@ router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 # Times are evaluated in India time because Retail Mind is intended for the
 # Indian retail market.
 #
-# 🔧 Session boundaries: Morning 9:00 AM–1:00 PM, Evening 2:00 PM–7:00 PM.
-# Early worker arrivals before 9:00 AM are also accepted and recorded as the
-# Morning session so a valid local-first check-in cannot disappear when the
-# mobile app is cleared. The lunch gap (1:00–2:00 PM) and post-evening period
-# remain outside the configured check-in windows.
+# 🔧 Attendance is not time-window restricted. The clock only classifies
+# records for reporting: before 2:00 PM = Morning, 2:00 PM onward = Afternoon.
+# This means early-opening shops and late operations can still record attendance
+# without losing data or relying on a client-side clock window.
 ATTENDANCE_TZ = ZoneInfo("Asia/Kolkata")
 ATTENDANCE_SESSIONS = (
-    ("morning", 9, 13, "Morning", "9:00 AM–1:00 PM"),
-    ("evening", 14, 19, "Evening", "2:00 PM–7:00 PM"),
+    ("morning", 0, 14, "Morning", "Before 2:00 PM"),
+    # Keep the internal key "evening" for backward compatibility with
+    # existing production rows, but present it to users as Afternoon.
+    ("evening", 14, 24, "Afternoon", "2:00 PM onward"),
 )
 SESSION_META_KEY = "_retail_mind_sessions"
 
@@ -42,15 +43,17 @@ def _session_for_time(value=None):
     value = value or _local_now()
     hour = value.hour
 
-    # Accept early pre-opening arrivals as the Morning session.
-    if 0 <= hour < 9:
-        key, _start, _end, label, window = ATTENDANCE_SESSIONS[0]
-        return key, label, window
-
+    # Attendance is never rejected because of the clock. The timestamp only
+    # decides which reporting session owns the check-in:
+    #   00:00–13:59 -> Morning
+    #   14:00–23:59 -> Afternoon
     for key, start_hour, end_hour, label, window in ATTENDANCE_SESSIONS:
         if start_hour <= hour < end_hour:
             return key, label, window
-    return None, None, None
+
+    # Defensive fallback; ATTENDANCE_SESSIONS covers every hour.
+    key, _start, _end, label, window = ATTENDANCE_SESSIONS[0]
+    return key, label, window
 
 
 def _session_meta(attendance):
