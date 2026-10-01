@@ -89,6 +89,7 @@ from khata_router import router as new_khata_engine_router
 from purchase_orders import router as purchase_orders_router
 from online_store import router as online_store_router
 from customer_ai_shopping import router as customer_ai_router
+from growth_suite import router as growth_router, customer_router as customer_growth_router
 from whatsapp_orders import router as whatsapp_orders_router
 from retail_intelligence import router as intelligence_router
 from gst_and_giftcards import router as gst_and_giftcards_router
@@ -207,6 +208,13 @@ try:
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
         "CREATE INDEX IF NOT EXISTS ix_online_orders_idempotency_key ON online_orders(idempotency_key)",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50)",
+        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+        "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+        "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+        "ALTER TABLE shop_expenses ADD COLUMN IF NOT EXISTS branch_id INTEGER",
     ]
     for migration_sql in safe_migrations:
         try:
@@ -371,6 +379,8 @@ api.include_router(new_khata_engine_router)          # /api/khata/*
 api.include_router(purchase_orders_router)        # /purchase-orders/*
 api.include_router(online_store_router)           # /store/*
 api.include_router(customer_ai_router)              # /store/customer-ai
+api.include_router(growth_router)                   # /growth/*
+api.include_router(customer_growth_router)           # /store/customer growth
 api.include_router(whatsapp_orders_router)
 api.include_router(intelligence_router)           # /expenses, /workers, /bank-recon, /enterprise/*, /retail/*
 api.include_router(gst_and_giftcards_router)      # /gift-cards, /gst/*

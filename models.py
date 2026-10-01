@@ -335,6 +335,7 @@ class Product(Base):
     purchase_price = Column(Numeric(10, 2), default=0)  # For margin calculation (Feature 15)
     category = Column(String(50), index=True)
     is_active = Column(Boolean, default=True, index=True)  # Soft-delete: False = deleted from catalogue
+    branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     
     __table_args__ = (
         UniqueConstraint('user_id', 'sku', name='uix_user_sku'),
@@ -477,6 +478,7 @@ class Invoice(Base):
     notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # 🔧 FIX: Added unique constraint on (user_id, offline_id) for idempotency
     __table_args__ = (
@@ -1020,6 +1022,7 @@ class ShopExpense(Base):
     description = Column(String(200))
     expense_date = Column(Date, nullable=False)
     payment_method = Column(String(50))  # cash, bank_transfer, etc
+    branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
 
 # ==================== ONLINE STORE & SHOP PROFILE ====================
 
@@ -1101,9 +1104,12 @@ class OnlineOrder(Base):
     total_amount = Column(Numeric(10, 2), nullable=False)
     # Snapshot of the online-only setup fee applied to this order.
     online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    coupon_code = Column(String(50), nullable=True)
+    discount_amount = Column(Numeric(12, 2), nullable=False, default=0)
     delivery_address = Column(Text)
     items_json = Column(Text, nullable=False) # JSON: [{product_id, name, qty, price}, ...]
     idempotency_key = Column(String(128), nullable=True, index=True)
+    branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
 class ShopReview(Base):
@@ -1146,6 +1152,7 @@ class PurchaseOrder(Base):
     total_cost = Column(Numeric(12, 2), default=0)
     items_json = Column(Text, nullable=False)
     expected_delivery = Column(Date)
+    branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
 # ==================== BANK RECONCILIATION & TRANSACTIONS ====================
@@ -1175,7 +1182,119 @@ class UniversalTransaction(Base):
     description = Column(String(200))
     tx_date = Column(DateTime, server_default=func.now())
 
-# ==================== GIFTCARDS ====================
+# =# ==================== RETAIL GROWTH SUITE ====================
+
+class RetailBranch(Base):
+    """Owner-managed branch/warehouse context for multi-location retail."""
+    __tablename__ = "retail_branches"
+
+    id = Column(Integer, primary_key=True)
+    owner_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    code = Column(String(40), nullable=False)
+    address = Column(Text)
+    city = Column(String(100))
+    state = Column(String(100))
+    postal_code = Column(String(20))
+    phone = Column(String(30))
+    is_primary = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "code", name="uix_branch_owner_code"),
+    )
+
+
+class OnlineOrderReturn(Base):
+    """Customer-initiated return/refund lifecycle for online orders."""
+    __tablename__ = "online_order_returns"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("online_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("online_customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    reason = Column(Text, nullable=False)
+    status = Column(String(40), default="REQUESTED", nullable=False, index=True)
+    refund_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    stock_restored = Column(Boolean, default=False, nullable=False)
+    customer_note = Column(Text)
+    owner_note = Column(Text)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    processed_at = Column(DateTime)
+
+
+class RetailCoupon(Base):
+    """Coupon/promotion engine for online checkout."""
+    __tablename__ = "retail_coupons"
+
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(50), nullable=False)
+    discount_type = Column(String(20), nullable=False, default="PERCENT")
+    discount_value = Column(Numeric(12, 2), nullable=False)
+    minimum_order_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    maximum_discount = Column(Numeric(12, 2), nullable=True)
+    usage_limit = Column(Integer, nullable=True)
+    used_count = Column(Integer, default=0, nullable=False)
+    starts_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("shop_id", "code", name="uix_coupon_shop_code"),
+    )
+
+
+class OnlineCustomerLoyalty(Base):
+    """Loyalty wallet for customer-web accounts."""
+    __tablename__ = "online_customer_loyalty"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("online_customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    points_balance = Column(Integer, default=0, nullable=False)
+    lifetime_earned = Column(Integer, default=0, nullable=False)
+    lifetime_redeemed = Column(Integer, default=0, nullable=False)
+    tier = Column(String(30), default="Member", nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("customer_id", "shop_id", name="uix_online_loyalty_customer_shop"),
+    )
+
+
+class OnlineLoyaltyTransaction(Base):
+    """Auditable online loyalty earn/redeem transactions."""
+    __tablename__ = "online_loyalty_transactions"
+
+    id = Column(Integer, primary_key=True)
+    loyalty_id = Column(Integer, ForeignKey("online_customer_loyalty.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("online_orders.id", ondelete="SET NULL"), nullable=True, index=True)
+    transaction_type = Column(String(20), nullable=False)
+    points = Column(Integer, nullable=False)
+    note = Column(Text)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class OnlineDeliveryAssignment(Base):
+    """Delivery assignment lifecycle for online orders."""
+    __tablename__ = "online_delivery_assignments"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("online_orders.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    driver_name = Column(String(100), nullable=False)
+    driver_phone = Column(String(30))
+    status = Column(String(30), default="ASSIGNED", nullable=False, index=True)
+    notes = Column(Text)
+    assigned_at = Column(DateTime, server_default=func.now(), nullable=False)
+    picked_up_at = Column(DateTime)
+    delivered_at = Column(DateTime)
+
+# =================== GIFTCARDS ====================
 
 class AIQueryHistory(Base):
     """Persistent owner-scoped history for natural-language Retail Mind queries."""

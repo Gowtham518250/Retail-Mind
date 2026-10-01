@@ -165,6 +165,7 @@ class PlaceOrder(BaseModel):
     items: List[OrderItem] = Field(..., min_length=1)
     delivery_address: str = Field(..., min_length=5)
     idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
+    coupon_code: Optional[str] = Field(None, min_length=3, max_length=50)
 
 class GuestOrder(BaseModel):
     shop_id: int
@@ -173,6 +174,7 @@ class GuestOrder(BaseModel):
     delivery_address: str = Field(..., min_length=5, max_length=500)
     items: List[OrderItem] = Field(..., min_length=1, max_length=50)
     idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
+    coupon_code: Optional[str] = Field(None, min_length=3, max_length=50)
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
 class OwnerOrderAction(BaseModel):
     """Optional verification payload for owner order state changes."""
@@ -1061,13 +1063,40 @@ def place_order(
 
     delivery_address = sanitize_input(data.delivery_address, "delivery_address")
     online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
-    total_amount = round(items_subtotal + online_setup_fee, 2)
+    discount_amount = 0.0
+    coupon_code = (data.coupon_code or "").strip().upper() or None
+
+    if coupon_code:
+        from models import RetailCoupon
+        from growth_suite import _coupon_value
+        coupon = db.query(RetailCoupon).filter(
+            RetailCoupon.shop_id == data.shop_id,
+            RetailCoupon.code == coupon_code,
+            RetailCoupon.is_active.is_(True),
+        ).first()
+        now = datetime.now(timezone.utc)
+        if not coupon:
+            raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
+        if coupon.starts_at and coupon.starts_at > now:
+            raise HTTPException(status_code=400, detail="Coupon is not active yet.")
+        if coupon.expires_at and coupon.expires_at < now:
+            raise HTTPException(status_code=400, detail="Coupon has expired.")
+        if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
+            raise HTTPException(status_code=400, detail="Coupon usage limit reached.")
+        discount_amount = _coupon_value(coupon, items_subtotal)
+        if discount_amount <= 0:
+            raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
+        coupon.used_count = int(coupon.used_count or 0) + 1
+
+    total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
 
     order = OnlineOrder(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
         online_setup_fee=online_setup_fee,
+        coupon_code=coupon_code,
+        discount_amount=discount_amount,
         delivery_address=delivery_address,
         items_json=json.dumps(order_items),
         order_status="PENDING",
@@ -1105,8 +1134,8 @@ def place_order(
         "order_id": order.id,
         "shop_name": profile.shop_name,
         "subtotal": round(items_subtotal, 2),
-        "online_setup_fee": online_setup_fee,
-        "subtotal": round(items_subtotal, 2),
+        "discount_amount": discount_amount,
+        "coupon_code": coupon_code,
         "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "items": order_items,
@@ -1856,6 +1885,19 @@ def update_order_status(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
 
+    loyalty_points_awarded = 0
+    if new_status == "DELIVERED":
+        try:
+            from growth_suite import _award_delivery_points
+            loyalty_points_awarded = int(_award_delivery_points(db, order) or 0)
+            db.commit()
+        except Exception as loyalty_error:
+            db.rollback()
+            logger.warning(
+                "Online order loyalty award failed after delivery: %s",
+                loyalty_error,
+            )
+
     try:
         AuditService.log_action(
             db=db,
@@ -1928,4 +1970,5 @@ def update_order_status(
         "message": f"Order #{order_id} status updated to {new_status}.",
         "order_id": order_id,
         "new_status": new_status,
+        "loyalty_points_awarded": loyalty_points_awarded,
     }

@@ -59,6 +59,22 @@ export default function ProfilePage() {
         <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>Welcome back to RetailShop!</p>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <button
+            onClick={() => router.push('/smart-shop')}
+            style={{
+              padding: '16px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, rgba(99,102,241,.16), rgba(34,211,238,.08))',
+              border: '1px solid rgba(129,140,248,.22)',
+              color: 'var(--text-primary)',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: 'pointer',
+            }}
+          >
+            ✨ Smart Shopping Hub
+          </button>
+
           <button 
             onClick={() => router.push('/orders')}
             style={{

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingBag, User, Package, LogIn, Sparkles } from 'lucide-react';
+import { ShoppingBag, User, Package, LogIn, Sparkles, Trophy } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function Navbar() {
@@ -59,6 +59,16 @@ export default function Navbar() {
 
           {signedIn ? (
             <>
+              <button
+                className="nav-icon-btn"
+                onClick={() => router.push('/smart-shop')}
+                aria-label="Smart shopping hub"
+                title="Smart Shopping Hub"
+              >
+                <Trophy size={20} />
+                <span className="nav-icon-label">Smart Hub</span>
+              </button>
+
               <button
                 className="nav-icon-btn"
                 onClick={() => router.push('/orders')}

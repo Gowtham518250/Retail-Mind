@@ -42,13 +42,14 @@ jobs:
           pip install pytest
       - name: Compile production modules
         run: |
-          python -m py_compile             app.py             invoices_billing.py             inventory_sync_service.py             online_store.py             backup_recovery.py             realtime.py             audit_logging.py
+          python -m py_compile             app.py             invoices_billing.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py
       - name: Run focused production tests
         env:
           PYTHONPATH: .
         run: |
           pytest -q tests/test_realtime.py
           pytest -q tests/test_customer_otp_password_reset.py
+          pytest -q tests/test_growth_suite.py
 
   customer-web:
     runs-on: ubuntu-latest

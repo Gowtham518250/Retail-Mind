@@ -46,9 +46,13 @@ export default function CheckoutClientPage() {
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [onlineSetupFee, setOnlineSetupFee] = useState(0);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
 
   const deliveryFee = 0 as number;
-  const grandTotal = cartTotal + onlineSetupFee;
+  const grandTotal = Math.max(0, cartTotal - couponDiscount) + onlineSetupFee;
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +181,33 @@ export default function CheckoutClientPage() {
     return Object.keys(next).length === 0;
   };
 
+  const applyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) {
+      setCouponMessage('Enter a coupon code.');
+      setCouponDiscount(0);
+      return;
+    }
+    setCouponLoading(true);
+    setCouponMessage('');
+    try {
+      const res = await fetch(API_BASE + '/store/coupon/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop_id: shopId, code, subtotal: cartTotal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Coupon could not be applied.');
+      setCouponDiscount(Number(data.discount || 0));
+      setCouponMessage(data.message || 'Coupon applied.');
+    } catch (error: any) {
+      setCouponDiscount(0);
+      setCouponMessage(error?.message || 'Coupon could not be applied.');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (!customer || !cartItems.length || !validate()) return;
 
@@ -193,7 +224,8 @@ export default function CheckoutClientPage() {
       shop_id: shopId,
       items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
       delivery_address: combinedAddress,
-      idempotency_key: `web-${shopId}-${crypto.randomUUID()}`,
+      coupon_code: couponCode.trim().toUpperCase() || undefined,
+      idempotency_key: 'web-' + shopId + '-' + crypto.randomUUID(),
     };
 
     try {
@@ -365,6 +397,23 @@ export default function CheckoutClientPage() {
               <span>Online setup / service</span>
               <span>₹{onlineSetupFee.toFixed(2)}</span>
             </div>
+          )}
+          <div className="checkout-coupon">
+            <div className="checkout-coupon-row">
+              <input
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+                placeholder="Coupon code"
+                maxLength={50}
+              />
+              <button type="button" onClick={applyCoupon} disabled={couponLoading}>
+                {couponLoading ? 'Checking…' : 'Apply'}
+              </button>
+            </div>
+            {couponMessage && <div className={couponDiscount > 0 ? 'checkout-coupon-success' : 'checkout-coupon-message'}>{couponMessage}</div>}
+          </div>
+          {couponDiscount > 0 && (
+            <div className="summary-row discount"><span>Coupon discount</span><span>-₹{couponDiscount.toFixed(2)}</span></div>
           )}
           <div className="summary-row muted"><span>GST</span><span>Included</span></div>
           <div className="summary-row total"><span>Total</span><span>₹{grandTotal.toFixed(2)}</span></div>
