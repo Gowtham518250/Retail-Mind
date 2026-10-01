@@ -4,26 +4,31 @@ import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, User, Phone, MapPin, Home, Banknote,
-  ShieldCheck, Loader2, AlertCircle, ShoppingBag,
+  ArrowLeft, MapPin, Home, Banknote,
+  ShieldCheck, Loader2, AlertCircle, ShoppingBag, UserRound, LockKeyhole,
 } from 'lucide-react';
 import { useCart } from '../../../../context/CartContext';
 import { API_BASE } from '../../../../lib/api';
 import type { PlacedOrder } from '../../../../lib/types';
 
 interface FormState {
-  name: string;
-  phone: string;
-  email: string;
   city: string;
   pincode: string;
   address: string;
   landmark: string;
-  notes: string;
+}
+
+interface CustomerProfile {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  address?: string | null;
 }
 
 const initialForm: FormState = {
-  name: '', phone: '', email: '', city: '', pincode: '', address: '', landmark: '', notes: '',
+  city: '', pincode: '', address: '', landmark: '',
 };
 
 export default function CheckoutClientPage() {
@@ -33,14 +38,74 @@ export default function CheckoutClientPage() {
   const { cartItems, cartTotal, clearCart } = useCart();
 
   const [form, setForm] = useState<FormState>(initialForm);
+  const [customer, setCustomer] = useState<CustomerProfile | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState('');
   const [locationError, setLocationError] = useState('');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const deliveryFee = cartTotal >= 499 || cartTotal === 0 ? 0 : 29;
-  const grandTotal = cartTotal + deliveryFee;
+  // Delivery charges are not yet persisted by the backend order model, so do
+  // not show a frontend-only amount that would differ from the saved order.
+  const deliveryFee = 0;
+  const grandTotal = cartTotal;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const requireCustomer = async () => {
+      const token = localStorage.getItem('customerToken');
+      if (!token) {
+        router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/store/customer/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('customerToken');
+          localStorage.removeItem('customerName');
+          localStorage.removeItem('customerEmail');
+          router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+          return;
+        }
+
+        const data = await res.json();
+        if (!res.ok || !data.customer) {
+          throw new Error(data.detail || 'Unable to load your customer account.');
+        }
+
+        if (cancelled) return;
+
+        const profile = data.customer as CustomerProfile;
+        setCustomer(profile);
+        setForm((prev) => ({
+          ...prev,
+          city: profile.city || '',
+          address: profile.address || '',
+        }));
+      } catch (error: any) {
+        if (!cancelled) {
+          setSubmitError(error?.message || 'Unable to verify your customer account.');
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthChecking(false);
+        }
+      }
+    };
+
+    void requireCustomer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, shopId]);
 
   const combinedAddress = useMemo(() => (
     [form.address, form.landmark ? `Landmark: ${form.landmark}` : '', form.city, form.pincode]
@@ -94,9 +159,6 @@ export default function CheckoutClientPage() {
 
   const validate = () => {
     const next: Partial<Record<keyof FormState, string>> = {};
-    if (form.name.trim().length < 2) next.name = 'Enter your full name';
-    if (!/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10-digit phone number';
-    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = 'Enter a valid email';
     if (!form.city.trim()) next.city = 'City is required';
     if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
     if (form.address.trim().length < 5) next.address = 'Enter your full address';
@@ -105,36 +167,54 @@ export default function CheckoutClientPage() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!cartItems.length || !validate()) return;
+    if (!customer || !cartItems.length || !validate()) return;
+
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+      return;
+    }
+
     setSubmitError('');
     setIsSubmitting(true);
 
     const payload = {
       shop_id: shopId,
-      customer_name: form.name.trim(),
-      phone: form.phone.trim(),
-      delivery_address: combinedAddress,
       items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
-      payment_method: 'COD',
+      delivery_address: combinedAddress,
+      idempotency_key: `web-${shopId}-${crypto.randomUUID()}`,
     };
 
     try {
-      const res = await fetch(`${API_BASE}/store/guest-order`, {
+      const res = await fetch(`${API_BASE}/store/order`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Could not place your order. Please try again.');
+
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('customerToken');
+        router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.detail || data.message || 'Could not place your order. Please try again.');
+      }
 
       const placedOrder: PlacedOrder = {
         order_id: data.order_id,
         shop_name: data.shop_name,
-        total_amount: data.total_amount,
+        total_amount: Number(data.total_amount || grandTotal),
         status: data.status || 'PENDING',
         payment_method: 'COD',
-        customer_name: form.name.trim(),
-        phone: form.phone.trim(),
+        customer_name: customer.name,
+        phone: customer.phone || '',
         delivery_address: combinedAddress,
         items: cartItems.map((item) => ({
           name: item.product.name,
@@ -144,10 +224,7 @@ export default function CheckoutClientPage() {
         placed_at: new Date().toISOString(),
       };
 
-      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify({
-        ...placedOrder,
-        tracking_token: data.tracking_token,
-      }));
+      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
     } catch (err: any) {
@@ -156,6 +233,33 @@ export default function CheckoutClientPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (authChecking) {
+    return (
+      <div className="container" style={{ padding: '72px 20px' }}>
+        <div className="checkout-auth-gate">
+          <div className="checkout-auth-icon"><LockKeyhole size={24} /></div>
+          <h1>Secure checkout</h1>
+          <p>Verifying your RetailShop customer account and loading your delivery details.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!customer) {
+    return (
+      <div className="container" style={{ padding: '48px 20px' }}>
+        <div className="store-empty-state">
+          {submitError || 'Please sign in to continue to checkout.'}
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <button className="hero-cta" onClick={() => router.push(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`)}>
+            <UserRound size={16} /> Sign in to checkout
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!cartItems.length) {
     return (
@@ -180,22 +284,14 @@ export default function CheckoutClientPage() {
         <div className="checkout-main">
           <section className="checkout-card">
             <h2 className="checkout-card-title"><MapPin size={18} /> Delivery details</h2>
-            <div className="checkout-field-row">
-              <div className="checkout-field">
-                <label><User size={14} /> Full name</label>
-                <input value={form.name} onChange={setField('name')} placeholder="Your name" />
-                {errors.name && <span className="field-error">{errors.name}</span>}
+            <div className="checkout-account-card">
+              <div className="checkout-account-icon"><UserRound size={18} /></div>
+              <div className="checkout-account-copy">
+                <strong>{customer.name}</strong>
+                <span>{customer.email || 'Customer account'}</span>
+                {customer.phone && <span>+91 {customer.phone}</span>}
               </div>
-              <div className="checkout-field">
-                <label><Phone size={14} /> Phone number</label>
-                <input value={form.phone} onChange={setField('phone')} placeholder="10-digit mobile number" inputMode="numeric" maxLength={10} />
-                {errors.phone && <span className="field-error">{errors.phone}</span>}
-              </div>
-            </div>
-            <div className="checkout-field">
-              <label>Email <span className="field-optional">(optional)</span></label>
-              <input value={form.email} onChange={setField('email')} placeholder="you@example.com" />
-              {errors.email && <span className="field-error">{errors.email}</span>}
+              <span className="checkout-account-badge">Signed in</span>
             </div>
             <div className="checkout-field">
               <label><Home size={14} /> Address</label>
@@ -223,10 +319,6 @@ export default function CheckoutClientPage() {
             <div className="checkout-field">
               <label>Landmark <span className="field-optional">(optional)</span></label>
               <input value={form.landmark} onChange={setField('landmark')} placeholder="Nearby landmark" />
-            </div>
-            <div className="checkout-field">
-              <label>Order notes <span className="field-optional">(optional)</span></label>
-              <textarea value={form.notes} onChange={setField('notes')} placeholder="Any delivery instructions" rows={2} />
             </div>
           </section>
 
@@ -263,7 +355,7 @@ export default function CheckoutClientPage() {
           <button className="place-order-btn" onClick={handlePlaceOrder} disabled={isSubmitting}>
             {isSubmitting ? <><Loader2 size={16} className="spin" /> Placing order…</> : 'Place Order'}
           </button>
-          <div className="checkout-trust"><ShieldCheck size={14} /> Secure guest checkout · No account needed</div>
+          <div className="checkout-trust"><ShieldCheck size={14} /> Secure account checkout · Your order will appear in My Orders</div>
         </aside>
       </motion.div>
     </div>
