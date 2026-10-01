@@ -957,6 +957,7 @@ def browse_shop_products(
         "shop_logo_url": profile.logo_url,
         "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),
         "rating_count": int(getattr(profile, "rating_count", 0) or 0),
+        "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
         "is_online": True,
         "products": [
             (lambda p, discount: {
@@ -1003,6 +1004,7 @@ def place_order(
                 "message": "Order already placed.",
                 "order_id": existing_order.id,
                 "shop_name": profile.shop_name if profile else "",
+                "online_setup_fee": float(getattr(existing_order, "online_setup_fee", 0) or 0),
                 "total_amount": float(existing_order.total_amount),
                 "items": json.loads(existing_order.items_json),
                 "status": existing_order.order_status,
@@ -1018,10 +1020,11 @@ def place_order(
     if not profile:
         raise HTTPException(status_code=404, detail="Shop not found or Online Shopping is disabled.")
 
-    # Validate all items and calculate total
+    # Validate all items and calculate subtotal. The configured online setup
+    # fee is added once per online order and never affects POS/in-store sales.
     order_items = []
     inventory_changes = []
-    total_amount = 0.0
+    items_subtotal = 0.0
 
     for item in data.items:
         product = db.query(Product).with_for_update().filter(
@@ -1047,7 +1050,7 @@ def place_order(
         if discount > 0:
             price = round(price * (1.0 - discount / 100.0), 2)
         line_total = price * item.quantity
-        total_amount += line_total
+        items_subtotal += line_total
         order_items.append({
             "product_id": product.id,
             "product_name": product.product_name,
@@ -1058,11 +1061,14 @@ def place_order(
         })
 
     delivery_address = sanitize_input(data.delivery_address, "delivery_address")
+    online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
+    total_amount = round(items_subtotal + online_setup_fee, 2)
 
     order = OnlineOrder(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
+        online_setup_fee=online_setup_fee,
         delivery_address=delivery_address,
         items_json=json.dumps(order_items),
         order_status="PENDING",
@@ -1099,6 +1105,10 @@ def place_order(
         "message": "Order placed successfully! The shop will confirm shortly.",
         "order_id": order.id,
         "shop_name": profile.shop_name,
+        "subtotal": round(items_subtotal, 2),
+        "online_setup_fee": online_setup_fee,
+        "subtotal": round(items_subtotal, 2),
+        "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "items": order_items,
         "status": "PENDING",
@@ -1160,6 +1170,7 @@ def place_guest_order(
                     "message": "Guest order already placed.",
                     "order_id": existing_order.id,
                     "shop_name": profile.shop_name if profile else "",
+                    "online_setup_fee": float(getattr(existing_order, "online_setup_fee", 0) or 0),
                     "total_amount": float(existing_order.total_amount),
                     "items": json.loads(existing_order.items_json),
                     "status": existing_order.order_status,
@@ -1212,10 +1223,10 @@ def place_guest_order(
         
     customer_id = customer.id
 
-    # 3. Validate items and calculate total
+    # 3. Validate items and calculate subtotal
     order_items = []
     inventory_changes = []
-    total_amount = 0.0
+    items_subtotal = 0.0
 
     for item in data.items:
         product = db.query(Product).with_for_update().filter(
@@ -1241,7 +1252,7 @@ def place_guest_order(
         if discount > 0:
             price = round(price * (1.0 - discount / 100.0), 2)
         line_total = price * item.quantity
-        total_amount += line_total
+        items_subtotal += line_total
         order_items.append({
             "product_id": product.id,
             "product_name": product.product_name,
@@ -1252,10 +1263,13 @@ def place_guest_order(
         })
 
     # 4. Create Order
+    online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
+    total_amount = round(items_subtotal + online_setup_fee, 2)
     order = OnlineOrder(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
+        online_setup_fee=online_setup_fee,
         delivery_address=sanitize_input(data.delivery_address, "address"),
         items_json=json.dumps(order_items),
         order_status="PENDING",
@@ -1516,6 +1530,8 @@ def get_incoming_orders(
             "customer_name": customer.user_name if customer else "Guest",
             "customer_phone": customer.phone if customer else "",
             "status": o.order_status,
+            "subtotal": round(float(o.total_amount) - float(getattr(o, "online_setup_fee", 0) or 0), 2),
+            "online_setup_fee": float(getattr(o, "online_setup_fee", 0) or 0),
             "total_amount": float(o.total_amount),
             "delivery_address": o.delivery_address,
             "items": json.loads(o.items_json),
