@@ -185,7 +185,7 @@ def customer_ai_shopping(
                 "product_name": product.product_name,
                 "description": getattr(product, "description", None),
                 "category": getattr(product, "category", None),
-                "price": float(product.price or 0),
+                "price": float(product.unit_price or 0),
                 "stock_available": float(product.current_stock or 0),
                 "shop_id": shop.shop_id,
                 "shop_name": shop.shop_name,
@@ -195,7 +195,7 @@ def customer_ai_shopping(
                 "rating_count": int(shop.rating_count or 0),
                 "online_setup_fee": float(getattr(shop, "online_setup_fee", 0) or 0),
                 "reason": (
-                    f"Lowest price ₹{float(product.price or 0):,.2f}"
+                    f"Lowest price ₹{float(product.unit_price or 0):,.2f}"
                     if intent == "price"
                     else f"Rated {float(shop.rating_score or 0):.1f}/5"
                     if intent == "rating"
