@@ -113,9 +113,9 @@ export default function AiShoppingPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.ambient ambientOne} />
-      <div className={styles.ambient ambientTwo} />
-      <div className={styles.ambient ambientThree} />
+      <div className={`${styles.ambient} ${styles.ambientOne}`} />
+      <div className={`${styles.ambient} ${styles.ambientTwo}`} />
+      <div className={`${styles.ambient} ${styles.ambientThree}`} />
 
       <section className={styles.hero}>
         <div className={styles.navRow}>
