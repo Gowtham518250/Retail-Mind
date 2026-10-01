@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from models import User, ShopProfile
+from models import User, ShopProfile, Worker
 from security import hash_password, verify_password, create_access_token, ROLE_OWNER, get_current_user, check_login_lockout, record_login_failure, record_login_success
 from email_notifications import EmailNotificationService
 from rate_limiter import rate_limit_endpoint, get_client_ip, ip_rate_limiter
@@ -147,6 +147,13 @@ class OwnerOTPRequest(BaseModel):
     email: str
     purpose: Optional[str] = "Owner Verification"
 
+class ResetWorkerPinRequest(BaseModel):
+    email: str
+    otp: str
+    worker_id: int
+    new_pin: str
+
+
 
 class StoreResetOTPRequestLegacy(BaseModel):
     email: str
@@ -263,6 +270,59 @@ def verify_otp(request: VerifyOTPRequest):
 
     otp_cache.pop(normalized_email, None)
     return {"msg": "OTP verified successfully"}
+
+
+@router.post("/reset-worker-pin")
+def reset_worker_pin(
+    request: ResetWorkerPinRequest,
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Reset a worker attendance PIN after owner-email OTP verification."""
+    normalized_email = request.email.strip().lower()
+    new_pin = request.new_pin.strip()
+
+    if not __import__("re").fullmatch(r"\d{4}", new_pin):
+        raise HTTPException(status_code=400, detail="Worker PIN must be exactly 4 digits")
+
+    user = db.query(User).filter(User.id == current_user).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Authenticated owner not found")
+
+    if (user.email or "").strip().lower() != normalized_email:
+        raise HTTPException(
+            status_code=403,
+            detail="Verification email does not match the logged-in account",
+        )
+
+    record = _find_db_otp(
+        db,
+        user_id=user.id,
+        otp=request.otp,
+        purpose=OWNER_VERIFICATION_OTP_PURPOSE,
+    )
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired owner verification OTP")
+
+    worker = db.query(Worker).filter(
+        Worker.id == request.worker_id,
+        Worker.shopkeeper_id == current_user,
+    ).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    worker.pin = new_pin
+    try:
+        db.delete(record)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to reset worker PIN")
+
+    return {
+        "message": "Worker attendance PIN reset successfully",
+        "worker_id": worker.id,
+    }
 
 
 @router.post("/send-owner-otp")
