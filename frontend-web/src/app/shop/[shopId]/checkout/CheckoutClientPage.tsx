@@ -45,11 +45,10 @@ export default function CheckoutClientPage() {
   const [locationError, setLocationError] = useState('');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [onlineSetupFee, setOnlineSetupFee] = useState(0);
 
-  // Delivery charges are not yet persisted by the backend order model, so do
-  // not show a frontend-only amount that would differ from the saved order.
   const deliveryFee: number = 0;
-  const grandTotal = cartTotal;
+  const grandTotal = cartTotal + onlineSetupFee;
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +100,18 @@ export default function CheckoutClientPage() {
     };
 
     void requireCustomer();
+
+    void fetch(API_BASE + '/store/shops/' + shopId + '/products?limit=1', {
+      cache: 'no-store',
+    })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setOnlineSetupFee(Math.max(0, Number(data.online_setup_fee || 0)));
+        }
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -349,6 +360,12 @@ export default function CheckoutClientPage() {
           </div>
           <div className="summary-row"><span>Subtotal</span><span>₹{cartTotal.toFixed(2)}</span></div>
           <div className="summary-row"><span>Delivery</span><span>{deliveryFee === 0 ? 'FREE' : `₹${deliveryFee.toFixed(2)}`}</span></div>
+          {onlineSetupFee > 0 && (
+            <div className="summary-row">
+              <span>Online setup / service</span>
+              <span>₹{onlineSetupFee.toFixed(2)}</span>
+            </div>
+          )}
           <div className="summary-row muted"><span>GST</span><span>Included</span></div>
           <div className="summary-row total"><span>Total</span><span>₹{grandTotal.toFixed(2)}</span></div>
           {submitError && <div className="cart-banner error"><AlertCircle size={15} /> {submitError}</div>}

@@ -165,7 +165,7 @@ export default function MarketplaceShell() {
                 <div className={styles.storeFace}>
                   <div className={styles.storeSign}><Store size={14} /> RETAIL SHOP</div>
                   <div className={styles.storeShelfRow}><span /><span /><span /><span /></div>
-                  <div className={styles.storeShelfRow compact}><span /><span /><span /></div>
+                  <div className={`${styles.storeShelfRow} ${styles.compact}`}><span /><span /><span /></div>
                   <div className={styles.storeDoor} />
                 </div>
                 <div className={styles.storeFloor} />
