@@ -101,8 +101,9 @@ def _session_breakdown(attendance):
         hours = float(s.get("working_hours") or 0.0)
         total_hours += hours
         sessions_out[key] = {
-            "label": s.get("label", label),
-            "window": s.get("window", window),
+            "session_key": "afternoon" if key == "evening" else key,
+            "label": label,
+            "window": window,
             "check_in_time": s.get("check_in_time"),
             "check_out_time": s.get("check_out_time"),
             "working_hours": hours,
