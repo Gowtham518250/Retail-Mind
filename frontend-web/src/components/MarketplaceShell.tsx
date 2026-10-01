@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, Sparkles, Store, ShoppingBag, Star, ArrowRight } from 'lucide-react';
+import { Search, Sparkles, Store, ShoppingBag, Star, ArrowRight, Bot, Boxes, Truck, Zap, MapPin } from 'lucide-react';
 import { API_BASE } from '../lib/api';
 import styles from './MarketplaceShell.module.css';
 
@@ -80,51 +80,141 @@ export default function MarketplaceShell() {
   return (
     <main className={styles.page}>
       <section className={styles.hero}>
-        <div className={styles.heroGlow} />
+        <div className={styles.heroMesh} />
+        <div className={styles.heroOrbOne} />
+        <div className={styles.heroOrbTwo} />
+
         <div className={styles.heroTop}>
-          <span className={styles.eyebrow}>RETAIL MIND MARKETPLACE</span>
-          <span className={styles.livePill}>Online shops only</span>
-        </div>
-        <h1>Find the right shop. Compare products. Order in one place.</h1>
-        <p>
-          Search by shop name, search a product across multiple shops, or ask the shopping
-          assistant for low-price and rating-aware recommendations.
-        </p>
-
-        <div className={styles.searchShell}>
-          <Search size={21} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void runSearch();
-            }}
-            placeholder="Search shop name or product name"
-          />
-          <button onClick={() => void runSearch()} disabled={searching}>
-            {searching ? 'Searching…' : 'Search'}
-          </button>
+          <span className={styles.heroEyebrow}>
+            <Sparkles size={13} /> RETAIL MIND MARKETPLACE
+          </span>
+          <span className={styles.livePill}>
+            <span className={styles.liveDot} /> Online shops only
+          </span>
         </div>
 
-        <div className={styles.modeRow}>
-          {[
-            ['all', 'All'],
-            ['shops', 'Shops'],
-            ['products', 'Products'],
-            ['ai', 'AI advice'],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              className={mode === value ? styles.modeActive : styles.mode}
-              onClick={() => {
-                setMode(value as ResultMode);
-                if (query.trim()) void runSearch();
-              }}
-            >
-              {value === 'ai' ? <Sparkles size={15} /> : null}
-              {label}
-            </button>
-          ))}
+        <div className={styles.heroGrid}>
+          <div className={styles.heroCopy}>
+            <div className={styles.heroKicker}>YOUR LOCAL SHOPS, NOW ONLINE</div>
+            <h1>
+              Shop local.
+              <span> Compare smarter.</span>
+              Order simply.
+            </h1>
+            <p>
+              Find a shop by name, compare one product across multiple shops,
+              or ask the shopping assistant for low-price and highly-rated options.
+            </p>
+
+            <div className={styles.searchShell}>
+              <Search size={20} />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void runSearch();
+                }}
+                placeholder="Search a shop or product…"
+              />
+              <button onClick={() => void runSearch()} disabled={searching}>
+                {searching ? 'Searching…' : 'Search'} <ArrowRight size={15} />
+              </button>
+            </div>
+
+            <div className={styles.modeRow}>
+              {[
+                ['all', 'Everything'],
+                ['shops', 'Shops'],
+                ['products', 'Products'],
+                ['ai', 'AI advice'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className={mode === value ? styles.modeActive : styles.mode}
+                  onClick={() => {
+                    setMode(value as ResultMode);
+                    if (query.trim()) void runSearch();
+                  }}
+                >
+                  {value === 'ai' ? <Bot size={14} /> : null}
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.heroTrustRow}>
+              <span><ShieldCheckIcon /> Secure checkout</span>
+              <span><Truck size={14} /> Order tracking</span>
+              <span><Zap size={14} /> Smart recommendations</span>
+            </div>
+          </div>
+
+          <div className={styles.sceneWrap} aria-hidden="true">
+            <div className={styles.scene}>
+              <div className={styles.sceneGlow} />
+
+              <div className={styles.backShelf}>
+                <div />
+                <div />
+                <div />
+              </div>
+
+              <div className={styles.store3d}>
+                <div className={styles.storeRoof} />
+                <div className={styles.storeFace}>
+                  <div className={styles.storeSign}><Store size={14} /> RETAIL SHOP</div>
+                  <div className={styles.storeShelfRow}><span /><span /><span /><span /></div>
+                  <div className={styles.storeShelfRow compact}><span /><span /><span /></div>
+                  <div className={styles.storeDoor} />
+                </div>
+                <div className={styles.storeFloor} />
+              </div>
+
+              <div className={styles.floatCardOne}>
+                <div className={styles.miniIcon}><ShoppingBag size={16} /></div>
+                <div><strong>Fresh groceries</strong><span>From nearby shops</span></div>
+              </div>
+
+              <div className={styles.floatCardTwo}>
+                <div className={styles.miniIconGold}><Star size={15} fill="currentColor" /></div>
+                <div><strong>4.8 rated</strong><span>Trusted local store</span></div>
+              </div>
+
+              <div className={styles.productBoxRed}>
+                <div className={styles.boxTop} />
+                <div className={styles.boxFront}><span>BEST</span><strong>DEAL</strong></div>
+                <div className={styles.boxSide} />
+              </div>
+
+              <div className={styles.productBoxBlue}>
+                <div className={styles.boxTop} />
+                <div className={styles.boxFront}><span>SMART</span><strong>PICK</strong></div>
+                <div className={styles.boxSide} />
+              </div>
+
+              <div className={styles.sceneBase}><div /></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.quickRow}>
+        <div><span><Store size={17} /></span><div><strong>Local shops</strong><small>Discover online-enabled stores</small></div></div>
+        <div><span><Boxes size={17} /></span><div><strong>Compare products</strong><small>See offers across shops</small></div></div>
+        <div><span><Bot size={17} /></span><div><strong>Ask Retail Mind</strong><small>Get price & rating advice</small></div></div>
+        <div><span><Truck size={17} /></span><div><strong>Track orders</strong><small>Follow the order lifecycle</small></div></div>
+      </section>
+
+      <section className={styles.exploreStrip}>
+        <div>
+          <span className={styles.sectionEyebrow}>SHOP SMARTER</span>
+          <h2>Search a shop. Compare a product. Let AI help.</h2>
+        </div>
+        <div className={styles.explorePills}>
+          <button onClick={() => { setQuery('Groceries'); setMode('products'); void runSearch(); }}>🛒 Groceries</button>
+          <button onClick={() => { setQuery('Bakery'); setMode('products'); void runSearch(); }}>🥖 Bakery</button>
+          <button onClick={() => { setQuery('Personal care'); setMode('products'); void runSearch(); }}>✨ Personal care</button>
+          <button onClick={() => { setMode('ai'); setQuery('best rated products'); void runSearch(); }}><Sparkles size={13} /> Best value with AI</button>
         </div>
       </section>
 
@@ -246,5 +336,15 @@ export default function MarketplaceShell() {
         </section>
       )}
     </main>
+  );
+}
+
+
+function ShieldCheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3 5 6v5c0 4.6 2.9 8.5 7 10 4.1-1.5 7-5.4 7-10V6l-7-3Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="m9.2 12 1.8 1.8 3.8-4.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
