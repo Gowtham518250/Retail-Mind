@@ -35,8 +35,9 @@ export default function MarketplaceShell() {
     }
   };
 
-  const runSearch = async () => {
+  const runSearch = async (overrideMode?: ResultMode) => {
     const value = query.trim();
+    const activeMode = overrideMode ?? mode;
     if (!value) {
       await loadShops();
       return;
@@ -44,7 +45,7 @@ export default function MarketplaceShell() {
 
     setSearching(true);
     try {
-      if (mode === 'ai') {
+      if (activeMode === 'ai') {
         const res = await fetch(
           API_BASE + '/store/ai/recommend?q=' + encodeURIComponent(value) + '&limit=10',
           { cache: 'no-store' },
@@ -55,7 +56,7 @@ export default function MarketplaceShell() {
         setShops([]);
         setProducts([]);
       } else {
-        const searchMode = mode === 'shops' ? 'shops' : mode === 'products' ? 'products' : 'all';
+        const searchMode = activeMode === 'shops' ? 'shops' : activeMode === 'products' ? 'products' : 'all';
         const res = await fetch(
           API_BASE + '/store/marketplace/search?q=' + encodeURIComponent(value) +
             '&mode=' + searchMode + '&limit=30',
@@ -211,10 +212,10 @@ export default function MarketplaceShell() {
           <h2>Search a shop. Compare a product. Let AI help.</h2>
         </div>
         <div className={styles.explorePills}>
-          <button onClick={() => { setQuery('Groceries'); setMode('products'); void runSearch(); }}>🛒 Groceries</button>
-          <button onClick={() => { setQuery('Bakery'); setMode('products'); void runSearch(); }}>🥖 Bakery</button>
-          <button onClick={() => { setQuery('Personal care'); setMode('products'); void runSearch(); }}>✨ Personal care</button>
-          <button onClick={() => { setMode('ai'); setQuery('best rated products'); void runSearch(); }}><Sparkles size={13} /> Best value with AI</button>
+          <button onClick={() => { setQuery('Groceries'); setMode('products'); void runSearch('products'); }}>🛒 Groceries</button>
+          <button onClick={() => { setQuery('Bakery'); setMode('products'); void runSearch('products'); }}>🥖 Bakery</button>
+          <button onClick={() => { setQuery('Personal care'); setMode('products'); void runSearch('products'); }}>✨ Personal care</button>
+          <button onClick={() => { setMode('ai'); setQuery('best rated products'); void runSearch('ai'); }}><Sparkles size={13} /> Best value with AI</button>
         </div>
       </section>
 
