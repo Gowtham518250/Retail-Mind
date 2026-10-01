@@ -83,7 +83,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
   }, [activeCategory, products, search, sortBy]);
 
   const handleAddToCart = (product: ShopProduct) => {
-    addToCart(product);
+    addToCart({ ...product, shop_id: shopId });
     setJustAddedId(product.id);
     window.setTimeout(() => setJustAddedId(null), 1200);
   };
@@ -98,7 +98,8 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
           className="shop-hero-card"
         >
           <div className="shop-hero-copy">
-            <div className="hero-pill">Premium local storefront</div>
+            <div className="hero-pill">Trusted local storefront</div>
+            <div className="shop-share-note">Browse freely · Sign in only when you checkout</div>
             <h1>{shop?.shop_name || 'Retail Mind Storefront'}</h1>
             <p>
               {shop?.shop_tagline || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
@@ -142,9 +143,14 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
                 <div><span>•</span> Express delivery</div>
                 <div><span>•</span> Simple reordering</div>
               </div>
-              <Link href="#products" className="hero-cta">
-                Shop now <ArrowRight size={16} />
-              </Link>
+              <div className="shop-hero-actions">
+                <Link href="#products" className="hero-cta">
+                  Shop now <ArrowRight size={16} />
+                </Link>
+                <Link href="/orders" className="shop-secondary-cta">
+                  My orders
+                </Link>
+              </div>
             </div>
           </div>
         </motion.section>
