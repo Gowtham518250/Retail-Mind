@@ -10,6 +10,7 @@ export interface Product {
   stock_available?: number;
   category?: string;
   image_url?: string;
+  shop_id?: number;
 }
 
 export interface CartItem {
@@ -54,6 +55,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const addToCart = (product: Product, quantity: number = 1) => {
     setCartItems(prev => {
+      const existingShopId = prev[0]?.product.shop_id;
+      const incomingShopId = product.shop_id;
+
+      // Never mix products from different shops. The order API accepts one
+      // shop_id, so a mixed cart could otherwise charge one shop for another
+      // shop's products.
+      if (
+        existingShopId !== undefined &&
+        incomingShopId !== undefined &&
+        existingShopId !== incomingShopId
+      ) {
+        window.alert('Your cart contains items from another shop. Please checkout or clear the cart before shopping here.');
+        return prev;
+      }
+
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
         return prev.map(item =>
