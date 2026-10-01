@@ -17,6 +17,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from groq import Groq
 from db import get_db
 from security import get_current_user as check_current_user
+from models import AIQueryHistory
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -198,11 +199,249 @@ if catalog_json.is_file():
 else:
     full_table_catalog = {}
 
+
+
+def _persist_query_history(db: Session, user_id: int, question: str, answer: str, result_count: int) -> None:
+    """Persist a successful owner query without making history storage break the query itself."""
+    try:
+        db.add(
+            AIQueryHistory(
+                user_id=user_id,
+                question=question.strip(),
+                answer=answer.strip(),
+                result_count=int(result_count or 0),
+            )
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"⚠️ AI query history persistence failed: {type(exc).__name__}: {exc}")
+
+
+def _fast_business_query(query: str, db: Session, user_id: int):
+    """Answer common owner KPI questions without FAISS/Groq latency.
+
+    The normal RAG/Text-to-SQL engine remains the fallback for arbitrary
+    questions. Common sales/expense KPI questions use the same tenant and
+    business-date rules but execute directly against the canonical tables.
+    """
+    normalized = re.sub(r"\s+", " ", query.lower()).strip()
+    wants_sales = bool(re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized))
+    wants_expense = bool(re.search(r"\b(expense|expenses|spent|spending)\b", normalized))
+    if not (wants_sales or wants_expense):
+        return None
+
+    if re.search(r"\b(today|today's|todays)\b", normalized):
+        business_date, previous_business_date = _business_dates()
+        date_scope = ("today", business_date, "invoice_date", "sale_date")
+    elif re.search(r"\byesterday\b", normalized):
+        business_date, previous_business_date = _business_dates()
+        date_scope = ("yesterday", previous_business_date, "invoice_date", "sale_date")
+    else:
+        date_scope = ("all time", None, "invoice_date", "sale_date")
+
+    wants_units = bool(
+        re.search(r"\b(items?|units?)\b", normalized)
+        and re.search(r"\b(sold|sales?)\b", normalized)
+    )
+    wants_count = bool(
+        re.search(r"\b(how many|number of|count)\b.*\bsales?\b", normalized)
+    )
+
+    if wants_expense:
+        if date_scope[1] is None:
+            row = db.execute(
+                text(
+                    "SELECT COALESCE(SUM(amount), 0) AS total_expenses "
+                    "FROM universal_transactions "
+                    "WHERE shop_id = :user_id AND tx_type = 'EXPENSE'"
+                ),
+                {"user_id": user_id},
+            ).mappings().one()
+        else:
+            row = db.execute(
+                text(
+                    "SELECT COALESCE(SUM(amount), 0) AS total_expenses "
+                    "FROM universal_transactions "
+                    "WHERE shop_id = :user_id AND tx_type = 'EXPENSE' "
+                    "AND tx_date::date = :business_date"
+                ),
+                {"user_id": user_id, "business_date": date_scope[1]},
+            ).mappings().one()
+        value = float(row["total_expenses"] or 0)
+        answer = f"Your expenses {date_scope[0]} are ₹{value:,.2f}."
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_KPI: universal_transactions expense total",
+            "generated_model_response": answer,
+            "results": [{"total_expenses": value}],
+        }
+
+    invoice_date = "i.invoice_date = :business_date" if date_scope[1] is not None else "1=1"
+    legacy_date = "s.sale_date = :business_date" if date_scope[1] is not None else "1=1"
+
+    if wants_count:
+        row = db.execute(
+            text(
+                "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.cnt ELSE sales_rows.cnt END AS sales_count "
+                "FROM (SELECT COUNT(*)::bigint AS cnt FROM invoices i "
+                f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
+                "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt FROM sales s "
+                f"WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
+            ),
+            {"user_id": user_id, "business_date": date_scope[1]},
+        ).mappings().one()
+        value = int(row["sales_count"] or 0)
+        answer = f"You have {value} sale(s) {date_scope[0]}."
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_KPI: invoice/sales count",
+            "generated_model_response": answer,
+            "results": [{"sales_count": value}],
+        }
+
+    if wants_units:
+        row = db.execute(
+            text(
+                "SELECT CASE WHEN invoice_rows.qty > 0 THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
+                "FROM (SELECT COALESCE(SUM(ili.quantity),0)::numeric AS qty "
+                "FROM invoice_line_items ili JOIN invoices i ON i.id = ili.invoice_id "
+                f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
+                "CROSS JOIN (SELECT COALESCE(SUM(s.quantity),0)::numeric AS qty FROM sales s "
+                f"WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
+            ),
+            {"user_id": user_id, "business_date": date_scope[1]},
+        ).mappings().one()
+        value = float(row["total_units_sold"] or 0)
+        answer = f"You sold {value:g} item(s) {date_scope[0]}."
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_KPI: invoice/sales units",
+            "generated_model_response": answer,
+            "results": [{"total_units_sold": value}],
+        }
+
+    row = db.execute(
+        text(
+            "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.total ELSE sales_rows.total END AS total_sales_amount "
+            "FROM (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(i.total_amount),0)::numeric AS total "
+            "FROM invoices i "
+            f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
+            "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(s.total),0)::numeric AS total "
+            f"FROM sales s WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
+        ),
+        {"user_id": user_id, "business_date": date_scope[1]},
+    ).mappings().one()
+    value = float(row["total_sales_amount"] or 0)
+    answer = f"Your total sales amount {date_scope[0]} is ₹{value:,.2f}."
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_KPI: invoice/sales revenue",
+        "generated_model_response": answer,
+        "results": [{"total_sales_amount": value}],
+    }
+
+
 app= APIRouter()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+
+@app.get("/askquery/history")
+def get_query_history(
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+
+    base = db.query(AIQueryHistory).filter(
+        AIQueryHistory.user_id == user_id
+    )
+    total = base.count()
+    rows = (
+        base.order_by(AIQueryHistory.created_at.desc(), AIQueryHistory.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "history": [
+            {
+                "id": row.id,
+                "question": row.question,
+                "answer": row.answer,
+                "result_count": row.result_count,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ],
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(rows) < total,
+    }
+
+
+@app.delete("/askquery/history/{history_id}")
+def delete_query_history(
+    history_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    row = db.query(AIQueryHistory).filter(
+        AIQueryHistory.id == history_id,
+        AIQueryHistory.user_id == user_id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Query history entry not found.")
+    db.delete(row)
+    db.commit()
+    return {"success": True, "id": history_id}
+
+
+@app.delete("/askquery/history")
+def clear_query_history(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    db.query(AIQueryHistory).filter(AIQueryHistory.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.commit()
+    return {"success": True}
+
+
 @app.post("/askquery")
 async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=Depends(check_current_user)):
     started = time.perf_counter()
+
+    # Fast path for the most common dashboard KPI questions. This avoids the
+    # FAISS + Groq round-trip that previously made simple questions feel stuck
+    # on "loading".
+    fast_result = _fast_business_query(query, db, user_id)
+    if fast_result is not None:
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=query,
+            answer=fast_result["answer"],
+            result_count=len(fast_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": query,
+            "answer": fast_result["answer"],
+            "message": fast_result["answer"],
+            "generated_sql": fast_result["generated_sql"],
+            "generated_model_response": fast_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": fast_result["generated_sql"],
+            "row_count": len(fast_result["results"]),
+            "results": fast_result["results"],
+        }
     print("🔥 ENDPOINT CALLED")
     print("QUERY ENGINE VERSION:", QUERY_ENGINE_VERSION)
     print("QUERY:", query)
@@ -754,6 +993,14 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         return f"Found {len(result_rows)} matching result(s)."
 
     answer_text = _build_answer(encoded_rows)
+
+    _persist_query_history(
+        db=db,
+        user_id=user_id,
+        question=query,
+        answer=answer_text,
+        result_count=len(encoded_rows),
+    )
 
     return {
         "query_engine_version": QUERY_ENGINE_VERSION,
