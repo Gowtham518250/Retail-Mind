@@ -48,7 +48,7 @@ export default function CheckoutClientPage() {
 
   // Delivery charges are not yet persisted by the backend order model, so do
   // not show a frontend-only amount that would differ from the saved order.
-  const deliveryFee = 0;
+  const deliveryFee: number = 0;
   const grandTotal = cartTotal;
 
   useEffect(() => {
