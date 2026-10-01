@@ -79,7 +79,7 @@ export default function ProductClientPage() {
             <div className="shop-stat-card"><Sparkles size={16} /> Premium quality</div>
           </div>
           <div className="store-card-actions" style={{ marginTop: 22 }}>
-            <button className="store-cart-btn" onClick={() => addToCart(product)}>
+            <button className="store-cart-btn" onClick={() => addToCart({ ...product, shop_id: shopId })}>
               <ShoppingCart size={16} /> Add to cart
             </button>
           </div>
