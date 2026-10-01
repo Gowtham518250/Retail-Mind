@@ -628,6 +628,11 @@ def set_publish_status(data: dict, user_id: int = Depends(check_current_user), d
         is_published = data.get("is_published", False)
         profile = ShopService.get_shop_profile(db, user_id)
         profile.is_online_store_enabled = is_published
+        # Enabling Online Shopping means the shop is intentionally active in
+        # the customer marketplace. Repair legacy NULL active flags at the same
+        # time so older shop profiles become discoverable immediately.
+        if is_published:
+            profile.is_active = True
         try:
             db.commit()
         except Exception as e:
@@ -650,6 +655,7 @@ def publish_marketplace(data: dict, user_id: int = Depends(check_current_user), 
         profile.latitude = data.get("latitude")
         profile.longitude = data.get("longitude")
         profile.is_online_store_enabled = True
+        profile.is_active = True
         
         if data.get("address_nickname"):
             profile.location = data.get("address_nickname")

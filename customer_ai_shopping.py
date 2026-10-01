@@ -103,7 +103,7 @@ def customer_ai_shopping(
         .filter(
             Product.is_active.is_(True),
             Product.current_stock > 0,
-            ShopProfile.is_active.is_(True),
+            (ShopProfile.is_active.is_(True)) | (ShopProfile.is_active.is_(None)),
             ShopProfile.is_online_store_enabled.is_(True),
         )
     )
