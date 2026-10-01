@@ -25,7 +25,7 @@ export default function Navbar() {
       window.removeEventListener('storage', syncAuth);
       window.removeEventListener('focus', syncAuth);
     };
-  }, []);
+  }, [pathname]);
 
   if (pathname === '/auth') return null;
 
