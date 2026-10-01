@@ -33,9 +33,11 @@ def _add(bind, table, column, type_, nullable=True, default=None):
 def upgrade():
     bind = op.get_bind()
 
-    # New core growth-suite tables.
-    op.create_table(
-        "retail_branches",
+    # New core growth-suite tables. The production boot path may already have
+    # created them through SQLAlchemy metadata, so keep the migration idempotent.
+    if "retail_branches" not in sa.inspect(bind).get_table_names():
+        op.create_table(
+            "retail_branches",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("owner_id", sa.Integer(), sa.ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(120), nullable=False),
@@ -51,7 +53,7 @@ def upgrade():
         sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now()),
         sa.UniqueConstraint("owner_id", "code", name="uix_branch_owner_code"),
     )
-    op.create_index("ix_retail_branches_owner_id", "retail_branches", ["owner_id"])
+        op.create_index("ix_retail_branches_owner_id", "retail_branches", ["owner_id"])
 
     op.create_table(
         "online_order_returns",
