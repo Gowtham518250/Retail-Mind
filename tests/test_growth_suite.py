@@ -4,20 +4,20 @@ from growth_suite import _coupon_value, router, customer_router
 def test_growth_routes_are_registered():
     routes = {route.path for route in router.routes}
     customer_routes = {route.path for route in customer_router.routes}
-    assert "/overview" in routes
-    assert "/analytics" in routes
-    assert "/reorder-suggestions" in routes
-    assert "/branches" in routes
-    assert "/coupons" in routes
-    assert "/returns" in routes
-    assert "/deliveries" in routes
-    assert "/security-center" in routes
-    assert "/copilot" in routes
-    assert "/coupon/validate" in customer_routes
-    assert "/returns" in customer_routes
-    assert "/buy-again" in customer_routes
-    assert "/recommendations" in customer_routes
-    assert "/loyalty" in customer_routes
+    assert "/growth/overview" in routes
+    assert "/growth/analytics" in routes
+    assert "/growth/reorder-suggestions" in routes
+    assert "/growth/branches" in routes
+    assert "/growth/coupons" in routes
+    assert "/growth/returns" in routes
+    assert "/growth/deliveries" in routes
+    assert "/growth/security-center" in routes
+    assert "/growth/copilot" in routes
+    assert "/store/coupon/validate" in customer_routes
+    assert "/store/returns" in customer_routes
+    assert "/store/buy-again" in customer_routes
+    assert "/store/recommendations" in customer_routes
+    assert "/store/loyalty" in customer_routes
 
 
 class Coupon:
