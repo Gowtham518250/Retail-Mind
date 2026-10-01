@@ -1104,6 +1104,8 @@ class OnlineOrder(Base):
     total_amount = Column(Numeric(10, 2), nullable=False)
     # Snapshot of the online-only setup fee applied to this order.
     online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    coupon_code = Column(String(50), nullable=True)
+    discount_amount = Column(Numeric(12, 2), nullable=False, default=0)
     delivery_address = Column(Text)
     items_json = Column(Text, nullable=False) # JSON: [{product_id, name, qty, price}, ...]
     idempotency_key = Column(String(128), nullable=True, index=True)
