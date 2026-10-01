@@ -19,19 +19,30 @@ export default function MarketplaceShell() {
   const [aiMessage, setAiMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [error, setError] = useState('');
 
   const loadShops = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await fetch(
         API_BASE + '/store/marketplace/search?mode=shops&limit=60',
         { cache: 'no-store' },
       );
+      if (!res.ok) {
+        throw new Error(`Marketplace API returned ${res.status}.`);
+      }
       const data = await res.json();
-      setShops(data.shops || []);
+      setShops(Array.isArray(data.shops) ? data.shops : []);
       setProducts([]);
       setAi([]);
       setAiMessage('');
+    } catch (err) {
+      setShops([]);
+      setProducts([]);
+      setAi([]);
+      setAiMessage('');
+      setError(err instanceof Error ? err.message : 'Unable to load the marketplace.');
     } finally {
       setLoading(false);
     }
@@ -46,14 +57,18 @@ export default function MarketplaceShell() {
     }
 
     setSearching(true);
+    setError('');
     try {
       if (activeMode === 'ai') {
         const res = await fetch(
           API_BASE + '/store/ai/recommend?q=' + encodeURIComponent(value) + '&limit=10',
           { cache: 'no-store' },
         );
+        if (!res.ok) {
+          throw new Error(`Shopping API returned ${res.status}.`);
+        }
         const data = await res.json();
-        setAi(data.recommendations || []);
+        setAi(Array.isArray(data.recommendations) ? data.recommendations : []);
         setAiMessage(data.response || '');
         setShops([]);
         setProducts([]);
@@ -64,12 +79,21 @@ export default function MarketplaceShell() {
             '&mode=' + searchMode + '&limit=30',
           { cache: 'no-store' },
         );
+        if (!res.ok) {
+          throw new Error(`Marketplace API returned ${res.status}.`);
+        }
         const data = await res.json();
-        setShops(data.shops || []);
-        setProducts(data.products || []);
+        setShops(Array.isArray(data.shops) ? data.shops : []);
+        setProducts(Array.isArray(data.products) ? data.products : []);
         setAi([]);
         setAiMessage('');
       }
+    } catch (err) {
+      setShops([]);
+      setProducts([]);
+      setAi([]);
+      setAiMessage('');
+      setError(err instanceof Error ? err.message : 'Unable to search the marketplace.');
     } finally {
       setSearching(false);
       setLoading(false);
@@ -225,6 +249,20 @@ export default function MarketplaceShell() {
           <button onClick={() => { setMode('ai'); setQuery('best rated products'); void runSearch('ai'); }}><Sparkles size={13} /> Best value with AI</button>
         </div>
       </section>
+
+      {error ? (
+        <section
+          className={styles.aiBanner}
+          role="alert"
+          style={{ marginTop: 20 }}
+        >
+          <span aria-hidden="true">⚠️</span>
+          <div>
+            <strong>Marketplace connection problem</strong>
+            <p>{error} Check the browser console/network request for the API endpoint.</p>
+          </div>
+        </section>
+      ) : null}
 
       {aiMessage ? (
         <section className={styles.aiBanner}>
