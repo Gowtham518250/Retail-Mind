@@ -131,6 +131,12 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
                 <Sparkles size={18} />
                 <span>Fast dispatch</span>
               </div>
+              {(shop?.online_setup_fee || 0) > 0 && (
+                <div className="shop-stat-card online-fee-stat">
+                  <span className="online-fee-icon">₹</span>
+                  <span>Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>
+                </div>
+              )}
             </div>
           </div>
 
