@@ -88,6 +88,7 @@ from khata_ledger import router as khata_router
 from khata_router import router as new_khata_engine_router
 from purchase_orders import router as purchase_orders_router
 from online_store import router as online_store_router
+from customer_ai_shopping import router as customer_ai_router
 from whatsapp_orders import router as whatsapp_orders_router
 from retail_intelligence import router as intelligence_router
 from gst_and_giftcards import router as gst_and_giftcards_router
@@ -361,6 +362,7 @@ api.include_router(khata_router)                  # /khata/*
 api.include_router(new_khata_engine_router)          # /api/khata/*
 api.include_router(purchase_orders_router)        # /purchase-orders/*
 api.include_router(online_store_router)           # /store/*
+api.include_router(customer_ai_router)              # /store/customer-ai
 api.include_router(whatsapp_orders_router)
 api.include_router(intelligence_router)           # /expenses, /workers, /bank-recon, /enterprise/*, /retail/*
 api.include_router(gst_and_giftcards_router)      # /gift-cards, /gst/*
