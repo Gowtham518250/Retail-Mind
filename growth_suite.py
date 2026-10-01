@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -1009,7 +1009,7 @@ def security_center(
 ):
     try:
         active_sessions = db.execute(
-            "SELECT COUNT(*) FROM session_tokens WHERE user_id = :uid AND is_active = TRUE",
+            text("SELECT COUNT(*) FROM session_tokens WHERE user_id = :uid AND is_active = TRUE"),
             {"uid": user_id},
         ).scalar() or 0
     except Exception:
