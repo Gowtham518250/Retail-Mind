@@ -47,7 +47,7 @@ export default function CheckoutClientPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [onlineSetupFee, setOnlineSetupFee] = useState(0);
 
-  const deliveryFee: number = 0;
+  const deliveryFee = 0 as number;
   const grandTotal = cartTotal + onlineSetupFee;
 
   useEffect(() => {
