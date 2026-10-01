@@ -12,7 +12,15 @@ export default function CartDrawer() {
 
   const handleCheckout = () => {
     toggleCart();
-    router.push(`/shop/${shopId}/checkout`);
+    const cartShopId = cartItems[0]?.product.shop_id || shopId;
+    const token = localStorage.getItem('customerToken');
+
+    if (!token) {
+      router.push(`/auth?next=${encodeURIComponent(`/shop/${cartShopId}/checkout`)}`);
+      return;
+    }
+
+    router.push(`/shop/${cartShopId}/checkout`);
   };
 
   return (
