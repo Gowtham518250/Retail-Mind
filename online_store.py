@@ -654,7 +654,7 @@ def forgot_password(
 def marketplace_search(
     q: str = Query("", max_length=80),
     mode: str = Query("all", pattern=r"^(all|shops|products)$"),
-    limit: int = Query(24, ge=1, le=50),
+    limit: int = Query(24, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     """Global online marketplace search.
