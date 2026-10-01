@@ -1294,7 +1294,7 @@ class OnlineDeliveryAssignment(Base):
     picked_up_at = Column(DateTime)
     delivered_at = Column(DateTime)
 
-=================== GIFTCARDS ====================
+# =================== GIFTCARDS ====================
 
 class AIQueryHistory(Base):
     """Persistent owner-scoped history for natural-language Retail Mind queries."""
