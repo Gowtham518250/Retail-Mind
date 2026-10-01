@@ -33,15 +33,87 @@ export default function OrderSuccessClientPage() {
   const [trackingError, setTrackingError] = useState('');
 
   useEffect(() => {
-    if (!orderId) { setNotFound(true); return; }
-    const raw = sessionStorage.getItem(`order:${orderId}`);
-    if (!raw) { setNotFound(true); return; }
-    try {
-      setOrder(JSON.parse(raw) as StoredOrder);
-    } catch {
-      setNotFound(true);
-    }
-  }, [orderId]);
+    let cancelled = false;
+
+    const loadOrder = async () => {
+      if (!orderId) {
+        setNotFound(true);
+        return;
+      }
+
+      const token = localStorage.getItem('customerToken');
+      if (!token) {
+        router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/order-success?orderId=${orderId}`)}`);
+        return;
+      }
+
+      setTrackingError('');
+
+      try {
+        const res = await fetch(
+          `${API_BASE}/store/order/${encodeURIComponent(orderId)}/track`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store',
+          },
+        );
+
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('customerToken');
+          router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/order-success?orderId=${orderId}`)}`);
+          return;
+        }
+
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 404) setNotFound(true);
+          throw new Error(data.detail || 'Unable to load this order.');
+        }
+
+        if (cancelled) return;
+
+        const stored = sessionStorage.getItem(`order:${orderId}`);
+        let storedOrder: Partial<StoredOrder> = {};
+        if (stored) {
+          try {
+            storedOrder = JSON.parse(stored);
+          } catch {
+            storedOrder = {};
+          }
+        }
+
+        setOrder({
+          order_id: Number(data.order_id),
+          shop_name: data.shop_name || storedOrder.shop_name || `Shop #${data.shop_id}`,
+          total_amount: Number(data.total_amount || 0),
+          status: data.status || 'PENDING',
+          payment_method: 'COD',
+          customer_name: data.customer_name || storedOrder.customer_name || 'Customer',
+          phone: data.customer_phone || storedOrder.phone || '',
+          delivery_address: data.delivery_address || storedOrder.delivery_address || '',
+          items: Array.isArray(data.items)
+            ? data.items.map((item: any) => ({
+                name: item.product_name || item.name || `Product #${item.product_id}`,
+                quantity: Number(item.quantity || 0),
+                price: Number(item.unit_price ?? item.price ?? 0),
+              }))
+            : storedOrder.items || [],
+          placed_at: data.created_at || storedOrder.placed_at || new Date().toISOString(),
+        });
+        setLiveStatus(String(data.status || 'PENDING').toUpperCase());
+      } catch (error: any) {
+        if (!cancelled) {
+          setTrackingError(error?.message || 'Unable to load order status right now.');
+        }
+      }
+    };
+
+    void loadOrder();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, router, shopId]);
 
   useEffect(() => {
     if (!order) return;
@@ -50,23 +122,44 @@ export default function OrderSuccessClientPage() {
 
   const refreshStatus = async () => {
     if (!order) return;
-    if (!order.tracking_token) {
-      setTrackingError('Secure tracking credentials are missing. Please use the original order confirmation page.');
+
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/order-success?orderId=${order.order_id}`)}`);
       return;
     }
+
     setIsRefreshing(true);
     setTrackingError('');
     try {
       const res = await fetch(
-        `${API_BASE}/store/order/${order.order_id}/guest-track?phone=${encodeURIComponent(order.phone)}`,
-        { headers: { 'X-Guest-Tracking-Token': order.tracking_token } },
+        `${API_BASE}/store/order/${order.order_id}/track`,
+        { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
       );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || 'Unable to verify order tracking credentials.');
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('customerToken');
+        router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/order-success?orderId=${order.order_id}`)}`);
+        return;
       }
       const data = await res.json();
-      setLiveStatus(data.status);
+      if (!res.ok) {
+        throw new Error(data.detail || 'Unable to refresh order status right now.');
+      }
+      setLiveStatus(String(data.status || 'PENDING').toUpperCase());
+      setOrder((current) => current ? {
+        ...current,
+        shop_name: data.shop_name || current.shop_name,
+        status: data.status || current.status,
+        total_amount: Number(data.total_amount ?? current.total_amount),
+        delivery_address: data.delivery_address || current.delivery_address,
+        items: Array.isArray(data.items)
+          ? data.items.map((item: any) => ({
+              name: item.product_name || item.name || `Product #${item.product_id}`,
+              quantity: Number(item.quantity || 0),
+              price: Number(item.unit_price ?? item.price ?? 0),
+            }))
+          : current.items,
+      } : current);
     } catch (error: any) {
       setTrackingError(error.message || 'Unable to refresh order status right now.');
     } finally {
@@ -77,7 +170,7 @@ export default function OrderSuccessClientPage() {
   useEffect(() => {
     if (!order) return;
     refreshStatus();
-    const interval = setInterval(refreshStatus, 15000);
+    const interval = setInterval(refreshStatus, 10000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
