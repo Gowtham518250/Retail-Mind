@@ -69,6 +69,9 @@ export default function AiShoppingPage() {
     setResults([]);
 
     try {
+      // Keep the browser contract aligned with the backend's live AI route.
+      // The previous /store/customer-ai path no longer exists and made the
+      // Shopping AI appear unavailable even though recommendations worked.
       const res = await fetch(
         '/api/ai-shopping?q=' +
           encodeURIComponent(value) +
@@ -82,18 +85,32 @@ export default function AiShoppingPage() {
         const detail =
           typeof data?.detail === 'string'
             ? data.detail
-            : typeof data?.message === 'string'
-              ? data.message
-              : `Shopping AI request failed (HTTP ${res.status}).`;
+            : 'The shopping assistant could not complete that search.';
         throw new Error(detail);
       }
 
-      setAvailable(data.available === true);
-      setMessage(data.message || '');
-      setIntent(data.intent_label || '');
-      setProductQuery(data.product_query || value);
-      setShopHint(data.shop_hint || '');
-      setResults(Array.isArray(data.recommendations) ? data.recommendations : []);
+      const recommendations = Array.isArray(data.recommendations)
+        ? data.recommendations
+        : [];
+
+      setAvailable(recommendations.length > 0);
+      setMessage(
+        data.response ||
+        data.message ||
+        (recommendations.length
+          ? 'I found matching products from online-enabled shops.'
+          : 'I could not find a verified match right now.'),
+      );
+      setIntent(
+        data.intent?.rating_priority
+          ? 'Rating-aware'
+          : data.intent?.low_price
+            ? 'Price-aware'
+            : 'Smart match',
+      );
+      setProductQuery(data.query || value);
+      setShopHint('');
+      setResults(recommendations);
 
       setRecent((current) =>
         [value, ...current.filter((item) => item !== value)].slice(0, 5),
@@ -254,7 +271,9 @@ export default function AiShoppingPage() {
             <div>
               <span className={styles.sectionLabel}>RETAIL MIND AI</span>
               <h2>Comparing live shops…</h2>
-              <p>Checking stock, prices, ratings and online availability.</p>
+              <p>
+                Checking stock, prices, ratings and online availability.
+              </p>
             </div>
             <div className={styles.loadingDots}>
               <span />
@@ -350,7 +369,9 @@ export default function AiShoppingPage() {
 
                   <div className={styles.resultTitleRow}>
                     <h3>{item.product_name}</h3>
-                    <div className={styles.price}>₹{Number(item.price).toFixed(2)}</div>
+                    <div className={styles.price}>
+                      ₹{Number(item.price).toFixed(2)}
+                    </div>
                   </div>
 
                   <p className={styles.resultDescription}>
@@ -398,7 +419,8 @@ export default function AiShoppingPage() {
 
                   {Number(item.online_setup_fee || 0) > 0 && (
                     <div className={styles.fee}>
-                      Online setup fee ₹{Number(item.online_setup_fee).toFixed(2)} per order
+                      Online setup fee ₹
+                      {Number(item.online_setup_fee).toFixed(2)} per order
                     </div>
                   )}
 
@@ -413,13 +435,29 @@ export default function AiShoppingPage() {
                       href={'/shop/' + item.shop_id}
                       className={styles.fillButton}
                     >
-                      Open shop
+                      Open shop <ArrowRight size={14} />
                     </Link>
                   </div>
                 </article>
               ))}
             </div>
           </>
+        )}
+
+        {!loading && !error && available === null && (
+          <section className={styles.introPanel}>
+            <div className={styles.introOrb}>
+              <div className={styles.introCore}><Bot size={28} /></div>
+            </div>
+            <div>
+              <span className={styles.sectionLabel}>READY WHEN YOU ARE</span>
+              <h2>Describe what you want to buy.</h2>
+              <p>
+                I’ll search only online-enabled shops and show real products,
+                prices, ratings and available stock.
+              </p>
+            </div>
+          </section>
         )}
       </section>
     </main>
