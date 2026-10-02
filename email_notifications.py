@@ -1,13 +1,14 @@
 """
 Email Notification Service
 Handles sending emails for alerts, notifications, and business events
-Integrates with SendGrid (production) and SMTP fallback
+Supports HTTPS transactional email via Brevo for Render and SMTP as a local/paid-host fallback
 """
 
 import logging
 import os
 from datetime import datetime
 import smtplib
+import httpx
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
@@ -56,75 +57,218 @@ class EmailNotification(Base):
 
 
 class EmailNotificationService:
-    """Service for sending email notifications"""
-    
+    """Service for sending email notifications.
+
+    Render Free blocks outbound SMTP ports, so production can use the Brevo
+    HTTPS API instead. SMTP remains available for local development or hosts
+    where SMTP egress is allowed.
+    """
+
     logger = logging.getLogger(__name__)
 
-    # Email configuration from environment
+    # SMTP/local configuration.
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_TIMEOUT = float(os.getenv("SMTP_TIMEOUT_SECONDS", "10"))
     SENDER_EMAIL = os.getenv("SENDER_EMAIL", os.getenv("SMTP_USER", ""))
     SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", os.getenv("SMTP_PASSWORD", ""))
     FROM_EMAIL = os.getenv("EMAIL_FROM", SENDER_EMAIL)
-    
+
+    # HTTPS transactional email configuration for Render.
+    # Set EMAIL_PROVIDER=brevo and BREVO_API_KEY on Render.
+    EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "auto").strip().lower()
+    BREVO_API_URL = os.getenv(
+        "BREVO_API_URL",
+        "https://api.brevo.com/v3/smtp/email",
+    )
+    BREVO_API_KEY = os.getenv("BREVO_API_KEY", "").strip()
+    BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "").strip()
+    BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", "Retail Mind").strip()
+    EMAIL_TIMEOUT = float(os.getenv("EMAIL_HTTP_TIMEOUT_SECONDS", "10"))
+
+    @classmethod
+    def _send_via_brevo(
+        cls,
+        recipient_email: str,
+        subject: str,
+        body: str,
+        html_body: str = None,
+    ) -> bool:
+        """Send a transactional email through Brevo's HTTPS API."""
+        if not cls.BREVO_API_KEY:
+            cls.logger.error(
+                "Brevo email provider selected but BREVO_API_KEY is missing. "
+                "To=%s Subject=%s",
+                recipient_email,
+                subject,
+            )
+            return False
+
+        sender_email = cls.BREVO_SENDER_EMAIL or cls.FROM_EMAIL or cls.SENDER_EMAIL
+        if not sender_email:
+            cls.logger.error(
+                "Brevo email provider selected but no sender email is configured."
+            )
+            return False
+
+        payload = {
+            "sender": {
+                "name": cls.BREVO_SENDER_NAME,
+                "email": sender_email,
+            },
+            "to": [{"email": recipient_email}],
+            "subject": subject,
+        }
+
+        # Brevo expects one message body type when sending inline content.
+        if html_body and html_body.strip():
+            payload["htmlContent"] = html_body
+        else:
+            payload["textContent"] = body
+
+        try:
+            response = httpx.post(
+                cls.BREVO_API_URL,
+                headers={
+                    "accept": "application/json",
+                    "api-key": cls.BREVO_API_KEY,
+                    "content-type": "application/json",
+                },
+                json=payload,
+                timeout=httpx.Timeout(
+                    connect=min(5.0, cls.EMAIL_TIMEOUT),
+                    read=cls.EMAIL_TIMEOUT,
+                    write=cls.EMAIL_TIMEOUT,
+                    pool=cls.EMAIL_TIMEOUT,
+                ),
+            )
+
+            if 200 <= response.status_code < 300:
+                cls.logger.info(
+                    "Email sent successfully through Brevo: To=%s Subject=%s",
+                    recipient_email,
+                    subject,
+                )
+                return True
+
+            cls.logger.error(
+                "Brevo email send failed: status=%s body=%s To=%s Subject=%s",
+                response.status_code,
+                response.text[:1000],
+                recipient_email,
+                subject,
+            )
+            return False
+        except Exception as e:
+            cls.logger.error(
+                "Brevo email request failed: %s",
+                e,
+                exc_info=True,
+                extra={"recipient_email": recipient_email, "subject": subject},
+            )
+            return False
+
+    @classmethod
+    def _send_via_smtp(
+        cls,
+        recipient_email: str,
+        subject: str,
+        body: str,
+        html_body: str = None,
+    ) -> bool:
+        """Send an email using SMTP where outbound SMTP is permitted."""
+        if not cls.SENDER_EMAIL or not cls.SENDER_PASSWORD:
+            cls.logger.error(
+                "SMTP email not configured: SENDER_EMAIL or SENDER_PASSWORD is missing. "
+                "To=%s Subject=%s",
+                recipient_email,
+                subject,
+            )
+            return False
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = cls.FROM_EMAIL
+        msg["To"] = recipient_email
+        msg.attach(MIMEText(body, "plain"))
+
+        if html_body:
+            msg.attach(MIMEText(html_body, "html"))
+
+        try:
+            with smtplib.SMTP(
+                cls.SMTP_SERVER,
+                cls.SMTP_PORT,
+                timeout=cls.SMTP_TIMEOUT,
+            ) as server:
+                server.starttls()
+                server.login(cls.SENDER_EMAIL, cls.SENDER_PASSWORD)
+                server.send_message(msg)
+
+            cls.logger.info(
+                "Email sent successfully through SMTP: To=%s Subject=%s",
+                recipient_email,
+                subject,
+            )
+            return True
+        except Exception as e:
+            cls.logger.error(
+                "SMTP email send error: %s",
+                e,
+                exc_info=True,
+                extra={"recipient_email": recipient_email, "subject": subject},
+            )
+            return False
+
     @classmethod
     def send_email(
         cls,
         recipient_email: str,
         subject: str,
         body: str,
-        html_body: str = None
+        html_body: str = None,
     ) -> bool:
+        """Send an email using the configured provider.
+
+        Provider modes:
+          - brevo: use Brevo HTTPS API only.
+          - smtp: use SMTP only.
+          - auto (default): use Brevo when BREVO_API_KEY is present,
+            otherwise use SMTP.
         """
-        Send email using SMTP
-        
-        Args:
-            recipient_email: Recipient email address
-            subject: Email subject
-            body: Plain text body
-            html_body: HTML body (optional)
-            
-        Returns:
-            True if sent successfully, False otherwise
-        """
-        try:
-            # Check if email credentials are configured
-            if not cls.SENDER_EMAIL or not cls.SENDER_PASSWORD:
-                cls.logger.error(
-                    "Email not configured: SENDER_EMAIL or SENDER_PASSWORD is missing. "
-                    f"To={recipient_email} Subject={subject}"
-                )
-                return False
-            
-            # Create message
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = cls.FROM_EMAIL
-            msg["To"] = recipient_email
-            
-            # Attach plain text
-            msg.attach(MIMEText(body, "plain"))
-            
-            # Attach HTML if provided
-            if html_body:
-                msg.attach(MIMEText(html_body, "html"))
-            
-            # Send email
-            with smtplib.SMTP(cls.SMTP_SERVER, cls.SMTP_PORT) as server:
-                server.starttls()
-                server.login(cls.SENDER_EMAIL, cls.SENDER_PASSWORD)
-                server.send_message(msg)
-            
-            cls.logger.info("Email sent successfully: To=%s Subject=%s", recipient_email, subject)
-            return True
-        except Exception as e:
+        provider = cls.EMAIL_PROVIDER
+
+        if provider == "brevo" or (provider == "auto" and cls.BREVO_API_KEY):
+            return cls._send_via_brevo(
+                recipient_email, subject, body, html_body
+            )
+
+        # Render free web services cannot reach SMTP ports 25/465/587.
+        # Do not silently fall back to SMTP in production, because that makes
+        # the API appear to work while the message is never delivered.
+        if provider == "auto" and (
+            os.getenv("RENDER_SERVICE_ID")
+            or os.getenv("RENDER")
+            or os.getenv("RENDER_SERVICE_NAME")
+        ):
             cls.logger.error(
-                "Email send error: %s", e,
-                exc_info=True,
-                extra={"recipient_email": recipient_email, "subject": subject}
+                "No HTTPS email provider is configured for Render. "
+                "Set EMAIL_PROVIDER=brevo and BREVO_API_KEY/BREVO_SENDER_EMAIL."
             )
             return False
-    
+
+        if provider == "smtp":
+            return cls._send_via_smtp(
+                recipient_email, subject, body, html_body
+            )
+
+        cls.logger.error(
+            "No usable email provider configured. EMAIL_PROVIDER=%r BREVO_API_KEY=%s",
+            provider,
+            "configured" if cls.BREVO_API_KEY else "missing",
+        )
+        return False
+
     @classmethod
     def create_notification(
         cls,

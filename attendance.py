@@ -17,13 +17,20 @@ from models import Attendance, LeaveRequest, User, Worker
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
-# Three attendance sessions per business day.  Times are evaluated in India time
-# because Retail Mind is intended for the Indian retail market.
+# Two attendance sessions per business day (morning shift + evening shift).
+# Times are evaluated in India time because Retail Mind is intended for the
+# Indian retail market.
+#
+# 🔧 Attendance is not time-window restricted. The clock only classifies
+# records for reporting: before 2:00 PM = Morning, 2:00 PM onward = Afternoon.
+# This means early-opening shops and late operations can still record attendance
+# without losing data or relying on a client-side clock window.
 ATTENDANCE_TZ = ZoneInfo("Asia/Kolkata")
 ATTENDANCE_SESSIONS = (
-    ("morning", 6, 12, "Morning", "6:00 AM–12:00 PM"),
-    ("afternoon", 12, 17, "Afternoon", "12:00 PM–5:00 PM"),
-    ("evening", 17, 24, "Evening", "5:00 PM–12:00 AM"),
+    ("morning", 0, 14, "Morning", "Before 2:00 PM"),
+    # Keep the internal key "evening" for backward compatibility with
+    # existing production rows, but present it to users as Afternoon.
+    ("evening", 14, 24, "Afternoon", "2:00 PM onward"),
 )
 SESSION_META_KEY = "_retail_mind_sessions"
 
@@ -32,13 +39,36 @@ def _local_now():
     return datetime.now(ATTENDANCE_TZ)
 
 
+def _serialize_attendance_time(value):
+    """Serialize DB-naive attendance timestamps as explicit IST offsets.
+
+    Production attendance rows are stored as naive datetimes representing
+    Asia/Kolkata wall-clock time. Returning them without an offset makes
+    clients incorrectly interpret them as UTC. Keep the database unchanged,
+    but make the API contract explicit.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=ATTENDANCE_TZ)
+    return value.isoformat()
+
+
 def _session_for_time(value=None):
     value = value or _local_now()
     hour = value.hour
+
+    # Attendance is never rejected because of the clock. The timestamp only
+    # decides which reporting session owns the check-in:
+    #   00:00–13:59 -> Morning
+    #   14:00–23:59 -> Afternoon
     for key, start_hour, end_hour, label, window in ATTENDANCE_SESSIONS:
         if start_hour <= hour < end_hour:
             return key, label, window
-    return None, None, None
+
+    # Defensive fallback; ATTENDANCE_SESSIONS covers every hour.
+    key, _start, _end, label, window = ATTENDANCE_SESSIONS[0]
+    return key, label, window
 
 
 def _session_meta(attendance):
@@ -61,6 +91,75 @@ def _save_session_meta(attendance, data):
     attendance.notes = json.dumps(data, separators=(",", ":"), default=str)
 
 
+def _session_breakdown(attendance):
+    """Per-session (morning/evening) hours + status for one Attendance row.
+
+    Single source of truth for turning the JSON session meta into
+    (sessions_out, total_hours) — used by every endpoint that needs a
+    correct multi-session total, so a fix here can't drift out of sync
+    across endpoints the way the payroll-undercount bug did (each endpoint
+    had its own copy of "sum working_hours" with only one copy fixed).
+
+    Returns (sessions_out: dict, total_hours: float) where sessions_out is
+    keyed by session key ("morning"/"evening") with label/window/times/hours,
+    including live elapsed time for a currently open session.
+    """
+    meta = _session_meta(attendance)
+    session_data = meta.get(SESSION_META_KEY, {})
+    sessions_out = {}
+    total_hours = 0.0
+
+    for key, _start, _end, label, window in ATTENDANCE_SESSIONS:
+        s = session_data.get(key)
+        if not s:
+            continue
+        hours = float(s.get("working_hours") or 0.0)
+        total_hours += hours
+        sessions_out[key] = {
+            "session_key": "afternoon" if key == "evening" else key,
+            "label": label,
+            "window": window,
+            "check_in_time": s.get("check_in_time"),
+            "check_out_time": s.get("check_out_time"),
+            "working_hours": hours,
+        }
+
+    active_session = session_data.get("active_session")
+    if active_session and attendance.check_in_time and not attendance.check_out_time:
+        # An active session starts with working_hours=0 in the database, but
+        # the UI/payroll must still show elapsed time after an app-data clear.
+        # Update the existing session entry when it is already present in the
+        # session metadata instead of only adding elapsed time for a missing key.
+        elapsed = (_local_now().replace(tzinfo=None) - attendance.check_in_time).total_seconds() / 3600
+        elapsed = max(0.0, elapsed)
+        existing = sessions_out.get(active_session)
+        if existing is not None:
+            previous_hours = float(existing.get("working_hours") or 0.0)
+            existing["check_in_time"] = existing.get(
+                "check_in_time",
+                attendance.check_in_time.isoformat(),
+            )
+            existing["check_out_time"] = None
+            existing["working_hours"] = elapsed
+            total_hours += elapsed - previous_hours
+        else:
+            match = next((x for x in ATTENDANCE_SESSIONS if x[0] == active_session), None)
+            sessions_out[active_session] = {
+                "label": match[3] if match else active_session.title(),
+                "window": match[4] if match else "",
+                "check_in_time": attendance.check_in_time.isoformat(),
+                "check_out_time": None,
+                "working_hours": elapsed,
+            }
+            total_hours += elapsed
+
+    if not sessions_out and attendance.working_hours:
+        # Fall back for rows saved before per-session meta existed.
+        total_hours = float(attendance.working_hours)
+
+    return sessions_out, round(total_hours, 2)
+
+
 def _completed_session_message(meta, current_key):
     completed = meta.get(SESSION_META_KEY, {})
     session = completed.get(current_key)
@@ -71,7 +170,9 @@ def _completed_session_message(meta, current_key):
         for key, start_hour, end_hour, session_label, window in ATTENDANCE_SESSIONS:
             if key != current_key and not completed.get(key, {}).get("check_in_time"):
                 remaining.append(f"{session_label} ({window})")
-        next_text = f" Try {remaining[0]}." if remaining else " All three sessions are already marked for today."
+        # FIX: leftover text from an earlier 3-session design. There are
+        # only two sessions (morning/evening) now — see ATTENDANCE_SESSIONS.
+        next_text = f" Try {remaining[0]}." if remaining else " Both sessions are already marked for today."
         return f"{label} attendance already marked for today.{next_text}"
     return None
 
@@ -505,11 +606,39 @@ def get_employee_attendance(
         query = query.filter(Attendance.attendance_date <= to_dt)
     
     records = query.order_by(desc(Attendance.attendance_date)).all()
+
+    # FIX (payroll correctness): Attendance.working_hours only ever reflects
+    # the MOST RECENTLY completed/active session for that day (it gets
+    # overwritten on every check-in/check-out - see employee_check_in /
+    # employee_check_out above). With two sessions per day now supported,
+    # a worker who does Morning (e.g. 4 hrs) then Evening (e.g. 4 hrs)
+    # would have their Morning hours silently overwritten and lost from
+    # any total that just reads `working_hours` directly - understating
+    # their pay by half. The full per-session breakdown is already
+    # durably stored in the JSON session meta (see _session_meta), so we
+    # sum it here and expose it as `total_working_hours` alongside a
+    # `sessions` breakdown, without changing the existing `working_hours`
+    # field (kept for backward compatibility with any existing caller).
+    records_out = []
+    for r in records:
+        sessions_out, total_hours = _session_breakdown(r)
+        records_out.append({
+            "id": r.id,
+            "employee_id": r.employee_id,
+            "worker_id": r.worker_id,
+            "attendance_date": str(r.attendance_date),
+            "check_in_time": _serialize_attendance_time(r.check_in_time),
+            "check_out_time": _serialize_attendance_time(r.check_out_time),
+            "status": r.status,
+            "working_hours": float(r.working_hours or 0.0),  # last/active session only - kept for backward compat
+            "total_working_hours": total_hours,               # correct value to use for payroll
+            "sessions": sessions_out,
+        })
     
     return {
         "employee_id": employee_id,
-        "records": records,
-        "total_records": len(records)
+        "records": records_out,
+        "total_records": len(records_out)
     }
 
 @router.get("/date/{date_str}")
@@ -541,13 +670,36 @@ def get_attendance_by_date(
     absent = sum(1 for r in records if r.status == "ABSENT")
     leave = sum(1 for r in records if r.status == "LEAVE")
 
+    # 🔧 Enrich each record with the same per-session (morning/evening)
+    # breakdown that get_employee_attendance already exposes. Previously
+    # this "today" endpoint returned raw rows with no session detail at
+    # all, so the mobile UI's per-session (Morning/Evening) cards had no
+    # way to show correct status/hours for the shopkeeper's own attendance
+    # — only for workers, since only the worker-attendance-history endpoint
+    # included this. Both now agree.
+    records_out = []
+    for r in records:
+        sessions_out, total_hours = _session_breakdown(r)
+        records_out.append({
+            "id": r.id,
+            "employee_id": r.employee_id,
+            "worker_id": r.worker_id,
+            "attendance_date": str(r.attendance_date),
+            "check_in_time": r.check_in_time.isoformat() if r.check_in_time else None,
+            "check_out_time": r.check_out_time.isoformat() if r.check_out_time else None,
+            "status": r.status,
+            "working_hours": float(r.working_hours or 0.0),
+            "total_working_hours": total_hours,
+            "sessions": sessions_out,
+        })
+
     return {
         "date": att_date,
         "total_records": len(records),
         "present": present,
         "absent": absent,
         "leave": leave,
-        "records": records
+        "records": records_out
     }
 
 # ==================== LEAVE MANAGEMENT ====================
@@ -762,14 +914,17 @@ def get_employee_analytics(
     present = sum(1 for r in records if r.status == "PRESENT")
     absent = sum(1 for r in records if r.status == "ABSENT")
     leave = sum(1 for r in records if r.status == "LEAVE")
-    total_hours = sum(r.working_hours for r in records if r.working_hours)
-    
+    total_hours = 0.0
+    for r in records:
+        _sessions, day_total = _session_breakdown(r)
+        total_hours += day_total
+
     return {
         "employee_id": employee_id,
         "period_days": days,
         "present": present,
         "absent": absent,
         "leave": leave,
-        "total_working_hours": total_hours,
+        "total_working_hours": round(total_hours, 2),
         "attendance_percentage": (present / len(records) * 100) if records else 0
     }

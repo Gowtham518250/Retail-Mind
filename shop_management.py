@@ -571,6 +571,46 @@ def get_tax_config(user_id: int = Depends(check_current_user), db: Session = Dep
         raise HTTPException(status_code=404, detail=str(e))
 
 
+
+
+@router.get("/online-settings")
+def get_online_settings(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Owner-only settings used exclusively by online marketplace orders."""
+    try:
+        profile = ShopService.get_shop_profile(db, user_id)
+        return {
+            "is_online_store_enabled": bool(profile.is_online_store_enabled),
+            "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.put("/online-settings")
+def set_online_settings(
+    data: dict,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update online-only setup/service fee without changing POS prices."""
+    try:
+        profile = ShopService.get_shop_profile(db, user_id)
+        try:
+            fee = round(float(data.get("online_setup_fee", 0)), 2)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="Online setup fee must be a valid number.")
+        if fee < 0 or fee > 100000:
+            raise HTTPException(status_code=422, detail="Online setup fee must be between ₹0 and ₹100000.")
+        profile.online_setup_fee = fee
+        db.commit()
+        return {"success": True, "online_setup_fee": fee, "message": "Online-only setup fee updated."}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update online settings: {str(e)}")
+
 @router.get("/publish-status")
 def get_publish_status(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Get the shop's online store publishing status"""
@@ -588,6 +628,11 @@ def set_publish_status(data: dict, user_id: int = Depends(check_current_user), d
         is_published = data.get("is_published", False)
         profile = ShopService.get_shop_profile(db, user_id)
         profile.is_online_store_enabled = is_published
+        # Enabling Online Shopping means the shop is intentionally active in
+        # the customer marketplace. Repair legacy NULL active flags at the same
+        # time so older shop profiles become discoverable immediately.
+        if is_published:
+            profile.is_active = True
         try:
             db.commit()
         except Exception as e:
@@ -610,6 +655,7 @@ def publish_marketplace(data: dict, user_id: int = Depends(check_current_user), 
         profile.latitude = data.get("latitude")
         profile.longitude = data.get("longitude")
         profile.is_online_store_enabled = True
+        profile.is_active = True
         
         if data.get("address_nickname"):
             profile.location = data.get("address_nickname")

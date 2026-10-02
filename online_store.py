@@ -13,16 +13,35 @@ import math
 import json
 import logging
 import secrets
+import hashlib
+import os
+import re
+from urllib.parse import quote
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta, date
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_, text
 
 from db import get_db
-from models import User, ShopProfile, Product, OnlineOrder, Invoice, InvoiceLineItem, UniversalTransaction, OnlineCustomerAuth, sales
+from models import (
+    User,
+    ShopProfile,
+    Product,
+    OnlineOrder,
+    Invoice,
+    InvoiceLineItem,
+    UniversalTransaction,
+    OnlineCustomerAuth,
+    OnlineOrderDeliveryOtp,
+    ShopReview,
+    CustomerPasswordReset,
+    CustomerPasswordResetOtp,
+    sales,
+)
 from security import (
     hash_password, verify_password, create_access_token,
     ROLE_CUSTOMER, ROLE_OWNER,
@@ -52,6 +71,31 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
     return 0.0
 
 logger = logging.getLogger(__name__)
+
+def _lock_order_idempotency(db: Session, key: Optional[str]) -> None:
+    """Serialize duplicate checkout requests for the same idempotency key.
+
+    The web client intentionally reuses its key when a network response is
+    lost. PostgreSQL advisory locks make two simultaneous retries converge on
+    the same order instead of both decrementing stock and creating duplicates.
+    Other database engines simply skip the database-specific lock.
+    """
+    if not key:
+        return
+    try:
+        bind = db.get_bind()
+        if getattr(bind.dialect, "name", "") == "postgresql":
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:idempotency_key))"),
+                {"idempotency_key": key},
+            )
+    except Exception:
+        # Never make checkout unavailable just because the optional
+        # serialization primitive is unsupported by a local/dev database.
+        logger.debug("Idempotency advisory lock unavailable", exc_info=True)
+
+from realtime import publish_realtime_event
+from audit_logging import AuditAction, AuditService
 
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
@@ -99,9 +143,10 @@ class CustomerLoginPhone(BaseModel):
     password: str
 
 class CustomerForgot(BaseModel):
-    # Support forgot by email or phone
+    """Legacy compatibility payload for the customer password-reset request."""
     email: Optional[str] = None
     phone: Optional[str] = None
+    shop_id: Optional[int] = Field(None, ge=1)
 
     @field_validator("email")
     def validate_email(cls, v):
@@ -111,6 +156,39 @@ class CustomerForgot(BaseModel):
             raise ValueError("value is not a valid email address")
         return v.lower().strip()
 
+class CustomerPasswordResetOtpRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    def validate_email(cls, v):
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("value is not a valid email address")
+        return v
+
+class CustomerVerifyPasswordResetOtp(BaseModel):
+    email: str
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+    @field_validator("email")
+    def validate_email(cls, v):
+        return v.strip().lower()
+
+class CustomerResetPassword(BaseModel):
+    reset_token: str = Field(..., min_length=32, max_length=200)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    def validate_new_password(cls, v):
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one number.")
+        return v
+
+
 class OrderItem(BaseModel):
     product_id: int
     quantity: int = Field(..., gt=0, le=1000)
@@ -119,6 +197,8 @@ class PlaceOrder(BaseModel):
     shop_id: int
     items: List[OrderItem] = Field(..., min_length=1)
     delivery_address: str = Field(..., min_length=5)
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
+    coupon_code: Optional[str] = Field(None, min_length=3, max_length=50)
 
 class GuestOrder(BaseModel):
     shop_id: int
@@ -126,7 +206,51 @@ class GuestOrder(BaseModel):
     phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
     delivery_address: str = Field(..., min_length=5, max_length=500)
     items: List[OrderItem] = Field(..., min_length=1, max_length=50)
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
+    coupon_code: Optional[str] = Field(None, min_length=3, max_length=50)
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
+class OwnerOrderAction(BaseModel):
+    """Optional verification payload for owner order state changes."""
+    customer_otp: Optional[str] = Field(
+        None,
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{6}$",
+    )
+
+
+class OrderRating(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = Field(None, max_length=500)
+
+
+_SHOPPING_STOP_WORDS = {
+    "a","an","the","for","of","in","on","at","to","with","from","near","me",
+    "shop","shops","store","stores","product","products","item","items",
+    "cheap","cheapest","low","lowest","price","prices","budget","best","top",
+    "good","highest","rated","rating","ratings","under","below","less","than",
+    "show","find","give","want","need","please","available","online","nearby",
+}
+
+
+def _shopping_tokens(query: str) -> list[str]:
+    tokens = re.findall(r"[a-z0-9]+", query.lower())
+    return [t for t in tokens if len(t) >= 2 and t not in _SHOPPING_STOP_WORDS][:6]
+
+
+def _extract_max_price(query: str) -> Optional[float]:
+    match = re.search(
+        r"(?:under|below|less\s+than|upto|up\s+to)\s*(?:₹|rs\.?\s*)?(\d+(?:\.\d+)?)",
+        query.lower(),
+    )
+    return float(match.group(1)) if match else None
+
+
+def _shop_reputation(shop: ShopProfile) -> dict:
+    rating = float(getattr(shop, "rating_score", 0.0) or 0.0)
+    count = int(getattr(shop, "rating_count", 0) or 0)
+    return {"rating": round(rating, 2), "rating_count": count}
+
 
 
 # =====================
@@ -141,32 +265,56 @@ def register_customer(
 ):
     """Register a new customer account — supports phone-only (no email required)"""
 
-    # ── Uniqueness check by PHONE (primary) ──────────────────────────────
+    # ── Normalize the account identity once ───────────────────────────────
+    normalized_registration_email = (
+        data.email.strip().lower() if data.email and data.email.strip() else None
+    )
+    name = sanitize_input(data.name, "name")
+
+    # ── Phone is the primary customer identity. ──────────────────────────
+    # Guest checkout historically created an inactive placeholder account
+    # using the customer's phone. When that same customer later registers,
+    # upgrade the placeholder in-place so the existing orders stay attached
+    # to the same customer_id instead of being lost from order history.
     existing_phone = db.query(OnlineCustomerAuth).filter(
         OnlineCustomerAuth.phone == data.phone
     ).first()
-    if existing_phone:
-        raise HTTPException(status_code=409, detail="Phone number already registered. Please login instead.")
 
-    # ── Uniqueness check by EMAIL only when email is provided ────────────
-    if data.email:
+    if existing_phone:
+        if existing_phone.is_active:
+            raise HTTPException(
+                status_code=409,
+                detail="Phone number already registered. Please login instead.",
+            )
+
+        existing_phone.user_name = name
+        existing_phone.email = normalized_registration_email
+        existing_phone.city = data.city
+        existing_phone.address = data.address
+        existing_phone.password = hash_password(data.password)
+        existing_phone.is_active = True
+        customer = existing_phone
+    else:
+        customer = OnlineCustomerAuth(
+            user_name=name,
+            email=normalized_registration_email,
+            phone=data.phone,
+            city=data.city,
+            address=data.address,
+            password=hash_password(data.password),
+            is_active=data.is_active if data.is_active is not None else True,
+        )
+        db.add(customer)
+
+    # ── Email must remain unique when supplied. ──────────────────────────
+    if normalized_registration_email:
         existing_email = db.query(OnlineCustomerAuth).filter(
-            OnlineCustomerAuth.email == data.email
+            func.lower(func.trim(OnlineCustomerAuth.email)) ==
+            normalized_registration_email
         ).first()
-        if existing_email:
+        if existing_email and existing_email.id != customer.id:
             raise HTTPException(status_code=409, detail="Email already registered.")
 
-    name = sanitize_input(data.name, "name")
-    customer = OnlineCustomerAuth(
-        user_name=name,
-        email=data.email,  # may be None if not provided
-        phone=data.phone,
-        city=data.city,
-        address=data.address,
-        password=hash_password(data.password),
-        is_active=data.is_active if data.is_active is not None else True,
-    )
-    db.add(customer)
     try:
         db.commit()
         db.refresh(customer)
@@ -216,7 +364,11 @@ def customer_login(
     if data.phone:
         user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
     if not user and data.email:
-        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
+        normalized_login_email = data.email.strip().lower()
+        user = db.query(OnlineCustomerAuth).filter(
+            func.lower(func.trim(OnlineCustomerAuth.email)) ==
+            normalized_login_email
+        ).first()
 
     if not user or not verify_password(data.password, user.password):
         record_login_failure(ip)
@@ -229,7 +381,44 @@ def customer_login(
         "token_type": "bearer",
         "customer_id": user.id,
         "name": user.user_name,
-        "customer": {"id": user.id, "name": user.user_name, "phone": user.phone},
+        "email": user.email,
+        "phone": user.phone,
+        "address": user.address,
+        "city": user.city,
+        "customer": {
+            "id": user.id,
+            "name": user.user_name,
+            "email": user.email,
+            "phone": user.phone,
+            "address": user.address,
+            "city": user.city,
+        },
+    }
+
+
+@router.get("/customer/me")
+def get_current_customer(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(customer_only),
+):
+    """Return the authenticated storefront customer's account profile."""
+    customer_id = int(current_user["user_id"])
+    user = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == customer_id,
+        OnlineCustomerAuth.is_active == True,
+    ).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Customer account is no longer available.")
+
+    return {
+        "customer": {
+            "id": user.id,
+            "name": user.user_name,
+            "email": user.email,
+            "phone": user.phone,
+            "address": user.address,
+            "city": user.city,
+        }
     }
 
 
@@ -260,58 +449,453 @@ def customer_login_phone(
     }
 
 
+def _customer_reset_generic_message():
+    return {
+        "message": "If this account is registered with an email, a password reset OTP has been sent."
+    }
+
+
+def _generate_customer_reset_otp() -> str:
+    return f"{secrets.randbelow(900000) + 100000:06d}"
+
+
+def _customer_reset_token_hash(value: str) -> str:
+    return hashlib.sha256(value.strip().encode("utf-8")).hexdigest()
+
+
+@router.post("/customer/request-password-reset-otp")
+def request_customer_password_reset_otp(
+    data: CustomerPasswordResetOtpRequest,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
+):
+    """Generate and email a backend-owned OTP for an online customer."""
+    normalized_email = data.email.strip().lower()
+
+    # Match normalized input against normalized stored data. This handles
+    # existing accounts whose email was stored with different casing or
+    # accidental leading/trailing spaces before registration was normalized.
+    user = db.query(OnlineCustomerAuth).filter(
+        func.lower(func.trim(OnlineCustomerAuth.email)) == normalized_email
+    ).first()
+
+    # Keep enumeration-resistant response behavior, but do not make the
+    # frontend believe an OTP was sent when this customer has no matching
+    # account/email. The caller can keep the same generic wording while using
+    # success=false to avoid advancing to OTP verification.
+    if not user or not user.email or not EmailNotificationService:
+        return {
+            "success": False,
+            "email_sent": False,
+            **_customer_reset_generic_message(),
+        }
+
+    existing = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.used == False,
+    ).all()
+    for challenge in existing:
+        challenge.used = True
+
+    otp = _generate_customer_reset_otp()
+    challenge = CustomerPasswordResetOtp(
+        customer_id=user.id,
+        otp_hash=_customer_reset_token_hash(otp),
+        otp_expires_at=datetime.utcnow() + timedelta(minutes=10),
+        otp_attempts=0,
+        verified_at=None,
+        reset_token_hash=None,
+        reset_token_expires_at=None,
+        used=False,
+    )
+    db.add(challenge)
+
+    subject, body = EmailNotificationService.send_otp_template(
+        otp,
+        "Customer Password Reset",
+    )
+
+    try:
+        sent = EmailNotificationService.send_email(
+            recipient_email=user.email,
+            subject=subject,
+            body=body,
+        )
+        if not sent:
+            db.rollback()
+            logger.error(
+                "Customer password reset OTP delivery failed for customer_id=%s email=%s",
+                user.id,
+                user.email,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Password reset email could not be delivered. Please try again later.",
+            )
+
+        db.commit()
+        return {
+            "success": True,
+            "email_sent": True,
+            **_customer_reset_generic_message(),
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Customer password reset OTP request failed for customer_id=%s",
+            user.id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Password reset email could not be delivered. Please try again later.",
+        )
+
+
+@router.post("/customer/verify-password-reset-otp")
+def verify_customer_password_reset_otp(
+    data: CustomerVerifyPasswordResetOtp,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
+):
+    """Verify the backend-generated OTP and issue a short-lived reset token."""
+    normalized_email = data.email.strip().lower()
+
+    user = db.query(OnlineCustomerAuth).filter(
+        func.lower(func.trim(OnlineCustomerAuth.email)) == normalized_email
+    ).first()
+
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset OTP.",
+        )
+
+    challenge = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.used == False,
+        CustomerPasswordResetOtp.otp_expires_at > datetime.utcnow(),
+    ).order_by(CustomerPasswordResetOtp.id.desc()).with_for_update().first()
+
+    if not challenge:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset OTP.",
+        )
+
+    if challenge.otp_attempts >= 5:
+        challenge.used = True
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail="Too many incorrect OTP attempts. Request a new OTP.",
+        )
+
+    if challenge.otp_hash != _customer_reset_token_hash(data.otp):
+        challenge.otp_attempts += 1
+        if challenge.otp_attempts >= 5:
+            challenge.used = True
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset OTP.",
+        )
+
+    reset_token = secrets.token_urlsafe(48)
+    challenge.reset_token_hash = _customer_reset_token_hash(reset_token)
+    challenge.reset_token_expires_at = datetime.utcnow() + timedelta(minutes=10)
+    challenge.verified_at = datetime.utcnow()
+    challenge.otp_attempts = challenge.otp_attempts
+    db.commit()
+
+    return {
+        "message": "OTP verified successfully.",
+        "reset_token": reset_token,
+        "expires_in": 600,
+    }
+
+
+@router.post("/customer/reset-password")
+def reset_customer_password(
+    data: CustomerResetPassword,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(check_rate_limit),
+):
+    """Consume the verified OTP reset token and set the customer password."""
+    token_hash = _customer_reset_token_hash(data.reset_token)
+
+    challenge = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.reset_token_hash == token_hash,
+        CustomerPasswordResetOtp.used == False,
+        CustomerPasswordResetOtp.verified_at.isnot(None),
+        CustomerPasswordResetOtp.reset_token_expires_at > datetime.utcnow(),
+    ).with_for_update().first()
+
+    if not challenge:
+        raise HTTPException(
+            status_code=400,
+            detail="Password reset authorization is invalid or expired. Request a new OTP.",
+        )
+
+    user = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == challenge.customer_id
+    ).with_for_update().first()
+
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="Customer account is unavailable.")
+
+    user.password = hash_password(data.new_password)
+    challenge.used = True
+
+    db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.id != challenge.id,
+        CustomerPasswordResetOtp.used == False,
+    ).update({"used": True}, synchronize_session=False)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to reset password. Please try again.",
+        )
+
+    return {
+        "message": "Password reset successfully. You can now sign in with your new password."
+    }
+
+
 @router.post("/customer/forgot-password")
 def forgot_password(
     data: CustomerForgot,
     db: Session = Depends(get_db),
     _rl: None = Depends(check_rate_limit),
 ):
-    """Generate a new temporary password and email it to the customer.
-
-    🔧 FIX: this previously queried the customer and then did nothing with
-    the result — no email was ever sent, no password was ever changed. It
-    just returned a generic success message regardless, which made the
-    "forgot password" flow completely non-functional while looking like
-    it worked from the client's perspective.
-
-    Always returns the same generic message whether or not the account
-    exists, to avoid leaking which emails are registered.
-    """
-    user = None
-    if data.email:
-        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.email == data.email).first()
-    elif data.phone:
-        user = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
-
-    if user and user.email:
-        try:
-            # Generate a secure, random temporary password (not a
-            # predictable/short one) and store only its bcrypt hash.
-            temp_password = secrets.token_urlsafe(9)  # ~12 char URL-safe string
-            user.password = hash_password(temp_password)
-            db.commit()
-
-            if EmailNotificationService:
-                subject, body = EmailNotificationService.welcome_credentials_template(
-                    user.user_name, temp_password, "Customer (Password Reset)"
-                )
-                EmailNotificationService.create_notification(
-                    db=db,
-                    recipient_email=user.email,
-                    subject=subject,
-                    body=body,
-                    event_type="PASSWORD_RESET",
-                )
-        except Exception as e:
-            logger.error(f"Failed to process password reset for customer: {e}")
-            db.rollback()
-
-    return {"message": "If this account is registered with an email, a new password has been sent to it."}
+    """Compatibility alias for clients that still call /forgot-password."""
+    if not data.email:
+        return _customer_reset_generic_message()
+    request = CustomerPasswordResetOtpRequest(email=data.email)
+    return request_customer_password_reset_otp(request, db, _rl)
 
 
 # =====================
 # SHOP DISCOVERY
 # =====================
+@router.get("/marketplace/search")
+def marketplace_search(
+    q: str = Query("", max_length=80),
+    mode: str = Query("all", pattern=r"^(all|shops|products)$"),
+    limit: int = Query(24, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Global online marketplace search.
+
+    Only shops that explicitly enabled online shopping are visible.
+    """
+    query = sanitize_input(q or "", "q").strip()
+    shops = []
+    products = []
+
+    if not query:
+        shop_rows = (
+            db.query(ShopProfile)
+            .filter(
+                ShopProfile.is_online_store_enabled == True,
+                (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
+            )
+            .order_by(ShopProfile.shop_name.asc())
+            .limit(limit)
+            .all()
+        )
+    else:
+        like = f"%{query}%"
+        shop_rows = (
+            db.query(ShopProfile)
+            .filter(
+                ShopProfile.is_online_store_enabled == True,
+                (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
+                or_(
+                    ShopProfile.shop_name.ilike(like),
+                    ShopProfile.city.ilike(like),
+                    ShopProfile.address.ilike(like),
+                ),
+            )
+            .order_by(ShopProfile.shop_name.asc())
+            .limit(limit)
+            .all()
+        )
+
+    if mode in ("all", "shops"):
+        shops = [
+            {
+                "shop_id": shop.shop_id,
+                "shop_name": shop.shop_name,
+                "tagline": shop.shop_tagline or "",
+                "address": shop.address or "",
+                "city": shop.city or "",
+                "phone": shop.phone or "",
+                "logo_url": shop.logo_url,
+                **_shop_reputation(shop),
+            }
+            for shop in shop_rows
+        ]
+
+    if mode in ("all", "products") and query:
+        tokens = _shopping_tokens(query)
+        max_price = _extract_max_price(query)
+        conditions = []
+        for token in tokens or [query.lower()]:
+            token_like = f"%{token}%"
+            conditions.append(
+                or_(
+                    Product.product_name.ilike(token_like),
+                    Product.category.ilike(token_like),
+                    Product.description.ilike(token_like),
+                )
+            )
+        product_query = (
+            db.query(Product, ShopProfile)
+            .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
+            .filter(
+                ShopProfile.is_online_store_enabled == True,
+                (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
+                Product.is_active == True,
+                Product.current_stock > 0,
+                or_(*conditions),
+            )
+        )
+        if max_price is not None:
+            product_query = product_query.filter(Product.unit_price <= max_price)
+        rows = product_query.order_by(Product.unit_price.asc()).limit(limit * 3).all()
+        products = [
+            {
+                "product_id": product.id,
+                "product_name": product.product_name,
+                "category": product.category,
+                "price": float(product.unit_price),
+                "stock_available": int(product.current_stock or 0),
+                "shop_id": shop.shop_id,
+                "shop_name": shop.shop_name,
+                "shop_address": shop.address or "",
+                **_shop_reputation(shop),
+            }
+            for product, shop in rows
+        ]
+
+    return {"query": query, "mode": mode, "shops": shops, "products": products}
+
+
+@router.get("/ai/recommend")
+def ai_shopping_recommendations(
+    q: str = Query(..., min_length=2, max_length=120),
+    limit: int = Query(10, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    """Customer shopping assistant.
+
+    This is a deterministic AI-style ranking layer: it understands common
+    shopping intents (cheap/budget/under-price/highest-rated) and searches
+    every online-enabled shop before ranking the best matches.
+    """
+    query = sanitize_input(q, "q").strip()
+    lower = query.lower()
+    wants_low_price = any(word in lower for word in ("cheap", "cheapest", "low price", "lowest price", "budget", "affordable"))
+    wants_rating = any(word in lower for word in ("best", "highest rated", "top rated", "rating", "rated"))
+    max_price = _extract_max_price(query)
+    tokens = _shopping_tokens(query)
+
+    conditions = []
+    for token in tokens or [query.lower()]:
+        like = f"%{token}%"
+        conditions.append(
+            or_(
+                Product.product_name.ilike(like),
+                Product.category.ilike(like),
+                Product.description.ilike(like),
+            )
+        )
+
+    product_query = (
+        db.query(Product, ShopProfile)
+        .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
+        .filter(
+            ShopProfile.is_online_store_enabled == True,
+            (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
+            Product.is_active == True,
+            Product.current_stock > 0,
+            or_(*conditions),
+        )
+    )
+    if max_price is not None:
+        product_query = product_query.filter(Product.unit_price <= max_price)
+
+    rows = product_query.limit(250).all()
+    candidates = []
+    for product, shop in rows:
+        rating = float(getattr(shop, "rating_score", 0.0) or 0.0)
+        rating_count = int(getattr(shop, "rating_count", 0) or 0)
+        price = float(product.unit_price)
+        candidates.append({
+            "product_id": product.id,
+            "product_name": product.product_name,
+            "category": product.category,
+            "price": price,
+            "stock_available": int(product.current_stock or 0),
+            "shop_id": shop.shop_id,
+            "shop_name": shop.shop_name,
+            "shop_address": shop.address or "",
+            "rating": round(rating, 2),
+            "rating_count": rating_count,
+        })
+
+    if wants_low_price:
+        candidates.sort(key=lambda x: (x["price"], -x["rating"], -x["rating_count"]))
+    elif wants_rating:
+        candidates.sort(key=lambda x: (-x["rating"], -x["rating_count"], x["price"]))
+    else:
+        candidates.sort(key=lambda x: (x["price"], -x["rating"], -x["rating_count"]))
+
+    recommendations = candidates[:limit]
+    if not recommendations:
+        response = "I couldn't find that product in any shop that has Online Shopping enabled."
+    elif wants_low_price:
+        response = f"I found {len(recommendations)} matching options and ranked them by lowest price, then shop rating."
+    elif wants_rating:
+        response = f"I found {len(recommendations)} matching options and ranked them by shop rating, then price."
+    else:
+        response = f"I found {len(recommendations)} matching options and ranked them by price and shop rating."
+
+    return {
+        "query": query,
+        "intent": {
+            "low_price": wants_low_price,
+            "rating_priority": wants_rating,
+            "max_price": max_price,
+        },
+        "response": response,
+        "recommendations": recommendations,
+    }
+
+
+@router.get("/customer-ai")
+def customer_ai_legacy_alias(
+    q: str = Query(..., min_length=2, max_length=120),
+    limit: int = Query(10, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    """Backward-compatible alias for older customer-web builds.
+
+    The canonical route is /store/ai/recommend. Keeping this alias prevents
+    an older deployed web client from turning a working AI backend into a
+    false "AI unavailable" screen during rolling deployments.
+    """
+    return ai_shopping_recommendations(q=q, limit=limit, db=db)
+
+
 @router.get("/shops/nearby")
 def find_nearby_shops(
     city: Optional[str] = None,
@@ -329,7 +913,7 @@ def find_nearby_shops(
     2. ?lat=19.0&lng=72.8&radius_km=5 — GPS radius (Haversine formula)
     Only returns shops with is_online_store_enabled=True
     """
-    query = db.query(ShopProfile).filter(ShopProfile.is_online_store_enabled == True)
+    query = db.query(ShopProfile).filter(ShopProfile.is_online_store_enabled == True, (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)))
 
     if city:
         city_clean = sanitize_input(city, "city")
@@ -373,6 +957,7 @@ def find_nearby_shops(
                 "address": s.address,
                 "phone": s.phone,
                 "logo_url": s.logo_url,
+                **_shop_reputation(s),
             }
             for s in all_shops
         ],
@@ -394,18 +979,14 @@ def browse_shop_products(
     except ValueError:
         shop_id_int = 1
 
-    # Try online-enabled first, fallback to any shop profile
+    # Marketplace visibility is opt-in: disabled shops are never exposed.
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == shop_id_int,
         ShopProfile.is_online_store_enabled == True,
+        (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
     ).first()
     if not profile:
-        # Fallback: show products even if online store flag not set
-        profile = db.query(ShopProfile).filter(
-            ShopProfile.shop_id == shop_id_int,
-        ).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Shop not found.")
+        raise HTTPException(status_code=404, detail="Shop not found or Online Shopping is disabled.")
 
     # Show ALL active products (even if stock is 0 — shopkeeper may not have updated)
     q = db.query(Product).filter(
@@ -422,6 +1003,12 @@ def browse_shop_products(
         "shop_tagline": profile.shop_tagline or "",
         "shop_phone": profile.phone or "",
         "shop_address": profile.address or "",
+        "shop_city": profile.city or "",
+        "shop_logo_url": profile.logo_url,
+        "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),
+        "rating_count": int(getattr(profile, "rating_count", 0) or 0),
+        "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
+        "is_online": True,
         "products": [
             (lambda p, discount: {
                 "id": p.id,
@@ -452,28 +1039,42 @@ def place_order(
     """Place an online order at a specific shop"""
     customer_id = current_user["user_id"]
 
-    # Validate shop.
-    # Browse requests already fall back to shops whose online-store flag is not enabled,
-    # so order placement should also allow those shops when the shop record exists.
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    _lock_order_idempotency(db, idempotency_key)
+    if idempotency_key:
+        existing_order = db.query(OnlineOrder).filter(
+            OnlineOrder.shop_id == data.shop_id,
+            OnlineOrder.customer_id == customer_id,
+            OnlineOrder.idempotency_key == idempotency_key,
+        ).first()
+        if existing_order:
+            profile = db.query(ShopProfile).filter(
+                ShopProfile.shop_id == data.shop_id
+            ).first()
+            return {
+                "message": "Order already placed.",
+                "order_id": existing_order.id,
+                "shop_name": profile.shop_name if profile else "",
+                "total_amount": float(existing_order.total_amount),
+                "items": json.loads(existing_order.items_json),
+                "status": existing_order.order_status,
+                "duplicate": True,
+            }
+
+    # Online ordering is opt-in and enforced server-side.
     profile = db.query(ShopProfile).filter(
         ShopProfile.shop_id == data.shop_id,
         ShopProfile.is_online_store_enabled == True,
+        (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
     ).first()
     if not profile:
-        profile = db.query(ShopProfile).filter(
-            ShopProfile.shop_id == data.shop_id,
-        ).first()
-        if profile:
-            logger.warning(
-                "Shop found but online ordering flag is disabled for shop_id=%s; allowing fallback order placement.",
-                data.shop_id,
-            )
-    if not profile:
-        raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+        raise HTTPException(status_code=404, detail="Shop not found or Online Shopping is disabled.")
 
-    # Validate all items and calculate total
+    # Validate all items and calculate subtotal. Add the configured online-only
+    # setup fee once per order; never alter the product/POS price.
     order_items = []
-    total_amount = 0.0
+    inventory_changes = []
+    items_subtotal = 0.0
 
     for item in data.items:
         product = db.query(Product).with_for_update().filter(
@@ -489,12 +1090,17 @@ def place_order(
                 detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
             )
         product.current_stock -= item.quantity
+        inventory_changes.append({
+            "product_id": product.id,
+            "quantity": item.quantity,
+            "new_stock": float(product.current_stock),
+        })
         discount = get_active_discount(db, data.shop_id, product.category)
         price = float(product.unit_price)
         if discount > 0:
             price = round(price * (1.0 - discount / 100.0), 2)
         line_total = price * item.quantity
-        total_amount += line_total
+        items_subtotal += line_total
         order_items.append({
             "product_id": product.id,
             "product_name": product.product_name,
@@ -505,14 +1111,45 @@ def place_order(
         })
 
     delivery_address = sanitize_input(data.delivery_address, "delivery_address")
+    online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
+    discount_amount = 0.0
+    coupon_code = (data.coupon_code or "").strip().upper() or None
+
+    if coupon_code:
+        from models import RetailCoupon
+        from growth_suite import _coupon_value
+        coupon = db.query(RetailCoupon).filter(
+            RetailCoupon.shop_id == data.shop_id,
+            RetailCoupon.code == coupon_code,
+            RetailCoupon.is_active.is_(True),
+        ).first()
+        now = datetime.now(timezone.utc)
+        if not coupon:
+            raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
+        if coupon.starts_at and coupon.starts_at > now:
+            raise HTTPException(status_code=400, detail="Coupon is not active yet.")
+        if coupon.expires_at and coupon.expires_at < now:
+            raise HTTPException(status_code=400, detail="Coupon has expired.")
+        if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
+            raise HTTPException(status_code=400, detail="Coupon usage limit reached.")
+        discount_amount = _coupon_value(coupon, items_subtotal)
+        if discount_amount <= 0:
+            raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
+        coupon.used_count = int(coupon.used_count or 0) + 1
+
+    total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
 
     order = OnlineOrder(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
+        online_setup_fee=online_setup_fee,
+        coupon_code=coupon_code,
+        discount_amount=discount_amount,
         delivery_address=delivery_address,
         items_json=json.dumps(order_items),
         order_status="PENDING",
+        idempotency_key=idempotency_key,
     )
     db.add(order)
     try:
@@ -523,10 +1160,32 @@ def place_order(
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.created",
+        "shop_id": data.shop_id,
+        "order_id": order.id,
+        "customer_id": customer_id,
+        "status": "PENDING",
+        "total_amount": float(total_amount),
+    })
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "inventory.changed",
+        "shop_id": data.shop_id,
+        "reference_type": "ONLINE_ORDER",
+        "reference_id": str(order.id),
+        "changes": inventory_changes,
+    })
+
     return {
         "message": "Order placed successfully! The shop will confirm shortly.",
         "order_id": order.id,
         "shop_name": profile.shop_name,
+        "subtotal": round(items_subtotal, 2),
+        "discount_amount": discount_amount,
+        "coupon_code": coupon_code,
+        "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "items": order_items,
         "status": "PENDING",
@@ -570,6 +1229,31 @@ def place_guest_order(
     else:
         logger.info(f"No Firebase token provided for guest checkout, proceeding with unverified phone {data.phone}")
 
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    _lock_order_idempotency(db, idempotency_key)
+    if idempotency_key:
+        existing_order = db.query(OnlineOrder).filter(
+            OnlineOrder.shop_id == data.shop_id,
+            OnlineOrder.idempotency_key == idempotency_key,
+        ).first()
+        if existing_order:
+            existing_customer = db.query(OnlineCustomerAuth).filter(
+                OnlineCustomerAuth.id == existing_order.customer_id
+            ).first()
+            if existing_customer and existing_customer.phone == data.phone:
+                profile = db.query(ShopProfile).filter(
+                    ShopProfile.shop_id == data.shop_id
+                ).first()
+                return {
+                    "message": "Guest order already placed.",
+                    "order_id": existing_order.id,
+                    "shop_name": profile.shop_name if profile else "",
+                    "total_amount": float(existing_order.total_amount),
+                    "items": json.loads(existing_order.items_json),
+                    "status": existing_order.order_status,
+                    "duplicate": True,
+                }
+
     # 2. Validate shop
     try:
         profile = db.query(ShopProfile).filter(
@@ -577,17 +1261,11 @@ def place_guest_order(
             ShopProfile.is_online_store_enabled == True,
         ).first()
         if not profile:
-            profile = db.query(ShopProfile).filter(
-                ShopProfile.shop_id == data.shop_id,
-            ).first()
-            if profile:
-                logger.warning(
-                    "Shop found for guest order but online ordering flag is disabled for shop_id=%s; allowing fallback checkout.",
-                    data.shop_id,
-                )
-        if not profile:
-            logger.error(f"Shop not found: shop_id={data.shop_id}")
-            raise HTTPException(status_code=404, detail="Shop not found or not accepting online orders.")
+            logger.error(f"Shop not found or Online Shopping disabled: shop_id={data.shop_id}")
+            raise HTTPException(
+                status_code=404,
+                detail="Shop not found or Online Shopping is disabled.",
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -616,9 +1294,10 @@ def place_guest_order(
         
     customer_id = customer.id
 
-    # 3. Validate items and calculate total
+    # 3. Validate items and calculate subtotal
     order_items = []
-    total_amount = 0.0
+    inventory_changes = []
+    items_subtotal = 0.0
 
     for item in data.items:
         product = db.query(Product).with_for_update().filter(
@@ -634,12 +1313,17 @@ def place_guest_order(
                 detail=f"Insufficient stock for '{product.product_name}'. Available: {product.current_stock}"
             )
         product.current_stock -= item.quantity
+        inventory_changes.append({
+            "product_id": product.id,
+            "quantity": item.quantity,
+            "new_stock": float(product.current_stock),
+        })
         discount = get_active_discount(db, data.shop_id, product.category)
         price = float(product.unit_price)
         if discount > 0:
             price = round(price * (1.0 - discount / 100.0), 2)
         line_total = price * item.quantity
-        total_amount += line_total
+        items_subtotal += line_total
         order_items.append({
             "product_id": product.id,
             "product_name": product.product_name,
@@ -650,13 +1334,43 @@ def place_guest_order(
         })
 
     # 4. Create Order
+    online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
+    discount_amount = 0.0
+    coupon_code = (data.coupon_code or "").strip().upper() or None
+    if coupon_code:
+        from models import RetailCoupon
+        from growth_suite import _coupon_value
+        coupon = db.query(RetailCoupon).filter(
+            RetailCoupon.shop_id == data.shop_id,
+            RetailCoupon.code == coupon_code,
+            RetailCoupon.is_active.is_(True),
+        ).first()
+        now = datetime.now(timezone.utc)
+        if not coupon:
+            raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
+        if coupon.starts_at and coupon.starts_at > now:
+            raise HTTPException(status_code=400, detail="Coupon is not active yet.")
+        if coupon.expires_at and coupon.expires_at < now:
+            raise HTTPException(status_code=400, detail="Coupon has expired.")
+        if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
+            raise HTTPException(status_code=400, detail="Coupon usage limit reached.")
+        discount_amount = _coupon_value(coupon, items_subtotal)
+        if discount_amount <= 0:
+            raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
+        coupon.used_count = int(coupon.used_count or 0) + 1
+
+    total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
     order = OnlineOrder(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
+        online_setup_fee=online_setup_fee,
+        coupon_code=coupon_code,
+        discount_amount=discount_amount,
         delivery_address=sanitize_input(data.delivery_address, "address"),
         items_json=json.dumps(order_items),
         order_status="PENDING",
+        idempotency_key=idempotency_key,
     )
     db.add(order)
     try:
@@ -688,10 +1402,31 @@ def place_guest_order(
     except Exception as e:
         logger.error(f"Failed to send FCM notification: {e}")
 
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.created",
+        "shop_id": data.shop_id,
+        "order_id": order.id,
+        "customer_id": customer.id,
+        "status": "PENDING",
+        "total_amount": float(total_amount),
+    })
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "inventory.changed",
+        "shop_id": data.shop_id,
+        "reference_type": "ONLINE_ORDER",
+        "reference_id": str(order.id),
+        "changes": inventory_changes,
+    })
+
     return {
         "message": "Guest order placed successfully!",
         "order_id": order.id,
         "shop_name": profile.shop_name,
+        "discount_amount": discount_amount,
+        "coupon_code": coupon_code,
+        "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "status": "PENDING",
     }
@@ -713,7 +1448,15 @@ def get_my_orders(
             {
                 "order_id": o.id,
                 "shop_id": o.shop_id,
+                "shop_name": (
+                    db.query(ShopProfile.shop_name)
+                    .filter(ShopProfile.shop_id == o.shop_id)
+                    .scalar()
+                    or f"Shop #{o.shop_id}"
+                ),
                 "status": o.order_status,
+                "subtotal": round(float(o.total_amount) - float(getattr(o, "online_setup_fee", 0) or 0), 2),
+                "online_setup_fee": float(getattr(o, "online_setup_fee", 0) or 0),
                 "total_amount": float(o.total_amount),
                 "delivery_address": o.delivery_address,
                 "items": json.loads(o.items_json),
@@ -746,14 +1489,28 @@ def track_order(
     STATUS_STEPS = ["PENDING", "ACCEPTED", "DISPATCHED", "DELIVERED"]
     current_step = STATUS_STEPS.index(order.order_status) if order.order_status in STATUS_STEPS else 0
 
+    customer = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == order.customer_id
+    ).first()
+    shop_name = (
+        db.query(ShopProfile.shop_name)
+        .filter(ShopProfile.shop_id == order.shop_id)
+        .scalar()
+        or f"Shop #{order.shop_id}"
+    )
+
     return {
         "order_id": order.id,
+        "shop_id": order.shop_id,
+        "shop_name": shop_name,
         "status": order.order_status,
         "progress_step": current_step + 1,
         "total_steps": len(STATUS_STEPS),
         "total_amount": float(order.total_amount),
         "delivery_address": order.delivery_address,
         "items": json.loads(order.items_json),
+        "customer_name": customer.user_name if customer else "Customer",
+        "customer_phone": customer.phone if customer else "",
         "created_at": order.created_at,
     }
 
@@ -798,6 +1555,58 @@ def guest_track_order(
     }
 
 
+@router.post("/order/{order_id}/rating")
+def rate_completed_order(
+    order_id: int,
+    data: OrderRating,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(customer_only),
+):
+    customer_id = current_user["user_id"]
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == order_id,
+        OnlineOrder.customer_id == customer_id,
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    if order.order_status != "DELIVERED":
+        raise HTTPException(status_code=409, detail="You can rate an order only after delivery.")
+
+    existing = db.query(ShopReview).filter(ShopReview.order_id == order.id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="This order has already been rated.")
+
+    review = ShopReview(
+        order_id=order.id,
+        shop_id=order.shop_id,
+        customer_id=customer_id,
+        rating=data.rating,
+        comment=sanitize_input(data.comment or "", "comment") or None,
+    )
+    db.add(review)
+
+    shop = db.query(ShopProfile).filter(ShopProfile.shop_id == order.shop_id).with_for_update().first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop profile not found.")
+    current_count = int(getattr(shop, "rating_count", 0) or 0)
+    current_score = float(getattr(shop, "rating_score", 0.0) or 0.0)
+    shop.rating_score = round(((current_score * current_count) + data.rating) / (current_count + 1), 2)
+    shop.rating_count = current_count + 1
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to save your rating right now.")
+
+    return {
+        "success": True,
+        "shop_id": order.shop_id,
+        "rating": shop.rating_score,
+        "rating_count": shop.rating_count,
+    }
+
+
 @router.get("/owner/orders")
 def get_incoming_orders(
     status: Optional[str] = None,
@@ -836,10 +1645,138 @@ def get_incoming_orders(
 
 
 
+@router.post("/owner/orders/{order_id}/delivery-otp")
+def request_order_delivery_otp(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    """Send a backend-generated OTP to the customer's registered email before delivery."""
+    shop_id = current_user["user_id"]
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == order_id,
+        OnlineOrder.shop_id == shop_id,
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+
+    if order.order_status != "DISPATCHED":
+        raise HTTPException(
+            status_code=409,
+            detail="Customer delivery OTP can only be requested for a dispatched order.",
+        )
+
+    customer = db.query(OnlineCustomerAuth).filter(
+        OnlineCustomerAuth.id == order.customer_id,
+    ).first()
+    if not customer:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer account record for this order could not be found.",
+        )
+
+    customer_email = (customer.email or "").strip().lower()
+    if not customer_email:
+        raise HTTPException(
+            status_code=409,
+            detail="Customer does not have a registered email address. Add an email to the customer account before delivery.",
+        )
+    if not EmailNotificationService:
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured on the server.",
+        )
+
+    now = datetime.utcnow()
+    latest = db.query(OnlineOrderDeliveryOtp).filter(
+        OnlineOrderDeliveryOtp.order_id == order.id,
+        OnlineOrderDeliveryOtp.customer_id == customer.id,
+        OnlineOrderDeliveryOtp.used == False,
+    ).order_by(OnlineOrderDeliveryOtp.id.desc()).first()
+    if latest and latest.created_at and now - latest.created_at < timedelta(seconds=60):
+        remaining = 60 - int((now - latest.created_at).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"Please wait {max(1, remaining)} seconds before requesting another delivery OTP.",
+        )
+
+    # Invalidate every older challenge for this order before issuing a new one.
+    db.query(OnlineOrderDeliveryOtp).filter(
+        OnlineOrderDeliveryOtp.order_id == order.id,
+        OnlineOrderDeliveryOtp.customer_id == customer.id,
+        OnlineOrderDeliveryOtp.used == False,
+    ).update({"used": True}, synchronize_session=False)
+
+    otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    challenge = OnlineOrderDeliveryOtp(
+        order_id=order.id,
+        customer_id=customer.id,
+        otp_hash=hashlib.sha256(otp.encode("utf-8")).hexdigest(),
+        otp_expires_at=now + timedelta(minutes=10),
+        otp_attempts=0,
+        used=False,
+        created_at=now,
+    )
+    db.add(challenge)
+
+    subject, body = EmailNotificationService.send_otp_template(
+        otp,
+        f"Order #{order.id} Delivery Verification",
+    )
+
+    try:
+        sent = EmailNotificationService.send_email(
+            recipient_email=customer_email,
+            subject=subject,
+            body=body,
+        )
+        if not sent:
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Customer delivery OTP email could not be delivered. Please try again.",
+            )
+
+        db.commit()
+        return {
+            "success": True,
+            "message": "Delivery OTP sent to the customer's registered email.",
+            "email": _mask_delivery_email(customer_email),
+            "expires_in": 600,
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(
+            "Customer delivery OTP request failed for order_id=%s: %s",
+            order.id,
+            e,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Customer delivery OTP email could not be delivered. Please try again.",
+        )
+
+
+def _mask_delivery_email(email: str) -> str:
+    normalized = email.strip().lower()
+    local, sep, domain = normalized.partition("@")
+    if not sep or not local or not domain:
+        return "***"
+    if len(local) <= 2:
+        masked_local = local[0] + "***"
+    else:
+        masked_local = local[0] + "***" + local[-1]
+    return f"{masked_local}@{domain}"
+
+
 @router.post("/owner/orders/{order_id}/action")
 def update_order_status(
     order_id: int,
     action: str = Query(..., description="ACCEPT, DISPATCH, DELIVER, REJECT"),
+    data: Optional[OwnerOrderAction] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
@@ -862,11 +1799,31 @@ def update_order_status(
     if not new_status:
         raise HTTPException(status_code=400, detail=f"Invalid action. Choose from: {list(ACTION_MAP.keys())}")
 
+    previous_status = order.order_status
+    restored_inventory = []
+    linked_invoice = None
+
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
-        
-    if order.order_status != "PENDING" and new_status == "ACCEPTED":
-        raise HTTPException(status_code=409, detail="Order is already accepted or finalized.")
+
+    # Enforce the same state machine on the server that the owner app
+    # presents in its UI. This prevents stale/double taps from skipping a
+    # fulfilment stage or rejecting an order after it has entered delivery.
+    expected_previous_status = {
+        "ACCEPTED": "PENDING",
+        "DISPATCHED": "ACCEPTED",
+        "DELIVERED": "DISPATCHED",
+        "REJECTED": "PENDING",
+    }.get(new_status)
+
+    if expected_previous_status and order.order_status != expected_previous_status:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot change order from {order.order_status} to {new_status}. "
+                f"Expected current status: {expected_previous_status}."
+            ),
+        )
 
     # 🟢 On ACCEPT: record sales immediately in dashboard 🟢──────────────────
     if new_status == "ACCEPTED":
@@ -932,10 +1889,57 @@ def update_order_status(
         )
         db.add(tx)
 
-    # 🟢 On DELIVER: only mark invoice as PAID (stock deducted at order placement) 🟢
+    # 🟢 On DELIVER: verify the OTP emailed to the customer, then mark invoice as PAID.
     if new_status == "DELIVERED":
+        customer_otp = (data.customer_otp if data else None)
+        if not customer_otp:
+            raise HTTPException(
+                status_code=400,
+                detail="Customer delivery OTP is required before marking this order delivered.",
+            )
 
-        # Mark the linked invoice as PAID
+        challenge = db.query(OnlineOrderDeliveryOtp).filter(
+            OnlineOrderDeliveryOtp.order_id == order.id,
+            OnlineOrderDeliveryOtp.customer_id == order.customer_id,
+            OnlineOrderDeliveryOtp.used == False,
+            OnlineOrderDeliveryOtp.otp_expires_at > datetime.utcnow(),
+        ).order_by(OnlineOrderDeliveryOtp.id.desc()).with_for_update().first()
+
+        if not challenge:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid customer delivery OTP was found. Send a new OTP and try again.",
+            )
+
+        if challenge.otp_attempts >= 5:
+            challenge.used = True
+            db.commit()
+            raise HTTPException(
+                status_code=429,
+                detail="Too many incorrect OTP attempts. Send a new delivery OTP.",
+            )
+
+        expected_hash = hashlib.sha256(customer_otp.strip().encode("utf-8")).hexdigest()
+        if challenge.otp_hash != expected_hash:
+            challenge.otp_attempts += 1
+            attempts_left = max(0, 5 - challenge.otp_attempts)
+            if challenge.otp_attempts >= 5:
+                challenge.used = True
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid customer delivery OTP."
+                    if attempts_left == 0
+                    else f"Invalid customer delivery OTP. {attempts_left} attempt(s) remaining."
+                ),
+            )
+
+        # Consume the challenge in the same transaction as the delivery update.
+        challenge.used = True
+        challenge.verified_at = datetime.utcnow()
+
+        # Mark the linked invoice as PAID.
         linked_invoice = db.query(Invoice).filter(
             Invoice.source == "ONLINE_ORDER",
             Invoice.notes.like(f"%Online Order #{order.id}%"),
@@ -957,6 +1961,11 @@ def update_order_status(
                 ).first()
                 if product:
                     product.current_stock = (product.current_stock or 0) + item["quantity"]
+                    restored_inventory.append({
+                        "product_id": product.id,
+                        "quantity": item["quantity"],
+                        "new_stock": float(product.current_stock),
+                    })
 
     order.order_status = new_status
     try:
@@ -965,8 +1974,90 @@ def update_order_status(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
 
+    loyalty_points_awarded = 0
+    if new_status == "DELIVERED":
+        try:
+            from growth_suite import _award_delivery_points
+            loyalty_points_awarded = int(_award_delivery_points(db, order) or 0)
+            db.commit()
+        except Exception as loyalty_error:
+            db.rollback()
+            logger.warning(
+                "Online order loyalty award failed after delivery: %s",
+                loyalty_error,
+            )
+
+    try:
+        AuditService.log_action(
+            db=db,
+            user_id=shop_id,
+            action=AuditAction.UPDATE,
+            table_name="online_orders",
+            record_id=order.id,
+            old_values={"status": previous_status},
+            new_values={"status": new_status},
+            description=f"Online order #{order.id} changed from {previous_status} to {new_status}",
+        )
+        if linked_invoice is not None:
+            AuditService.log_action(
+                db=db,
+                user_id=shop_id,
+                action=AuditAction.UPDATE,
+                table_name="invoices",
+                record_id=linked_invoice.id,
+                new_values={
+                    "payment_status": "PAID",
+                    "paid_amount": float(linked_invoice.paid_amount or 0),
+                },
+                description=f"Online order #{order.id} marked invoice paid on delivery",
+            )
+    except Exception as audit_error:
+        logger.warning(
+            "Online order audit logging failed after commit: %s",
+            audit_error,
+        )
+
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.status_changed",
+        "shop_id": shop_id,
+        "order_id": order_id,
+        "customer_id": order.customer_id,
+        "previous_status": previous_status,
+        "status": new_status,
+        "total_amount": float(order.total_amount),
+        "delivery_address": order.delivery_address,
+        "items": json.loads(order.items_json),
+        "created_at": order.created_at,
+    })
+
+    if linked_invoice is not None and new_status == "DELIVERED":
+        publish_realtime_event({
+            "event_id": str(uuid4()),
+            "type": "payment.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "amount": float(order.total_amount),
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "payment_status": "PAID",
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+
+    if restored_inventory:
+        publish_realtime_event({
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": shop_id,
+            "reference_type": "ONLINE_ORDER_REJECT",
+            "reference_id": str(order.id),
+            "changes": restored_inventory,
+        })
+
     return {
         "message": f"Order #{order_id} status updated to {new_status}.",
         "order_id": order_id,
         "new_status": new_status,
+        "loyalty_points_awarded": loyalty_points_awarded,
     }

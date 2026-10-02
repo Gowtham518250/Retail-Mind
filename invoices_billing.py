@@ -24,9 +24,12 @@ from sqlalchemy.exc import IntegrityError
 from db import get_db
 from models import (
     Invoice, InvoiceLineItem, Product, Customer,
-    UniversalTransaction, StockMovement
+    UniversalTransaction, StockMovement, Payment, PaymentMethod,
+    PaymentStatus, InvoiceStatus
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
+from realtime import publish_realtime_event
+from audit_logging import AuditAction, AuditService
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
 logger = logging.getLogger(__name__)
@@ -50,23 +53,30 @@ def _parse_client_timestamp(raw: Optional[str]) -> Optional[datetime]:
 class InvoiceLineItemCreate(BaseModel):
     product_id: Optional[int] = None
     product_name: str
-    quantity: float = Field(..., gt=0)
-    unit_price: float = Field(..., ge=0)
+    # Decimal is intentional: Product.current_stock is PostgreSQL NUMERIC,
+    # so quantities must use the same numeric type during inventory arithmetic.
+    quantity: Decimal = Field(..., gt=0)
+    unit_price: Decimal = Field(..., ge=0)
+    discount_amount: Decimal = Field(Decimal("0"), ge=0)
 
 class InvoiceSyncCreate(BaseModel):
     invoice_number: str
     offline_id: Optional[str] = None
-    customer_phone: Optional[str] = None  # Removed min_length/max_length restriction for flexibility
+    customer_phone: Optional[str] = None
     customer_name: Optional[str] = None
     total_amount: float = Field(..., ge=0)
     paid_amount: float = Field(0, ge=0)
     tax: float = Field(0, ge=0)
     payment_status: str = "PAID"
-    line_items: Optional[List[InvoiceLineItemCreate]] = None  # Made optional
-    invoice_date: Optional[str] = None  # YYYY-MM-DD
-    sale_timestamp: Optional[str] = None  # Exact phone-side sale time (ISO-8601)
-    due_date: Optional[str] = None  # Added due_date
+    line_items: Optional[List[InvoiceLineItemCreate]] = None
+    invoice_date: Optional[str] = None
+    sale_timestamp: Optional[str] = None
+    due_date: Optional[str] = None
     notes: Optional[str] = None
+    # FEATURE (staff sales leaderboard): optional, self-reported by the
+    # client's active-worker selector. See models.py Invoice.sold_by_worker_id
+    # for why this is not used for any authorization decision.
+    sold_by_worker_id: Optional[int] = None
     
     @validator('line_items')
     def validate_line_items(cls, v):
@@ -80,8 +90,9 @@ class InvoiceLineItemResponse(BaseModel):
     id: int
     product_id: Optional[int]
     description: Optional[str]
-    quantity: int
+    quantity: float
     unit_price: float
+    discount_amount: float = 0
     line_total: float
     
     class Config:
@@ -103,6 +114,324 @@ class InvoiceResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class PaymentWriteRequest(BaseModel):
+    invoice_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+    amount: Optional[float] = Field(None, gt=0)
+    paid_amount: Optional[float] = Field(None, ge=0)
+    payment_method: str = "ONLINE"
+    reference_id: Optional[str] = Field(default=None, max_length=100)
+    idempotency_key: Optional[str] = Field(default=None, max_length=128)
+    payer_name: Optional[str] = Field(default=None, max_length=120)
+    source: str = Field(default="PAYMENT_DETECTION", max_length=50)
+    timestamp: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
+def _payment_status_for(invoice: Invoice) -> PaymentStatus:
+    total = Decimal(str(invoice.total_amount or 0))
+    paid = Decimal(str(invoice.paid_amount or 0))
+    if paid >= total - Decimal("0.01"):
+        return PaymentStatus.PAID
+    if paid > Decimal("0.01"):
+        return PaymentStatus.PARTIAL
+    return PaymentStatus.UNPAID
+
+
+def _apply_payment_write(
+    *,
+    data: PaymentWriteRequest,
+    db: Session,
+    shop_id: int,
+    mode: str,
+):
+    if data.amount is None and data.paid_amount is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either amount or paid_amount.",
+        )
+
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    if idempotency_key:
+        existing = (
+            db.query(Payment)
+            .join(Invoice, Payment.invoice_id == Invoice.id)
+            .filter(
+                Invoice.user_id == shop_id,
+                Payment.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+        if existing:
+            existing_invoice = (
+                db.query(Invoice)
+                .filter(
+                    Invoice.id == existing.invoice_id,
+                    Invoice.user_id == shop_id,
+                )
+                .first()
+            )
+            if existing_invoice is None:
+                raise HTTPException(status_code=404, detail="Payment invoice not found.")
+            return {
+                "success": True,
+                "duplicate": True,
+                "payment_id": existing.id,
+                "invoice_id": existing_invoice.id,
+                "invoice_number": existing_invoice.invoice_number,
+                "applied_amount": float(existing.amount or 0),
+                "paid_amount": float(existing_invoice.paid_amount or 0),
+                "payment_status": (
+                    existing_invoice.payment_status.value
+                    if hasattr(existing_invoice.payment_status, "value")
+                    else str(existing_invoice.payment_status)
+                ),
+                "message": "Payment already recorded (idempotent retry).",
+            }
+
+    if data.invoice_id is None and not (data.invoice_number and data.invoice_number.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="invoice_id or invoice_number is required for a payment write.",
+        )
+
+    invoice_query = db.query(Invoice).filter(
+        Invoice.user_id == shop_id,
+        Invoice.status != InvoiceStatus.CANCELLED,
+    )
+    if data.invoice_id is not None:
+        invoice_query = invoice_query.filter(Invoice.id == data.invoice_id)
+    else:
+        invoice_query = invoice_query.filter(
+            Invoice.invoice_number == data.invoice_number.strip()
+        )
+
+    invoice = invoice_query.with_for_update().first()
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    total = Decimal(str(invoice.total_amount or 0))
+    current_paid = Decimal(str(invoice.paid_amount or 0))
+
+    if mode == "delta":
+        delta = Decimal(str(data.amount or 0))
+    else:
+        target_paid = Decimal(str(data.paid_amount if data.paid_amount is not None else 0))
+        if target_paid < current_paid - Decimal("0.01"):
+            raise HTTPException(
+                status_code=400,
+                detail="paid_amount cannot reduce an invoice's existing paid amount.",
+            )
+        delta = target_paid - current_paid
+
+    if delta <= Decimal("0.01"):
+        status_value = _payment_status_for(invoice)
+        invoice.payment_status = status_value
+        if status_value == PaymentStatus.PAID:
+            invoice.status = InvoiceStatus.PAID
+        elif status_value == PaymentStatus.PARTIAL:
+            invoice.status = InvoiceStatus.PARTIAL
+        return {
+            "success": True,
+            "duplicate": False,
+            "no_op": True,
+            "payment_id": None,
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "applied_amount": 0.0,
+            "paid_amount": float(invoice.paid_amount or 0),
+            "payment_status": status_value.value,
+            "message": "Invoice already reflects this payment state.",
+        }
+
+    outstanding = max(Decimal("0"), total - current_paid)
+    if delta > outstanding + Decimal("0.01"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Payment exceeds invoice balance. "
+                f"Outstanding: ₹{outstanding:.2f}, Received: ₹{delta:.2f}"
+            ),
+        )
+
+    method_name = (data.payment_method or "ONLINE").upper().strip()
+    payment_method = PaymentMethod.__members__.get(method_name)
+    if payment_method is None:
+        payment_method = PaymentMethod.ONLINE
+
+    new_paid = min(total, current_paid + delta)
+    invoice.paid_amount = new_paid
+    invoice.payment_status = _payment_status_for(invoice)
+
+    if invoice.payment_status == PaymentStatus.PAID:
+        invoice.status = InvoiceStatus.PAID
+    elif invoice.payment_status == PaymentStatus.PARTIAL:
+        invoice.status = InvoiceStatus.PARTIAL
+
+    payment = Payment(
+        invoice_id=invoice.id,
+        payment_method=payment_method,
+        amount=delta,
+        payment_date=_parse_client_timestamp(data.timestamp) or datetime.utcnow(),
+        reference_number=(data.reference_id or "").strip() or None,
+        notes=(
+            data.notes
+            or (
+                f"{data.source} payment"
+                + (f" from {data.payer_name.strip()}" if data.payer_name else "")
+            )
+        ),
+        idempotency_key=idempotency_key,
+    )
+    db.add(payment)
+
+    db.add(
+        UniversalTransaction(
+            shop_id=shop_id,
+            tx_type="INCOME",
+            category="PAYMENT",
+            amount=delta,
+            reference_id=invoice.invoice_number,
+            description=f"Payment received for invoice {invoice.invoice_number}",
+            tx_date=payment.payment_date,
+        )
+    )
+
+    try:
+        db.commit()
+        db.refresh(invoice)
+        db.refresh(payment)
+    except IntegrityError:
+        db.rollback()
+        if idempotency_key:
+            existing = (
+                db.query(Payment)
+                .join(Invoice, Payment.invoice_id == Invoice.id)
+                .filter(
+                    Invoice.user_id == shop_id,
+                    Payment.idempotency_key == idempotency_key,
+                )
+                .first()
+            )
+            if existing:
+                existing_invoice = (
+                    db.query(Invoice)
+                    .filter(
+                        Invoice.id == existing.invoice_id,
+                        Invoice.user_id == shop_id,
+                    )
+                    .first()
+                )
+                return {
+                    "success": True,
+                    "duplicate": True,
+                    "payment_id": existing.id,
+                    "invoice_id": existing.invoice_id,
+                    "invoice_number": existing_invoice.invoice_number if existing_invoice else None,
+                    "applied_amount": float(existing.amount or 0),
+                    "paid_amount": float(existing_invoice.paid_amount or 0) if existing_invoice else 0.0,
+                    "payment_status": (
+                        existing_invoice.payment_status.value
+                        if existing_invoice and hasattr(existing_invoice.payment_status, "value")
+                        else str(existing_invoice.payment_status) if existing_invoice else None
+                    ),
+                    "message": "Payment already recorded (idempotent retry).",
+                }
+        raise HTTPException(status_code=409, detail="Payment write conflicted with another transaction.")
+    except Exception as exc:
+        db.rollback()
+        logger.error("Payment transaction failed safely: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Payment transaction failed safely.")
+
+    # Business-level audit trail is best-effort and intentionally runs after
+    # the financial transaction has committed. A logging failure must never
+    # turn a successful payment into an apparent API failure.
+    try:
+        AuditService.log_action(
+            db=db,
+            user_id=shop_id,
+            action=AuditAction.CREATE,
+            table_name="payments",
+            record_id=payment.id,
+            new_values={
+                "invoice_id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "amount": float(delta),
+                "payment_method": payment_method.value,
+                "reference_id": (data.reference_id or "").strip() or None,
+                "source": data.source,
+            },
+            description=f"Payment recorded for invoice {invoice.invoice_number}",
+        )
+        AuditService.log_action(
+            db=db,
+            user_id=shop_id,
+            action=AuditAction.UPDATE,
+            table_name="invoices",
+            record_id=invoice.id,
+            new_values={
+                "paid_amount": float(invoice.paid_amount or 0),
+                "payment_status": (
+                    invoice.payment_status.value
+                    if hasattr(invoice.payment_status, "value")
+                    else str(invoice.payment_status)
+                ),
+            },
+            description=f"Invoice payment state updated for {invoice.invoice_number}",
+        )
+    except Exception as audit_error:
+        logger.warning(
+            "Payment audit logging failed after committed transaction: %s",
+            audit_error,
+        )
+
+    event_id = str(uuid.uuid4())
+    payment_status = (
+        invoice.payment_status.value
+        if hasattr(invoice.payment_status, "value")
+        else str(invoice.payment_status)
+    )
+
+    publish_realtime_event({
+        "event_id": event_id,
+        "type": "payment.updated",
+        "shop_id": shop_id,
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "amount": float(delta),
+        "paid_amount": float(invoice.paid_amount or 0),
+        "payment_status": payment_status,
+        "payment_id": payment.id,
+        "reference_id": (data.reference_id or "").strip() or None,
+        "source": data.source,
+    })
+
+    publish_realtime_event({
+        "event_id": str(uuid.uuid4()),
+        "type": "invoice.updated",
+        "shop_id": shop_id,
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "paid_amount": float(invoice.paid_amount or 0),
+        "payment_status": payment_status,
+        "status": invoice.status.value if hasattr(invoice.status, "value") else str(invoice.status),
+        "source": data.source,
+    })
+
+    return {
+        "success": True,
+        "duplicate": False,
+        "payment_id": payment.id,
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "applied_amount": float(delta),
+        "paid_amount": float(invoice.paid_amount or 0),
+        "payment_status": payment_status,
+        "message": "Payment recorded successfully.",
+    }
+
+
 # =====================
 # ENDPOINTS
 # =====================
@@ -121,7 +450,6 @@ def sync_offline_invoice(
     shop_id = resolve_shop_id(current_user)
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
-    # Check for duplicate sync (idempotency) - check both offline_id and invoice_number
     if data.offline_id:
         existing = db.query(Invoice).filter(
             Invoice.user_id == shop_id,
@@ -130,7 +458,6 @@ def sync_offline_invoice(
         if existing:
             return {"message": "Invoice already synced (offline_id).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "offline_id": data.offline_id}
     
-    # Always check invoice_number as fallback
     existing = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         Invoice.invoice_number == invoice_number
@@ -139,7 +466,6 @@ def sync_offline_invoice(
     if existing:
         return {"message": "Invoice already synced (invoice_number).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "invoice_number": invoice_number}
 
-    # Find/Create Customer
     customer_id = None
     if data.customer_phone:
         phone = sanitize_input(data.customer_phone, "customer_phone")
@@ -174,14 +500,12 @@ def sync_offline_invoice(
     except ValueError:
         due_date = inv_date
 
-    # TRANSACTION-BASED APPROACH: All operations in single transaction
     try:
-        # Create Invoice
         sub_t = Decimal(str(data.total_amount)) - Decimal(str(data.tax))
 
         if data.line_items and len(data.line_items) > 0:
             computed_subtotal = sum(
-                Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+                item.quantity * item.unit_price
                 for item in data.line_items
             )
             tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
@@ -193,6 +517,20 @@ def sync_offline_invoice(
                         f"but total_amount - tax = {sub_t}. Please recalculate."
                     )
                 )
+
+        # FEATURE (staff sales leaderboard): validate the claimed worker
+        # actually belongs to this shop before trusting it, rather than
+        # blindly storing a client-supplied ID (which could otherwise be
+        # used to attribute a sale to an arbitrary worker row in any shop).
+        validated_worker_id = None
+        if data.sold_by_worker_id:
+            from models import Worker
+            worker_row = db.query(Worker).filter(
+                Worker.id == data.sold_by_worker_id,
+                Worker.shopkeeper_id == shop_id,
+            ).first()
+            if worker_row:
+                validated_worker_id = worker_row.id
 
         invoice = Invoice(
             user_id=shop_id,
@@ -212,11 +550,12 @@ def sync_offline_invoice(
             payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
             source="OFFLINE_SYNC",
             notes=sanitize_input(data.notes or "", "notes"),
+            sold_by_worker_id=validated_worker_id,
         )
         db.add(invoice)
         db.flush()
 
-        # Process Line Items & Deduct Inventory (if any)
+        inventory_changes = []
         if data.line_items and len(data.line_items) > 0:
             for item in data.line_items:
                 line_total = item.quantity * item.unit_price
@@ -226,28 +565,30 @@ def sync_offline_invoice(
                     description=sanitize_input(item.product_name, "product_name"),
                     quantity=item.quantity,
                     unit_price=item.unit_price,
+                    discount_amount=item.discount_amount,
                     line_total=line_total,
                 )
                 db.add(db_line)
 
-                # Inventory Auto-Deduction with validation
                 if item.product_id:
                     product = db.query(Product).filter(
                         Product.id == item.product_id,
                         Product.user_id == shop_id
-                    ).with_for_update().first()  # Row-level lock for concurrency
+                    ).with_for_update().first()
                     if product:
-                        # Validate stock availability
-                        current_stock = product.current_stock or 0
+                        current_stock = product.current_stock or Decimal("0")
                         if current_stock < item.quantity:
                             raise HTTPException(
                                 status_code=400,
                                 detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
                             )
-                        # 🔧 FIX: Use proper logging instead of print statements
                         logger.info(f"Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
-                        product.current_stock = max(0, current_stock - item.quantity)
-                        # Log stock movement
+                        product.current_stock = max(Decimal("0"), current_stock - item.quantity)
+                        inventory_changes.append({
+                            "product_id": product.id,
+                            "quantity": float(item.quantity),
+                            "new_stock": float(product.current_stock),
+                        })
                         mov = StockMovement(
                             product_id=product.id,
                             movement_type="OUT",
@@ -258,19 +599,23 @@ def sync_offline_invoice(
                         db.add(mov)
                         logger.info(f"Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
                 else:
-                    # Deduct by product name when product_id is missing
                     product = db.query(Product).filter(
                         func.lower(Product.product_name) == item.product_name.lower().strip(),
                         Product.user_id == shop_id
                     ).with_for_update().first()
                     if product:
-                        current_stock = product.current_stock or 0
+                        current_stock = product.current_stock or Decimal("0")
                         if current_stock < item.quantity:
                             raise HTTPException(
                                 status_code=400,
                                 detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Required: {item.quantity}"
                             )
-                        product.current_stock = current_stock - item.quantity
+                        product.current_stock = max(Decimal("0"), current_stock - item.quantity)
+                        inventory_changes.append({
+                            "product_id": product.id,
+                            "quantity": float(item.quantity),
+                            "new_stock": float(product.current_stock),
+                        })
                         mov = StockMovement(
                             product_id=product.id,
                             movement_type="OUT",
@@ -280,7 +625,6 @@ def sync_offline_invoice(
                         )
                         db.add(mov)
 
-        # Universal Journal Entry
         tx = UniversalTransaction(
             shop_id=shop_id,
             tx_type="INCOME",
@@ -292,9 +636,44 @@ def sync_offline_invoice(
         )
         db.add(tx)
 
-        # Commit transaction - all operations succeed or all fail
         db.commit()
-        # Build consistent response payload
+
+        publish_realtime_event({
+            "event_id": str(uuid.uuid4()),
+            "type": "invoice.created",
+            "shop_id": shop_id,
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "customer_id": customer_id,
+            "total_amount": float(invoice.total_amount),
+            "paid_amount": float(invoice.paid_amount),
+            "payment_status": invoice.payment_status,
+            "source": invoice.source,
+        })
+
+        if data.paid_amount > 0:
+            publish_realtime_event({
+                "event_id": str(uuid.uuid4()),
+                "type": "payment.updated",
+                "shop_id": shop_id,
+                "invoice_id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "customer_id": customer_id,
+                "amount": float(invoice.paid_amount),
+                "payment_status": invoice.payment_status,
+                "source": "OFFLINE_SYNC",
+            })
+
+        if inventory_changes:
+            publish_realtime_event({
+                "event_id": str(uuid.uuid4()),
+                "type": "inventory.changed",
+                "shop_id": shop_id,
+                "reference_type": "INVOICE_SYNC",
+                "reference_id": invoice_number,
+                "changes": inventory_changes,
+            })
+
         line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
         payload = {
             "id": invoice.id,
@@ -314,7 +693,7 @@ def sync_offline_invoice(
                 {
                     "product_id": li.product_id,
                     "product_name": li.description,
-                    "quantity": li.quantity,
+                    "quantity": float(li.quantity),
                     "unit_price": float(li.unit_price),
                     "total": float(li.line_total),
                 }
@@ -327,8 +706,6 @@ def sync_offline_invoice(
         db.rollback()
         raise
     except IntegrityError:
-        # Another request may have committed the same offline_id/invoice_number
-        # between the pre-check and insert. Treat that race as idempotent success.
         db.rollback()
         existing = None
         if data.offline_id:
@@ -356,7 +733,8 @@ def sync_offline_invoice(
         raise HTTPException(status_code=500, detail=f"Transaction failed: {str(e)}")
 
 
-@router.get("/", response_model=List[InvoiceResponse])
+@router.get("", response_model=List[InvoiceResponse])
+@router.get("/", response_model=List[InvoiceResponse], include_in_schema=False)
 def get_invoices(
     status: Optional[str] = None,
     payment_status: Optional[str] = None,
@@ -425,7 +803,7 @@ def create_invoice(
 
     if data.line_items and len(data.line_items) > 0:
         computed_subtotal = sum(
-            Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+            item.quantity * item.unit_price
             for item in data.line_items
         )
         tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
@@ -477,15 +855,15 @@ def create_invoice(
                     Product.user_id == shop_id
                 ).first()
                 if product:
-                    if (product.current_stock or 0) < item.quantity:
+                    current_stock = product.current_stock or Decimal("0")
+                    if current_stock < item.quantity:
                         db.rollback()
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Insufficient stock for product ID {product.id}. Available: {product.current_stock or 0}, Requested: {item.quantity}"
+                            detail=f"Insufficient stock for product ID {product.id}. Available: {current_stock}, Requested: {item.quantity}"
                         )
-                    # 🔧 FIX: Debug logging for quantity deduction
-                    logger.debug(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} (current: {product.current_stock or 0})")
-                    product.current_stock = (product.current_stock or 0) - item.quantity
+                    logger.debug(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
+                    product.current_stock = max(Decimal("0"), current_stock - item.quantity)
                     mov = StockMovement(
                         product_id=product.id,
                         movement_type="OUT",
@@ -494,22 +872,21 @@ def create_invoice(
                         reference_id=invoice_number,
                     )
                     db.add(mov)
-                    logger.debug(f"✅ [Backend Create] Stock updated: {item.product_name} ({(product.current_stock or 0) + item.quantity} → {product.current_stock})")
+                    logger.debug(f"✅ [Backend Create] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
             else:
-                # Deduct by product name when product_id is missing
                 product = db.query(Product).with_for_update().filter(
                     func.lower(Product.product_name) == item.product_name.lower().strip(),
                     Product.user_id == shop_id
                 ).first()
                 if product:
-                    current_stock = product.current_stock or 0
+                    current_stock = product.current_stock or Decimal("0")
                     if current_stock < item.quantity:
                         db.rollback()
                         raise HTTPException(
                             status_code=400,
                             detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Requested: {item.quantity}"
                         )
-                    product.current_stock = current_stock - item.quantity
+                    product.current_stock = max(Decimal("0"), current_stock - item.quantity)
                     mov = StockMovement(
                         product_id=product.id,
                         movement_type="OUT",
@@ -556,7 +933,7 @@ def create_invoice(
             {
                 "product_id": li.product_id,
                 "product_name": li.description,
-                "quantity": li.quantity,
+                "quantity": float(li.quantity),
                 "unit_price": float(li.unit_price),
                 "total": float(li.line_total),
             }
@@ -566,7 +943,25 @@ def create_invoice(
     return JSONResponse(status_code=201, content=payload)
 
 
-# ── These MUST come before /{invoice_id} ──────────────────────────────
+@router.post("/payments")
+def create_invoice_payment(
+    data: PaymentWriteRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    shop_id = resolve_shop_id(current_user)
+    return _apply_payment_write(data=data, db=db, shop_id=shop_id, mode="delta")
+
+
+@router.put("/update_payment")
+def update_invoice_payment(
+    data: PaymentWriteRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    shop_id = resolve_shop_id(current_user)
+    return _apply_payment_write(data=data, db=db, shop_id=shop_id, mode="target")
+
 
 @router.get("/overdue")
 def get_overdue_invoices(
@@ -661,8 +1056,6 @@ def get_invoice_analytics(
     }
 
 
-# ── /{invoice_id} MUST be last ────────────────────────────────────────
-
 @router.get("/{invoice_id}")
 def get_invoice(
     invoice_id: int,
@@ -694,7 +1087,7 @@ def get_invoice(
             {
                 "product_id":   li.product_id,
                 "product_name": li.description,
-                "quantity":     li.quantity,
+                "quantity":     float(li.quantity),
                 "unit_price":   float(li.unit_price),
                 "total":        float(li.line_total),
             }
@@ -724,10 +1117,8 @@ def update_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    # Update fields
     if data.paid_amount is not None:
         invoice.paid_amount = data.paid_amount
-        # Auto-set payment status based on paid_amount vs total_amount
         if invoice.paid_amount >= invoice.total_amount:
             invoice.payment_status = "PAID"
         elif invoice.paid_amount > 0:
@@ -751,7 +1142,6 @@ def update_invoice(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update invoice: {str(e)}")
     
-    # Get line items
     line_items = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice_id).all()
     
     return {
@@ -771,7 +1161,7 @@ def update_invoice(
             {
                 "product_id": li.product_id,
                 "product_name": li.description,
-                "quantity": li.quantity,
+                "quantity": float(li.quantity),
                 "unit_price": float(li.unit_price),
                 "total": float(li.line_total),
             }

@@ -11,11 +11,14 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from decimal import Decimal
+from uuid import uuid4
 import logging
 
 from db import get_db
+from realtime import publish_realtime_event
 from models import Product, StockMovement, Invoice, InvoiceLineItem
 from security import get_current_user as check_current_user
+from audit_logging import AuditAction, AuditService
 
 router = APIRouter(prefix="/api/inventory-sync", tags=["inventory sync"])
 logger = logging.getLogger(__name__)
@@ -145,6 +148,39 @@ def deduct_stock_with_idempotency(
         
         db.commit()
         db.refresh(product)
+
+        try:
+            AuditService.log_action(
+                db=db,
+                user_id=user_id,
+                action=AuditAction.UPDATE,
+                table_name="products",
+                record_id=product.id,
+                old_values={"current_stock": float(previous_stock)},
+                new_values={
+                    "current_stock": float(product.current_stock),
+                    "quantity": float(request.quantity),
+                    "reason": request.reason,
+                    "reference_id": request.reference_id,
+                },
+                description=f"Inventory stock deducted for product {product.id}",
+            )
+        except Exception as audit_error:
+            logger.warning(
+                "Inventory audit logging failed after commit: %s",
+                audit_error,
+            )
+
+        publish_realtime_event({
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": user_id,
+            "product_id": product.id,
+            "reference_id": request.reference_id,
+            "reason": request.reason,
+            "quantity": float(request.quantity),
+            "new_stock": float(product.current_stock),
+        })
         
         logger.info(f"Stock deducted: Product {product.id}, Qty: {request.quantity}, New Stock: {product.current_stock}")
         
@@ -179,6 +215,7 @@ def deduct_stock_batch(
     try:
         results = []
         failed_items = []
+        inventory_changes = []
         
         for item in request.updates:
             try:
@@ -244,6 +281,13 @@ def deduct_stock_batch(
                     "new_stock": product.current_stock,
                     "message": "Stock deducted"
                 })
+                inventory_changes.append({
+                    "product_id": item.product_id,
+                    "reference_id": item.reference_id,
+                    "reason": item.reason,
+                    "quantity": float(item.quantity),
+                    "new_stock": float(product.current_stock),
+                })
                 
             except Exception as e:
                 failed_items.append({
@@ -252,6 +296,35 @@ def deduct_stock_batch(
                 })
         
         db.commit()
+
+        for change in inventory_changes:
+            try:
+                AuditService.log_action(
+                    db=db,
+                    user_id=user_id,
+                    action=AuditAction.UPDATE,
+                    table_name="products",
+                    record_id=int(change["product_id"]),
+                    new_values=change,
+                    description=(
+                        f"Batch inventory deduction for product "
+                        f"{change['product_id']}"
+                    ),
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Batch inventory audit logging failed for product %s: %s",
+                    change.get("product_id"),
+                    audit_error,
+                )
+
+        if inventory_changes:
+            publish_realtime_event({
+                "event_id": __import__("uuid").uuid4().__str__(),
+                "type": "inventory.changed",
+                "shop_id": user_id,
+                "changes": inventory_changes,
+            })
         
         return {
             "success": len(failed_items) == 0,

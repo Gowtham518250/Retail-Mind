@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -150,9 +151,94 @@ def get_credit_score(customer_id: int, user_id: int = Depends(check_current_user
 # ==========================================
 from report_service import ReportService
 
+@router.get("/reports/staff-leaderboard")
+def get_staff_leaderboard(
+    days: int = 7,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db)
+):
+    """FEATURE (staff sales leaderboard): total sales value and bill count
+    per staff member over the last `days` days, based on Invoice.sold_by_worker_id
+    (see models.py for how that field is populated/validated). Sales with
+    no attributed worker (owner-made sales, or made before this feature
+    existed) are excluded from the ranking but included in a separate
+    'unattributed' total so the numbers are transparent rather than
+    silently missing revenue.
+    """
+    from models import Invoice, Worker
+    from sqlalchemy import func as sqlfunc
+
+    cutoff = datetime.now(ZoneInfo("Asia/Kolkata")) - timedelta(days=days)
+
+    rows = db.query(
+        Worker.id,
+        Worker.name,
+        sqlfunc.count(Invoice.id).label("bill_count"),
+        sqlfunc.coalesce(sqlfunc.sum(Invoice.total_amount), 0).label("total_sales"),
+    ).join(
+        Invoice, Invoice.sold_by_worker_id == Worker.id
+    ).filter(
+        Worker.shopkeeper_id == user_id,
+        Invoice.user_id == user_id,
+        Invoice.created_at >= cutoff,
+    ).group_by(Worker.id, Worker.name).order_by(
+        sqlfunc.sum(Invoice.total_amount).desc()
+    ).all()
+
+    unattributed = db.query(
+        sqlfunc.count(Invoice.id),
+        sqlfunc.coalesce(sqlfunc.sum(Invoice.total_amount), 0),
+    ).filter(
+        Invoice.user_id == user_id,
+        Invoice.sold_by_worker_id.is_(None),
+        Invoice.created_at >= cutoff,
+    ).first()
+
+    return {
+        "period_days": days,
+        "leaderboard": [
+            {
+                "worker_id": r[0],
+                "worker_name": r[1],
+                "bill_count": r[2],
+                "total_sales": float(r[3]),
+            }
+            for r in rows
+        ],
+        "unattributed": {
+            "bill_count": unattributed[0] or 0,
+            "total_sales": float(unattributed[1] or 0),
+        },
+    }
+
+
 @router.get("/reports/daily")
 def generate_daily_report(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     return {"report": ReportService.generate_daily_report(db, user_id=user_id)}
+
+
+@router.get("/reports/daily/whatsapp-message")
+def get_daily_report_whatsapp_message(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """FEATURE (daily owner summary): expose the ready-to-share WhatsApp
+    text that ReportService already builds (format_whatsapp_message /
+    send_daily_report_whatsapp existed but were never reachable via any
+    route - only the raw-numbers /reports/daily endpoint above was wired
+    up). Returns the message text and the shop's registered phone (if
+    any) so the frontend can hand both straight to the app's existing
+    WhatsApp-launcher (WhatsAppMessageService), same one already used for
+    Khata reminders.
+    """
+    from models import ShopProfile
+    report_data = ReportService.generate_daily_report(db, user_id=user_id)
+    if "error" in report_data:
+        raise HTTPException(status_code=400, detail=report_data["error"])
+
+    shop = db.query(ShopProfile).filter(ShopProfile.shop_id == user_id).first()
+    shop_name = shop.shop_name if shop and shop.shop_name else "Your Shop"
+    shop_phone = shop.phone if shop and shop.phone else None
+
+    message = ReportService.format_whatsapp_message(report_data, shop_name)
+    return {"message": message, "phone": shop_phone, "report": report_data}
 
 
 # =========================================================
@@ -886,4 +972,3 @@ def soft_delete_customer(customer_id: int, user_id: int = Depends(check_current_
     customer.is_active = False
     db.commit()
     return {"status": "success", "message": f"Customer '{customer.customer_name}' archived. All Khata and invoice history preserved."}
-

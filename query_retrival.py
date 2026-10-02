@@ -1,44 +1,454 @@
+import json
 import re
 import os
+import calendar
+import time
+from datetime import date, datetime, timedelta
 from pathlib import Path
-
-import os
+from zoneinfo import ZoneInfo
 
 from fastapi import Form, HTTPException, Depends, APIRouter
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
+from groq import Groq
 from db import get_db
 from security import get_current_user as check_current_user
+from models import AIQueryHistory
 
 BASE_DIR = Path(__file__).resolve().parent
-HF_HOME = Path(os.getenv("HF_HOME", BASE_DIR / ".cache" / "huggingface"))
-if not HF_HOME.is_absolute():
-    HF_HOME = BASE_DIR / HF_HOME
-os.environ["HF_HOME"] = str(HF_HOME)
-HF_HOME.mkdir(parents=True, exist_ok=True)
 
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-faiss_index = Path(os.getenv("FAISS_INDEX_PATH", BASE_DIR / "faiss_index"))
-if not faiss_index.is_absolute():
-    faiss_index = BASE_DIR / faiss_index
-vectorstore = FAISS.load_local(str(faiss_index), embeddings, allow_dangerous_deserialization=True)
-app= APIRouter()
-llm = ChatGroq(
-    model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
-    api_key=os.getenv("GROQ_API_KEY"),
-    temperature=0,
+QUERY_ENGINE_VERSION = "2026-09-30-schema-guard-v2"
+
+BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
+
+
+def _business_dates():
+    """Return today and yesterday using the shop business timezone."""
+    today = datetime.now(BUSINESS_TZ).date()
+    return today, today - timedelta(days=1)
+
+# CPU-only embedding runtime for small Render instances.
+# Uses the same all-MiniLM-L6-v2 model family as the existing FAISS index,
+# but runs inference with ONNX Runtime instead of PyTorch.
+import numpy as np
+import onnxruntime as ort
+
+# Configure Hugging Face before importing huggingface_hub so Render never
+# falls back to the non-writable /app cache, including Xet.
+MODEL_CACHE = Path("/tmp/.cache/huggingface")
+MODEL_CACHE.mkdir(parents=True, exist_ok=True)
+os.environ["HF_HOME"] = str(MODEL_CACHE)
+os.environ["HF_XET_CACHE"] = str(MODEL_CACHE / "xet")
+os.environ["HF_HUB_CACHE"] = str(MODEL_CACHE / "hub")
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+
+from huggingface_hub import hf_hub_download
+from tokenizers import Tokenizer
+
+MODEL_REPO = "Xenova/all-MiniLM-L6-v2"
+
+TOKENIZER_PATH = hf_hub_download(
+    repo_id=MODEL_REPO,
+    filename="tokenizer.json",
+    cache_dir=str(MODEL_CACHE),
 )
+MODEL_PATH = hf_hub_download(
+    repo_id=MODEL_REPO,
+    filename="onnx/model.onnx",
+    cache_dir=str(MODEL_CACHE),
+)
+
+_TOKENIZER = Tokenizer.from_file(TOKENIZER_PATH)
+_TOKENIZER.enable_truncation(max_length=256)
+_SESSION = ort.InferenceSession(
+    MODEL_PATH,
+    providers=["CPUExecutionProvider"],
+)
+
+def _repair_known_schema_aliases(sql: str) -> str:
+    """Repair narrowly-scoped column aliases that are known from the catalog.
+
+    Text-to-SQL models sometimes normalize a field such as customers.customer_name
+    to the generic customers.name. Do not perform global replacements because
+    other tables may legitimately have a column named "name".
+    """
+    customer_aliases = set()
+
+    # Capture aliases used specifically for the customers table:
+    #   FROM customers c
+    #   FROM customers AS c
+    #   JOIN customers c
+    #   JOIN customers AS c
+    customer_table_pattern = re.compile(
+        r"\b(?:FROM|JOIN)\s+(?:public\.)?customers"
+        r"(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?"
+        r"(?=\s|\.|,|\)|$)",
+        re.IGNORECASE,
+    )
+
+    for match in customer_table_pattern.finditer(sql):
+        alias = match.group(1)
+        if alias:
+            customer_aliases.add(alias)
+
+    repaired_sql = sql
+
+    # Direct table reference: customers.name -> customers.customer_name.
+    repaired_sql, direct_count = re.subn(
+        r"\b(?:public\.)?customers\.name\b",
+        lambda m: m.group(0).rsplit(".", 1)[0] + ".customer_name",
+        repaired_sql,
+        flags=re.IGNORECASE,
+    )
+
+    # Aliased reference: c.name -> c.customer_name, but ONLY when c was
+    # explicitly bound to the customers table in this query.
+    alias_count = 0
+    for alias in customer_aliases:
+        repaired_sql, count = re.subn(
+            rf"\b{re.escape(alias)}\.name\b",
+            f"{alias}.customer_name",
+            repaired_sql,
+            flags=re.IGNORECASE,
+        )
+        alias_count += count
+
+    if direct_count or alias_count:
+        print(
+            "🛠️ SQL schema repair:",
+            f"customers.name -> customer_name ({direct_count + alias_count} replacement(s))",
+        )
+
+    return repaired_sql
+
+
+class MiniLMONNXEmbeddings(Embeddings):
+    """all-MiniLM-L6-v2 embeddings without loading PyTorch."""
+
+    @staticmethod
+    def _embed(text: str) -> list[float]:
+        encoded = _TOKENIZER.encode(text)
+        input_ids = np.asarray([encoded.ids], dtype=np.int64)
+        attention_mask = np.asarray([encoded.attention_mask], dtype=np.int64)
+        token_type_ids = np.asarray([encoded.type_ids], dtype=np.int64)
+
+        inputs = {}
+        input_names = {item.name for item in _SESSION.get_inputs()}
+        if "input_ids" in input_names:
+            inputs["input_ids"] = input_ids
+        if "attention_mask" in input_names:
+            inputs["attention_mask"] = attention_mask
+        if "token_type_ids" in input_names:
+            inputs["token_type_ids"] = token_type_ids
+
+        outputs = _SESSION.run(None, inputs)
+        token_embeddings = outputs[0]
+
+        mask = attention_mask[..., None].astype(np.float32)
+        pooled = (token_embeddings * mask).sum(axis=1) / np.clip(
+            mask.sum(axis=1), 1e-9, None
+        )
+
+        # Match the normalized Sentence-Transformers representation.
+        norm = np.linalg.norm(pooled, axis=1, keepdims=True)
+        pooled = pooled / np.clip(norm, 1e-12, None)
+        return pooled[0].astype(np.float32).tolist()
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed(text)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._embed(text) for text in texts]
+
+embeddings = MiniLMONNXEmbeddings()
+configured_faiss = Path(os.getenv("FAISS_INDEX_PATH", ""))
+faiss_index = configured_faiss if configured_faiss.is_absolute() else (
+    BASE_DIR / configured_faiss if str(configured_faiss) else BASE_DIR / "faiss_index"
+)
+# Ignore stale Render paths such as /app/faiss_index when the build produced
+# the index inside the deployed repository.
+if not (faiss_index / "index.faiss").is_file() or not (faiss_index / "index.pkl").is_file():
+    faiss_index = BASE_DIR / "faiss_index"
+if not (faiss_index / "index.faiss").is_file() or not (faiss_index / "index.pkl").is_file():
+    raise RuntimeError(
+        f"FAISS index files are missing. Expected {faiss_index / 'index.faiss'} and {faiss_index / 'index.pkl'}."
+    )
+vectorstore = FAISS.load_local(
+    str(faiss_index),
+    embeddings,
+    allow_dangerous_deserialization=True,
+)
+
+# Complete table catalog generated alongside the FAISS index. This avoids
+# depending on the original .txt files being present at runtime and lets us
+# expand each retrieved chunk back to the full table definition.
+catalog_json = Path(
+    os.getenv("RAG_TABLE_CATALOG_PATH", str(BASE_DIR / "rag_table_catalog.json"))
+)
+if catalog_json.is_file():
+    try:
+        with catalog_json.open("r", encoding="utf-8") as file:
+            full_table_catalog = json.load(file)
+    except Exception as exc:
+        print(f"Could not load complete RAG catalog {catalog_json}: {exc}")
+        full_table_catalog = {}
+else:
+    full_table_catalog = {}
+
+
+
+def _persist_query_history(db: Session, user_id: int, question: str, answer: str, result_count: int) -> None:
+    """Persist a successful owner query without making history storage break the query itself."""
+    try:
+        db.add(
+            AIQueryHistory(
+                user_id=user_id,
+                question=question.strip(),
+                answer=answer.strip(),
+                result_count=int(result_count or 0),
+            )
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"⚠️ AI query history persistence failed: {type(exc).__name__}: {exc}")
+
+
+def _fast_business_query(query: str, db: Session, user_id: int):
+    """Answer common owner KPI questions without FAISS/Groq latency.
+
+    The normal RAG/Text-to-SQL engine remains the fallback for arbitrary
+    questions. Common sales/expense KPI questions use the same tenant and
+    business-date rules but execute directly against the canonical tables.
+    """
+    normalized = re.sub(r"\s+", " ", query.lower()).strip()
+    wants_sales = bool(re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized))
+    wants_expense = bool(re.search(r"\b(expense|expenses|spent|spending)\b", normalized))
+    if not (wants_sales or wants_expense):
+        return None
+
+    if re.search(r"\b(today|today's|todays)\b", normalized):
+        business_date, previous_business_date = _business_dates()
+        date_scope = ("today", business_date, "invoice_date", "sale_date")
+    elif re.search(r"\byesterday\b", normalized):
+        business_date, previous_business_date = _business_dates()
+        date_scope = ("yesterday", previous_business_date, "invoice_date", "sale_date")
+    else:
+        date_scope = ("all time", None, "invoice_date", "sale_date")
+
+    wants_units = bool(
+        re.search(r"\b(items?|units?)\b", normalized)
+        and re.search(r"\b(sold|sales?)\b", normalized)
+    )
+    wants_count = bool(
+        re.search(r"\b(how many|number of|count)\b.*\bsales?\b", normalized)
+    )
+
+    if wants_expense:
+        if date_scope[1] is None:
+            row = db.execute(
+                text(
+                    "SELECT COALESCE(SUM(amount), 0) AS total_expenses "
+                    "FROM universal_transactions "
+                    "WHERE shop_id = :user_id AND tx_type = 'EXPENSE'"
+                ),
+                {"user_id": user_id},
+            ).mappings().one()
+        else:
+            row = db.execute(
+                text(
+                    "SELECT COALESCE(SUM(amount), 0) AS total_expenses "
+                    "FROM universal_transactions "
+                    "WHERE shop_id = :user_id AND tx_type = 'EXPENSE' "
+                    "AND tx_date::date = :business_date"
+                ),
+                {"user_id": user_id, "business_date": date_scope[1]},
+            ).mappings().one()
+        value = float(row["total_expenses"] or 0)
+        answer = f"Your expenses {date_scope[0]} are ₹{value:,.2f}."
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_KPI: universal_transactions expense total",
+            "generated_model_response": answer,
+            "results": [{"total_expenses": value}],
+        }
+
+    invoice_date = "i.invoice_date = :business_date" if date_scope[1] is not None else "1=1"
+    legacy_date = "s.sale_date = :business_date" if date_scope[1] is not None else "1=1"
+
+    if wants_count:
+        row = db.execute(
+            text(
+                "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.cnt ELSE sales_rows.cnt END AS sales_count "
+                "FROM (SELECT COUNT(*)::bigint AS cnt FROM invoices i "
+                f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
+                "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt FROM sales s "
+                f"WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
+            ),
+            {"user_id": user_id, "business_date": date_scope[1]},
+        ).mappings().one()
+        value = int(row["sales_count"] or 0)
+        answer = f"You have {value} sale(s) {date_scope[0]}."
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_KPI: invoice/sales count",
+            "generated_model_response": answer,
+            "results": [{"sales_count": value}],
+        }
+
+    if wants_units:
+        row = db.execute(
+            text(
+                "SELECT CASE WHEN invoice_rows.qty > 0 THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
+                "FROM (SELECT COALESCE(SUM(ili.quantity),0)::numeric AS qty "
+                "FROM invoice_line_items ili JOIN invoices i ON i.id = ili.invoice_id "
+                f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
+                "CROSS JOIN (SELECT COALESCE(SUM(s.quantity),0)::numeric AS qty FROM sales s "
+                f"WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
+            ),
+            {"user_id": user_id, "business_date": date_scope[1]},
+        ).mappings().one()
+        value = float(row["total_units_sold"] or 0)
+        answer = f"You sold {value:g} item(s) {date_scope[0]}."
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_KPI: invoice/sales units",
+            "generated_model_response": answer,
+            "results": [{"total_units_sold": value}],
+        }
+
+    row = db.execute(
+        text(
+            "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.total ELSE sales_rows.total END AS total_sales_amount "
+            "FROM (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(i.total_amount),0)::numeric AS total "
+            "FROM invoices i "
+            f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
+            "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(s.total),0)::numeric AS total "
+            f"FROM sales s WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
+        ),
+        {"user_id": user_id, "business_date": date_scope[1]},
+    ).mappings().one()
+    value = float(row["total_sales_amount"] or 0)
+    answer = f"Your total sales amount {date_scope[0]} is ₹{value:,.2f}."
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_KPI: invoice/sales revenue",
+        "generated_model_response": answer,
+        "results": [{"total_sales_amount": value}],
+    }
+
+
+app= APIRouter()
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+
+@app.get("/askquery/history")
+def get_query_history(
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+
+    base = db.query(AIQueryHistory).filter(
+        AIQueryHistory.user_id == user_id
+    )
+    total = base.count()
+    rows = (
+        base.order_by(AIQueryHistory.created_at.desc(), AIQueryHistory.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "history": [
+            {
+                "id": row.id,
+                "question": row.question,
+                "answer": row.answer,
+                "result_count": row.result_count,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ],
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(rows) < total,
+    }
+
+
+@app.delete("/askquery/history/{history_id}")
+def delete_query_history(
+    history_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    row = db.query(AIQueryHistory).filter(
+        AIQueryHistory.id == history_id,
+        AIQueryHistory.user_id == user_id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Query history entry not found.")
+    db.delete(row)
+    db.commit()
+    return {"success": True, "id": history_id}
+
+
+@app.delete("/askquery/history")
+def clear_query_history(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    db.query(AIQueryHistory).filter(AIQueryHistory.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.commit()
+    return {"success": True}
+
+
 @app.post("/askquery")
 async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=Depends(check_current_user)):
+    started = time.perf_counter()
+
+    # Fast path for the most common dashboard KPI questions. This avoids the
+    # FAISS + Groq round-trip that previously made simple questions feel stuck
+    # on "loading".
+    fast_result = _fast_business_query(query, db, user_id)
+    if fast_result is not None:
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=query,
+            answer=fast_result["answer"],
+            result_count=len(fast_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": query,
+            "answer": fast_result["answer"],
+            "message": fast_result["answer"],
+            "generated_sql": fast_result["generated_sql"],
+            "generated_model_response": fast_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": fast_result["generated_sql"],
+            "row_count": len(fast_result["results"]),
+            "results": fast_result["results"],
+        }
     print("🔥 ENDPOINT CALLED")
+    print("QUERY ENGINE VERSION:", QUERY_ENGINE_VERSION)
     print("QUERY:", query)
 
-    answer = vectorstore.similarity_search(query, k=3)
+    retrieval_started = time.perf_counter()
+    answer = vectorstore.similarity_search(query, k=6)
+    retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
     print("Relevant database information:")
     for doc in answer:
@@ -47,22 +457,119 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         print("Table:", doc.metadata.get("table"))
         print("Source:", doc.metadata.get("source"))
     table_paths = []
+    retrived_table_information = []
+    retrieved_table_records = []
+    processed_tables = set()
+
+    # FAISS returns chunks, but SQL generation needs complete table context.
+    # Expand each selected table using rag_table_catalog.json.
+
+    # The current app's primary sale/billing flow writes invoices
+    # (the mobile SaleService syncs an invoice), while the legacy sales table
+    # can contain older/raw sale rows. Use invoices for normal sales/billing
+    # questions and sales only for explicit raw-sales-table questions.
+    sales_intent = bool(
+        re.search(r"\b(sale|sales|sold|revenue|turnover|billed|billing|bill|bills)\b", query, re.IGNORECASE)
+        and not re.search(r"\b(sales\s+table|raw\s+sales|raw\s+sale|sale\s+rows?)\b", query, re.IGNORECASE)
+    )
+    raw_sales_intent = bool(
+        re.search(r"\b(sales\s+table|raw\s+sales|raw\s+sale|sale\s+rows?)\b", query, re.IGNORECASE)
+    )
+    invoice_intent = bool(
+        re.search(r"\b(invoice|invoices|bill|bills|billing)\b", query, re.IGNORECASE)
+    )
+
+    if sales_intent and not raw_sales_intent and "invoices" not in processed_tables:
+        invoice_content = full_table_catalog.get("invoices")
+
+        if isinstance(invoice_content, dict):
+            invoice_content = invoice_content.get("content", "")
+
+        if isinstance(invoice_content, str) and invoice_content.strip():
+            retrived_table_information.append(invoice_content)
+            retrieved_table_records.append({
+                "table": "invoices",
+                "source": "business_table_catalog/invoices.txt",
+                "content": invoice_content,
+                "retrieval": "full_table_catalog_intent",
+            })
+            processed_tables.add("invoices")
+
+    if raw_sales_intent and "sales" not in processed_tables:
+        sales_content = full_table_catalog.get("sales")
+
+        if isinstance(sales_content, dict):
+            sales_content = sales_content.get("content", "")
+
+        if isinstance(sales_content, str) and sales_content.strip():
+            retrived_table_information.append(sales_content)
+            retrieved_table_records.append({
+                "table": "sales",
+                "source": "business_table_catalog/sales.txt",
+                "content": sales_content,
+                "retrieval": "full_table_catalog_intent",
+            })
+            processed_tables.add("sales")
+
     for doc in answer:
         source_path = doc.metadata.get("source")
-        if source_path  not in table_paths:
+        table_name = doc.metadata.get("table")
+        source_name = Path(str(source_path).replace("\\", "/")).name if source_path else None
+        catalog_key = table_name or (Path(source_name).stem if source_name else None)
+
+        if source_path not in table_paths:
             table_paths.append(source_path)
-    retrived_table_information=[]
-    for path in table_paths:
-        try:
-            source_name = Path(str(path).replace("\\", "/")).name
-            catalog_path = BASE_DIR / "business_table_catalog" / source_name
-            if catalog_path.suffix != ".txt" or not catalog_path.is_file():
-                continue
-            with catalog_path.open("r", encoding="utf-8") as file:
-                content = file.read()
+
+        if catalog_key and catalog_key not in processed_tables:
+            catalog_entry = full_table_catalog.get(catalog_key)
+            # Support both catalog formats so an already-deployed JSON file
+            # with {"source": ..., "content": ...} keeps working.
+            if isinstance(catalog_entry, dict):
+                content = catalog_entry.get("content", "")
+                catalog_source = catalog_entry.get("source", source_path)
+            else:
+                content = catalog_entry or ""
+                catalog_source = source_path
+
+            if isinstance(content, str) and content.strip():
                 retrived_table_information.append(content)
-        except Exception as e:
-            print(f"Error reading file {path}: {str(e)}")
+                retrieved_table_records.append({
+                    "table": catalog_key,
+                    "source": catalog_source,
+                    "content": content,
+                    "retrieval": "full_table_catalog",
+                })
+                processed_tables.add(catalog_key)
+                continue
+
+        # Legacy fallback for an already-deployed instance without the JSON catalog.
+        if source_name and catalog_key not in processed_tables:
+            catalog_path = BASE_DIR / "business_table_catalog" / source_name
+            if catalog_path.suffix == ".txt" and catalog_path.is_file():
+                try:
+                    content = catalog_path.read_text(encoding="utf-8")
+                    retrived_table_information.append(content)
+                    retrieved_table_records.append({
+                        "table": catalog_key,
+                        "source": source_path,
+                        "content": content,
+                        "retrieval": "catalog_file",
+                    })
+                    processed_tables.add(catalog_key)
+                    continue
+                except Exception as exc:
+                    print(f"Error reading catalog file {catalog_path}: {exc}")
+
+        # Final fallback: expose the FAISS chunk itself.
+        content = str(getattr(doc, "page_content", "") or "").strip()
+        if content:
+            retrived_table_information.append(content)
+            retrieved_table_records.append({
+                "table": catalog_key,
+                "source": source_path,
+                "content": content,
+                "retrieval": "faiss_chunk",
+            })
     print("Retrieved table information:")
     for content in retrived_table_information:
         print(content)
@@ -82,22 +589,39 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
 
     - Carefully understand the user's question.
     - Examine all retrieved table information.
-    - Select the table that is most relevant to the user's question.
-    - Use ONLY tables and columns that appear in the retrieved table information.
-    - Follow the QUERY GUIDANCE provided in the retrieved table information.
-    - Do NOT invent table names.
-    - Do NOT invent column names.
-    - Do NOT invent relationships.
-    - Do NOT assume a column exists just because it would normally exist in a database.
-    - Prefer the source table specified by the QUERY GUIDANCE.
+    - Use ONLY tables, columns, and relationships explicitly present in the retrieved catalog.
+    - Treat QUERY GUIDANCE as authoritative business semantics.
     - Generate PostgreSQL-compatible SQL.
-    - Generate a single-table, read-only SELECT query only.
-    - Always filter rows with `user_id = :user_id`. Do not use a literal user ID.
-    - Do not use JOINs, subqueries, OR, or UNION.
-    - Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or CREATE.
-    - For date-related questions such as "today", follow the table's documented business-date guidance.
-    - If the question requires information from multiple related tables and the relationships are explicitly provided, you may use a JOIN.
-    - If the retrieved information is insufficient to answer the question, state that the schema information is insufficient instead of inventing information.
+    - JOINs are allowed only when the retrieved catalog explicitly documents the relationship.
+    - For tables with user_id, scope using user_id = :user_id.
+    - For the sales table, shopkeeper_id is the authenticated shop owner scope, so use shopkeeper_id = :user_id.
+    - The catalog may contain example placeholders such as :shop_id or :business_date. Treat them as documented parameter semantics. Runtime parameters are :user_id, :business_date, and :previous_business_date.
+    - CRITICAL DATE RULE: for "today" / "today's", use the documented date column with = :business_date. NEVER subtract one day for "today". NEVER use CURRENT_DATE, CURRENT_TIMESTAMP, AT TIME ZONE, or INTERVAL arithmetic to decide today's date.
+    - For "yesterday" / "yesterday's", use the documented date column with = :previous_business_date.
+    - Never invent a relationship or literal user/shop ID.
+    - Do not assume a column exists just because it would normally exist in a database.
+    - Use the documented date column and business-date/timezone guidance for date/range questions.
+    - IMPORTANT: Do not add a date filter unless the user explicitly asks for a date or time range.
+    - If the user says "today", filter to today's Asia/Kolkata business date only.
+    - If the user gives a specific date, filter to that exact date only.
+    - If the user gives a range such as yesterday, this week, last week, this month, or last month, use that exact range.
+    - If no date or range is mentioned, do not silently assume today; answer across the full available period requested by the question.
+    - For normal sales questions in this application, use the invoices table because the current sale workflow records completed sales as invoices:
+      - count completed/active invoices for sale counts;
+      - use invoices.total_amount for billed sales amount;
+      - exclude CANCELLED and DRAFT invoices;
+      - use invoice_line_items for billed item/unit quantities.
+    - Use the legacy sales table only when the user explicitly asks for raw sales rows or the sales table.
+    - Do not combine sales and invoices totals unless the user explicitly asks for a reconciliation; the application can record both and they may overlap.
+    - For "today", use the shop's business date (Asia/Kolkata) rather than the database server timezone.
+    - Distinguish COUNT(rows), SUM(quantity), revenue, billed value, cash received, and stock exactly as documented.
+    - Generate exactly one read-only SELECT query.
+    - Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, REVOKE, COPY, or multiple statements.
+    - The query must contain the authenticated parameter :user_id somewhere in its scope logic.
+    - If the catalog is insufficient, do not invent a schema or relationship.
+    - CUSTOMER SCHEMA SAFETY: the customers table uses customer_name for the customer name.
+      There is NO customers.name column. When the customers table is aliased as c, use c.customer_name.
+      Verify every customers column against the supplied catalog before returning SQL.
 
     Retrieved complete table information:
 
@@ -123,30 +647,371 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             retrieved_table_information=retrived_table_information_str,
             question=query
         )
-    response = llm.invoke(formatted_prompt)
-    generated_text = response.content
+    llm_started = time.perf_counter()
+    try:
+        completion = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
+            messages=[{"role": "user", "content": formatted_prompt}],
+            temperature=0.1,
+            max_tokens=2048,
+            top_p=0.9,
+            stream=True,
+            stop=None,
+        )
+
+        generated_parts = []
+        for chunk in completion:
+            if not getattr(chunk, "choices", None):
+                continue
+            delta = getattr(chunk.choices[0], "delta", None)
+            content = getattr(delta, "content", None) or ""
+            if content:
+                generated_parts.append(content)
+    except Exception as exc:
+        print("Groq completion failed:")
+        print(f"Exception type: {type(exc).__name__}")
+        print(f"Exception: {exc}")
+        raise HTTPException(status_code=502, detail="The SQL generation service is temporarily unavailable.") from exc
+
+    llm_ms = (time.perf_counter() - llm_started) * 1000
+    generated_text = "".join(generated_parts).strip()
     sql_match = re.search(r"\bSQL\s*:\s*(.+)", generated_text, re.IGNORECASE | re.DOTALL)
     if not sql_match:
         raise HTTPException(status_code=400, detail="The generated response did not contain SQL.")
 
     sql = sql_match.group(1).strip().strip("`").strip()
     sql = re.sub(r";\s*$", "", sql)
-    if (
-        not re.match(r"^SELECT\b", sql, re.IGNORECASE)
-        or ";" in sql
-        or re.search(r"\b(JOIN|UNION|OR|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|WITH)\b", sql, re.IGNORECASE)
-        or not re.search(r"\buser_id\s*=\s*:user_id\b", sql, re.IGNORECASE)
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Generated SQL must be a single read-only SELECT scoped by user_id = :user_id.",
+
+    # Apply a narrow schema repair before execution. This catches common LLM
+    # normalization such as c.name when c is the customers table, while
+    # leaving legitimate name columns on other tables untouched.
+    sql = _repair_known_schema_aliases(sql)
+
+    # Normalize the tenant placeholder to the authenticated user.
+    sql = re.sub(r":shop_id\b", ":user_id", sql, flags=re.IGNORECASE)
+
+    # Business dates are supplied by the application in Asia/Kolkata.
+    # Do not let the model/database server choose the meaning of "today".
+    normalized_query = re.sub(r"\s+", " ", query.lower()).strip()
+    if re.search(r"\b(today|todays|today's)\b", normalized_query):
+        sql = re.sub(
+            r"\(\s*\(?\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)?\s*::date\s*-\s*INTERVAL\s*'1\s*day'\s*\)?\s*::date",
+            ":business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date\s*-\s*INTERVAL\s*'1\s*day'",
+            ":business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date",
+            ":business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(r"\bCURRENT_DATE\s*-\s*INTERVAL\s*'1\s*day'", ":business_date", sql, flags=re.IGNORECASE)
+        sql = re.sub(r"\bCURRENT_DATE\b", ":business_date", sql, flags=re.IGNORECASE)
+    elif re.search(r"\b(yesterday|yesterday's)\b", normalized_query):
+        sql = re.sub(
+            r"\(\s*\(?\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)?\s*::date\s*-\s*INTERVAL\s*'1\s*day'\s*\)?\s*::date",
+            ":previous_business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date\s*-\s*INTERVAL\s*'1\s*day'",
+            ":previous_business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(
+            r"\(\s*CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'Asia/Kolkata'\s*\)::date",
+            ":previous_business_date",
+            sql,
+            flags=re.IGNORECASE,
+        )
+        sql = re.sub(r"\bCURRENT_DATE\s*-\s*INTERVAL\s*'1\s*day'", ":previous_business_date", sql, flags=re.IGNORECASE)
+        sql = re.sub(r"\bCURRENT_DATE\b", ":previous_business_date", sql, flags=re.IGNORECASE)
+
+    # For common sales metrics, use a deterministic source preference:
+    # current invoices are canonical for the modern sale workflow; when there
+    # are no qualifying invoice rows for the requested period, fall back to
+    # legacy sales rows. Crucially, the requested date/range controls the
+    # filter: no date mentioned means no date filter.
+    sale_metric_intent = bool(
+        re.search(r"\b(sale|sales|sold|revenue|turnover)\b", query, re.IGNORECASE)
+        and not re.search(r"\b(invoice|invoices|bill|bills|billing)\b", query, re.IGNORECASE)
+        and not raw_sales_intent
+    )
+    if sale_metric_intent:
+        normalized_query = re.sub(r"\s+", " ", query.lower()).strip()
+
+        wants_units = bool(
+            re.search(r"\b(how many|number of|total)\b.*\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
+            or re.search(r"\b(items?|units?)\b.*\b(sold|sales?)\b", normalized_query)
+        )
+        wants_count = bool(
+            re.search(r"\b(how many|number of)\b.*\bsales?\b", normalized_query)
+            or re.search(r"\b(count|number)\s+of\s+sales?\b", normalized_query)
         )
 
+        def build_date_filters(column_name: str):
+            today_expr = "CAST(:business_date AS date)"
+
+            if re.search(r"\b(today|todays|today's)\b", normalized_query):
+                return f"{column_name} = {today_expr}", "today"
+
+            if re.search(r"\byesterday\b", normalized_query):
+                return f"{column_name} = CAST(:previous_business_date AS date)", "yesterday"
+
+            # Exact ISO date: 2026-09-20
+            iso_match = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", normalized_query)
+            if iso_match:
+                y, m, d = map(int, iso_match.groups())
+                try:
+                    exact = date(y, m, d).isoformat()
+                    return f"{column_name} = DATE '{exact}'", exact
+                except ValueError:
+                    pass
+
+            # Exact Indian/common date: 20/09/2026 or 20-09-2026
+            dmy_match = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", normalized_query)
+            if dmy_match:
+                d, m, y = map(int, dmy_match.groups())
+                try:
+                    exact = date(y, m, d).isoformat()
+                    return f"{column_name} = DATE '{exact}'", exact
+                except ValueError:
+                    pass
+
+            # Named month + day, with optional year: "September 20" / "September 20, 2026"
+            month_names = {
+                "january": 1, "february": 2, "march": 3, "april": 4,
+                "may": 5, "june": 6, "july": 7, "august": 8,
+                "september": 9, "october": 10, "november": 11, "december": 12,
+            }
+            month_pattern = "|".join(month_names)
+            month_match = re.search(
+                rf"\b({month_pattern})\s+(\d{{1,2}})(?:,\s*(20\d{{2}}))?\b",
+                normalized_query,
+                re.IGNORECASE,
+            )
+            if month_match:
+                month_num = month_names[month_match.group(1).lower()]
+                day_num = int(month_match.group(2))
+                year_num = int(month_match.group(3)) if month_match.group(3) else date.today().year
+                try:
+                    exact = date(year_num, month_num, day_num).isoformat()
+                    return f"{column_name} = DATE '{exact}'", exact
+                except ValueError:
+                    pass
+
+            # Common natural-language ranges.
+            if re.search(r"\b(this week|current week)\b", normalized_query):
+                return (
+                    f"{column_name} >= date_trunc('week', {today_expr})::date "
+                    f"AND {column_name} < (date_trunc('week', {today_expr}) + INTERVAL '7 days')::date",
+                    "this week",
+                )
+
+            if re.search(r"\b(last week|previous week)\b", normalized_query):
+                return (
+                    f"{column_name} >= (date_trunc('week', {today_expr}) - INTERVAL '7 days')::date "
+                    f"AND {column_name} < date_trunc('week', {today_expr})::date",
+                    "last week",
+                )
+
+            if re.search(r"\b(this month|current month)\b", normalized_query):
+                return (
+                    f"{column_name} >= date_trunc('month', {today_expr})::date "
+                    f"AND {column_name} < (date_trunc('month', {today_expr}) + INTERVAL '1 month')::date",
+                    "this month",
+                )
+
+            if re.search(r"\b(last month|previous month)\b", normalized_query):
+                return (
+                    f"{column_name} >= (date_trunc('month', {today_expr}) - INTERVAL '1 month')::date "
+                    f"AND {column_name} < date_trunc('month', {today_expr})::date",
+                    "last month",
+                )
+
+            return "", "all time"
+
+        invoice_date_filter, date_scope = build_date_filters("invoice_date")
+        sales_date_filter, _ = build_date_filters("sale_date")
+
+        invoice_where = (
+            "user_id = :user_id AND status NOT IN ('CANCELLED', 'DRAFT')"
+            + (f" AND {invoice_date_filter}" if invoice_date_filter else "")
+        )
+        sales_where = (
+            "shopkeeper_id = :user_id"
+            + (f" AND {sales_date_filter}" if sales_date_filter else "")
+        )
+
+        if wants_count:
+            sql = (
+                "WITH invoice_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt "
+                "FROM invoices "
+                f"WHERE {invoice_where}"
+                "), sales_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt "
+                "FROM sales "
+                f"WHERE {sales_where}"
+                ") "
+                "SELECT CASE WHEN invoice_rows.cnt > 0 "
+                "THEN invoice_rows.cnt ELSE sales_rows.cnt END AS sales_count "
+                "FROM invoice_rows CROSS JOIN sales_rows"
+            )
+            generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
+        elif wants_units:
+            sql = (
+                "WITH invoice_rows AS ("
+                "SELECT COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
+                "FROM invoice_line_items ili "
+                "JOIN invoices i ON i.id = ili.invoice_id "
+                "WHERE i.user_id = :user_id "
+                "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+                + (f" AND i.{invoice_date_filter}" if invoice_date_filter else "")
+                + "), sales_rows AS ("
+                "SELECT COALESCE(SUM(quantity), 0)::numeric AS qty "
+                "FROM sales "
+                f"WHERE {sales_where}"
+                ") "
+                "SELECT CASE WHEN invoice_rows.qty > 0 "
+                "THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
+                "FROM invoice_rows CROSS JOIN sales_rows"
+            )
+            generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
+        elif re.search(r"\b(total|amount|revenue|turnover)\b", normalized_query):
+            sql = (
+                "WITH invoice_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt, "
+                "COALESCE(SUM(total_amount), 0)::numeric AS total "
+                "FROM invoices "
+                f"WHERE {invoice_where}"
+                "), sales_rows AS ("
+                "SELECT COUNT(*)::bigint AS cnt, "
+                "COALESCE(SUM(total), 0)::numeric AS total "
+                "FROM sales "
+                f"WHERE {sales_where}"
+                ") "
+                "SELECT CASE WHEN invoice_rows.cnt > 0 "
+                "THEN invoice_rows.total ELSE sales_rows.total END AS total_sales_amount "
+                "FROM invoice_rows CROSS JOIN sales_rows"
+            )
+            generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
+
+    print("Generated SQL:")
+    print(sql)
+
+    if (
+        not re.match(r"^(?:SELECT|WITH)\b", sql, re.IGNORECASE)
+        or not re.search(r"\bSELECT\b", sql, re.IGNORECASE)
+        or ";" in sql
+        or re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\b", sql, re.IGNORECASE)
+        or re.search(r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export)\s*\(", sql, re.IGNORECASE)
+        or not re.search(r":user_id\b", sql, re.IGNORECASE)
+    ):
+        print("SQL validation failed for generated SQL:")
+        print(sql)
+        raise HTTPException(
+            status_code=400,
+            detail="Generated SQL must be a single read-only SELECT scoped with the authenticated :user_id parameter.",
+        )
+
+    db_started = time.perf_counter()
     try:
-        rows = db.execute(text(sql), {"user_id": user_id}).mappings().all()
+        business_date, previous_business_date = _business_dates()
+        rows = db.execute(
+            text(sql),
+            {
+                "user_id": user_id,
+                "business_date": business_date,
+                "previous_business_date": previous_business_date,
+            },
+        ).mappings().all()
     except Exception as exc:
         db.rollback()
+        print("SQL execution failed:")
+        print(f"Exception type: {type(exc).__name__}")
+        print(f"Exception: {exc}")
+        print("SQL:")
+        print(sql)
         raise HTTPException(status_code=400, detail="The generated SQL could not be executed.") from exc
 
-    return {"query": query, "sql": sql, "results": jsonable_encoder([dict(row) for row in rows])}
+    db_ms = (time.perf_counter() - db_started) * 1000
+    total_ms = (time.perf_counter() - started) * 1000
+    print(f"ASKQUERY TIMING retrieval={retrieval_ms:.1f}ms llm={llm_ms:.1f}ms db={db_ms:.1f}ms total={total_ms:.1f}ms")
+
+    encoded_rows = jsonable_encoder([dict(row) for row in rows])
+
+    def _money(value):
+        try:
+            return f"₹{float(value):,.2f}"
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _build_answer(result_rows):
+        if not result_rows:
+            return "No matching records were found for your question."
+
+        first = result_rows[0]
+        keys = {str(k).lower() for k in first.keys()}
+
+        # Common retail metric responses.
+        if len(result_rows) == 1:
+            for key in ("sales_count", "total_units_sold", "count", "invoice_count", "total_invoices"):
+                if key in keys:
+                    actual = next(k for k in first if str(k).lower() == key)
+                    return f"The answer is {first[actual]}."
+            for key in ("total_sales_amount", "total_revenue", "total_amount", "total", "khata_balance"):
+                if key in keys:
+                    actual = next(k for k in first if str(k).lower() == key)
+                    return f"The total is {_money(first[actual])}."
+
+        if "customer_name" in keys and "khata_balance" in keys:
+            total = sum(float(row.get("khata_balance") or 0) for row in result_rows)
+            return (
+                f"{len(result_rows)} customer(s) have outstanding khata balances, "
+                f"totaling {_money(total)}."
+            )
+
+        if any(k in keys for k in ("product_name", "name")):
+            label_key = next((k for k in first if str(k).lower() in ("product_name", "name")), None)
+            value_key = next(
+                (k for k in first if str(k).lower() in ("revenue", "total", "total_amount", "amount", "quantity", "total_sales_amount")),
+                None,
+            )
+            if label_key and value_key:
+                return f"Found {len(result_rows)} result(s). The top result is {first[label_key]} with {first[value_key]}."
+
+        return f"Found {len(result_rows)} matching result(s)."
+
+    answer_text = _build_answer(encoded_rows)
+
+    _persist_query_history(
+        db=db,
+        user_id=user_id,
+        question=query,
+        answer=answer_text,
+        result_count=len(encoded_rows),
+    )
+
+    return {
+        "query_engine_version": QUERY_ENGINE_VERSION,
+        "query": query,
+        "answer": answer_text,
+        "message": answer_text,
+        "generated_sql": sql,
+        "generated_model_response": generated_text,
+        "retrieved_table_information": retrieved_table_records,
+        "sql": sql,
+        "row_count": len(encoded_rows),
+        "results": encoded_rows,
+    }
         

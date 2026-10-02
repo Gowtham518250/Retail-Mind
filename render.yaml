@@ -2,21 +2,36 @@ services:
   - type: web
     name: retail-mind-api
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "alembic upgrade head && python -c \"from app import api; from production_hardening_middleware import install; install(api); import uvicorn; uvicorn.run(api, host='0.0.0.0', port=int(__import__('os').environ['PORT']))\""
+    buildCommand: "pip install -r requirements.txt && python build_faiss_index.py"
+    # Start the API directly; migrations are intentionally not part of the web startup path.
+    startCommand: "python production_boot.py"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.0
+        value: 3.11.0
       - key: DATABASE_URL
         sync: false
       - key: SECRET_KEY
         generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 10080
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 7
       - key: SENDER_EMAIL
         sync: false
       - key: SENDER_PASSWORD
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REALTIME_REDIS_CHANNEL
+        value: retail-mind:realtime:events
+      - key: REALTIME_TICKET_TTL_SECONDS
+        value: "120"
 
   - type: static
     name: retail-mind-frontend

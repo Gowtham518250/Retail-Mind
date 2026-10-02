@@ -44,7 +44,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth-hardened/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth-hardened/swagger-login")
 
 
 # ==================== PYDANTIC MODELS ====================

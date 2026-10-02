@@ -123,9 +123,40 @@ class BackupService:
             )
             
             db.add(backup_record)
+            db.flush()
+
+            verification = cls.verify_backup(db, backup_record.id)
+            if not verification.get("verified"):
+                backup_record.status = "FAILED"
+                backup_record.error_message = verification.get("reason")
+                db.commit()
+                raise RuntimeError(
+                    f"Backup verification failed: {verification.get('reason')}"
+                )
+
             db.commit()
-            
-            logger.info(f"Backup created: {backup_name} ({backup_size_mb:.2f} MB)")
+
+            try:
+                from audit_logging import AuditAction, AuditService
+                AuditService.log_action(
+                    db=db,
+                    action=AuditAction.BACKUP,
+                    table_name="backup_records",
+                    record_id=backup_record.id,
+                    new_values={
+                        "backup_name": backup_record.backup_name,
+                        "size_mb": backup_record.backup_size_mb,
+                        "records": backup_record.total_records,
+                        "verified": True,
+                    },
+                    description=f"Verified database backup created: {backup_record.backup_name}",
+                )
+            except Exception as audit_error:
+                logger.warning("Backup audit logging failed: %s", audit_error)
+
+            logger.info(
+                f"Backup created and verified: {backup_name} ({backup_size_mb:.2f} MB)"
+            )
             return backup_record
         
         except Exception as e:
@@ -281,6 +312,75 @@ class BackupService:
         except:
             return 0
     
+    @classmethod
+    def verify_backup(cls, db: Session, backup_id: int) -> dict:
+        """Verify that a backup file exists and is structurally readable without restoring it."""
+        backup = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
+        if not backup:
+            raise ValueError(f"Backup {backup_id} not found")
+
+        backup_path = Path(backup.backup_path)
+        if not backup_path.exists() or backup_path.stat().st_size <= 0:
+            return {
+                "verified": False,
+                "backup_id": backup_id,
+                "name": backup.backup_name,
+                "reason": "Backup file is missing or empty",
+            }
+
+        temp_path = None
+        try:
+            candidate = backup_path
+            if backup_path.suffix == ".gz":
+                temp_path = backup_path.with_suffix(".verify.tmp")
+                with gzip.open(backup_path, "rb") as source, open(temp_path, "wb") as target:
+                    shutil.copyfileobj(source, target)
+                candidate = temp_path
+
+            with open(candidate, "rb") as handle:
+                sample = handle.read(4096)
+
+            if not sample:
+                return {
+                    "verified": False,
+                    "backup_id": backup_id,
+                    "name": backup.backup_name,
+                    "reason": "Backup payload is empty",
+                }
+
+            # Current PostgreSQL backups are plain SQL dumps. Accept valid
+            # PostgreSQL headers or generic SQL content; SQLite backups only
+            # need a non-empty file at this layer.
+            if "postgresql" in str(engine.url).lower():
+                text_sample = sample.decode("utf-8", errors="ignore").lower()
+                recognizable = (
+                    "postgresql database dump" in text_sample
+                    or "create table" in text_sample
+                    or "set " in text_sample
+                )
+                if not recognizable:
+                    return {
+                        "verified": False,
+                        "backup_id": backup_id,
+                        "name": backup.backup_name,
+                        "reason": "Backup does not look like a readable PostgreSQL dump",
+                    }
+
+            return {
+                "verified": True,
+                "backup_id": backup_id,
+                "name": backup.backup_name,
+                "size_mb": backup.backup_size_mb,
+                "created_at": backup.created_at.isoformat() if backup.created_at else None,
+                "records": backup.total_records,
+            }
+        finally:
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    logger.warning("Unable to remove temporary backup verification file: %s", temp_path)
+
     @classmethod
     def cleanup_old_backups(cls, db: Session):
         """Remove backups older than retention period"""
