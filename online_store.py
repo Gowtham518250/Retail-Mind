@@ -1806,14 +1806,24 @@ def update_order_status(
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
 
-    if new_status == "DELIVERED" and order.order_status != "DISPATCHED":
+    # Enforce the same state machine on the server that the owner app
+    # presents in its UI. This prevents stale/double taps from skipping a
+    # fulfilment stage or rejecting an order after it has entered delivery.
+    expected_previous_status = {
+        "ACCEPTED": "PENDING",
+        "DISPATCHED": "ACCEPTED",
+        "DELIVERED": "DISPATCHED",
+        "REJECTED": "PENDING",
+    }.get(new_status)
+
+    if expected_previous_status and order.order_status != expected_previous_status:
         raise HTTPException(
             status_code=409,
-            detail="Order must be dispatched before it can be marked delivered.",
+            detail=(
+                f"Cannot change order from {order.order_status} to {new_status}. "
+                f"Expected current status: {expected_previous_status}."
+            ),
         )
-
-    if order.order_status != "PENDING" and new_status == "ACCEPTED":
-        raise HTTPException(status_code=409, detail="Order is already accepted or finalized.")
 
     # 🟢 On ACCEPT: record sales immediately in dashboard 🟢──────────────────
     if new_status == "ACCEPTED":
