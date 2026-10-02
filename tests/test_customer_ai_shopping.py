@@ -44,3 +44,12 @@ def test_customer_ai_uses_real_store_and_stock_filters():
     source = inspect.getsource(customer_ai_shopping)
     assert "ShopProfile.is_online_store_enabled.is_(True)" in source
     assert "Product.current_stock > 0" in source
+
+
+def test_customer_ai_uses_unit_price_for_ranking():
+    from customer_ai_shopping import customer_ai_shopping
+    import inspect
+
+    source = inspect.getsource(customer_ai_shopping)
+    assert "pair[0].unit_price" in source
+    assert "pair[0].price" not in source
