@@ -254,9 +254,7 @@ export default function AiShoppingPage() {
             <div>
               <span className={styles.sectionLabel}>RETAIL MIND AI</span>
               <h2>Comparing live shops…</h2>
-              <p>
-                Checking stock, prices, ratings and online availability.
-              </p>
+              <p>Checking stock, prices, ratings and online availability.</p>
             </div>
             <div className={styles.loadingDots}>
               <span />
@@ -352,9 +350,7 @@ export default function AiShoppingPage() {
 
                   <div className={styles.resultTitleRow}>
                     <h3>{item.product_name}</h3>
-                    <div className={styles.price}>
-                      ₹{Number(item.price).toFixed(2)}
-                    </div>
+                    <div className={styles.price}>₹{Number(item.price).toFixed(2)}</div>
                   </div>
 
                   <p className={styles.resultDescription}>
@@ -402,8 +398,7 @@ export default function AiShoppingPage() {
 
                   {Number(item.online_setup_fee || 0) > 0 && (
                     <div className={styles.fee}>
-                      Online setup fee ₹
-                      {Number(item.online_setup_fee).toFixed(2)} per order
+                      Online setup fee ₹{Number(item.online_setup_fee).toFixed(2)} per order
                     </div>
                   )}
 
@@ -426,8 +421,8 @@ export default function AiShoppingPage() {
             </div>
           </>
         )}
-        </section>
-      </main>
-    </div>
+      </section>
+    </main>
+  </div>
   );
 }
