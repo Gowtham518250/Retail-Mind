@@ -2,14 +2,18 @@ import re
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+import logging
 
 from db import get_db
 from models import Product, ShopProfile
 
 
 router = APIRouter(prefix="/store", tags=["Customer AI Shopping"])
+logger = logging.getLogger(__name__)
 
 
 def _parse_money(text: str) -> float | None:
@@ -76,6 +80,45 @@ def _intent(text: str) -> tuple[str, str]:
     return "match", "best matching"
 
 
+@router.get("/customer-ai/health")
+def customer_ai_health(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Public readiness probe for the customer Shopping AI service."""
+    try:
+        online_shops = int(
+            db.query(func.count(ShopProfile.shop_id))
+            .filter(
+                (ShopProfile.is_active.is_(True)) | (ShopProfile.is_active.is_(None)),
+                ShopProfile.is_online_store_enabled.is_(True),
+            )
+            .scalar()
+            or 0
+        )
+        in_stock_products = int(
+            db.query(func.count(Product.id))
+            .join(ShopProfile, ShopProfile.shop_id == Product.user_id)
+            .filter(
+                Product.is_active.is_(True),
+                Product.current_stock > 0,
+                (ShopProfile.is_active.is_(True)) | (ShopProfile.is_active.is_(None)),
+                ShopProfile.is_online_store_enabled.is_(True),
+            )
+            .scalar()
+            or 0
+        )
+        return {
+            "status": "ready",
+            "service": "customer-ai-shopping",
+            "online_shops": online_shops,
+            "in_stock_products": in_stock_products,
+        }
+    except SQLAlchemyError as exc:
+        logger.exception("Customer AI health query failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Shopping AI data service is unavailable.",
+        ) from exc
+
+
 @router.get("/customer-ai")
 def customer_ai_shopping(
     q: str = Query(..., min_length=2, max_length=300),
@@ -114,7 +157,14 @@ def customer_ai_shopping(
     if shop_hint:
         base = base.filter(ShopProfile.shop_name.ilike(f"%{shop_hint}%"))
 
-    rows = base.all()
+    try:
+        rows = base.all()
+    except SQLAlchemyError as exc:
+        logger.exception("Customer AI shopping database query failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Shopping AI is temporarily unavailable because the store data service is unhealthy.",
+        ) from exc
 
     # Prefer the complete product phrase first, then fall back to token matching.
     searchable = product_terms or raw_query
