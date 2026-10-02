@@ -32,6 +32,7 @@ from models import (
     OnlineCustomerLoyalty,
     OnlineLoyaltyTransaction,
     OnlineDeliveryAssignment,
+    AIQueryHistory,
 )
 from audit_logging import AuditLog
 
@@ -1002,6 +1003,28 @@ def award_order_loyalty(
     return {"message": "Loyalty processed.", "points_awarded": points}
 
 
+@router.get("/copilot/history")
+def copilot_history(
+    limit: int = Query(8, ge=1, le=30),
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(AIQueryHistory).filter(
+        AIQueryHistory.user_id == user_id,
+    ).order_by(desc(AIQueryHistory.created_at)).limit(limit).all()
+    return {
+        "history": [
+            {
+                "id": row.id,
+                "question": row.question,
+                "answer": row.answer,
+                "result_count": row.result_count,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+    }
+
 @router.get("/security-center")
 def security_center(
     user_id: int = Depends(check_current_user),
@@ -1050,40 +1073,93 @@ def business_copilot(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
-    text = q.lower()
+    query = q.strip()
+    text_query = query.lower()
     overview = growth_overview(user_id=user_id, db=db)
     stock = reorder_suggestions(user_id=user_id, db=db)
 
-    if any(word in text for word in ["stock", "restock", "inventory"]):
+    returns_open = db.query(OnlineOrderReturn).filter(
+        OnlineOrderReturn.shop_id == user_id,
+        OnlineOrderReturn.status.in_(["REQUESTED", "APPROVED", "REFUND_PENDING"]),
+    ).count()
+    active_deliveries = db.query(OnlineDeliveryAssignment).filter(
+        OnlineDeliveryAssignment.shop_id == user_id,
+        OnlineDeliveryAssignment.status.notin_(["DELIVERED", "CANCELLED"]),
+    ).count()
+
+    if any(word in text_query for word in ["stock", "restock", "inventory", "reorder"]):
         critical = stock["suggestions"][:5]
         if critical:
-            answer = "Your inventory attention list is ready."
+            answer = "I found the products that need inventory attention."
             actions = [
-                f"{x['product_name']}: reorder {x['suggested_reorder_quantity']} units; {x['estimated_days_remaining'] or 'unknown'} days cover."
-                for x in critical
+                f"{item['product_name']}: reorder {item['suggested_reorder_quantity']} units; "
+                f"{item['estimated_days_remaining'] or 'unknown'} days of cover."
+                for item in critical
             ]
+            result_count = len(critical)
         else:
-            answer = "No urgent reorder candidates were detected."
-            actions = ["Continue monitoring your low-stock threshold."]
-    elif any(word in text for word in ["online", "order", "marketplace"]):
-        answer = f"You have {overview['online']['total_orders']} online orders, with {overview['online']['pending_orders']} pending."
-        actions = ["Open Online Orders", "Review delivery assignments"]
-    elif any(word in text for word in ["profit", "sales", "revenue"]):
+            answer = "No urgent reorder candidates were detected from the recent sales velocity."
+            actions = ["Keep monitoring minimum-stock thresholds.", "Review slow-moving inventory."]
+            result_count = 0
+    elif any(word in text_query for word in ["return", "refund"]):
+        answer = f"You currently have {returns_open} open return/refund cases."
+        actions = ["Review return reasons.", "Approve valid returns to restore stock.", "Mark settled refunds as refunded."]
+        result_count = returns_open
+    elif any(word in text_query for word in ["delivery", "deliveries", "driver", "dispatch"]):
+        answer = f"There are {active_deliveries} active delivery assignments."
+        actions = ["Review driver assignments.", "Move picked-up orders to out-for-delivery.", "Confirm delivered orders with customer OTP."]
+        result_count = active_deliveries
+    elif any(word in text_query for word in ["coupon", "offer", "promotion", "discount"]):
+        answer = f"You have {overview['active_coupons']} active coupons."
+        actions = ["Review coupon usage.", "Create a limited-time offer.", "Pair promotions with low-stock campaigns."]
+        result_count = int(overview["active_coupons"])
+    elif any(word in text_query for word in ["online", "order", "marketplace"]):
         answer = (
-            f"Month sales are ₹{overview['sales']['month']:,.0f}; estimated month profit is "
-            f"₹{overview['sales']['month_profit_estimate']:,.0f} after recorded expenses."
+            f"You have {overview['online']['total_orders']} online orders, "
+            f"with {overview['online']['pending_orders']} pending."
+        )
+        actions = ["Open Online Orders", "Review delivery assignments", "Check open returns"]
+        result_count = int(overview["online"]["total_orders"])
+    elif any(word in text_query for word in ["profit", "sales", "revenue", "expense"]):
+        answer = (
+            f"Month sales are ₹{overview['sales']['month']:,.0f}; "
+            f"recorded month expenses are ₹{overview['sales']['month_expenses']:,.0f}; "
+            f"estimated profit is ₹{overview['sales']['month_profit_estimate']:,.0f}."
         )
         actions = ["Review top products", "Review expenses", "Compare online vs in-store sales"]
+        result_count = 1
+    elif any(word in text_query for word in ["summary", "today", "overview"]):
+        answer = (
+            f"Current shop pulse: ₹{overview['sales']['month']:,.0f} month sales, "
+            f"{overview['online']['total_orders']} online orders, "
+            f"{overview['inventory']['low_stock_products']} low-stock products, "
+            f"{returns_open} open returns and {active_deliveries} active deliveries."
+        )
+        actions = ["Ask about stock", "Ask about profit", "Ask about deliveries"]
+        result_count = 1
     else:
         answer = (
             f"Your shop has ₹{overview['sales']['month']:,.0f} in month sales, "
-            f"{overview['online']['total_orders']} online orders and "
-            f"{overview['inventory']['low_stock_products']} low-stock products."
+            f"{overview['online']['total_orders']} online orders, "
+            f"{overview['inventory']['low_stock_products']} low-stock products, "
+            f"{returns_open} open returns and {active_deliveries} active deliveries."
         )
-        actions = ["Ask about stock", "Ask about profit", "Ask about online orders"]
+        actions = ["Ask about stock", "Ask about profit", "Ask about deliveries", "Ask about returns"]
+        result_count = 1
+
+    try:
+        db.add(AIQueryHistory(
+            user_id=user_id,
+            question=query,
+            answer=answer,
+            result_count=result_count,
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return {
-        "question": q,
+        "question": query,
         "answer": answer,
         "actions": actions,
         "data": overview,
