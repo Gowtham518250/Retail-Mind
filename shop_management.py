@@ -34,6 +34,61 @@ class ShopSettingsUpdate:
             setattr(self, key, value)
 
 
+def _serialize_shop_settings(settings: ShopSettings) -> Dict[str, Any]:
+    """Serialize settings without assuming legacy ORM fields exist."""
+    receipt_format = getattr(settings, "receipt_format", None) or "detailed"
+    flat_tax = getattr(settings, "flat_tax_percentage", None)
+    default_tax_rate = getattr(settings, "default_tax_rate", None)
+    if default_tax_rate is None:
+        default_tax_rate = flat_tax if flat_tax is not None else 0.0
+
+    return {
+        "business_hours": {
+            "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
+            "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
+            "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
+            "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
+            "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
+            "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
+            "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed},
+        },
+        "receipt_settings": {
+            "header": getattr(settings, "receipt_header", ""),
+            "footer": getattr(settings, "receipt_footer", ""),
+            "show_tax": getattr(settings, "show_tax_on_receipt", True),
+            "print_size": getattr(settings, "default_print_size", receipt_format),
+        },
+        "taxes": {
+            "default_rate": float(default_tax_rate or 0),
+            "is_inclusive": getattr(settings, "tax_inclusive", False),
+        },
+        "tax_config": {
+            "tax_type": settings.tax_type,
+            "igst": settings.igst_percentage,
+            "sgst": settings.sgst_percentage,
+            "utgst": settings.utgst_percentage,
+            "flat_rate": settings.flat_tax_percentage,
+        },
+        "payment_methods": {
+            "cash": settings.accept_cash,
+            "card": settings.accept_card,
+            "upi": settings.accept_upi,
+            "bank": settings.accept_bank_transfer,
+        },
+        "preferences": {
+            "language": settings.language,
+            "theme": settings.theme_mode,
+            "timezone": settings.timezone,
+            "currency": settings.currency_code,
+            "receipt_format": receipt_format,
+        },
+        "loyalty": {
+            "enabled": getattr(settings, "loyalty_enabled", settings.enable_customer_loyalty),
+            "points_per_amount": float(getattr(settings, "points_per_amount", 1.0) or 1.0),
+        },
+    }
+
+
 # ==================== SERVICE CLASS ====================
 
 class ShopService:
@@ -319,35 +374,7 @@ def get_profile(user_id: int = Depends(check_current_user), db: Session = Depend
                 "created_at": profile.created_at,
                 "updated_at": profile.updated_at
             },
-            "settings": {
-                "business_hours": {
-                    "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
-                    "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
-                    "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
-                    "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
-                    "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
-                    "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
-                    "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed},
-                },
-                "tax_config": {
-                    "tax_type": settings.tax_type,
-                    "igst": settings.igst_percentage,
-                    "sgst": settings.sgst_percentage,
-                    "utgst": settings.utgst_percentage,
-                    "flat_rate": settings.flat_tax_percentage
-                },
-                "payment_methods": {
-                    "cash": settings.accept_cash,
-                    "card": settings.accept_card,
-                    "upi": settings.accept_upi,
-                    "bank": settings.accept_bank_transfer
-                },
-                "preferences": {
-                    "language": settings.language,
-                    "theme": settings.theme_mode,
-                    "timezone": settings.timezone
-                }
-            }
+            "settings": _serialize_shop_settings(settings)
         }
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -395,31 +422,7 @@ def update_profile(data: dict, user_id: int = Depends(check_current_user), db: S
                 "created_at": profile.created_at,
                 "updated_at": profile.updated_at
             },
-            "settings": {
-                "business_hours": {
-                    "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
-                    "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
-                    "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
-                    "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
-                    "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
-                    "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
-                    "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed}
-                },
-                "receipt_settings": {
-                    "header": settings.receipt_header,
-                    "footer": settings.receipt_footer,
-                    "show_tax": settings.show_tax_on_receipt,
-                    "print_size": settings.default_print_size
-                },
-                "taxes": {
-                    "default_rate": settings.default_tax_rate,
-                    "is_inclusive": settings.tax_inclusive
-                },
-                "loyalty": {
-                    "enabled": settings.loyalty_enabled,
-                    "points_per_amount": settings.points_per_amount
-                }
-            }
+            "settings": _serialize_shop_settings(settings)
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
