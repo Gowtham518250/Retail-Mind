@@ -70,9 +70,12 @@ export default function AiShoppingPage() {
     setResults([]);
 
     try {
+      // Keep the browser contract aligned with the backend's live AI route.
+      // The previous /store/customer-ai path no longer exists and made the
+      // Shopping AI appear unavailable even though recommendations worked.
       const res = await fetch(
         API_BASE +
-          '/store/customer-ai?q=' +
+          '/store/ai/recommend?q=' +
           encodeURIComponent(value) +
           '&limit=10',
         { cache: 'no-store' },
@@ -88,12 +91,28 @@ export default function AiShoppingPage() {
         throw new Error(detail);
       }
 
-      setAvailable(data.available === true);
-      setMessage(data.message || '');
-      setIntent(data.intent_label || '');
-      setProductQuery(data.product_query || value);
-      setShopHint(data.shop_hint || '');
-      setResults(Array.isArray(data.recommendations) ? data.recommendations : []);
+      const recommendations = Array.isArray(data.recommendations)
+        ? data.recommendations
+        : [];
+
+      setAvailable(recommendations.length > 0);
+      setMessage(
+        data.response ||
+        data.message ||
+        (recommendations.length
+          ? 'I found matching products from online-enabled shops.'
+          : 'I could not find a verified match right now.'),
+      );
+      setIntent(
+        data.intent?.rating_priority
+          ? 'Rating-aware'
+          : data.intent?.low_price
+            ? 'Price-aware'
+            : 'Smart match',
+      );
+      setProductQuery(data.query || value);
+      setShopHint('');
+      setResults(recommendations);
 
       setRecent((current) =>
         [value, ...current.filter((item) => item !== value)].slice(0, 5),
