@@ -406,18 +406,37 @@ def update_profile(data: dict, user_id: int = Depends(check_current_user), db: S
                     "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed}
                 },
                 "receipt_settings": {
-                    "header": settings.receipt_header,
-                    "footer": settings.receipt_footer,
-                    "show_tax": settings.show_tax_on_receipt,
-                    "print_size": settings.default_print_size
+                    # These keys existed in an older ShopSettings contract.
+                    # Use safe fallbacks because the production ORM model does
+                    # not define receipt_header/footer or the legacy tax/loyalty
+                    # attributes. A response serialization error must never turn
+                    # a successful profile update into HTTP 500.
+                    "header": getattr(settings, "receipt_header", ""),
+                    "footer": getattr(settings, "receipt_footer", ""),
+                    "show_tax": getattr(settings, "show_tax_on_receipt", True),
+                    "print_size": getattr(
+                        settings,
+                        "default_print_size",
+                        getattr(settings, "receipt_format", "detailed"),
+                    ),
                 },
                 "taxes": {
-                    "default_rate": settings.default_tax_rate,
-                    "is_inclusive": settings.tax_inclusive
+                    "default_rate": getattr(
+                        settings,
+                        "default_tax_rate",
+                        getattr(settings, "flat_tax_percentage", 0.0),
+                    ),
+                    "is_inclusive": getattr(settings, "tax_inclusive", False),
                 },
                 "loyalty": {
-                    "enabled": settings.loyalty_enabled,
-                    "points_per_amount": settings.points_per_amount
+                    "enabled": getattr(
+                        settings,
+                        "loyalty_enabled",
+                        settings.enable_customer_loyalty,
+                    ),
+                    "points_per_amount": getattr(
+                        settings, "points_per_amount", 1.0
+                    ),
                 }
             }
         }
