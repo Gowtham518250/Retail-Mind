@@ -18,7 +18,6 @@ import {
   Zap,
 } from 'lucide-react';
 import Link from 'next/link';
-import { API_BASE } from '../../lib/api';
 import styles from './page.module.css';
 
 type Recommendation = {
@@ -71,8 +70,7 @@ export default function AiShoppingPage() {
 
     try {
       const res = await fetch(
-        API_BASE +
-          '/store/customer-ai?q=' +
+        '/api/ai-shopping?q=' +
           encodeURIComponent(value) +
           '&limit=10',
         { cache: 'no-store' },
@@ -84,7 +82,9 @@ export default function AiShoppingPage() {
         const detail =
           typeof data?.detail === 'string'
             ? data.detail
-            : 'The shopping assistant could not complete that search.';
+            : typeof data?.message === 'string'
+              ? data.message
+              : `Shopping AI request failed (HTTP ${res.status}).`;
         throw new Error(detail);
       }
 
@@ -418,31 +418,3 @@ export default function AiShoppingPage() {
                       href={'/shop/' + item.shop_id}
                       className={styles.fillButton}
                     >
-                      Open shop <ArrowRight size={14} />
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </>
-        )}
-
-        {!loading && !error && available === null && (
-          <section className={styles.introPanel}>
-            <div className={styles.introOrb}>
-              <div className={styles.introCore}><Bot size={28} /></div>
-            </div>
-            <div>
-              <span className={styles.sectionLabel}>READY WHEN YOU ARE</span>
-              <h2>Describe what you want to buy.</h2>
-              <p>
-                I’ll search only online-enabled shops and show real products,
-                prices, ratings and available stock.
-              </p>
-            </div>
-          </section>
-        )}
-      </section>
-    </main>
-  );
-}
