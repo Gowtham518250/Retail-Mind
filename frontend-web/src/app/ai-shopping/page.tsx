@@ -417,6 +417,7 @@ export default function AiShoppingPage() {
                     <Link
                       href={'/shop/' + item.shop_id}
                       className={styles.fillButton}
+                    >
                       Open shop
                     </Link>
                   </div>
