@@ -192,16 +192,16 @@ def customer_ai_shopping(
         ]
 
     if intent == "price":
-        matched.sort(key=lambda pair: (float(pair[0].price or 0), -float(pair[1].rating_score or 0)))
+        matched.sort(key=lambda pair: (float(pair[0].unit_price or 0), -float(pair[1].rating_score or 0)))
     elif intent == "rating":
-        matched.sort(key=lambda pair: (-float(pair[1].rating_score or 0), -int(pair[1].rating_count or 0), float(pair[0].price or 0)))
+        matched.sort(key=lambda pair: (-float(pair[1].rating_score or 0), -int(pair[1].rating_count or 0), float(pair[0].unit_price or 0)))
     elif intent == "budget":
-        matched.sort(key=lambda pair: (float(pair[0].price or 0), -float(pair[1].rating_score or 0)))
+        matched.sort(key=lambda pair: (float(pair[0].unit_price or 0), -float(pair[1].rating_score or 0)))
     else:
         matched.sort(
             key=lambda pair: (
                 -float(pair[1].rating_score or 0),
-                float(pair[0].price or 0),
+                float(pair[0].unit_price or 0),
             )
         )
 
