@@ -220,12 +220,39 @@ export default function CheckoutClientPage() {
     setSubmitError('');
     setIsSubmitting(true);
 
+    const cartSignature = JSON.stringify(
+      cartItems
+        .map((item) => ({ product_id: item.product.id, quantity: item.quantity }))
+        .sort((a, b) => a.product_id - b.product_id),
+    );
+    const idempotencyStorageKey = 'checkout-idempotency:' + shopId;
+    let idempotencyKey = '';
+    try {
+      const saved = sessionStorage.getItem(idempotencyStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { signature?: string; key?: string };
+        if (parsed.signature === cartSignature && parsed.key) {
+          idempotencyKey = parsed.key;
+        }
+      }
+      if (!idempotencyKey) {
+        idempotencyKey = 'web-' + shopId + '-' + crypto.randomUUID();
+        sessionStorage.setItem(
+          idempotencyStorageKey,
+          JSON.stringify({ signature: cartSignature, key: idempotencyKey }),
+        );
+      }
+    } catch {
+      // sessionStorage can be unavailable in strict/privacy browser modes.
+      idempotencyKey = 'web-' + shopId + '-' + crypto.randomUUID();
+    }
+
     const payload = {
       shop_id: shopId,
       items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
       delivery_address: combinedAddress,
       coupon_code: couponCode.trim().toUpperCase() || undefined,
-      idempotency_key: 'web-' + shopId + '-' + crypto.randomUUID(),
+      idempotency_key: idempotencyKey,
     };
 
     try {
@@ -268,6 +295,9 @@ export default function CheckoutClientPage() {
       };
 
       sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
+      try {
+        sessionStorage.removeItem(idempotencyStorageKey);
+      } catch {}
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
     } catch (err: any) {
