@@ -178,6 +178,16 @@ class CustomerResetPassword(BaseModel):
     reset_token: str = Field(..., min_length=32, max_length=200)
     new_password: str = Field(..., min_length=8, max_length=128)
 
+    @field_validator("new_password")
+    def validate_new_password(cls, v):
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one number.")
+        return v
+
 
 class OrderItem(BaseModel):
     product_id: int
@@ -869,6 +879,21 @@ def ai_shopping_recommendations(
         "response": response,
         "recommendations": recommendations,
     }
+
+
+@router.get("/customer-ai")
+def customer_ai_legacy_alias(
+    q: str = Query(..., min_length=2, max_length=120),
+    limit: int = Query(10, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    """Backward-compatible alias for older customer-web builds.
+
+    The canonical route is /store/ai/recommend. Keeping this alias prevents
+    an older deployed web client from turning a working AI backend into a
+    false "AI unavailable" screen during rolling deployments.
+    """
+    return ai_shopping_recommendations(q=q, limit=limit, db=db)
 
 
 @router.get("/shops/nearby")
