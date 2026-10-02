@@ -423,6 +423,5 @@ export default function AiShoppingPage() {
         )}
       </section>
     </main>
-  </div>
   );
 }
