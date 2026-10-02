@@ -425,7 +425,7 @@ export default function AiShoppingPage() {
               ))}
             </div>
           </>
-          )}
+        )}
         </section>
       </main>
     </div>
