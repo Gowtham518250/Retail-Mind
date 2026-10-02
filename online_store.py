@@ -24,7 +24,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 
 from db import get_db
 from models import (
@@ -71,6 +71,29 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
     return 0.0
 
 logger = logging.getLogger(__name__)
+
+def _lock_order_idempotency(db: Session, key: Optional[str]) -> None:
+    """Serialize duplicate checkout requests for the same idempotency key.
+
+    The web client intentionally reuses its key when a network response is
+    lost. PostgreSQL advisory locks make two simultaneous retries converge on
+    the same order instead of both decrementing stock and creating duplicates.
+    Other database engines simply skip the database-specific lock.
+    """
+    if not key:
+        return
+    try:
+        bind = db.get_bind()
+        if getattr(bind.dialect, "name", "") == "postgresql":
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:idempotency_key))"),
+                {"idempotency_key": key},
+            )
+    except Exception:
+        # Never make checkout unavailable just because the optional
+        # serialization primitive is unsupported by a local/dev database.
+        logger.debug("Idempotency advisory lock unavailable", exc_info=True)
+
 from realtime import publish_realtime_event
 from audit_logging import AuditAction, AuditService
 
@@ -992,6 +1015,7 @@ def place_order(
     customer_id = current_user["user_id"]
 
     idempotency_key = (data.idempotency_key or "").strip() or None
+    _lock_order_idempotency(db, idempotency_key)
     if idempotency_key:
         existing_order = db.query(OnlineOrder).filter(
             OnlineOrder.shop_id == data.shop_id,
@@ -1181,6 +1205,7 @@ def place_guest_order(
         logger.info(f"No Firebase token provided for guest checkout, proceeding with unverified phone {data.phone}")
 
     idempotency_key = (data.idempotency_key or "").strip() or None
+    _lock_order_idempotency(db, idempotency_key)
     if idempotency_key:
         existing_order = db.query(OnlineOrder).filter(
             OnlineOrder.shop_id == data.shop_id,
