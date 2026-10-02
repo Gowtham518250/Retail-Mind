@@ -181,6 +181,8 @@ export default function MyOrdersPage() {
   const [query, setQuery] = useState('');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
+  const [deliveryByOrder, setDeliveryByOrder] = useState<Record<number, any>>({});
+  const [deliveryLoadingId, setDeliveryLoadingId] = useState<number | null>(null);
   const router = useRouter();
 
   const fetchOrders = useCallback(
@@ -419,16 +421,43 @@ export default function MyOrdersPage() {
     });
   }, [orders, filter, query]);
 
-  const toggleOrder = (orderId: number) => {
+  const toggleOrder = async (orderId: number) => {
+    const willOpen = !expandedOrders.has(orderId);
     setExpandedOrders((current) => {
       const next = new Set(current);
-      if (next.has(orderId)) {
-        next.delete(orderId);
-      } else {
-        next.add(orderId);
-      }
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
       return next;
     });
+
+    if (!willOpen || deliveryByOrder[orderId] || deliveryLoadingId === orderId) {
+      return;
+    }
+
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      router.push('/auth');
+      return;
+    }
+
+    setDeliveryLoadingId(orderId);
+    try {
+      const response = await fetch(
+        API_BASE + '/store/orders/' + orderId + '/delivery',
+        {
+          headers: { Authorization: 'Bearer ' + token },
+          cache: 'no-store',
+        },
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setDeliveryByOrder((current) => ({ ...current, [orderId]: data }));
+      }
+    } catch {
+      // The main order timeline remains authoritative.
+    } finally {
+      setDeliveryLoadingId(null);
+    }
   };
   const requestReturn = async (order: Order) => {
     if (order.status !== 'DELIVERED' || returningOrderId !== null) return;
@@ -767,6 +796,85 @@ export default function MyOrdersPage() {
                             <strong>{order.items.length}</strong>
                           </div>
                         </div>
+
+                        {deliveryLoadingId === order.order_id ? (
+                          <div
+                            style={{
+                              marginBottom: 16,
+                              padding: '12px 14px',
+                              borderRadius: 14,
+                              background: 'rgba(99,102,241,.06)',
+                              border: '1px solid rgba(99,102,241,.12)',
+                              color: '#64748b',
+                              fontSize: 12,
+                            }}
+                          >
+                            Loading delivery tracking…
+                          </div>
+                        ) : deliveryByOrder[order.order_id] ? (
+                          <div
+                            style={{
+                              marginBottom: 16,
+                              padding: '14px',
+                              borderRadius: 16,
+                              background: 'linear-gradient(135deg, rgba(37,99,235,.07), rgba(34,211,238,.05))',
+                              border: '1px solid rgba(96,165,250,.18)',
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 12,
+                              }}
+                            >
+                              <div>
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 900,
+                                    letterSpacing: '.11em',
+                                    color: '#64748b',
+                                  }}
+                                >
+                                  DELIVERY TRACKING
+                                </div>
+                                <div
+                                  style={{
+                                    marginTop: 4,
+                                    fontWeight: 800,
+                                    color: '#0f172a',
+                                  }}
+                                >
+                                  {String(deliveryByOrder[order.order_id].status || 'NOT_ASSIGNED').replaceAll('_', ' ')}
+                                </div>
+                              </div>
+                              <Truck size={20} color="#2563EB" />
+                            </div>
+                            {deliveryByOrder[order.order_id].driver_name && (
+                              <div
+                                style={{
+                                  marginTop: 10,
+                                  display: 'flex',
+                                  gap: 14,
+                                  flexWrap: 'wrap',
+                                  fontSize: 11,
+                                  color: '#475569',
+                                }}
+                              >
+                                <span>
+                                  Driver: <strong>{deliveryByOrder[order.order_id].driver_name}</strong>
+                                </span>
+                                {deliveryByOrder[order.order_id].driver_phone && (
+                                  <span>
+                                    {deliveryByOrder[order.order_id].driver_phone}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
 
                         <div className="orders-fk-items">
                           {order.items.map((item, idx) => {
