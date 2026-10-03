@@ -522,6 +522,13 @@ async def serve_shop_frontend(request: Request, shop_id: str):
         return {"error": "Failed to retrieve shop data", "details": str(e)}, 500
 
 # Mount static asset folders for both Next.js (_next) and Vite (assets)
+# Shop logos are stored under static/logos and must be publicly readable by
+# customer storefronts. The profile API still controls which logo belongs to
+# which authenticated owner.
+static_root = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_root):
+    api.mount("/static", StaticFiles(directory=static_root), name="static")
+
 frontend_web_out = os.path.join(os.path.dirname(__file__), "frontend-web", "out")
 frontend_vite_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
