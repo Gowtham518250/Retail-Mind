@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
+import httpx
+import re
 from typing import List, Optional
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
@@ -16,6 +18,101 @@ from models import Product, StockMovement, ProductBatch, Notification
 from stock_service import StockService
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+
+# ==================== BARCODE PRODUCT LOOKUP ====================
+
+@router.get("/barcode-lookup")
+def barcode_product_lookup(
+    barcode: str = Query(..., min_length=8, max_length=14),
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Look up a real product from a GTIN/UPC/EAN barcode.
+
+    This endpoint deliberately never invents a product name. The owner can use
+    the result to prefill the catalog, while price/MRP remain owner-controlled.
+    """
+    clean = re.sub(r"\D", "", str(barcode or ""))
+    if len(clean) not in {8, 12, 13, 14}:
+        raise HTTPException(
+            status_code=400,
+            detail="This is not a standard retail product barcode. Scan the EAN/UPC barcode on the product label.",
+        )
+
+    # Use a real external catalog rather than the old deterministic fake-product
+    # fallback. Keep the provider behind our authenticated API.
+    url = "https://api.upcitemdb.com/prod/trial/lookup"
+
+    try:
+        response = httpx.get(
+            url,
+            params={"upc": clean},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "RetailMind/1.0 barcode lookup",
+            },
+            timeout=6.0,
+        )
+
+        if response.status_code == 404:
+            return {
+                "found": False,
+                "barcode": clean,
+                "message": "Barcode is valid but no matching product was found in the external catalog.",
+            }
+
+        if response.status_code == 429:
+            return {
+                "found": False,
+                "barcode": clean,
+                "rate_limited": True,
+                "message": "Barcode lookup is temporarily rate limited. Enter the product name manually.",
+            }
+
+        response.raise_for_status()
+        payload = response.json()
+        items = payload.get("items") or []
+
+        if not items:
+            return {
+                "found": False,
+                "barcode": clean,
+                "message": "No product match was found. Please enter the product name manually.",
+            }
+
+        item = items[0] or {}
+        title = str(item.get("title") or "").strip()
+        if not title:
+            return {
+                "found": False,
+                "barcode": clean,
+                "message": "The barcode exists but the catalog returned no product title.",
+            }
+
+        return {
+            "found": True,
+            "barcode": clean,
+            "name": title,
+            "brand": item.get("brand"),
+            "model": item.get("model"),
+            "category": item.get("category"),
+            "description": item.get("description"),
+            "image_url": (item.get("images") or [None])[0],
+            "lowest_recorded_price": item.get("lowest_recorded_price"),
+            "highest_recorded_price": item.get("highest_recorded_price"),
+            "provider": "UPCitemdb",
+        }
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=502,
+            detail="Barcode catalog is temporarily unavailable. You can still add the product manually.",
+        )
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=502,
+            detail="Barcode catalog returned an invalid response.",
+        )
+
 
 # ==================== BATCH OPERATIONS ====================
 
