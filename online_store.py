@@ -38,6 +38,7 @@ from models import (
     OnlineCustomerAuth,
     OnlineOrderDeliveryOtp,
     ShopReview,
+    OnlineOrderReturn,
     CustomerPasswordReset,
     CustomerPasswordResetOtp,
     sales,
@@ -1524,9 +1525,21 @@ def get_my_orders(
 
     order_ids = [o.id for o in orders]
     reviews_by_order = {}
+    return_by_order = {}
     if order_ids:
         review_rows = db.query(ShopReview).filter(ShopReview.order_id.in_(order_ids)).all()
         reviews_by_order = {r.order_id: r for r in review_rows}
+
+        return_rows = (
+            db.query(OnlineOrderReturn)
+            .filter(OnlineOrderReturn.order_id.in_(order_ids))
+            .order_by(OnlineOrderReturn.created_at.desc())
+            .all()
+        )
+        # Keep the most recent return request for each order.
+        for return_row in return_rows:
+            if return_row.order_id not in return_by_order:
+                return_by_order[return_row.order_id] = return_row
 
     return {
         "orders": [
@@ -1556,6 +1569,19 @@ def get_my_orders(
                     else None
                 ),
                 "can_cancel": o.order_status in {"PENDING", "ACCEPTED"},
+                "return_request": (
+                    {
+                        "id": return_req.id,
+                        "status": return_req.status,
+                        "reason": return_req.reason,
+                        "refund_amount": float(return_req.refund_amount or 0),
+                        "stock_restored": bool(return_req.stock_restored),
+                        "created_at": return_req.created_at,
+                        "processed_at": return_req.processed_at,
+                    }
+                    if (return_req := return_by_order.get(o.id))
+                    else None
+                ),
             }
             for o in orders
         ]
