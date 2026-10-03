@@ -687,6 +687,10 @@ def marketplace_search(
                 (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
                 or_(
                     ShopProfile.shop_name.ilike(like),
+                    ShopProfile.shop_type.ilike(like),
+                    ShopProfile.shop_categories.ilike(like),
+                    ShopProfile.shop_tagline.ilike(like),
+                    ShopProfile.shop_description.ilike(like),
                     ShopProfile.city.ilike(like),
                     ShopProfile.address.ilike(like),
                 ),
