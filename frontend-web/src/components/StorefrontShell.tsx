@@ -119,7 +119,14 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
             <div className="shop-profile-identity">
               <div className="shop-profile-avatar">
                 {shop?.shop_logo_url ? (
-                  <img src={shop.shop_logo_url} alt={shop.shop_name + ' profile'} />
+                  <img
+                    src={
+                      shop.shop_logo_url.startsWith('http')
+                        ? shop.shop_logo_url
+                        : API_BASE + shop.shop_logo_url
+                    }
+                    alt={shop.shop_name + ' profile'}
+                  />
                 ) : (
                   <StorefrontFallbackIcon />
                 )}
