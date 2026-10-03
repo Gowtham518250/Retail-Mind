@@ -923,6 +923,49 @@ def ai_shopping_recommendations(
     }
 
 
+@router.get("/shops")
+def list_online_shops(
+    skip: int = 0,
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+):
+    """List all public online-enabled shops for customer web/app discovery."""
+    rows = (
+        db.query(ShopProfile)
+        .filter(
+            ShopProfile.is_online_store_enabled == True,
+            (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
+        )
+        .order_by(ShopProfile.shop_name.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "shops": [
+            {
+                "shop_id": shop.shop_id,
+                "shop_name": shop.shop_name,
+                "shop_type": shop.shop_type or "General",
+                "tagline": shop.shop_tagline or "",
+                "description": shop.shop_description or "",
+                "address": shop.address or "",
+                "city": shop.city or "",
+                "state": shop.state or "",
+                "postal_code": shop.postal_code or "",
+                "phone": shop.phone or "",
+                "email": shop.email or "",
+                "website": shop.website or "",
+                "logo_url": shop.logo_url,
+                "categories": _safe_json_list(shop.shop_categories) if '_safe_json_list' in globals() else [],
+                **_shop_reputation(shop),
+            }
+            for shop in rows
+        ],
+        "count": len(rows),
+    }
+
+
 @router.get("/shops/nearby")
 def find_nearby_shops(
     city: Optional[str] = None,
