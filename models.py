@@ -145,6 +145,8 @@ class OnlineOrderStatus(str, enum.Enum):
     ACCEPTED = "ACCEPTED"
     DISPATCHED = "DISPATCHED"
     DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+    RETURNED = "RETURNED"
     REJECTED = "REJECTED"
 
 class WhatsappOrderStatus(str, enum.Enum):
@@ -309,6 +311,8 @@ class sales(Base):
     quantity = Column(Integer, nullable=False)
     total = Column(Numeric(10, 2), nullable=False)
     sale_date = Column(Date, index=True)
+    # Online-order reference used to reverse accepted sales safely on cancellation/return.
+    reference_order_id = Column(Integer, nullable=True, index=True)
     
     # 🔒 PERFORMANCE FIX: Add index on foreign key (already has index=True)
     # Relationship
