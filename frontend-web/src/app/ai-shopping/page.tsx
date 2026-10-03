@@ -16,8 +16,12 @@ import {
   Star,
   Store,
   Zap,
+  BrainCircuit,
+  ScanSearch,
+  SlidersHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import styles from './page.module.css';
 
 type Recommendation = {
@@ -41,9 +45,12 @@ const examples = [
   'best rated atta',
   'milk under ₹80',
   'low price ghee',
-  'low price rice at Ganesh Store',
   'best rated shampoo under ₹500',
 ];
+
+function metric(value: number, suffix = '') {
+  return String(value).replace(/\.0$/, '') + suffix;
+}
 
 export default function AiShoppingPage() {
   const [query, setQuery] = useState('');
@@ -69,24 +76,18 @@ export default function AiShoppingPage() {
     setResults([]);
 
     try {
-      // Keep the browser contract aligned with the backend's live AI route.
-      // The previous /store/customer-ai path no longer exists and made the
-      // Shopping AI appear unavailable even though recommendations worked.
       const res = await fetch(
-        '/api/ai-shopping?q=' +
-          encodeURIComponent(value) +
-          '&limit=10',
+        '/api/ai-shopping?q=' + encodeURIComponent(value) + '&limit=10',
         { cache: 'no-store' },
       );
-
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const detail =
+        throw new Error(
           typeof data?.detail === 'string'
             ? data.detail
-            : 'The shopping assistant could not complete that search.';
-        throw new Error(detail);
+            : 'The shopping assistant could not complete that search.',
+        );
       }
 
       const recommendations = Array.isArray(data.recommendations)
@@ -96,10 +97,10 @@ export default function AiShoppingPage() {
       setAvailable(recommendations.length > 0);
       setMessage(
         data.response ||
-        data.message ||
-        (recommendations.length
-          ? 'I found matching products from online-enabled shops.'
-          : 'I could not find a verified match right now.'),
+          data.message ||
+          (recommendations.length
+            ? 'I found matching products from online-enabled shops.'
+            : 'I could not find a verified match right now.'),
       );
       setIntent(
         data.intent?.rating_priority
@@ -111,7 +112,6 @@ export default function AiShoppingPage() {
       setProductQuery(data.query || value);
       setShopHint('');
       setResults(recommendations);
-
       setRecent((current) =>
         [value, ...current.filter((item) => item !== value)].slice(0, 5),
       );
@@ -130,9 +130,11 @@ export default function AiShoppingPage() {
 
   return (
     <main className={styles.page}>
-      <div className={`${styles.ambient} ${styles.ambientOne}`} />
-      <div className={`${styles.ambient} ${styles.ambientTwo}`} />
-      <div className={`${styles.ambient} ${styles.ambientThree}`} />
+      <div className={styles.noise} />
+      <div className={styles.gridFloor} />
+      <div className={styles.ambient + ' ' + styles.ambientOne} />
+      <div className={styles.ambient + ' ' + styles.ambientTwo} />
+      <div className={styles.ambient + ' ' + styles.ambientThree} />
 
       <section className={styles.hero}>
         <div className={styles.navRow}>
@@ -143,31 +145,40 @@ export default function AiShoppingPage() {
 
           <div className={styles.liveBadge}>
             <span className={styles.liveDot} />
-            REAL STORE DATA
+            LIVE RETAIL INTELLIGENCE
           </div>
         </div>
 
         <div className={styles.heroInner}>
           <div className={styles.copy}>
             <div className={styles.kicker}>
-              <Sparkles size={13} />
-              RETAIL MIND AI SHOPPING
+              <BrainCircuit size={14} />
+              RETAIL MIND / AI SHOPPING ENGINE
+            </div>
+
+            <div className={styles.eyebrowLine}>
+              <span>REAL INVENTORY</span>
+              <i />
+              <span>LIVE RATINGS</span>
+              <i />
+              <span>SHOP-READY</span>
             </div>
 
             <h1>
-              Ask naturally.
-              <span> Shop with confidence.</span>
+              Think it.
+              <span>Say it.</span>
+              <em>Shop it.</em>
             </h1>
 
-            <p>
-              Tell me the product, budget or shop you care about. I compare
-              live inventory from shops that are actually enabled for online
-              ordering.
+            <p className={styles.heroLead}>
+              Describe the outcome you want — product, budget, shop or rating.
+              Retail Mind turns that sentence into a live shortlist from
+              online-enabled neighbourhood stores.
             </p>
 
-            <div className={styles.searchCard}>
-              <div className={styles.searchIcon}>
-                <Search size={19} />
+            <div className={styles.commandBar}>
+              <div className={styles.commandPrefix}>
+                <ScanSearch size={18} />
               </div>
               <input
                 value={query}
@@ -175,7 +186,7 @@ export default function AiShoppingPage() {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') void ask();
                 }}
-                placeholder="Try “low price ghee”"
+                placeholder="Ask: “best rated shampoo under ₹500”"
                 aria-label="Ask Retail Mind AI"
               />
               <button
@@ -186,7 +197,7 @@ export default function AiShoppingPage() {
                 {loading ? (
                   <>
                     <Loader2 size={16} className={styles.spin} />
-                    Searching
+                    Thinking
                   </>
                 ) : (
                   <>
@@ -198,8 +209,8 @@ export default function AiShoppingPage() {
             </div>
 
             <div className={styles.exampleStrip}>
-              <span>Try:</span>
-              {examples.slice(0, 4).map((example) => (
+              <span>TRY</span>
+              {examples.map((example) => (
                 <button key={example} onClick={() => void ask(example)}>
                   {example}
                 </button>
@@ -207,43 +218,74 @@ export default function AiShoppingPage() {
             </div>
 
             <div className={styles.trustRow}>
-              <span><ShieldCheck size={14} /> Real inventory</span>
-              <span><Star size={14} /> Rating-aware</span>
-              <span><ShoppingBag size={14} /> Order from shop</span>
+              <span><ShieldCheck size={14} /> Verified inventory</span>
+              <span><Star size={14} /> Reputation-aware</span>
+              <span><ShoppingBag size={14} /> Local checkout</span>
             </div>
           </div>
 
           <div className={styles.visual} aria-hidden="true">
-            <div className={styles.visualHalo} />
-            <div className={`${styles.visualOrbit} ${styles.orbitOne}`} />
-            <div className={`${styles.visualOrbit} ${styles.orbitTwo}`} />
-            <div className={styles.core}>
-              <div className={styles.coreInner}>
-                <Bot size={42} />
-              </div>
-            </div>
+            <div className={styles.holoStage}>
+              <div className={styles.holoFloor} />
+              <div className={styles.orbit orbitOne} />
+              <div className={styles.orbit orbitTwo} />
+              <div className={styles.orbit orbitThree} />
 
-            <div className={`${styles.signal} ${styles.signalOne}`}>
-              <Package size={16} />
-              <div>
-                <strong>Live inventory</strong>
-                <span>Verified stock</span>
-              </div>
-            </div>
+              <motion.div
+                className={styles.aiCore}
+                animate={{
+                  y: [0, -12, 0],
+                  rotateX: [-4, 4, -4],
+                  rotateY: [6, -6, 6],
+                }}
+                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <div className={styles.aiCoreShell}>
+                  <div className={styles.aiCoreGlass} />
+                  <Bot size={44} />
+                  <span className={styles.corePulse} />
+                </div>
+              </motion.div>
 
-            <div className={`${styles.signal} ${styles.signalTwo}`}>
-              <Star size={16} />
-              <div>
-                <strong>Compare ratings</strong>
-                <span>Shop reputation</span>
-              </div>
-            </div>
+              <motion.div
+                className={styles.dataCard + ' ' + styles.dataCardA}
+                animate={{ y: [0, -9, 0], rotateZ: [-2, 1, -2] }}
+                transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <Package size={16} />
+                <div>
+                  <strong>12 shops</strong>
+                  <span>inventory scanned</span>
+                </div>
+              </motion.div>
 
-            <div className={`${styles.signal} ${styles.signalThree}`}>
-              <Store size={16} />
-              <div>
-                <strong>Open shop</strong>
-                <span>Order in one tap</span>
+              <motion.div
+                className={styles.dataCard + ' ' + styles.dataCardB}
+                animate={{ y: [0, 8, 0], rotateZ: [2, -1, 2] }}
+                transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut', delay: .6 }}
+              >
+                <Star size={16} />
+                <div>
+                  <strong>4.8 avg</strong>
+                  <span>shop rating signal</span>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className={styles.dataCard + ' ' + styles.dataCardC}
+                animate={{ y: [0, -6, 0], rotateZ: [1, -1, 1] }}
+                transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut', delay: .9 }}
+              >
+                <Sparkles size={16} />
+                <div>
+                  <strong>Value match</strong>
+                  <span>AI ranking layer</span>
+                </div>
+              </motion.div>
+
+              <div className={styles.sceneCaption}>
+                <span>AI SEARCH CORE</span>
+                <strong>LOCAL COMMERCE / ONLINE</strong>
               </div>
             </div>
           </div>
@@ -253,7 +295,7 @@ export default function AiShoppingPage() {
       <section className={styles.content}>
         {recent.length > 0 && !loading && (
           <div className={styles.recent}>
-            <span>Recent</span>
+            <span>RECENT COMMANDS</span>
             {recent.map((item) => (
               <button key={item} onClick={() => void ask(item)}>
                 {item}
@@ -263,60 +305,82 @@ export default function AiShoppingPage() {
         )}
 
         {loading && (
-          <section className={styles.loadingPanel}>
-            <div className={styles.loadingCore}>
-              <div className={styles.loadingRing} />
+          <section className={styles.responseStage}>
+            <div className={styles.responseGlow} />
+            <div className={styles.responseIcon}>
+              <div className={styles.responseIconRing} />
               <Bot size={24} />
             </div>
-            <div>
+            <div className={styles.responseCopy}>
               <span className={styles.sectionLabel}>RETAIL MIND AI</span>
-              <h2>Comparing live shops…</h2>
-              <p>
-                Checking stock, prices, ratings and online availability.
-              </p>
-            </div>
-            <div className={styles.loadingDots}>
-              <span />
-              <span />
-              <span />
+              <h2>Building your shopping answer…</h2>
+              <p>Cross-checking live stock, price, ratings and shop availability.</p>
+              <div className={styles.thinkingSteps}>
+                <span><i /> Inventory scan</span>
+                <span><i /> Value ranking</span>
+                <span><i /> Shop matching</span>
+              </div>
             </div>
           </section>
         )}
 
         {error && !loading && (
-          <section className={styles.errorPanel} role="alert">
-            <div className={styles.errorIcon}>
-              <Bot size={21} />
+          <section className={styles.responseStage + ' ' + styles.errorStage}>
+            <div className={styles.responseIcon}>
+              <Bot size={24} />
             </div>
-            <div className={styles.errorBody}>
+            <div className={styles.responseCopy}>
               <span className={styles.sectionLabel}>SEARCH INTERRUPTED</span>
-              <h2>Shopping AI needs another try.</h2>
+              <h2>The AI needs another pass.</h2>
               <p>{error}</p>
-              <button
-                className={styles.retryButton}
-                onClick={() => void ask()}
-                disabled={query.trim().length < 2}
-              >
+              <button className={styles.retryButton} onClick={() => void ask()}>
                 Try again <ArrowRight size={15} />
               </button>
             </div>
           </section>
         )}
 
-        {!loading && !error && available === false && (
-          <section className={styles.emptyPanel}>
-            <div className={styles.emptyOrb}>
-              <Package size={30} />
-              <span>0</span>
+        {!loading && !error && available === null && (
+          <section className={styles.introGrid}>
+            <div className={styles.introCard + ' ' + styles.introMain}>
+              <div className={styles.introOrb}>
+                <Bot size={28} />
+              </div>
+              <div>
+                <span className={styles.sectionLabel}>READY WHEN YOU ARE</span>
+                <h2>Give Retail Mind a normal sentence.</h2>
+                <p>
+                  “Find me the best-rated ghee under ₹350 near my neighbourhood”
+                  is enough. The engine translates intent into actual store data.
+                </p>
+              </div>
             </div>
-            <div>
+            <div className={styles.introCard}>
+              <div className={styles.miniIcon}><SlidersHorizontal size={18} /></div>
+              <strong>More context = better matching</strong>
+              <span>Add budget, preferred shop, category or “best rated”.</span>
+            </div>
+            <div className={styles.introCard}>
+              <div className={styles.miniIcon}><Store size={18} /></div>
+              <strong>Local stores stay local</strong>
+              <span>Only online-enabled shops are surfaced for checkout.</span>
+            </div>
+          </section>
+        )}
+
+        {!loading && !error && available === false && (
+          <section className={styles.responseStage + ' ' + styles.emptyStage}>
+            <div className={styles.responseIcon}>
+              <Package size={24} />
+            </div>
+            <div className={styles.responseCopy}>
               <span className={styles.sectionLabel}>NO VERIFIED MATCH</span>
-              <h2>Nothing available right now.</h2>
+              <h2>Nothing matched this command yet.</h2>
               <p>{message}</p>
-              <div className={styles.emptyTips}>
-                <span><CheckCircle2 size={14} /> Try a broader product name</span>
-                <span><CheckCircle2 size={14} /> Relax the budget</span>
-                <span><CheckCircle2 size={14} /> Try another shop</span>
+              <div className={styles.thinkingSteps}>
+                <span><CheckCircle2 size={13} /> Broaden the product name</span>
+                <span><CheckCircle2 size={13} /> Relax the budget</span>
+                <span><CheckCircle2 size={13} /> Try another shop</span>
               </div>
             </div>
           </section>
@@ -324,27 +388,45 @@ export default function AiShoppingPage() {
 
         {!loading && !error && available === true && (
           <>
-            <section className={styles.answer}>
-              <div className={styles.answerBadge}>
-                <Bot size={18} />
-              </div>
+            <section className={styles.answerDeck}>
+              <div className={styles.answerBack} />
               <div className={styles.answerMain}>
-                <div className={styles.answerMeta}>
-                  <span className={styles.sectionLabel}>AI RECOMMENDATION</span>
-                  {intent && <span className={styles.intent}>{intent}</span>}
+                <div className={styles.answerHead}>
+                  <div className={styles.answerBot}>
+                    <Bot size={20} />
+                  </div>
+                  <div>
+                    <span className={styles.sectionLabel}>AI RESPONSE</span>
+                    <div className={styles.answerIntent}>{intent}</div>
+                  </div>
+                  <span className={styles.livePill}>
+                    <span className={styles.liveDot} />
+                    LIVE DATA
+                  </span>
                 </div>
                 <h2>{message}</h2>
-                <div className={styles.answerTags}>
+                <div className={styles.answerChips}>
                   {productQuery && <span><Package size={13} /> {productQuery}</span>}
                   {shopHint && <span><Store size={13} /> {shopHint}</span>}
+                  <span><CheckCircle2 size={13} /> Verified options only</span>
+                </div>
+              </div>
+              <div className={styles.answerSide}>
+                <div>
+                  <span>OPTIONS</span>
+                  <strong>{results.length}</strong>
+                </div>
+                <div>
+                  <span>BEST RATING</span>
+                  <strong>{results.length ? metric(Math.max(...results.map((r) => Number(r.rating || 0))), '/5') : '—'}</strong>
                 </div>
               </div>
             </section>
 
             <div className={styles.resultsHeading}>
               <div>
-                <span className={styles.sectionLabel}>VERIFIED OPTIONS</span>
-                <h2>{results.length} real option{results.length === 1 ? '' : 's'}</h2>
+                <span className={styles.sectionLabel}>3D VALUE BOARD</span>
+                <h2>Options the AI wants you to see</h2>
               </div>
               <span className={styles.stockPill}>
                 <span className={styles.liveDot} />
@@ -354,21 +436,30 @@ export default function AiShoppingPage() {
 
             <div className={styles.grid}>
               {results.map((item, index) => (
-                <article
+                <motion.article
                   className={styles.result}
-                  style={{ animationDelay: `${index * 70}ms` }}
                   key={String(item.product_id) + '-' + String(item.shop_id)}
+                  initial={{ opacity: 0, y: 24, rotateX: 9 }}
+                  animate={{ opacity: 1, y: 0, rotateX: 0 }}
+                  transition={{
+                    duration: .5,
+                    delay: Math.min(index * .07, .35),
+                    ease: [.22, .7, .25, 1],
+                  }}
                 >
-                  <div className={styles.resultGlow} />
+                  <div className={styles.resultDepth} />
                   <div className={styles.resultHeader}>
                     <div className={styles.productBadge}>
-                      <Package size={19} />
+                      <Package size={18} />
                     </div>
                     <span className={styles.rank}>0{index + 1}</span>
                   </div>
 
                   <div className={styles.resultTitleRow}>
-                    <h3>{item.product_name}</h3>
+                    <div>
+                      <span className={styles.resultKicker}>MATCH {String(index + 1).padStart(2, '0')}</span>
+                      <h3>{item.product_name}</h3>
+                    </div>
                     <div className={styles.price}>
                       ₹{Number(item.price).toFixed(2)}
                     </div>
@@ -417,13 +508,6 @@ export default function AiShoppingPage() {
                     </div>
                   )}
 
-                  {Number(item.online_setup_fee || 0) > 0 && (
-                    <div className={styles.fee}>
-                      Online setup fee ₹
-                      {Number(item.online_setup_fee).toFixed(2)} per order
-                    </div>
-                  )}
-
                   <div className={styles.actions}>
                     <Link
                       href={'/shop/' + item.shop_id + '/product/' + item.product_id}
@@ -438,26 +522,10 @@ export default function AiShoppingPage() {
                       Open shop <ArrowRight size={14} />
                     </Link>
                   </div>
-                </article>
+                </motion.article>
               ))}
             </div>
           </>
-        )}
-
-        {!loading && !error && available === null && (
-          <section className={styles.introPanel}>
-            <div className={styles.introOrb}>
-              <div className={styles.introCore}><Bot size={28} /></div>
-            </div>
-            <div>
-              <span className={styles.sectionLabel}>READY WHEN YOU ARE</span>
-              <h2>Describe what you want to buy.</h2>
-              <p>
-                I’ll search only online-enabled shops and show real products,
-                prices, ratings and available stock.
-              </p>
-            </div>
-          </section>
         )}
       </section>
     </main>

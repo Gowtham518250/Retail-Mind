@@ -28,9 +28,10 @@ export default function ProductCard({
 
   return (
     <motion.article
-      whileHover={{ y: -6, scale: 1.01 }}
-      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-      className="store-product-card"
+      whileHover={{ y: -8, rotateX: 2, rotateY: -2, scale: 1.015 }}
+      transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+      style={{ transformPerspective: 1000, transformStyle: 'preserve-3d' }}
+      className="store-product-card store-product-card-3d"
     >
       <div className="store-product-media">
         {product.image_url ? (
@@ -54,7 +55,7 @@ export default function ProductCard({
       <div className="store-product-body">
         <div className="store-product-topline">
           <span className="store-category-pill">{product.category || 'Featured'}</span>
-          <span className="store-rating-pill"><Sparkles size={12} /> 4.8</span>
+          <span className="store-rating-pill"><Sparkles size={12} /> Local pick</span>
         </div>
 
         <h3 className="store-product-title">{product.name}</h3>
