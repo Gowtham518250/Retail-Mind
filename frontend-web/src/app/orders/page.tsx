@@ -41,6 +41,16 @@ interface OrderReview {
   created_at?: string | null;
 }
 
+interface ReturnRequest {
+  id: number;
+  status: string;
+  reason: string;
+  refund_amount: number;
+  stock_restored?: boolean;
+  created_at?: string | null;
+  processed_at?: string | null;
+}
+
 interface Order {
   order_id: number;
   shop_id: number;
@@ -52,6 +62,7 @@ interface Order {
   created_at: string;
   review?: OrderReview | null;
   can_cancel?: boolean;
+  return_request?: ReturnRequest | null;
 }
 
 const STATUS_STEPS = ['PENDING', 'ACCEPTED', 'DISPATCHED', 'DELIVERED'] as const;
@@ -133,6 +144,23 @@ function formatDate(value?: string | null) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function activeReturnRequest(order: Order) {
+  const status = String(order.return_request?.status || '').toUpperCase();
+  return Boolean(
+    order.return_request &&
+      status !== 'REJECTED',
+  );
+}
+
+function returnLabel(order: Order) {
+  const status = String(order.return_request?.status || '').toUpperCase();
+  if (order.status === 'RETURNED' || status === 'REFUND_PENDING' || status === 'REFUNDED') {
+    return 'Return complete';
+  }
+  if (status === 'REQUESTED') return 'Return requested';
+  return 'Return in progress';
 }
 
 function OrderTimeline({ status }: { status: string }) {
@@ -422,7 +450,7 @@ export default function MyOrdersPage() {
   );
 
   const returnedCount = useMemo(
-    () => orders.filter((order) => order.status === 'RETURNED').length,
+    () => orders.filter((order) => activeReturnRequest(order)).length,
     [orders],
   );
 
@@ -457,7 +485,7 @@ export default function MyOrdersPage() {
         (filter === 'ACTIVE' &&
           !TERMINAL_STATUSES.includes(order.status)) ||
         (filter === 'DELIVERED' && order.status === 'DELIVERED') ||
-        (filter === 'RETURNED' && order.status === 'RETURNED') ||
+        (filter === 'RETURNED' && activeReturnRequest(order)) ||
         (filter === 'CANCELLED' &&
           ['CANCELLED', 'REJECTED'].includes(order.status));
 
@@ -841,7 +869,24 @@ export default function MyOrdersPage() {
             <div className="orders-fk-list">
               {visibleOrders.map((order, orderIndex) => {
                 const meta = STATUS_META[order.status] || STATUS_META.PENDING;
-                const Icon = meta.icon;
+                const returnActive = activeReturnRequest(order);
+                const effectiveStatus =
+                  returnActive && order.status === 'DELIVERED'
+                    ? 'RETURN_REQUESTED'
+                    : order.status;
+                const effectiveMeta =
+                  effectiveStatus === 'RETURN_REQUESTED'
+                    ? {
+                        label: returnLabel(order),
+                        description:
+                          order.return_request?.status === 'REQUESTED'
+                            ? 'Your return request is waiting for the shop to review it.'
+                            : 'Your return request is being processed.',
+                        icon: RotateCcw,
+                        tone: '#8b5cf6',
+                      }
+                    : meta;
+                const Icon = effectiveMeta.icon;
                 const isOpen = expandedOrders.has(order.order_id);
                 const firstItem = order.items[0];
                 const firstName =
@@ -899,7 +944,25 @@ export default function MyOrdersPage() {
                       </span>
                     </div>
 
-                    <OrderTimeline status={order.status} />
+                    {effectiveStatus === 'RETURN_REQUESTED' ? (
+  <div className="orders-fk-return-state">
+    <div className="orders-fk-return-state-icon"><RotateCcw size={15} /></div>
+    <div>
+      <strong>{effectiveMeta.label}</strong>
+      <span>
+        {order.return_request?.reason || 'Return request submitted.'}
+        {order.return_request?.refund_amount
+          ? ' · Refund ' + formatCurrency(order.return_request.refund_amount)
+          : ''}
+      </span>
+    </div>
+    <span className="orders-fk-return-state-badge">
+      {String(order.return_request?.status || 'REQUESTED').replaceAll('_', ' ')}
+    </span>
+  </div>
+) : (
+  <OrderTimeline status={order.status} />
+)}
 
                     <div className="orders-fk-card-actions">
                       <div className="orders-fk-delivery">
@@ -932,7 +995,7 @@ export default function MyOrdersPage() {
                             Rate & review <Star size={14} fill="currentColor" />
                           </button>
                         )}
-                        {order.status === 'DELIVERED' && !order.review && (
+                        {order.status === 'DELIVERED' && !returnActive && !order.review && (
                           <button
                             className="orders-fk-details-btn"
                             onClick={() => void requestReturn(order)}
@@ -968,7 +1031,11 @@ export default function MyOrdersPage() {
                           </div>
                           <div>
                             <span>Current status</span>
-                            <strong>{meta.label}</strong>
+                            <strong>
+                              {effectiveStatus === 'RETURN_REQUESTED'
+                                ? effectiveMeta.label
+                                : meta.label}
+                            </strong>
                           </div>
                           <div>
                             <span>Shop</span>
@@ -979,6 +1046,21 @@ export default function MyOrdersPage() {
                             <strong>{order.items.length}</strong>
                           </div>
                         </div>
+
+                        {returnActive && (
+                          <div className="orders-fk-return-state compact">
+                            <div className="orders-fk-return-state-icon"><RotateCcw size={14} /></div>
+                            <div>
+                              <strong>{effectiveMeta.label}</strong>
+                              <span>
+                                {order.return_request?.reason || 'Return request submitted.'}
+                              </span>
+                            </div>
+                            <span className="orders-fk-return-state-badge">
+                              {String(order.return_request?.status || 'REQUESTED').replaceAll('_', ' ')}
+                            </span>
+                          </div>
+                        )}
 
                         {deliveryLoadingId === order.order_id ? (
                           <div
