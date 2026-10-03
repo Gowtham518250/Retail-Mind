@@ -21,6 +21,7 @@ from models import (
     ShopProfile,
     Product,
     Invoice,
+    InvoiceStatus,
     InvoiceLineItem,
     ShopExpense,
     OnlineOrder,
@@ -199,7 +200,10 @@ def growth_overview(
 ):
     branch = _owner_branch(db, user_id, branch_id)
 
-    invoice_q = db.query(Invoice).filter(Invoice.user_id == user_id)
+    invoice_q = db.query(Invoice).filter(
+        Invoice.user_id == user_id,
+        Invoice.status != InvoiceStatus.CANCELLED,
+    )
     online_q = db.query(OnlineOrder).filter(OnlineOrder.shop_id == user_id)
     expense_q = db.query(ShopExpense).filter(ShopExpense.shop_id == user_id)
     product_q = db.query(Product).filter(Product.user_id == user_id)
@@ -288,6 +292,7 @@ def growth_analytics(
     ).filter(
         Invoice.user_id == user_id,
         Invoice.created_at >= since,
+        Invoice.status != InvoiceStatus.CANCELLED,
     )
     if branch:
         invoice_q = invoice_q.filter(Invoice.branch_id == branch.id)
@@ -330,6 +335,7 @@ def growth_analytics(
         .filter(
             Product.user_id == user_id,
             Invoice.created_at >= since,
+            Invoice.status != InvoiceStatus.CANCELLED,
         )
         .group_by(Product.id, Product.product_name)
         .order_by(desc("revenue"))
