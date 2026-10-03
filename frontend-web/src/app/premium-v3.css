@@ -212,3 +212,61 @@ body{background-image:radial-gradient(circle at 82% -4%,rgba(240,180,63,.12),tra
   .orders-fk-details-actions{justify-content:flex-start}
   .orders-fk-review-actions{flex-direction:column}
 }
+
+
+.store-product-card-3d{transform-style:preserve-3d;perspective:1100px;will-change:transform}
+.store-product-card-3d .store-product-media,.store-product-card-3d .store-product-body{transform:translateZ(1px)}
+.product-reviews-panel{
+  margin-top:22px;
+  padding:30px;
+  border-radius:28px;
+  border:1px solid var(--retail-line);
+  background:linear-gradient(145deg,#fffdf9,#f6fbf7);
+  box-shadow:var(--retail-shadow);
+}
+.product-reviews-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:end;
+  gap:20px;
+}
+.product-reviews-head h2{margin-top:10px;font-size:32px;letter-spacing:-.04em;color:var(--retail-ink)}
+.product-reviews-head p{margin-top:6px;color:var(--retail-muted);font-size:12px}
+.product-reviews-summary{
+  min-width:110px;
+  padding:14px 16px;
+  border-radius:16px;
+  text-align:right;
+  background:#eef7f2;
+  border:1px solid #d4e7dd;
+}
+.product-reviews-summary strong{display:block;font-size:28px;color:var(--retail-forest)}
+.product-reviews-summary span{font-size:9px;color:#71827b;font-weight:800}
+.product-reviews-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:22px}
+.product-review-card{
+  padding:16px;
+  min-height:150px;
+  border-radius:18px;
+  background:#fff;
+  border:1px solid var(--retail-line);
+  box-shadow:0 12px 26px rgba(18,63,52,.06);
+}
+.product-review-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.product-review-top strong{font-size:12px;color:var(--retail-ink)}
+.product-review-top span{font-size:9px;color:#89958e}
+.product-review-stars{display:flex;gap:2px;margin-top:10px;color:#dfa72c}
+.product-review-card p{margin-top:11px;color:#556860;font-size:11px;line-height:1.65}
+.product-review-empty{
+  margin-top:20px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:16px;
+  border-radius:15px;
+  background:#f7faf8;
+  border:1px dashed #c7dbd1;
+  color:#66766f;
+  font-size:11px;
+}
+@media(max-width:850px){.product-reviews-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.product-reviews-panel{padding:20px;border-radius:22px}.product-reviews-head{align-items:start;flex-direction:column}.product-reviews-summary{text-align:left}.product-reviews-grid{grid-template-columns:1fr}}
