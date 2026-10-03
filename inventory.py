@@ -96,7 +96,33 @@ def barcode_product_lookup(
                 "message": "The barcode exists but the catalog returned no product title.",
             }
 
-        return {
+        inr_prices: list[float] = []
+        for offer in (item.get("offers") or []):
+            if str(offer.get("currency") or "").upper() != "INR":
+                continue
+            try:
+                offer_price = float(offer.get("price") or 0)
+            except (TypeError, ValueError):
+                offer_price = 0
+            if offer_price > 0:
+                inr_prices.append(offer_price)
+
+        currency = str(item.get("currency") or "").upper()
+        if not inr_prices and currency == "INR":
+            for raw_price in (
+                item.get("lowest_recorded_price"),
+                item.get("highest_recorded_price"),
+            ):
+                try:
+                    value = float(raw_price or 0)
+                except (TypeError, ValueError):
+                    value = 0
+                if value > 0:
+                    inr_prices.append(value)
+
+        online_price = min(inr_prices) if inr_prices else None
+
+        result = {
             "found": True,
             "barcode": clean,
             "name": title,
@@ -105,10 +131,16 @@ def barcode_product_lookup(
             "category": item.get("category"),
             "description": item.get("description"),
             "image_url": (item.get("images") or [None])[0],
+            "catalog_currency": currency or None,
+            "online_price": online_price,
+            "price_source": "INR offer" if online_price is not None else None,
             "lowest_recorded_price": item.get("lowest_recorded_price"),
             "highest_recorded_price": item.get("highest_recorded_price"),
             "provider": "UPCitemdb",
         }
+        _BARCODE_LOOKUP_CACHE[clean] = (time.time(), result)
+        return result
+
     except httpx.RequestError:
         raise HTTPException(
             status_code=502,
