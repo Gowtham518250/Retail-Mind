@@ -3,11 +3,12 @@ Shop Profile & Settings Management Service
 Handles all shop profile operations: CRUD, validation, sync
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 import json
 from datetime import datetime
+from fastapi.responses import FileResponse
 
 from db import get_db
 from models import User, ShopProfile, ShopSettings
@@ -493,9 +494,11 @@ def upload_logo(file: UploadFile = File(...), user_id: int = Depends(check_curre
         with open(file_path, "wb") as f:
             f.write(content)
         
-        # Update profile with logo path
+        # Update the canonical profile record with both the stored file path
+        # and the public API URL used by customer storefronts.
         profile = ShopService.get_shop_profile(db, user_id)
         profile.logo_file_path = file_path
+        profile.logo_url = f"/static/logos/{filename}"
         if profile.logo_version is None:
             profile.logo_version = 0
         profile.logo_version += 1
@@ -511,12 +514,43 @@ def upload_logo(file: UploadFile = File(...), user_id: int = Depends(check_curre
         return {
             "status": "success",
             "logo_path": file_path,
-            "url": f"/static/logos/{filename}"
+            "logo_url": profile.logo_url,
+            "url": profile.logo_url,
+            "shop_id": profile.shop_id,
+            "profile_id": profile.id,
+            "logo_version": profile.logo_version,
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/logo/{shop_id}")
+def get_public_shop_logo(shop_id: int, db: Session = Depends(get_db)):
+    """Return the current public logo for a shop storefront."""
+    try:
+        profile = (
+            db.query(ShopProfile)
+            .filter(ShopProfile.shop_id == shop_id)
+            .first()
+        )
+        if not profile or not profile.logo_file_path:
+            raise HTTPException(status_code=404, detail="Shop logo not found")
+
+        import os
+        if not os.path.isfile(profile.logo_file_path):
+            raise HTTPException(status_code=404, detail="Shop logo file not found")
+
+        return FileResponse(
+            profile.logo_file_path,
+            media_type="image/*",
+            filename=os.path.basename(profile.logo_file_path),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/business-hours")
