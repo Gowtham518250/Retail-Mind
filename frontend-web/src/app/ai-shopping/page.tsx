@@ -227,9 +227,9 @@ export default function AiShoppingPage() {
           <div className={styles.visual} aria-hidden="true">
             <div className={styles.holoStage}>
               <div className={styles.holoFloor} />
-              <div className={styles.orbit orbitOne} />
-              <div className={styles.orbit orbitTwo} />
-              <div className={styles.orbit orbitThree} />
+              <div className={`${styles.orbit} ${styles.orbitOne}`} />
+              <div className={`${styles.orbit} ${styles.orbitTwo}`} />
+              <div className={`${styles.orbit} ${styles.orbitThree}`} />
 
               <motion.div
                 className={styles.aiCore}
