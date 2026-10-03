@@ -773,7 +773,6 @@ def marketplace_search(
                 "state": shop.state or "",
                 "postal_code": shop.postal_code or "",
                 "phone": shop.phone or "",
-                "email": shop.email or "",
                 "website": shop.website or "",
                 "logo_url": shop.logo_url,
                 "categories": (
@@ -1027,6 +1026,12 @@ def find_nearby_shops(
                 "address": s.address,
                 "phone": s.phone,
                 "logo_url": s.logo_url,
+                "shop_type": s.shop_type or "General",
+                "tagline": s.shop_tagline or "",
+                "description": s.shop_description or "",
+                "city": s.city or "",
+                "state": s.state or "",
+                "website": s.website or "",
                 **_shop_reputation(s),
             }
             for s in all_shops
@@ -1074,7 +1079,6 @@ def browse_shop_products(
         "shop_description": profile.shop_description or "",
         "shop_type": profile.shop_type or "General",
         "shop_phone": profile.phone or "",
-        "shop_email": profile.email or "",
         "shop_website": profile.website or "",
         "shop_address": profile.address or "",
         "shop_city": profile.city or "",
@@ -1803,7 +1807,7 @@ def get_shop_reviews(
             {
                 "id": review.id,
                 "order_id": review.order_id,
-                "customer_name": customer.user_name,
+                "customer_name": "Verified customer",
                 "rating": review.rating,
                 "comment": review.comment,
                 "created_at": review.created_at,
