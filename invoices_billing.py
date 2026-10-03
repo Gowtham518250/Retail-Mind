@@ -887,6 +887,42 @@ def get_invoices(
     return query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
 
 
+@router.get("/next-bill-number")
+def get_next_bill_number(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    """
+    Return the highest customer-facing BILL-NNNN sequence currently stored for
+    this shop. The phone keeps the next number locally, but the server history
+    is authoritative when local app data has been cleared.
+    """
+    shop_id = resolve_shop_id(current_user)
+
+    rows = (
+        db.query(Invoice.invoice_number)
+        .filter(Invoice.user_id == shop_id)
+        .all()
+    )
+
+    highest = 0
+    for (raw_invoice_number,) in rows:
+        raw_value = str(raw_invoice_number or "")
+        match = re.search(r"^BILL-(\d+)$", raw_value, re.IGNORECASE)
+        if match:
+            highest = max(
+                highest,
+                int(match.group(1)),
+            )
+
+    return {
+        "shop_id": shop_id,
+        "highest_bill_number": highest,
+        "next_bill_number": f"BILL-{highest + 1:04d}",
+        "total_invoices": len(rows),
+    }
+
+
 @router.post("/create")
 def create_invoice(
     data: InvoiceSyncCreate,
