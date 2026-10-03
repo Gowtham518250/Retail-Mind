@@ -915,3 +915,75 @@ body{background-image:radial-gradient(circle at 82% -4%,rgba(240,180,63,.12),tra
 @media(prefers-reduced-motion:reduce){
   .smart3d-orbit-1,.smart3d-orbit-2,.smart3d-orbit-3,.smart3d-return-ring,.smart3d-skeleton-card{animation:none!important}
 }
+
+
+/* Customer return request state */
+.orders-fk-return-state{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:11px;
+  margin:14px 0 4px;
+  padding:13px 14px;
+  border:1px solid #ded2fa;
+  border-radius:16px;
+  background:
+    radial-gradient(circle at 0 0,rgba(139,92,246,.10),transparent 34%),
+    linear-gradient(135deg,#fbfaff,#f6f3ff);
+  box-shadow:0 10px 24px rgba(91,61,151,.06);
+}
+.orders-fk-return-state.compact{
+  margin:0 0 14px;
+}
+.orders-fk-return-state-icon{
+  width:36px;height:36px;
+  flex:none;
+  display:grid;place-items:center;
+  border-radius:12px;
+  background:#efe9ff;
+  color:#7c4ee7;
+}
+.orders-fk-return-state>div:nth-child(2){
+  min-width:0;
+  flex:1;
+}
+.orders-fk-return-state strong{
+  display:block;
+  color:#3d2b69;
+  font-size:11px;
+}
+.orders-fk-return-state span:not(.orders-fk-return-state-badge){
+  display:block;
+  margin-top:3px;
+  color:#756a8e;
+  font-size:9.5px;
+  line-height:1.45;
+}
+.orders-fk-return-state-badge{
+  flex:none;
+  padding:6px 8px;
+  border-radius:999px;
+  background:#eee8ff;
+  color:#7048bd;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.orders-fk-status.return_requested{
+  color:#7c4ee7;
+  border-color:#dcd0fa;
+  background:#f6f2ff;
+}
+.orders-fk-status.returned{
+  color:#7c4ee7;
+  border-color:#dcd0fa;
+  background:#f6f2ff;
+}
+.orders-fk-status.delivered{
+  color:#168157;
+}
+@media(max-width:680px){
+  .orders-fk-return-state{align-items:flex-start}
+  .orders-fk-return-state-badge{margin-left:auto}
+}

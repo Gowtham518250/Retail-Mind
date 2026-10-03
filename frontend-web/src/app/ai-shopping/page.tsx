@@ -225,71 +225,82 @@ export default function AiShoppingPage() {
           </div>
 
           <div className={styles.visual} aria-hidden="true">
-            <div className={styles.holoStage}>
-              <div className={styles.holoFloor} />
-              <div className={`${styles.orbit} ${styles.orbitOne}`} />
-              <div className={`${styles.orbit} ${styles.orbitTwo}`} />
-              <div className={`${styles.orbit} ${styles.orbitThree}`} />
+            <div className={styles.showroomStage}>
+              <div className={styles.showroomGlow} />
+              <div className={styles.showroomRing + ' ' + styles.showroomRingA} />
+              <div className={styles.showroomRing + ' ' + styles.showroomRingB} />
+              <div className={styles.showroomFloor} />
 
               <motion.div
-                className={styles.aiCore}
+                className={styles.retailPod}
                 animate={{
-                  y: [0, -12, 0],
-                  rotateX: [-4, 4, -4],
-                  rotateY: [6, -6, 6],
+                  y: [0, -10, 0],
+                  rotateY: [-5, 5, -5],
+                  rotateZ: [-2, 1, -2],
                 }}
-                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                transition={{ duration: 6.2, repeat: Infinity, ease: 'easeInOut' }}
               >
-                <div className={styles.aiCoreShell}>
-                  <div className={styles.aiCoreGlass} />
-                  <Bot size={44} />
-                  <span className={styles.corePulse} />
+                <div className={styles.retailPodTop}>
+                  <span>RETAIL MIND</span>
+                  <i />
+                </div>
+                <div className={styles.retailPodBody}>
+                  <ShoppingBag size={42} />
+                  <strong>SMART CART</strong>
+                  <small>AI READY</small>
                 </div>
               </motion.div>
 
               <motion.div
-                className={styles.dataCard + ' ' + styles.dataCardA}
-                animate={{ y: [0, -9, 0], rotateZ: [-2, 1, -2] }}
-                transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
+                className={styles.productPod + ' ' + styles.productPodA}
+                animate={{ y: [0, -7, 0], rotateZ: [-3, 1, -3] }}
+                transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
               >
-                <Package size={16} />
-                <div>
-                  <strong>12 shops</strong>
-                  <span>inventory scanned</span>
-                </div>
+                <span>01</span>
+                <Package size={24} />
+                <strong>VALUE</strong>
               </motion.div>
 
               <motion.div
-                className={styles.dataCard + ' ' + styles.dataCardB}
-                animate={{ y: [0, 8, 0], rotateZ: [2, -1, 2] }}
-                transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut', delay: .6 }}
+                className={styles.productPod + ' ' + styles.productPodB}
+                animate={{ y: [0, 8, 0], rotateZ: [3, -1, 3] }}
+                transition={{ duration: 5.3, repeat: Infinity, ease: 'easeInOut', delay: .4 }}
               >
-                <Star size={16} />
-                <div>
-                  <strong>4.8 avg</strong>
-                  <span>shop rating signal</span>
-                </div>
+                <span>02</span>
+                <Star size={22} fill="currentColor" />
+                <strong>RATED</strong>
               </motion.div>
 
               <motion.div
-                className={styles.dataCard + ' ' + styles.dataCardC}
-                animate={{ y: [0, -6, 0], rotateZ: [1, -1, 1] }}
-                transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut', delay: .9 }}
+                className={styles.productPod + ' ' + styles.productPodC}
+                animate={{ y: [0, -6, 0], rotateZ: [2, -1, 2] }}
+                transition={{ duration: 5.1, repeat: Infinity, ease: 'easeInOut', delay: .8 }}
               >
-                <Sparkles size={16} />
-                <div>
-                  <strong>Value match</strong>
-                  <span>AI ranking layer</span>
-                </div>
+                <span>03</span>
+                <Sparkles size={22} />
+                <strong>AI PICK</strong>
               </motion.div>
+
+              <div className={styles.scanBeam} />
+              <div className={styles.showroomStat + ' ' + styles.showroomStatA}>
+                <Store size={15} />
+                <div><strong>12</strong><span>shops scanned</span></div>
+              </div>
+              <div className={styles.showroomStat + ' ' + styles.showroomStatB}>
+                <Star size={15} />
+                <div><strong>4.8</strong><span>average signal</span></div>
+              </div>
+              <div className={styles.showroomStat + ' ' + styles.showroomStatC}>
+                <Sparkles size={15} />
+                <div><strong>LIVE</strong><span>value matching</span></div>
+              </div>
 
               <div className={styles.sceneCaption}>
-                <span>AI SEARCH CORE</span>
-                <strong>LOCAL COMMERCE / ONLINE</strong>
+                <span>AI RETAIL SHOWROOM</span>
+                <strong>DISCOVER · COMPARE · BUY</strong>
               </div>
             </div>
-          </div>
-        </div>
+          </div>        </div>
       </section>
 
       <section className={styles.content}>
