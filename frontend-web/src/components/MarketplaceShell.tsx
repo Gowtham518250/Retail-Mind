@@ -217,7 +217,14 @@ export default function MarketplaceShell() {
                 <Link key={shop.shop_id} href={'/shop/' + shop.shop_id} className={styles.shopCard}>
                   <div className={styles.shopCover}>
                     {shop.logo_url ? (
-                      <img src={shop.logo_url} alt={shop.shop_name + ' logo'} />
+                      <img
+                        src={
+                          shop.logo_url.startsWith('http')
+                            ? shop.logo_url
+                            : API_BASE + shop.logo_url
+                        }
+                        alt={shop.shop_name + ' logo'}
+                      />
                     ) : (
                       <div className={styles.shopLogoFallback}><Store size={24} /></div>
                     )}
