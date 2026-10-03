@@ -12,12 +12,15 @@ from datetime import datetime, timedelta
 import httpx
 import re
 from typing import List, Optional
+import time
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Product, StockMovement, ProductBatch, Notification
 from stock_service import StockService
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+_BARCODE_LOOKUP_CACHE: dict[str, tuple[float, dict]] = {}
+_BARCODE_CACHE_TTL_SECONDS = 6 * 60 * 60
 
 # ==================== BARCODE PRODUCT LOOKUP ====================
 
@@ -38,6 +41,10 @@ def barcode_product_lookup(
             status_code=400,
             detail="This is not a standard retail product barcode. Scan the EAN/UPC barcode on the product label.",
         )
+
+    cached = _BARCODE_LOOKUP_CACHE.get(clean)
+    if cached and (time.time() - cached[0]) < _BARCODE_CACHE_TTL_SECONDS:
+        return cached[1]
 
     # Use a real external catalog rather than the old deterministic fake-product
     # fallback. Keep the provider behind our authenticated API.
