@@ -21,3 +21,11 @@ def test_delivery_otp_contract_requires_customer_otp_for_delivery_action():
     routes = {getattr(route, "path", "") for route in router.routes}
     assert "/store/owner/orders/{order_id}/delivery-otp" in routes
     assert "/store/owner/orders/{order_id}/action" in routes
+
+
+def test_customer_marketplace_can_find_shops_by_category_metadata():
+    import inspect
+
+    source = inspect.getsource(marketplace_search)
+    assert "ShopProfile.shop_type.ilike(like)" in source
+    assert "ShopProfile.shop_categories.ilike(like)" in source
