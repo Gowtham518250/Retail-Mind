@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ShoppingCart, Sparkles, Package2, Truck, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Sparkles, Package2, Truck, ShieldCheck, CheckCircle2, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { API_BASE } from '../../../../../lib/api';
 import { useCart } from '../../../../../context/CartContext';
@@ -17,6 +17,9 @@ export default function ProductClientPage() {
   const [product, setProduct] = useState<ShopProduct | null>(null);
   const [loading, setLoading] = useState(true);
   const [added, setAdded] = useState(false);
+  const [reviews, setReviews] = useState<
+    Array<{ id: number; customer_name: string; rating: number; comment?: string | null; created_at?: string | null }>
+  >([]);
 
   useEffect(() => {
     const load = async () => {
@@ -26,6 +29,19 @@ export default function ProductClientPage() {
         if (!res.ok) throw new Error('Unable to load product');
         const data = await res.json();
         setProduct(data.products?.find((item: ShopProduct) => item.id === productId) || null);
+
+        try {
+          const reviewResponse = await fetch(
+            API_BASE + '/store/shops/' + shopId + '/reviews?limit=12',
+            { cache: 'no-store' },
+          );
+          if (reviewResponse.ok) {
+            const reviewData = await reviewResponse.json();
+            setReviews(Array.isArray(reviewData.reviews) ? reviewData.reviews : []);
+          }
+        } catch {
+          setReviews([]);
+        }
       } catch {
         setProduct(null);
       } finally {
@@ -100,6 +116,54 @@ export default function ProductClientPage() {
             <Link href="/orders" className="store-link-btn">View orders</Link>
           </div>
         </div>
+      </motion.section>
+
+      <motion.section
+        className="product-reviews-panel"
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: .45 }}
+      >
+        <div className="product-reviews-head">
+          <div>
+            <span className="store-category-pill">Verified customer voice</span>
+            <h2>What shoppers say</h2>
+            <p>Reviews are tied to completed orders from this shop.</p>
+          </div>
+          <div className="product-reviews-summary">
+            <strong>{reviews.length ? (reviews.reduce((sum, item) => sum + Number(item.rating || 0), 0) / reviews.length).toFixed(1) : '—'}</strong>
+            <span>/ 5 average</span>
+          </div>
+        </div>
+
+        {reviews.length === 0 ? (
+          <div className="product-review-empty">
+            <Sparkles size={18} />
+            No verified reviews yet. Your completed order can be the first voice here.
+          </div>
+        ) : (
+          <div className="product-reviews-grid">
+            {reviews.map((review) => (
+              <article key={review.id} className="product-review-card">
+                <div className="product-review-top">
+                  <strong>{review.customer_name || 'Customer'}</strong>
+                  <span>{review.created_at ? new Date(review.created_at).toLocaleDateString('en-IN') : ''}</span>
+                </div>
+                <div className="product-review-stars">
+                  {Array.from({ length: 5 }, (_, index) => (
+                    <Star
+                      key={index}
+                      size={14}
+                      fill={index < Number(review.rating || 0) ? 'currentColor' : 'none'}
+                    />
+                  ))}
+                </div>
+                {review.comment && <p>“{review.comment}”</p>}
+              </article>
+            ))}
+          </div>
+        )}
       </motion.section>
     </main>
   );
