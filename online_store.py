@@ -923,6 +923,49 @@ def ai_shopping_recommendations(
     }
 
 
+@router.get("/shops")
+def list_online_shops(
+    skip: int = 0,
+    limit: int = Query(100, le=200),
+    db: Session = Depends(get_db),
+):
+    """Compatibility/catalog endpoint used by the customer web build.
+
+    Returns the same online-enabled shop identity data as the marketplace,
+    without requiring customer authentication.
+    """
+    shops = (
+        db.query(ShopProfile)
+        .filter(
+            ShopProfile.is_online_store_enabled == True,
+            (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
+        )
+        .order_by(ShopProfile.shop_name.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "shops": [
+            {
+                "shop_id": shop.shop_id,
+                "shop_name": shop.shop_name,
+                "tagline": shop.shop_tagline or "",
+                "description": shop.shop_description or "",
+                "shop_type": shop.shop_type or "General",
+                "address": shop.address or "",
+                "city": shop.city or "",
+                "state": shop.state or "",
+                "phone": shop.phone or "",
+                "logo_url": shop.logo_url,
+                **_shop_reputation(shop),
+            }
+            for shop in shops
+        ],
+        "count": len(shops),
+    }
+
+
 @router.get("/shops/nearby")
 def find_nearby_shops(
     city: Optional[str] = None,
