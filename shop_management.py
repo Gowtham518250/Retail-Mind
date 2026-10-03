@@ -34,6 +34,89 @@ class ShopSettingsUpdate:
             setattr(self, key, value)
 
 
+# ==================== SERIALIZATION HELPERS ====================
+
+def _safe_json_list(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if isinstance(value, dict):
+        return [value]
+    text = str(value).strip()
+    if not text:
+        return []
+    try:
+        decoded = json.loads(text)
+        if isinstance(decoded, list):
+            return decoded
+        if decoded is None:
+            return []
+        return [decoded]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        # Legacy rows may contain a comma-separated value instead of JSON.
+        return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _profile_payload(profile):
+    return {
+        "id": profile.id,
+        "profile_id": profile.id,
+        "shop_id": profile.shop_id,
+        "user_id": profile.shop_id,
+        "shop_name": profile.shop_name,
+        "shop_type": profile.shop_type,
+        "phone": profile.phone,
+        "phone_number": profile.phone,
+        "location": profile.location,
+        "email": profile.email,
+        "website": profile.website,
+        "shop_tagline": profile.shop_tagline,
+        "shop_description": profile.shop_description,
+        "address": profile.address,
+        "address_line1": profile.address_line1,
+        "address_line2": profile.address_line2,
+        "state": profile.state,
+        "city": profile.city,
+        "postal_code": profile.postal_code,
+        "gst_number": profile.gst_number,
+        "primary_upi_id": profile.upi_id,
+        "upi_ids": _safe_json_list(profile.upi_ids),
+        "shop_categories": _safe_json_list(profile.shop_categories),
+        "logo_url": profile.logo_url,
+        "color_primary": profile.color_primary,
+        "color_secondary": profile.color_secondary,
+        "is_online_store_enabled": bool(profile.is_online_store_enabled),
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+    }
+
+
+def _settings_payload(settings):
+    return {
+        "business_hours": {
+            "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
+            "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
+            "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
+            "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
+            "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
+            "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
+            "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed},
+        },
+        "payment_methods": {
+            "cash": settings.accept_cash,
+            "card": settings.accept_card,
+            "upi": settings.accept_upi,
+            "bank": settings.accept_bank_transfer,
+        },
+        "preferences": {
+            "language": settings.language,
+            "theme": settings.theme_mode,
+            "timezone": settings.timezone,
+        },
+    }
+
+
 # ==================== SERVICE CLASS ====================
 
 class ShopService:
@@ -58,7 +141,7 @@ class ShopService:
             email=data.get("email") or data.get("shop_email"),
             website=data.get("website"),
             gst_number=data.get("gst_number") or data.get("shop_gst") or data.get("gstin"),
-            primary_upi_id=data.get("primary_upi_id") or data.get("upi_id"),
+            upi_id=data.get("primary_upi_id") or data.get("upi_id"),
             shop_tagline=data.get("shop_tagline"),
             shop_description=data.get("shop_description"),
             latitude=data.get("latitude"),
@@ -153,8 +236,15 @@ class ShopService:
         
         profile = db.query(ShopProfile).filter_by(shop_id=user_id).first()
         if not profile:
-            # Auto-create default profile
-            profile = ShopProfile(shop_id=user_id, shop_name="My Shop")
+            # Auto-create a real profile for the authenticated owner. Never
+            # overwrite an existing profile and never use a shared placeholder.
+            user = db.query(User).filter(User.id == user_id).first()
+            default_name = (
+                (getattr(user, "shop_name", None) or "").strip()
+                or (getattr(user, "username", None) or "").strip()
+                or "My Shop"
+            )
+            profile = ShopProfile(shop_id=user_id, shop_name=default_name)
             db.add(profile)
             db.flush()  # Get id before commit
             
@@ -281,169 +371,57 @@ def create_shop_profile(data: dict, user_id: int = Depends(check_current_user), 
 
 @router.get("/profile")
 def get_profile(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Get shop profile with all settings"""
-    
+    """Return the authenticated owner's canonical shop profile.
+
+    The Bearer token is the only source of identity. Any query-string
+    user_id sent by an old client is intentionally ignored.
+    """
     try:
         profile = ShopService.get_shop_profile(db, user_id)
         settings = ShopService.get_shop_settings(db, profile.id)
-        
-        # Parse JSON fields
-        categories = json.loads(profile.shop_categories) if profile.shop_categories else []
-        upi_ids = json.loads(profile.upi_ids) if profile.upi_ids else []
-        
+        payload = _profile_payload(profile)
         return {
             "status": "success",
-            "profile": {
-                "id": profile.id,
-                "shop_name": profile.shop_name,
-                "shop_type": profile.shop_type,
-                "phone": profile.phone,
-                "phone_number": profile.phone,
-                "location": profile.location,
-                "email": profile.email,
-                "website": profile.website,
-                "shop_tagline": profile.shop_tagline,
-                "shop_description": profile.shop_description,
-                "address": profile.address,
-                "state": profile.state,
-                "city": profile.city,
-                "postal_code": profile.postal_code,
-                "gst_number": profile.gst_number,
-                "primary_upi_id": profile.upi_id,
-                "upi_ids": upi_ids,
-                "shop_categories": categories,
-                "logo_url": profile.logo_url,
-                "color_primary": profile.color_primary,
-                "color_secondary": profile.color_secondary,
-                "is_online_store_enabled": profile.is_online_store_enabled or False,
-                "created_at": profile.created_at,
-                "updated_at": profile.updated_at
-            },
-            "settings": {
-                "business_hours": {
-                    "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
-                    "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
-                    "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
-                    "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
-                    "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
-                    "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
-                    "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed},
-                },
-                "tax_config": {
-                    "tax_type": settings.tax_type,
-                    "igst": settings.igst_percentage,
-                    "sgst": settings.sgst_percentage,
-                    "utgst": settings.utgst_percentage,
-                    "flat_rate": settings.flat_tax_percentage
-                },
-                "payment_methods": {
-                    "cash": settings.accept_cash,
-                    "card": settings.accept_card,
-                    "upi": settings.accept_upi,
-                    "bank": settings.accept_bank_transfer
-                },
-                "preferences": {
-                    "language": settings.language,
-                    "theme": settings.theme_mode,
-                    "timezone": settings.timezone
-                }
-            }
+            "shop_id": profile.shop_id,
+            "user_id": profile.shop_id,
+            "profile_id": profile.id,
+            "profile": payload,
+            "settings": _settings_payload(settings),
         }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to load shop profile: {str(e)}")
 
 
 @router.put("/profile")
 def update_profile(data: dict, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Update shop profile"""
-    
+    """Upsert the authenticated owner's profile and return the persisted row."""
     try:
+        # Never trust a client supplied user_id. Identity comes from the JWT.
+        data = dict(data or {})
+        data.pop("user_id", None)
+        data.pop("shop_id", None)
+        data.pop("profile_id", None)
+
         profile = ShopService.update_shop_profile(db, user_id, data)
         settings = ShopService.get_shop_settings(db, profile.id)
-        
-        # Parse JSON fields
-        categories = json.loads(profile.shop_categories) if profile.shop_categories else []
-        upi_ids = json.loads(profile.upi_ids) if profile.upi_ids else []
-        
+        payload = _profile_payload(profile)
+
         return {
             "status": "success",
             "message": "Shop profile updated successfully",
-            "shop_id": profile.id,
-            "profile": {
-                "id": profile.id,
-                "shop_name": profile.shop_name,
-                "shop_type": profile.shop_type,
-                "phone": profile.phone,
-                "phone_number": profile.phone,
-                "location": profile.location,
-                "email": profile.email,
-                "website": profile.website,
-                "shop_tagline": profile.shop_tagline,
-                "shop_description": profile.shop_description,
-                "address": profile.address,
-                "state": profile.state,
-                "city": profile.city,
-                "postal_code": profile.postal_code,
-                "gst_number": profile.gst_number,
-                "primary_upi_id": profile.upi_id,
-                "upi_ids": upi_ids,
-                "shop_categories": categories,
-                "logo_url": profile.logo_url,
-                "color_primary": profile.color_primary,
-                "color_secondary": profile.color_secondary,
-                "is_online_store_enabled": profile.is_online_store_enabled or False,
-                "created_at": profile.created_at,
-                "updated_at": profile.updated_at
-            },
-            "settings": {
-                "business_hours": {
-                    "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
-                    "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
-                    "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
-                    "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
-                    "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
-                    "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
-                    "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed}
-                },
-                "receipt_settings": {
-                    # These keys existed in an older ShopSettings contract.
-                    # Use safe fallbacks because the production ORM model does
-                    # not define receipt_header/footer or the legacy tax/loyalty
-                    # attributes. A response serialization error must never turn
-                    # a successful profile update into HTTP 500.
-                    "header": getattr(settings, "receipt_header", ""),
-                    "footer": getattr(settings, "receipt_footer", ""),
-                    "show_tax": getattr(settings, "show_tax_on_receipt", True),
-                    "print_size": getattr(
-                        settings,
-                        "default_print_size",
-                        getattr(settings, "receipt_format", "detailed"),
-                    ),
-                },
-                "taxes": {
-                    "default_rate": getattr(
-                        settings,
-                        "default_tax_rate",
-                        getattr(settings, "flat_tax_percentage", 0.0),
-                    ),
-                    "is_inclusive": getattr(settings, "tax_inclusive", False),
-                },
-                "loyalty": {
-                    "enabled": getattr(
-                        settings,
-                        "loyalty_enabled",
-                        settings.enable_customer_loyalty,
-                    ),
-                    "points_per_amount": getattr(
-                        settings, "points_per_amount", 1.0
-                    ),
-                }
-            }
+            "shop_id": profile.shop_id,
+            "user_id": profile.shop_id,
+            "profile_id": profile.id,
+            "profile": payload,
+            "settings": _settings_payload(settings),
         }
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to persist shop profile: {str(e)}")
 
 
 @router.delete("/profile")
