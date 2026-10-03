@@ -74,7 +74,57 @@ logger = logging.getLogger(__name__)
 from realtime import publish_realtime_event
 from audit_logging import AuditAction, AuditService
 
+
 router = APIRouter(prefix="/store", tags=["Online Store"])
+
+
+def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str) -> None:
+    """Reverse the financial/inventory side effects created when an online order was accepted."""
+    items = json.loads(order.items_json or "[]")
+
+    for item in items:
+        product_id = item.get("product_id")
+        quantity = float(item.get("quantity", 0) or 0)
+        if not product_id or quantity <= 0:
+            continue
+        product = db.query(Product).with_for_update().filter(
+            Product.id == int(product_id),
+            Product.user_id == shop_id,
+        ).first()
+        if product:
+            product.current_stock = (product.current_stock or 0) + quantity
+
+    # Only online sales tagged with this exact order are removed. POS sales remain untouched.
+    db.query(sales).filter(
+        sales.shopkeeper_id == shop_id,
+        sales.reference_order_id == order.id,
+    ).delete(synchronize_session=False)
+
+    invoice = db.query(Invoice).filter(
+        Invoice.source == "ONLINE_ORDER",
+        Invoice.notes.like(f"%Online Order #{order.id}%"),
+        Invoice.user_id == shop_id,
+    ).first()
+    if invoice:
+        invoice.status = "CANCELLED"
+        invoice.payment_status = "UNPAID"
+        invoice.paid_amount = 0
+
+    reversal_ref = f"ONL-{order.id}-REVERSAL"
+    existing_reversal = db.query(UniversalTransaction).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.reference_id == reversal_ref,
+    ).first()
+    if not existing_reversal:
+        db.add(UniversalTransaction(
+            shop_id=shop_id,
+            tx_type="EXPENSE",
+            category="SALE_REVERSAL",
+            amount=float(order.total_amount or 0),
+            reference_id=reversal_ref,
+            description=f"{reason}: Online Order #{order.id}",
+            tx_date=datetime.now(),
+        ))
 
 # =====================
 # CUSTOMER AUTH SCHEMAS
@@ -1391,11 +1441,17 @@ def get_my_orders(
     db: Session = Depends(get_db),
     current_user: dict = Depends(customer_only),
 ):
-    """Customer: View all their orders"""
+    """Customer: View all their orders plus any verified review left for each delivered order."""
     customer_id = current_user["user_id"]
     orders = db.query(OnlineOrder).filter(
         OnlineOrder.customer_id == customer_id
     ).order_by(OnlineOrder.created_at.desc()).all()
+
+    order_ids = [o.id for o in orders]
+    reviews_by_order = {}
+    if order_ids:
+        review_rows = db.query(ShopReview).filter(ShopReview.order_id.in_(order_ids)).all()
+        reviews_by_order = {r.order_id: r for r in review_rows}
 
     return {
         "orders": [
@@ -1415,9 +1471,69 @@ def get_my_orders(
                 "delivery_address": o.delivery_address,
                 "items": json.loads(o.items_json),
                 "created_at": o.created_at,
+                "review": (
+                    {
+                        "rating": review.rating,
+                        "comment": review.comment,
+                        "created_at": review.created_at,
+                    }
+                    if (review := reviews_by_order.get(o.id))
+                    else None
+                ),
+                "can_cancel": o.order_status in {"PENDING", "ACCEPTED"},
             }
             for o in orders
         ]
+    }
+
+
+@router.post("/order/{order_id}/cancel")
+def cancel_customer_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(customer_only),
+):
+    """Customer cancellation before the order has been dispatched."""
+    customer_id = current_user["user_id"]
+    order = db.query(OnlineOrder).with_for_update().filter(
+        OnlineOrder.id == order_id,
+        OnlineOrder.customer_id == customer_id,
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+
+    if order.order_status not in {"PENDING", "ACCEPTED"}:
+        raise HTTPException(
+            status_code=409,
+            detail="This order can no longer be cancelled. Only pending or accepted orders can be cancelled.",
+        )
+
+    previous_status = order.order_status
+    shop_id = order.shop_id
+    _reverse_online_order_financials(db, order, shop_id, "Customer cancellation")
+
+    order.order_status = "CANCELLED"
+    db.commit()
+
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.status_changed",
+        "shop_id": shop_id,
+        "order_id": order.id,
+        "customer_id": customer_id,
+        "previous_status": previous_status,
+        "status": "CANCELLED",
+        "total_amount": float(order.total_amount),
+        "delivery_address": order.delivery_address,
+        "items": json.loads(order.items_json),
+        "created_at": order.created_at,
+    })
+
+    return {
+        "success": True,
+        "message": "Order cancelled successfully.",
+        "order_id": order.id,
+        "status": "CANCELLED",
     }
 
 
@@ -1558,6 +1674,71 @@ def rate_completed_order(
         "shop_id": order.shop_id,
         "rating": shop.rating_score,
         "rating_count": shop.rating_count,
+    }
+
+
+@router.get("/owner/reviews")
+def get_owner_reviews(
+    skip: int = 0,
+    limit: int = Query(100, le=500),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    shop_id = current_user["user_id"]
+    rows = (
+        db.query(ShopReview, OnlineCustomerAuth, OnlineOrder)
+        .join(OnlineCustomerAuth, OnlineCustomerAuth.id == ShopReview.customer_id)
+        .join(OnlineOrder, OnlineOrder.id == ShopReview.order_id)
+        .filter(ShopReview.shop_id == shop_id)
+        .order_by(ShopReview.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "reviews": [
+            {
+                "id": review.id,
+                "order_id": review.order_id,
+                "customer_id": review.customer_id,
+                "customer_name": customer.user_name,
+                "rating": review.rating,
+                "comment": review.comment,
+                "created_at": review.created_at,
+                "items": json.loads(order.items_json or "[]"),
+            }
+            for review, customer, order in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.get("/shops/{shop_id}/reviews")
+def get_shop_reviews(
+    shop_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(ShopReview, OnlineCustomerAuth)
+        .join(OnlineCustomerAuth, OnlineCustomerAuth.id == ShopReview.customer_id)
+        .filter(ShopReview.shop_id == shop_id)
+        .order_by(ShopReview.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "reviews": [
+            {
+                "id": review.id,
+                "order_id": review.order_id,
+                "customer_name": customer.user_name,
+                "rating": review.rating,
+                "comment": review.comment,
+                "created_at": review.created_at,
+            }
+            for review, customer in rows
+        ]
     }
 
 
@@ -1785,6 +1966,7 @@ def update_order_status(
                 quantity=item.get("quantity", 1),
                 total=item.get("line_total", 0),
                 sale_date=date.today(),
+                reference_order_id=order.id,
             )
             db.add(sale_entry)
 
