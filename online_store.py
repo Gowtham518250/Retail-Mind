@@ -766,10 +766,21 @@ def marketplace_search(
                 "shop_id": shop.shop_id,
                 "shop_name": shop.shop_name,
                 "tagline": shop.shop_tagline or "",
+                "description": shop.shop_description or "",
+                "shop_type": shop.shop_type or "General",
                 "address": shop.address or "",
                 "city": shop.city or "",
+                "state": shop.state or "",
+                "postal_code": shop.postal_code or "",
                 "phone": shop.phone or "",
+                "email": shop.email or "",
+                "website": shop.website or "",
                 "logo_url": shop.logo_url,
+                "categories": (
+                    [item.strip() for item in str(shop.shop_categories or "").split(",") if item.strip()]
+                    if shop.shop_categories and not str(shop.shop_categories).strip().startswith("[")
+                    else shop.shop_categories
+                ),
                 **_shop_reputation(shop),
             }
             for shop in shop_rows
@@ -1017,10 +1028,17 @@ def browse_shop_products(
     return {
         "shop_name": profile.shop_name,
         "shop_tagline": profile.shop_tagline or "",
+        "shop_description": profile.shop_description or "",
+        "shop_type": profile.shop_type or "General",
         "shop_phone": profile.phone or "",
+        "shop_email": profile.email or "",
+        "shop_website": profile.website or "",
         "shop_address": profile.address or "",
         "shop_city": profile.city or "",
+        "shop_state": profile.state or "",
+        "shop_postal_code": profile.postal_code or "",
         "shop_logo_url": profile.logo_url,
+        "shop_categories": profile.shop_categories or "",
         "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),
         "rating_count": int(getattr(profile, "rating_count", 0) or 0),
         "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
