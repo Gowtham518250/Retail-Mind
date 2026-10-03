@@ -58,3 +58,157 @@ body{background-image:radial-gradient(circle at 82% -4%,rgba(240,180,63,.12),tra
 @media(max-width:900px){.product-detail{grid-template-columns:1fr}.product-visual{min-height:420px}.product-copy{padding-right:0}}
 @media(max-width:600px){.product-page{padding:22px 14px 70px}.product-detail{padding:18px;border-radius:22px;gap:24px}.product-visual{min-height:330px}.product-image-frame{width:78%;height:280px;padding:24px}.product-orbit{width:260px;height:260px}.product-copy h1{font-size:35px}.product-benefits{grid-template-columns:1fr}.product-actions{flex-direction:column}.product-actions .store-cart-btn,.product-actions .store-link-btn{width:100%;justify-content:center}}
 @media(prefers-reduced-motion:reduce){.product-orbit{animation:none!important}}
+
+
+/* Customer order lifecycle + review layer */
+.orders-fk-card-3d{
+  transform-style:preserve-3d;
+  perspective:1200px;
+  transition:transform .28s ease, box-shadow .28s ease, border-color .28s ease;
+}
+.orders-fk-card-3d:hover{
+  transform:translateY(-4px) rotateX(.7deg) rotateY(-.4deg);
+  box-shadow:0 28px 60px rgba(18,63,52,.14),0 0 0 1px rgba(35,123,93,.06);
+}
+.orders-fk-details-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.orders-fk-details-btn.danger{
+  color:#b42318;
+  border-color:#f1b6ad;
+  background:#fff8f6;
+}
+.orders-fk-details-btn.review{
+  color:#7a5708;
+  border-color:#ead38b;
+  background:#fffaf0;
+}
+.orders-fk-review-card{
+  margin:16px 0;
+  padding:16px;
+  border-radius:18px;
+  border:1px solid #eadfba;
+  background:
+    radial-gradient(circle at 100% 0, rgba(240,180,63,.12), transparent 34%),
+    linear-gradient(135deg,#fffdf3,#f7faf8);
+  box-shadow:0 14px 30px rgba(47,57,44,.06);
+}
+.orders-fk-review-card.editor{
+  border-color:#b9d7c8;
+  background:
+    radial-gradient(circle at 0 0, rgba(15,91,71,.08), transparent 35%),
+    #f8fcfa;
+}
+.orders-fk-detail-eyebrow{
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.13em;
+  color:#6d7b74;
+}
+.orders-fk-review-card h3{
+  margin:6px 0 12px;
+  font-size:16px;
+  color:#173a30;
+}
+.orders-review-stars{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  color:#d79a12;
+}
+.orders-review-stars button{
+  width:30px;
+  height:30px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#cbd2cd;
+  cursor:pointer;
+}
+.orders-review-stars button.active,
+.orders-review-stars button:hover{
+  color:#e1a72b;
+  background:#fff4d6;
+}
+.orders-fk-review-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:8px;
+}
+.orders-fk-review-row>span{
+  color:#89958f;
+  font-size:10px;
+}
+.orders-fk-review-card p{
+  margin:11px 0 0;
+  color:#52645c;
+  font-size:12px;
+  line-height:1.65;
+}
+.orders-fk-review-card textarea{
+  width:100%;
+  margin-top:12px;
+  resize:vertical;
+  min-height:90px;
+  padding:11px 12px;
+  border-radius:13px;
+  border:1px solid #cfe0d7;
+  background:#fff;
+  color:#173a30;
+  outline:0;
+  font:inherit;
+}
+.orders-fk-review-card textarea:focus{
+  border-color:#83bfa7;
+  box-shadow:0 0 0 4px rgba(15,91,71,.08);
+}
+.orders-fk-review-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:11px;
+}
+.orders-fk-detail-info{
+  margin-bottom:16px;
+  padding:12px 14px;
+  border-radius:14px;
+  background:#f7faf8;
+  border:1px solid var(--retail-line);
+  color:#64756e;
+  font-size:11px;
+}
+.orders-fk-delivery-panel{
+  margin-bottom:16px;
+  padding:14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  border-radius:16px;
+  background:linear-gradient(135deg,#f4fbf7,#eef7f3);
+  border:1px solid #cfe5d8;
+  color:#1b5845;
+}
+.orders-fk-delivery-panel strong{
+  display:block;
+  margin-top:4px;
+  font-size:13px;
+}
+.orders-fk-warning{
+  border:1px solid #e6d8a2 !important;
+  background:#fff9df !important;
+  color:#705c14 !important;
+}
+@media(max-width:760px){
+  .orders-fk-stat:nth-child(n+5){display:none}
+  .orders-fk-details-actions{justify-content:flex-start}
+  .orders-fk-review-actions{flex-direction:column}
+}
