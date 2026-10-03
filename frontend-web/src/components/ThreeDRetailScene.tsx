@@ -26,7 +26,7 @@ export default function ThreeDRetailScene() {
     >
       <motion.div className={styles.scene} style={{ rotateX, rotateY }}>
         <div className={styles.sceneHalo} />
-        <motion.div className={styles.orbit + ' ' + styles.orbitOne} animate={{ rotate: 360 }} transition={{ duration: 22, repeat: Infinity, ease: 'linear' }} />
+        <motion.div className={styles.orbit} animate={{ rotate: 360 }} transition={{ duration: 22, repeat: Infinity, ease: 'linear' }} />
         <motion.div className={styles.orbit + ' ' + styles.orbitTwo} animate={{ rotate: -360 }} transition={{ duration: 28, repeat: Infinity, ease: 'linear' }} />
 
         <div className={styles.platform}>
