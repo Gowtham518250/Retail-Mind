@@ -79,7 +79,7 @@ router = APIRouter(prefix="/store", tags=["Online Store"])
 
 
 def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str) -> None:
-    """Reverse the financial/inventory side effects created when an online order was accepted."""
+    """Restore reserved stock and reverse financial side effects when they exist."""
     items = json.loads(order.items_json or "[]")
 
     for item in items:
@@ -94,37 +94,47 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
         if product:
             product.current_stock = (product.current_stock or 0) + quantity
 
-    # Only online sales tagged with this exact order are removed. POS sales remain untouched.
-    db.query(sales).filter(
+    tagged_sales = db.query(sales).filter(
         sales.shopkeeper_id == shop_id,
         sales.reference_order_id == order.id,
-    ).delete(synchronize_session=False)
+    ).all()
 
     invoice = db.query(Invoice).filter(
         Invoice.source == "ONLINE_ORDER",
         Invoice.notes.like(f"%Online Order #{order.id}%"),
         Invoice.user_id == shop_id,
     ).first()
+
+    # A PENDING order has reserved stock but has not yet created sales/invoice records.
+    # Only write financial reversal entries when ACCEPT already created those records.
+    if tagged_sales:
+        db.query(sales).filter(
+            sales.shopkeeper_id == shop_id,
+            sales.reference_order_id == order.id,
+        ).delete(synchronize_session=False)
+
     if invoice:
         invoice.status = "CANCELLED"
         invoice.payment_status = "UNPAID"
         invoice.paid_amount = 0
 
-    reversal_ref = f"ONL-{order.id}-REVERSAL"
-    existing_reversal = db.query(UniversalTransaction).filter(
-        UniversalTransaction.shop_id == shop_id,
-        UniversalTransaction.reference_id == reversal_ref,
-    ).first()
-    if not existing_reversal:
-        db.add(UniversalTransaction(
-            shop_id=shop_id,
-            tx_type="EXPENSE",
-            category="SALE_REVERSAL",
-            amount=float(order.total_amount or 0),
-            reference_id=reversal_ref,
-            description=f"{reason}: Online Order #{order.id}",
-            tx_date=datetime.now(),
-        ))
+    if tagged_sales or invoice:
+        reversal_ref = f"ONL-{order.id}-REVERSAL"
+        existing_reversal = db.query(UniversalTransaction).filter(
+            UniversalTransaction.shop_id == shop_id,
+            UniversalTransaction.reference_id == reversal_ref,
+        ).first()
+        if not existing_reversal:
+            db.add(UniversalTransaction(
+                shop_id=shop_id,
+                tx_type="EXPENSE",
+                category="SALE_REVERSAL",
+                amount=float(order.total_amount or 0),
+                reference_id=reversal_ref,
+                description=f"{reason}: Online Order #{order.id}",
+                tx_date=datetime.now(),
+            ))
+
 
 # =====================
 # CUSTOMER AUTH SCHEMAS
