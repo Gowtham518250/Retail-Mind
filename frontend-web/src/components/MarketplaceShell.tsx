@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Bot, Boxes, Search, ShieldCheck, Sparkles, Star, Store, Truck, Zap } from 'lucide-react';
+import { ArrowRight, Bot, Boxes, MapPin, Search, ShieldCheck, Sparkles, Star, Store, Truck, Zap } from 'lucide-react';
 import styles from './MarketplaceShell.module.css';
 import { API_BASE } from '../lib/api';
 import ThreeDRetailScene from './ThreeDRetailScene';
@@ -140,9 +140,9 @@ export default function MarketplaceShell() {
           </div>
 
           <div className={styles.heroTrustRow}>
-            <span><ShieldCheck size={14} /> Secure checkout</span>
-            <span><Truck size={14} /> Order tracking</span>
-            <span><Zap size={14} /> Local availability</span>
+            <span><ShieldCheck size={14} /><b>Secure checkout</b><small>Protected ordering</small></span>
+            <span><Truck size={14} /><b>Fast fulfilment</b><small>Local dispatch</small></span>
+            <span><Zap size={14} /><b>Live availability</b><small>Stock-aware</small></span>
           </div>
         </div>
 
@@ -150,19 +150,39 @@ export default function MarketplaceShell() {
       </section>
 
       <section className={styles.featureRail}>
-        <div className={styles.featureRailItem}><span><Store size={17} /></span><div><strong>Local shops</strong><small>Discover online-enabled stores</small></div></div>
-        <div className={styles.featureRailItem}><span><Boxes size={17} /></span><div><strong>Compare value</strong><small>See offers across shops</small></div></div>
-        <div className={styles.featureRailItem}><span><Sparkles size={17} /></span><div><strong>AI powered</strong><small>Ask before you buy</small></div></div>
-        <div className={styles.featureRailItem}><span><Truck size={17} /></span><div><strong>Track orders</strong><small>Follow each delivery</small></div></div>
+        <button className={styles.featureRailItem} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
+          <span className={styles.featureIcon}><Store size={18} /></span>
+          <div><strong>Local storefronts</strong><small>Meet verified shops near you</small></div>
+          <ArrowRight size={15} />
+        </button>
+        <button className={styles.featureRailItem} onClick={() => { setMode('products'); void performSearch('products', '', true); }}>
+          <span className={styles.featureIcon}><Boxes size={18} /></span>
+          <div><strong>Compare products</strong><small>See prices across stores</small></div>
+          <ArrowRight size={15} />
+        </button>
+        <button className={styles.featureRailItem} onClick={() => router.push('/ai-shopping')}>
+          <span className={styles.featureIcon}><Sparkles size={18} /></span>
+          <div><strong>AI shopping</strong><small>Describe what you need</small></div>
+          <ArrowRight size={15} />
+        </button>
+        <Link href="/orders" className={styles.featureRailItem}>
+          <span className={styles.featureIcon}><Truck size={18} /></span>
+          <div><strong>Order centre</strong><small>Returns, reviews & history</small></div>
+          <ArrowRight size={15} />
+        </Link>
       </section>
 
       <section className={styles.discoveryBar}>
-        <div><div className={styles.sectionEyebrow}>QUICK DISCOVERY</div><h2>What are you shopping for today?</h2></div>
+        <div className={styles.discoveryCopy}>
+          <div className={styles.sectionEyebrow}>QUICK DISCOVERY</div>
+          <h2>Jump into a shopping mood.</h2>
+          <p>Pick a category, or let Retail Mind turn a sentence into a shortlist.</p>
+        </div>
         <div className={styles.presetRow}>
-          <button onClick={() => preset('Groceries')}>🛒 Groceries</button>
-          <button onClick={() => preset('Bakery')}>🥖 Bakery</button>
-          <button onClick={() => preset('Personal care')}>✨ Personal care</button>
-          <button className={styles.presetAi} onClick={() => router.push('/ai-shopping')}><Sparkles size={14} /> Find with AI</button>
+          <button onClick={() => preset('Groceries')}><span>01</span><b>Groceries</b><small>Everyday essentials</small></button>
+          <button onClick={() => preset('Bakery')}><span>02</span><b>Bakery</b><small>Freshly baked</small></button>
+          <button onClick={() => preset('Personal care')}><span>03</span><b>Personal care</b><small>Beauty & wellness</small></button>
+          <button className={styles.presetAi} onClick={() => router.push('/ai-shopping')}><Sparkles size={14} /><b>Find with AI</b><small>Ask naturally</small></button>
         </div>
       </section>
 
@@ -195,9 +215,27 @@ export default function MarketplaceShell() {
             <div className={styles.shopGrid}>
               {shops.map((shop) => (
                 <Link key={shop.shop_id} href={'/shop/' + shop.shop_id} className={styles.shopCard}>
-                  <div className={styles.shopIcon}><Store size={20} /></div>
-                  <div className={styles.shopCardBody}><strong>{shop.shop_name}</strong><span>{shop.city || shop.address || 'Online shop'}</span><small><Star size={12} fill="currentColor" /> {shop.rating_count ? shop.rating : 'New'} · {shop.rating_count || 0} reviews</small></div>
-                  <ArrowRight size={17} />
+                  <div className={styles.shopCover}>
+                    {shop.logo_url ? (
+                      <img src={shop.logo_url} alt={shop.shop_name + ' logo'} />
+                    ) : (
+                      <div className={styles.shopLogoFallback}><Store size={24} /></div>
+                    )}
+                    <span className={styles.shopStatus}><i /> Online</span>
+                  </div>
+                  <div className={styles.shopCardBody}>
+                    <div className={styles.shopCardTopline}>
+                      <span>{shop.shop_type || 'Local store'}</span>
+                      <div><Star size={12} fill="currentColor" /> {shop.rating_count ? Number(shop.rating).toFixed(1) : 'New'}</div>
+                    </div>
+                    <strong>{shop.shop_name}</strong>
+                    <p>{shop.tagline || shop.description || 'A trusted neighbourhood shop, now available online.'}</p>
+                    <div className={styles.shopCardMeta}>
+                      <span><MapPin size={12} /> {shop.city || shop.address || 'Local delivery'}</span>
+                      <span>{shop.rating_count || 0} reviews</span>
+                    </div>
+                  </div>
+                  <div className={styles.shopCardArrow}><ArrowRight size={17} /></div>
                 </Link>
               ))}
             </div>
