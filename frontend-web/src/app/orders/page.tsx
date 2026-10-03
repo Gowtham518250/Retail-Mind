@@ -937,10 +937,10 @@ export default function MyOrdersPage() {
                       <span
                         className={
                           'orders-fk-status ' +
-                          order.status.toLowerCase()
+                          effectiveStatus.toLowerCase()
                         }
                       >
-                        <Icon size={14} /> {meta.label}
+                        <Icon size={14} /> {effectiveMeta.label}
                       </span>
                     </div>
 
