@@ -46,6 +46,8 @@ export default function ProductClientPage() {
   if (loading) return <div className="page-loading">Loading product details…</div>;
   if (!product) return <div className="container product-page"><div className="store-empty-state">This product is not available right now.</div></div>;
 
+  const stockAvailable = product.stock_available ?? 0;
+
   const handleAdd = () => {
     addToCart({ ...product, shop_id: shopId });
     setAdded(true);
@@ -85,14 +87,14 @@ export default function ProductClientPage() {
           </div>
 
           <div className="product-availability">
-            <span className={product.stock_available > 0 ? 'available' : 'unavailable'}>
-              {product.stock_available > 0 ? String(product.stock_available) + ' available' : 'Out of stock'}
+            <span className={stockAvailable > 0 ? 'available' : 'unavailable'}>
+              {stockAvailable > 0 ? String(stockAvailable) + ' available' : 'Out of stock'}
             </span>
             <span>Shop #{shopId}</span>
           </div>
 
           <div className="product-actions">
-            <button className="store-cart-btn" onClick={handleAdd} disabled={(product.stock_available ?? 0) <= 0}>
+            <button className="store-cart-btn" onClick={handleAdd} disabled={stockAvailable <= 0}>
               <ShoppingCart size={17} /> {added ? 'Added to cart' : 'Add to cart'}
             </button>
             <Link href="/orders" className="store-link-btn">View orders</Link>
