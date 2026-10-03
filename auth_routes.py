@@ -113,6 +113,12 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         data={"sub": str(new_user.id), "role": new_user.user_type, "user_type": new_user.user_type}
     )
 
+    registered_profile = (
+        db.query(ShopProfile)
+        .filter(ShopProfile.shop_id == new_user.id)
+        .first()
+    )
+
     return {
         "msg": "User registered successfully",
         "user_id": new_user.id,
@@ -120,7 +126,13 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         "token_type": "bearer",
         "role": new_user.user_type,
         "user_type": new_user.user_type,
-        "username": new_user.user_name
+        "username": new_user.user_name,
+        "shop_profile": {
+            "id": registered_profile.id,
+            "shop_id": registered_profile.shop_id,
+            "shop_name": registered_profile.shop_name,
+            "logo_url": registered_profile.logo_url,
+        } if registered_profile else None,
     }
 
 class SendOTPRequest(BaseModel):
@@ -625,18 +637,34 @@ def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
             data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
         )
         
+        # Guarantee that every OWNER account has exactly one shop profile before
+        # the login response is returned. This also repairs legacy accounts that
+        # were created before the automatic shop-profile creation existed.
+        shop_profile = None
+        if str(user_role).upper() == str(ROLE_OWNER).upper():
+            from shop_management import ShopService
+            shop_profile = ShopService.get_shop_profile(db, db_user.id)
+
         # Create refresh token for secure token renewal
         from security import create_refresh_token
         refresh_token = create_refresh_token(db_user.id, user_role)
-        
+
         return {
-            "access_token": access_token, 
+            "access_token": access_token,
             "refresh_token": refresh_token,
-            "token_type": "bearer", 
+            "token_type": "bearer",
             "role": user_role,
             "user_type": user_role,
             "user_id": db_user.id,
-            "username": db_user.user_name
+            "username": db_user.user_name,
+            "shop_profile": {
+                "id": shop_profile.id,
+                "shop_id": shop_profile.shop_id,
+                "shop_name": shop_profile.shop_name,
+                "shop_type": shop_profile.shop_type,
+                "logo_url": shop_profile.logo_url,
+                "is_online_store_enabled": bool(shop_profile.is_online_store_enabled),
+            } if shop_profile else None,
         }
     except HTTPException:
         raise
