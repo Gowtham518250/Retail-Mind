@@ -35,8 +35,8 @@ def upgrade():
             for value in ("CANCELLED", "RETURNED"):
                 safe_enum = '"' + enum_name.replace('"', '""') + '"'
                 bind.execute(sa.text(
-                    f"ALTER TYPE {safe_enum} ADD VALUE IF NOT EXISTS :value"
-                ), {"value": value})
+                    f"ALTER TYPE {safe_enum} ADD VALUE IF NOT EXISTS '{value}'"
+                ))
 
     tables = inspector.get_table_names()
     if "sales" in tables:
