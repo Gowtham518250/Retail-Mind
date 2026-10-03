@@ -124,7 +124,8 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function formatDate(value: string) {
+function formatDate(value?: string | null) {
+  if (!value) return '—';
   return new Date(value).toLocaleString('en-IN', {
     day: '2-digit',
     month: 'short',
