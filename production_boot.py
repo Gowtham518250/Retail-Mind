@@ -59,7 +59,7 @@ def _ensure_online_delivery_payment_trigger():
             CREATE OR REPLACE FUNCTION retail_mind_auto_record_online_payment()
             RETURNS TRIGGER
             LANGUAGE plpgsql
-            AS $
+            AS $rm_payment$
             BEGIN
                 IF NEW.source = 'ONLINE_ORDER'
                    AND NEW.status = 'PAID'
@@ -92,7 +92,7 @@ def _ensure_online_delivery_payment_trigger():
                 END IF;
                 RETURN NEW;
             END;
-            $;
+            $rm_payment$;
         """))
         db.execute(text("""
             DROP TRIGGER IF EXISTS trg_auto_record_online_payment ON invoices
