@@ -723,24 +723,35 @@ def sync_offline_invoice(
 
             if product:
                 current_stock = product.current_stock or Decimal("0")
-                if current_stock < item.quantity:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Insufficient stock for product "
-                            f"'{item.product_name}'. Available: "
-                            f"{current_stock}, Required: {item.quantity}"
-                        ),
-                    )
-                product.current_stock = max(
-                    Decimal("0"),
-                    current_stock - item.quantity,
-                )
+                # Offline invoices must never be lost just because the
+                # server's stock is stale or was already decremented locally.
+                # The invoice/sale is the source of truth for the completed sale.
+                # Clamp inventory at zero rather than rejecting the financial
+                # transaction. This makes offline sync idempotent from the
+                # business perspective while still preventing negative stock.
+                available_stock = max(Decimal("0"), current_stock)
+                shortage = max(Decimal("0"), item.quantity - available_stock)
+                deducted = min(item.quantity, available_stock)
+                product.current_stock = available_stock - deducted
+
                 inventory_changes.append({
                     "product_id": product.id,
                     "quantity": float(item.quantity),
+                    "deducted_quantity": float(deducted),
+                    "shortage_quantity": float(shortage),
                     "new_stock": float(product.current_stock),
+                    "forced_sale": bool(shortage > 0),
                 })
+                if shortage > 0:
+                    logger.warning(
+                        "FORCED OFFLINE SALE: product=%s available=%s requested=%s shortage=%s invoice=%s",
+                        item.product_name,
+                        available_stock,
+                        item.quantity,
+                        shortage,
+                        invoice_number,
+                    )
+
                 mov = StockMovement(
                     product_id=product.id,
                     movement_type="OUT",
@@ -748,7 +759,7 @@ def sync_offline_invoice(
                     reason=(
                         "Flash Sale Sale"
                         if prepared["discount_amount"] > 0
-                        else "Sales Sync"
+                        else ("Offline Sale - Stock Shortage" if shortage > 0 else "Sales Sync")
                     ),
                     reference_id=invoice_number,
                 )
