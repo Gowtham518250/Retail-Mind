@@ -1090,6 +1090,12 @@ def browse_shop_products(
         "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),
         "rating_count": int(getattr(profile, "rating_count", 0) or 0),
         "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
+        "min_order": float(getattr(profile, "online_min_order", 0) or 0),
+        "delivery_fee": float(getattr(profile, "online_delivery_fee", 0) or 0),
+        "offer_delivery": bool(getattr(profile, "online_offer_delivery", True)),
+        "offer_pickup": bool(getattr(profile, "online_offer_pickup", True)),
+        "accept_cod": bool(getattr(profile, "online_accept_cod", True)),
+        "accept_online": bool(getattr(profile, "online_accept_online", False)),
         "is_online": True,
         "products": [
             (lambda p, discount: {
@@ -1193,6 +1199,23 @@ def place_order(
 
     delivery_address = sanitize_input(data.delivery_address, "delivery_address")
     online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
+    min_order = round(float(getattr(profile, "online_min_order", 0) or 0), 2)
+    delivery_fee = round(float(getattr(profile, "online_delivery_fee", 0) or 0), 2)
+    offer_delivery = bool(getattr(profile, "online_offer_delivery", True))
+    offer_pickup = bool(getattr(profile, "online_offer_pickup", True))
+    accept_cod = bool(getattr(profile, "online_accept_cod", True))
+    accept_online = bool(getattr(profile, "online_accept_online", False))
+
+    if min_order > 0 and items_subtotal < min_order:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum online order is ₹{min_order:.2f}. Add ₹{max(0.0, min_order - items_subtotal):.2f} more.",
+        )
+    if not offer_delivery and not offer_pickup:
+        raise HTTPException(status_code=400, detail="This shop is not accepting online delivery or pickup orders.")
+    if not accept_cod and not accept_online:
+        raise HTTPException(status_code=400, detail="This shop has no online payment method enabled.")
+
     discount_amount = 0.0
     coupon_code = (data.coupon_code or "").strip().upper() or None
 
@@ -1218,7 +1241,13 @@ def place_order(
             raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
         coupon.used_count = int(coupon.used_count or 0) + 1
 
-    total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
+    delivery_charge = delivery_fee if offer_delivery else 0.0
+    total_amount = round(
+        max(0.0, items_subtotal - discount_amount)
+        + online_setup_fee
+        + delivery_charge,
+        2,
+    )
 
     order = OnlineOrder(
         shop_id=data.shop_id,
@@ -1267,6 +1296,10 @@ def place_order(
         "discount_amount": discount_amount,
         "coupon_code": coupon_code,
         "online_setup_fee": online_setup_fee,
+        "delivery_fee": delivery_charge,
+        "min_order": min_order,
+        "accept_cod": accept_cod,
+        "accept_online": accept_online,
         "total_amount": total_amount,
         "items": order_items,
         "status": "PENDING",
