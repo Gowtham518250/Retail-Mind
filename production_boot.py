@@ -34,6 +34,23 @@ def _current_shift():
     return None, now
 
 
+def _ensure_sales_reference_order_id():
+    """Safely add the online-order reference column to legacy sales tables."""
+    db = next(get_db())
+    try:
+        db.execute(text("""
+            ALTER TABLE IF EXISTS sales
+            ADD COLUMN IF NOT EXISTS reference_order_id INTEGER
+        """))
+        db.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_sales_reference_order_id
+            ON sales (reference_order_id)
+        """))
+        db.commit()
+    finally:
+        db.close()
+
+
 def _ensure_shift_table():
     db = next(get_db())
     try:
