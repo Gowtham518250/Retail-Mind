@@ -7,6 +7,7 @@ Low stock alerts, inventory analytics
 from fastapi import APIRouter, Depends, HTTPException, Query, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import httpx
@@ -26,7 +27,7 @@ _BARCODE_CACHE_TTL_SECONDS = 6 * 60 * 60
 
 @router.get("/barcode-lookup")
 def barcode_product_lookup(
-    barcode: str = Query(..., min_length=8, max_length=14),
+    barcode: str = Query(..., min_length=1, max_length=50),
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
@@ -36,11 +37,19 @@ def barcode_product_lookup(
     the result to prefill the catalog, while price/MRP remain owner-controlled.
     """
     clean = re.sub(r"\D", "", str(barcode or ""))
+    if not clean:
+        raise HTTPException(status_code=400, detail="Barcode must contain at least one digit.")
+
+    # Inventory/SKU values may be longer than a standard GTIN. They are valid
+    # shop-local identifiers, but the external retail catalog only supports
+    # 8/12/13/14 digit GTIN/UPC/EAN values. Return a normal no-match response
+    # instead of FastAPI validation errors for local-only barcodes.
     if len(clean) not in {8, 12, 13, 14}:
-        raise HTTPException(
-            status_code=400,
-            detail="This is not a standard retail product barcode. Scan the EAN/UPC barcode on the product label.",
-        )
+        return {
+            "found": False,
+            "barcode": clean,
+            "message": "This barcode is stored as a shop-local SKU and is not eligible for external GTIN lookup.",
+        }
 
     cached = _BARCODE_LOOKUP_CACHE.get(clean)
     if cached and (time.time() - cached[0]) < _BARCODE_CACHE_TTL_SECONDS:
@@ -258,16 +267,35 @@ def create_product(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new product"""
-    # Scoped uniqueness per user (not global)
+    """Create or idempotently restore a product for this account.
+
+    SKU is the shop-scoped identity for an inventory product. Repeated offline
+    retries, double taps, or concurrent sync workers must not turn an already
+    persisted product into a 500 error.
+    """
     existing = db.query(Product).filter(
         Product.user_id == user_id,
         Product.sku == product.sku,
-        Product.is_active == True
     ).first()
+
     if existing:
-        raise HTTPException(status_code=400, detail="SKU already exists for this account")
-    
+        existing.product_name = product.product_name
+        existing.description = product.description
+        existing.current_stock = product.current_stock
+        existing.min_stock = product.min_stock
+        existing.max_stock = product.max_stock
+        existing.reorder_level = product.reorder_level
+        existing.unit_price = product.unit_price
+        existing.category = product.category
+        existing.is_active = True
+        try:
+            db.commit()
+            db.refresh(existing)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to restore existing product: {str(e)}")
+        return existing
+
     db_product = Product(
         user_id=user_id,
         **product.dict()
@@ -276,6 +304,26 @@ def create_product(
     try:
         db.commit()
         db.refresh(db_product)
+    except IntegrityError:
+        db.rollback()
+        raced = db.query(Product).filter(
+            Product.user_id == user_id,
+            Product.sku == product.sku,
+        ).first()
+        if raced:
+            raced.product_name = product.product_name
+            raced.description = product.description
+            raced.current_stock = product.current_stock
+            raced.min_stock = product.min_stock
+            raced.max_stock = product.max_stock
+            raced.reorder_level = product.reorder_level
+            raced.unit_price = product.unit_price
+            raced.category = product.category
+            raced.is_active = True
+            db.commit()
+            db.refresh(raced)
+            return raced
+        raise HTTPException(status_code=500, detail="Failed to create product due to a database constraint.")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")
