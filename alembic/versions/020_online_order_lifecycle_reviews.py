@@ -1,7 +1,7 @@
 """Harden online-order cancellation/return lifecycle.
 
-Revision ID: 020_online_order_lifecycle_reviews
-Revises: 019_retail_growth_suite
+Revision ID: 021_online_order_lifecycle_reviews
+Revises: 020_add_sales_reference_order_id
 Create Date: 2026-10-03
 """
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "020_online_order_lifecycle_reviews"
-down_revision = "019_retail_growth_suite"
+revision = "021_online_order_lifecycle_reviews"
+down_revision = "020_add_sales_reference_order_id"
 branch_labels = None
 depends_on = None
 
@@ -38,19 +38,6 @@ def upgrade():
                     f"ALTER TYPE {safe_enum} ADD VALUE IF NOT EXISTS '{value}'"
                 ))
 
-    tables = inspector.get_table_names()
-    if "sales" in tables:
-        columns = {c["name"] for c in inspector.get_columns("sales")}
-        if "reference_order_id" not in columns:
-            op.add_column(
-                "sales",
-                sa.Column("reference_order_id", sa.Integer(), nullable=True),
-            )
-            op.create_index(
-                "ix_sales_reference_order_id",
-                "sales",
-                ["reference_order_id"],
-            )
 
 
 def downgrade():
