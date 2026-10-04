@@ -2272,6 +2272,22 @@ def update_order_status(
             "reference_id": f"ONL-{order.id}",
         })
 
+    if linked_invoice is not None and new_status == "DELIVERED":
+        # Notify realtime dashboard clients that the invoice itself changed.
+        publish_realtime_event({
+            "event_id": str(uuid4()),
+            "type": "invoice.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "status": "PAID",
+            "payment_status": "PAID",
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "total_amount": float(linked_invoice.total_amount or 0),
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+
     if restored_inventory:
         publish_realtime_event({
             "event_id": str(uuid4()),
