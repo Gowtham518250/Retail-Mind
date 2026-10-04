@@ -344,20 +344,6 @@ export default function MyOrdersPage() {
 
     void connectRealtime();
 
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void fetchOrders(true);
-      }
-    }, 30000);
-
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void fetchOrders(true);
-      }
-    };
-
-    document.addEventListener('visibilitychange', onVisible);
-
     return () => {
       stopped = true;
       setLiveConnected(false);
@@ -373,9 +359,6 @@ export default function MyOrdersPage() {
           // ignore cleanup errors
         }
       }
-
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [fetchOrders, router]);
 
