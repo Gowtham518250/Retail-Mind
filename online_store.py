@@ -1799,6 +1799,19 @@ def update_order_status(
     if not new_status:
         raise HTTPException(status_code=400, detail=f"Invalid action. Choose from: {list(ACTION_MAP.keys())}")
 
+    # Idempotency: a client may retry an action after the original request
+    # committed successfully but its response was lost/timed out. Treat an
+    # already-applied transition as success instead of returning 409. This is
+    # especially important for mobile networks and prevents the owner UI from
+    # remaining in SYNCING after a successful ACCEPT/DISPATCH/DELIVER.
+    if order.order_status == new_status:
+        return {
+            "message": f"Order #{order_id} is already {new_status}.",
+            "order_id": order_id,
+            "new_status": new_status,
+            "already_applied": True,
+        }
+
     previous_status = order.order_status
     restored_inventory = []
     linked_invoice = None
