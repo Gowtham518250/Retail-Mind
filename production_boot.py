@@ -82,7 +82,7 @@ def _ensure_online_delivery_payment_trigger():
                     )
                     VALUES (
                         NEW.id,
-                        'CASH'::payment_method,
+                        'ONLINE'::payment_method,
                         NEW.paid_amount,
                         'AUTO-DELIVERY-' || NEW.id::text,
                         'Automatically recorded when online order was delivered and delivery OTP was verified.',
