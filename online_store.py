@@ -781,6 +781,13 @@ def marketplace_search(
                     if shop.shop_categories and not str(shop.shop_categories).strip().startswith("[")
                     else shop.shop_categories
                 ),
+                "online_setup_fee": float(getattr(shop, "online_setup_fee", 0) or 0),
+                "min_order": float(getattr(shop, "online_min_order", 0) or 0),
+                "delivery_fee": float(getattr(shop, "online_delivery_fee", 0) or 0),
+                "offer_delivery": bool(getattr(shop, "online_offer_delivery", True)),
+                "offer_pickup": bool(getattr(shop, "online_offer_pickup", True)),
+                "accept_cod": bool(getattr(shop, "online_accept_cod", True)),
+                "accept_online": bool(getattr(shop, "online_accept_online", False)),
                 **_shop_reputation(shop),
             }
             for shop in shop_rows
@@ -823,6 +830,9 @@ def marketplace_search(
                 "shop_id": shop.shop_id,
                 "shop_name": shop.shop_name,
                 "shop_address": shop.address or "",
+                "online_setup_fee": float(getattr(shop, "online_setup_fee", 0) or 0),
+                "delivery_fee": float(getattr(shop, "online_delivery_fee", 0) or 0),
+                "min_order": float(getattr(shop, "online_min_order", 0) or 0),
                 **_shop_reputation(shop),
             }
             for product, shop in rows
