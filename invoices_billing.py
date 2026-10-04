@@ -15,7 +15,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
-from sqlalchemy import or_, and_, desc, func
+from sqlalchemy import or_, and_, desc, func, cast, Integer
 from sqlalchemy.orm import Session, joinedload
 from decimal import Decimal
 import logging
@@ -899,27 +899,42 @@ def get_next_bill_number(
     """
     shop_id = resolve_shop_id(current_user)
 
-    rows = (
-        db.query(Invoice.invoice_number)
-        .filter(Invoice.user_id == shop_id)
-        .all()
+    # Do not load every invoice into Python for a simple sequence lookup.
+    # The previous implementation scanned the complete invoice table on every
+    # sale, which became increasingly expensive as the shop history grew.
+    # SUBSTR is supported by PostgreSQL and SQLite and lets the database do the
+    # aggregation in one query.
+    highest = (
+        db.query(
+            func.max(
+                cast(
+                    func.substr(Invoice.invoice_number, 6),
+                    # SQLAlchemy maps this to the database integer type.
+                    # Non-BILL invoice numbers are excluded by the filter.
+                    Integer,
+                )
+            )
+        )
+        .filter(
+            Invoice.user_id == shop_id,
+            Invoice.invoice_number.ilike("BILL-%"),
+        )
+        .scalar()
+        or 0
     )
 
-    highest = 0
-    for (raw_invoice_number,) in rows:
-        raw_value = str(raw_invoice_number or "")
-        match = re.search(r"^BILL-(\d+)$", raw_value, re.IGNORECASE)
-        if match:
-            highest = max(
-                highest,
-                int(match.group(1)),
-            )
+    total_invoices = (
+        db.query(func.count(Invoice.id))
+        .filter(Invoice.user_id == shop_id)
+        .scalar()
+        or 0
+    )
 
     return {
         "shop_id": shop_id,
-        "highest_bill_number": highest,
-        "next_bill_number": f"BILL-{highest + 1:04d}",
-        "total_invoices": len(rows),
+        "highest_bill_number": int(highest),
+        "next_bill_number": f"BILL-{int(highest) + 1:04d}",
+        "total_invoices": int(total_invoices),
     }
 
 
