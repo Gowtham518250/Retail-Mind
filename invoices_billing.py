@@ -15,7 +15,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
-from sqlalchemy import or_, and_, desc, func, Integer
+from sqlalchemy import or_, and_, desc, func, cast, Integer
 from sqlalchemy.orm import Session, joinedload
 from decimal import Decimal
 import logging
@@ -907,7 +907,7 @@ def get_next_bill_number(
     highest = (
         db.query(
             func.max(
-                func.cast(
+                cast(
                     func.substr(Invoice.invoice_number, 6),
                     # SQLAlchemy maps this to the database integer type.
                     # Non-BILL invoice numbers are excluded by the filter.
