@@ -46,6 +46,11 @@ export default function CheckoutClientPage() {
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [onlineSetupFee, setOnlineSetupFee] = useState(0);
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [minOrder, setMinOrder] = useState(0);
+  const [offerDelivery, setOfferDelivery] = useState(true);
+  const [acceptCod, setAcceptCod] = useState(true);
+  const [acceptOnline, setAcceptOnline] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
@@ -59,8 +64,10 @@ export default function CheckoutClientPage() {
     [shopId, cartItems],
   );
 
-  const deliveryFee = 0 as number;
-  const grandTotal = Math.max(0, cartTotal - couponDiscount) + onlineSetupFee;
+  const grandTotal =
+    Math.max(0, cartTotal - couponDiscount)
+    + (offerDelivery ? deliveryFee : 0)
+    + onlineSetupFee;
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +128,11 @@ export default function CheckoutClientPage() {
         const data = await res.json();
         if (!cancelled) {
           setOnlineSetupFee(Math.max(0, Number(data.online_setup_fee || 0)));
+          setDeliveryFee(Math.max(0, Number(data.delivery_fee || 0)));
+          setMinOrder(Math.max(0, Number(data.min_order || 0)));
+          setOfferDelivery(data.offer_delivery !== false);
+          setAcceptCod(data.accept_cod !== false);
+          setAcceptOnline(data.accept_online === true);
         }
       })
       .catch(() => {});
@@ -182,9 +194,22 @@ export default function CheckoutClientPage() {
 
   const validate = () => {
     const next: Partial<Record<keyof FormState, string>> = {};
-    if (!form.city.trim()) next.city = 'City is required';
-    if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
-    if (form.address.trim().length < 5) next.address = 'Enter your full address';
+    if (!acceptCod && !acceptOnline) {
+      setSubmitError('This shop has not enabled a payment method yet.');
+      return false;
+    }
+    if (minOrder > 0 && cartTotal < minOrder) {
+      setSubmitError(
+        'Minimum online order is ₹' + minOrder.toFixed(2) +
+        '. Add ₹' + Math.max(0, minOrder - cartTotal).toFixed(2) + ' more.',
+      );
+      return false;
+    }
+    if (offerDelivery) {
+      if (!form.city.trim()) next.city = 'City is required';
+      if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
+      if (form.address.trim().length < 5) next.address = 'Enter your full address';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -383,15 +408,25 @@ export default function CheckoutClientPage() {
           <section className="checkout-card">
             <h2 className="checkout-card-title"><Banknote size={18} /> Payment method</h2>
             <div className="payment-options">
-              <div className="payment-option active" aria-label="Cash on Delivery selected">
-                <Banknote size={20} />
-                <div>
-                  <strong>Cash on Delivery</strong>
-                  <span>Pay when your order arrives</span>
+              {acceptCod && (
+                <div className="payment-option active" aria-label="Cash on Delivery available">
+                  <Banknote size={20} />
+                  <div>
+                    <strong>Cash on Delivery</strong>
+                    <span>Pay when your order arrives</span>
+                  </div>
                 </div>
-              </div>
+              )}
+              {acceptOnline && (
+                <div className="payment-option" aria-label="Online payment configured">
+                  <ShieldCheck size={20} />
+                  <div>
+                    <strong>Online payment configured</strong>
+                    <span>Payment processing requires a verified payment provider connection.</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <p className="payment-note">Online UPI and card payments are not enabled yet. No payment is captured online.</p>
           </section>
         </div>
 
@@ -406,12 +441,16 @@ export default function CheckoutClientPage() {
             ))}
           </div>
           <div className="summary-row"><span>Subtotal</span><span>₹{cartTotal.toFixed(2)}</span></div>
-          <div className="summary-row"><span>Delivery</span><span>{deliveryFee === 0 ? 'FREE' : `₹${deliveryFee.toFixed(2)}`}</span></div>
-          {onlineSetupFee > 0 && (
-            <div className="summary-row">
-              <span>Online setup / service</span>
-              <span>₹{onlineSetupFee.toFixed(2)}</span>
-            </div>
+          <div className="summary-row">
+            <span>Delivery</span>
+            <span>{!offerDelivery ? 'Not offered' : deliveryFee === 0 ? 'FREE' : '₹' + deliveryFee.toFixed(2)}</span>
+          </div>
+          <div className="summary-row">
+            <span>Online setup / service</span>
+            <span>₹{onlineSetupFee.toFixed(2)}</span>
+          </div>
+          {minOrder > 0 && (
+            <div className="checkout-trust">Minimum online order: ₹{minOrder.toFixed(2)}</div>
           )}
           <div className="checkout-coupon">
             <div className="checkout-coupon-row">
