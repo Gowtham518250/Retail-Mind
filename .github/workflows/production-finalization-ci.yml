@@ -45,6 +45,12 @@ jobs:
       - name: Compile production modules
         run: |
           python -m py_compile             app.py             invoices_billing.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py
+      - name: Validate Alembic migration graph
+        run: |
+          heads="$(alembic heads)"
+          echo "$heads"
+          count="$(printf '%s\n' "$heads" | grep -c '^021_online_order_lifecycle_reviews')"
+          test "$count" -eq 1
       - name: Run focused production tests
         env:
           PYTHONPATH: .
