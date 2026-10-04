@@ -34,6 +34,25 @@ def _current_shift():
     return None, now
 
 
+def _ensure_online_order_status_enum():
+    """Keep production PostgreSQL enum values aligned with the online-order state machine."""
+    from db import engine
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            DO $rm_order_status$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_type WHERE typname = 'online_order_status'
+                ) THEN
+                    ALTER TYPE online_order_status ADD VALUE IF NOT EXISTS 'CANCELLED';
+                    ALTER TYPE online_order_status ADD VALUE IF NOT EXISTS 'RETURNED';
+                END IF;
+            END
+            $rm_order_status$;
+        """))
+
+
 def _ensure_sales_reference_order_id():
     """Safely add the online-order reference column to legacy sales tables."""
     db = next(get_db())
@@ -315,6 +334,7 @@ def _patch_routes():
 
 
 if __name__ == "__main__":
+    _ensure_online_order_status_enum()
     _ensure_sales_reference_order_id()
     _ensure_online_delivery_payment_trigger()
     _ensure_shift_table()
