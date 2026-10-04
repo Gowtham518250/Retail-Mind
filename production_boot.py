@@ -34,6 +34,28 @@ def _current_shift():
     return None, now
 
 
+def _ensure_sales_reference_order_id():
+    """Safely align the legacy sales table with online-order sales code.
+
+    Existing Render databases may have been created before this column was
+    introduced. Keep startup compatible without assuming the Alembic version
+    table accurately represents the legacy schema.
+    """
+    db = next(get_db())
+    try:
+        db.execute(text("""
+            ALTER TABLE IF EXISTS sales
+            ADD COLUMN IF NOT EXISTS reference_order_id INTEGER
+        """))
+        db.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_sales_reference_order_id
+            ON sales (reference_order_id)
+        """))
+        db.commit()
+    finally:
+        db.close()
+
+
 def _ensure_shift_table():
     db = next(get_db())
     try:
@@ -240,6 +262,7 @@ def _patch_routes():
 
 
 if __name__ == "__main__":
+    _ensure_sales_reference_order_id()
     _ensure_shift_table()
     api = _patch_routes()
     import uvicorn
