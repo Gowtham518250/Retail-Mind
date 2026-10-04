@@ -51,6 +51,14 @@ export default function CheckoutClientPage() {
   const [couponMessage, setCouponMessage] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
 
+  const checkoutSessionKey = useMemo(
+    () => `retail-mind:checkout-idempotency:${shopId}:${cartItems
+      .map((item) => \`${item.product.id}:${item.quantity}\`)
+      .sort()
+      .join('|')}`,
+    [shopId, cartItems],
+  );
+
   const deliveryFee = 0 as number;
   const grandTotal = Math.max(0, cartTotal - couponDiscount) + onlineSetupFee;
 
@@ -225,7 +233,13 @@ export default function CheckoutClientPage() {
       items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
       delivery_address: combinedAddress,
       coupon_code: couponCode.trim().toUpperCase() || undefined,
-      idempotency_key: 'web-' + shopId + '-' + crypto.randomUUID(),
+      idempotency_key: (() => {
+        const existing = sessionStorage.getItem(checkoutSessionKey);
+        if (existing) return existing;
+        const created = 'web-' + shopId + '-' + crypto.randomUUID();
+        sessionStorage.setItem(checkoutSessionKey, created);
+        return created;
+      })(),
     };
 
     try {
@@ -268,6 +282,7 @@ export default function CheckoutClientPage() {
       };
 
       sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
+      sessionStorage.removeItem(checkoutSessionKey);
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
     } catch (err: any) {
