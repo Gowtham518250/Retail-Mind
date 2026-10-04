@@ -1072,6 +1072,15 @@ class ShopProfile(Base):
     upi_ids = Column(Text)  # JSON string
     shop_categories = Column(Text)  # JSON string
     is_online_store_enabled = Column(Boolean, default=False)
+    # Online-store configuration. These values are shop-level source of truth,
+    # not device-local preferences.
+    online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    online_min_order = Column(Numeric(10, 2), nullable=False, default=0)
+    online_delivery_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    online_offer_delivery = Column(Boolean, nullable=False, default=True)
+    online_offer_pickup = Column(Boolean, nullable=False, default=True)
+    online_accept_cod = Column(Boolean, nullable=False, default=True)
+    online_accept_online = Column(Boolean, nullable=False, default=False)
     # Marketplace reputation is maintained from verified customer order reviews.
     rating_score = Column(Float, nullable=False, default=0.0)
     rating_count = Column(Integer, nullable=False, default=0)
