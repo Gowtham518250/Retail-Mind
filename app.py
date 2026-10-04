@@ -388,8 +388,9 @@ api.include_router(gst_and_giftcards_router)      # /gift-cards, /gst/*
 # Legacy extended features
 api.include_router(new_features_router, tags=["Legacy Features"])
 
-# Debug routes (diagnostic helpers)
-api.include_router(debug_router)
+# Debug routes are disabled by default in production. Enable explicitly only for controlled diagnostics.
+if os.getenv("ENABLE_DEBUG_ROUTES", "false").strip().lower() == "true":
+    api.include_router(debug_router)
 api.include_router(query_router, tags=["Query Retrieval"])
 
 # Advanced System Features
