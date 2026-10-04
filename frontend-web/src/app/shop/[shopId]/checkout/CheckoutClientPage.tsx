@@ -53,7 +53,7 @@ export default function CheckoutClientPage() {
 
   const checkoutSessionKey = useMemo(
     () => `retail-mind:checkout-idempotency:${shopId}:${cartItems
-      .map((item) => \`${item.product.id}:${item.quantity}\`)
+      .map((item) => `${item.product.id}:${item.quantity}`)
       .sort()
       .join('|')}`,
     [shopId, cartItems],
