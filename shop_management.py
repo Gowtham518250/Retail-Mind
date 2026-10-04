@@ -606,15 +606,21 @@ def get_tax_config(user_id: int = Depends(check_current_user), db: Session = Dep
 
 @router.get("/online-settings")
 def get_online_settings(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Owner-only settings used exclusively by online marketplace orders."""
+    """Return the complete persisted online-store configuration for the owner."""
     try:
         profile = ShopService.get_shop_profile(db, user_id)
         return {
             "is_online_store_enabled": bool(profile.is_online_store_enabled),
             "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
+            "min_order": float(getattr(profile, "online_min_order", 0) or 0),
+            "delivery_fee": float(getattr(profile, "online_delivery_fee", 0) or 0),
+            "offer_delivery": bool(getattr(profile, "online_offer_delivery", True)),
+            "offer_pickup": bool(getattr(profile, "online_offer_pickup", True)),
+            "accept_cod": bool(getattr(profile, "online_accept_cod", True)),
+            "accept_online": bool(getattr(profile, "online_accept_online", False)),
         }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to load online settings: {str(e)}")
 
 
 @router.put("/online-settings")
@@ -623,24 +629,61 @@ def set_online_settings(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update online-only setup/service fee without changing POS prices."""
+    """Persist all online-store settings in the shop profile."""
     try:
         profile = ShopService.get_shop_profile(db, user_id)
-        try:
-            fee = round(float(data.get("online_setup_fee", 0)), 2)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=422, detail="Online setup fee must be a valid number.")
-        if fee < 0 or fee > 100000:
-            raise HTTPException(status_code=422, detail="Online setup fee must be between ₹0 and ₹100000.")
-        profile.online_setup_fee = fee
+
+        def money(key: str, default: float) -> float:
+            try:
+                value = round(float(data.get(key, default)), 2)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=422, detail=f"{key} must be a valid number.")
+            if value < 0 or value > 100000:
+                raise HTTPException(status_code=422, detail=f"{key} must be between ₹0 and ₹100000.")
+            return value
+
+        profile.online_setup_fee = money(
+            "online_setup_fee", float(getattr(profile, "online_setup_fee", 0) or 0)
+        )
+        profile.online_min_order = money(
+            "min_order", float(getattr(profile, "online_min_order", 0) or 0)
+        )
+        profile.online_delivery_fee = money(
+            "delivery_fee", float(getattr(profile, "online_delivery_fee", 0) or 0)
+        )
+        profile.online_offer_delivery = bool(
+            data.get("offer_delivery", getattr(profile, "online_offer_delivery", True))
+        )
+        profile.online_offer_pickup = bool(
+            data.get("offer_pickup", getattr(profile, "online_offer_pickup", True))
+        )
+        profile.online_accept_cod = bool(
+            data.get("accept_cod", getattr(profile, "online_accept_cod", True))
+        )
+        profile.online_accept_online = bool(
+            data.get("accept_online", getattr(profile, "online_accept_online", False))
+        )
+
         db.commit()
-        return {"success": True, "online_setup_fee": fee, "message": "Online-only setup fee updated."}
+        return {
+            "success": True,
+            "is_online_store_enabled": bool(profile.is_online_store_enabled),
+            "online_setup_fee": float(profile.online_setup_fee or 0),
+            "min_order": float(profile.online_min_order or 0),
+            "delivery_fee": float(profile.online_delivery_fee or 0),
+            "offer_delivery": bool(profile.online_offer_delivery),
+            "offer_pickup": bool(profile.online_offer_pickup),
+            "accept_cod": bool(profile.online_accept_cod),
+            "accept_online": bool(profile.online_accept_online),
+            "message": "Online store settings saved.",
+        }
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update online settings: {str(e)}")
+
 
 @router.get("/publish-status")
 def get_publish_status(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
