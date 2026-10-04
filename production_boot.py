@@ -257,6 +257,7 @@ def _patch_routes():
 
 
 if __name__ == "__main__":
+    _ensure_sales_reference_order_id()
     _ensure_shift_table()
     api = _patch_routes()
     import uvicorn
