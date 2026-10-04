@@ -49,7 +49,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^021_online_order_lifecycle_reviews')"
+          count="$(printf '%s\n' "$heads" | grep -c '^022_online_store_configuration')"
           test "$count" -eq 1
       - name: Run focused production tests
         env:
