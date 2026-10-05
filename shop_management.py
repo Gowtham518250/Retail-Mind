@@ -641,6 +641,13 @@ def set_online_settings(
             if profile.is_online_store_enabled:
                 profile.is_active = True
 
+        # Preserve the shop location when the owner enables marketplace
+        # discovery from the location-aware configuration screen.
+        if data.get("latitude") is not None:
+            profile.latitude = float(data["latitude"])
+        if data.get("longitude") is not None:
+            profile.longitude = float(data["longitude"])
+
         def money(key: str, default: float) -> float:
             try:
                 value = round(float(data.get(key, default)), 2)
