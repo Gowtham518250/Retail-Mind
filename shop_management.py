@@ -633,6 +633,14 @@ def set_online_settings(
     try:
         profile = ShopService.get_shop_profile(db, user_id)
 
+        # The online-store screen is a single source of truth. Persist the
+        # publication switch together with the rest of the shop configuration
+        # so the Flutter app, customer web, and marketplace cannot drift apart.
+        if "is_online_store_enabled" in data:
+            profile.is_online_store_enabled = bool(data.get("is_online_store_enabled"))
+            if profile.is_online_store_enabled:
+                profile.is_active = True
+
         def money(key: str, default: float) -> float:
             try:
                 value = round(float(data.get(key, default)), 2)
@@ -668,6 +676,7 @@ def set_online_settings(
         return {
             "success": True,
             "is_online_store_enabled": bool(profile.is_online_store_enabled),
+            "is_active": bool(profile.is_active),
             "online_setup_fee": float(profile.online_setup_fee or 0),
             "min_order": float(profile.online_min_order or 0),
             "delivery_fee": float(profile.online_delivery_fee or 0),
