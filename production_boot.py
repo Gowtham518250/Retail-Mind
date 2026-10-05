@@ -34,13 +34,27 @@ def _current_shift():
     return None, now
 
 
-def _ensure_sales_reference_order_id():
-    """Safely align the legacy sales table with online-order sales code.
+def _ensure_online_order_status_enum():
+    """Keep production PostgreSQL enum values aligned with the online-order state machine."""
+    from db import engine
 
-    Existing Render databases may have been created before this column was
-    introduced. Keep startup compatible without assuming the Alembic version
-    table accurately represents the legacy schema.
-    """
+    with engine.begin() as conn:
+        conn.execute(text("""
+            DO $rm_order_status$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_type WHERE typname = 'online_order_status'
+                ) THEN
+                    ALTER TYPE online_order_status ADD VALUE IF NOT EXISTS 'CANCELLED';
+                    ALTER TYPE online_order_status ADD VALUE IF NOT EXISTS 'RETURNED';
+                END IF;
+            END
+            $rm_order_status$;
+        """))
+
+
+def _ensure_sales_reference_order_id():
+    """Safely add the online-order reference column to legacy sales tables."""
     db = next(get_db())
     try:
         db.execute(text("""
@@ -52,6 +66,64 @@ def _ensure_sales_reference_order_id():
             ON sales (reference_order_id)
         """))
         db.commit()
+    finally:
+        db.close()
+
+
+def _ensure_online_delivery_payment_trigger():
+    """Create an idempotent DB trigger that records payment when an online invoice is settled."""
+    db = next(get_db())
+    try:
+        db.execute(text("""
+            CREATE OR REPLACE FUNCTION retail_mind_auto_record_online_payment()
+            RETURNS TRIGGER
+            LANGUAGE plpgsql
+            AS $rm_payment$
+            BEGIN
+                IF NEW.source = 'ONLINE_ORDER'
+                   AND NEW.status = 'PAID'
+                   AND COALESCE(OLD.status::text, '') <> 'PAID'
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM payments
+                       WHERE invoice_id = NEW.id
+                         AND idempotency_key = 'AUTO_DELIVERY:' || NEW.id::text
+                   )
+                THEN
+                    INSERT INTO payments (
+                        invoice_id,
+                        payment_method,
+                        amount,
+                        reference_number,
+                        notes,
+                        payment_date,
+                        idempotency_key
+                    )
+                    VALUES (
+                        NEW.id,
+                        'ONLINE'::payment_method,
+                        NEW.paid_amount,
+                        'AUTO-DELIVERY-' || NEW.id::text,
+                        'Automatically recorded when online order was delivered and delivery OTP was verified.',
+                        CURRENT_TIMESTAMP,
+                        'AUTO_DELIVERY:' || NEW.id::text
+                    );
+                END IF;
+                RETURN NEW;
+            END;
+            $rm_payment$;
+        """))
+        db.execute(text("""
+            DROP TRIGGER IF EXISTS trg_auto_record_online_payment ON invoices
+        """))
+        db.execute(text("""
+            CREATE TRIGGER trg_auto_record_online_payment
+            AFTER UPDATE OF status, payment_status, paid_amount ON invoices
+            FOR EACH ROW
+            EXECUTE FUNCTION retail_mind_auto_record_online_payment()
+        """))
+        db.commit()
+        print("[DB] online delivery auto-payment trigger ready", flush=True)
     finally:
         db.close()
 
@@ -262,7 +334,9 @@ def _patch_routes():
 
 
 if __name__ == "__main__":
+    _ensure_online_order_status_enum()
     _ensure_sales_reference_order_id()
+    _ensure_online_delivery_payment_trigger()
     _ensure_shift_table()
     api = _patch_routes()
     import uvicorn

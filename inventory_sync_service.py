@@ -476,8 +476,13 @@ def get_all_stock(
             "products": [
                 {
                     "id": p.id,
+                    "product_id": p.id,
                     "product_name": p.product_name,
+                    # The frontend historically called this field "barcode".
+                    # SKU is the canonical product barcode in the inventory model,
+                    # so expose both names to keep clients consistent.
                     "sku": p.sku,
+                    "barcode": p.sku,
                     "current_stock": p.current_stock,
                     "min_stock": p.min_stock,
                     "max_stock": p.max_stock,

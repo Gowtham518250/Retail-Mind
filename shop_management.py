@@ -3,11 +3,12 @@ Shop Profile & Settings Management Service
 Handles all shop profile operations: CRUD, validation, sync
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 import json
 from datetime import datetime
+from fastapi.responses import FileResponse
 
 from db import get_db
 from models import User, ShopProfile, ShopSettings
@@ -34,6 +35,89 @@ class ShopSettingsUpdate:
             setattr(self, key, value)
 
 
+# ==================== SERIALIZATION HELPERS ====================
+
+def _safe_json_list(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if isinstance(value, dict):
+        return [value]
+    text = str(value).strip()
+    if not text:
+        return []
+    try:
+        decoded = json.loads(text)
+        if isinstance(decoded, list):
+            return decoded
+        if decoded is None:
+            return []
+        return [decoded]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        # Legacy rows may contain a comma-separated value instead of JSON.
+        return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _profile_payload(profile):
+    return {
+        "id": profile.id,
+        "profile_id": profile.id,
+        "shop_id": profile.shop_id,
+        "user_id": profile.shop_id,
+        "shop_name": profile.shop_name,
+        "shop_type": profile.shop_type,
+        "phone": profile.phone,
+        "phone_number": profile.phone,
+        "location": profile.location,
+        "email": profile.email,
+        "website": profile.website,
+        "shop_tagline": profile.shop_tagline,
+        "shop_description": profile.shop_description,
+        "address": profile.address,
+        "address_line1": profile.address_line1,
+        "address_line2": profile.address_line2,
+        "state": profile.state,
+        "city": profile.city,
+        "postal_code": profile.postal_code,
+        "gst_number": profile.gst_number,
+        "primary_upi_id": profile.upi_id,
+        "upi_ids": _safe_json_list(profile.upi_ids),
+        "shop_categories": _safe_json_list(profile.shop_categories),
+        "logo_url": profile.logo_url,
+        "color_primary": profile.color_primary,
+        "color_secondary": profile.color_secondary,
+        "is_online_store_enabled": bool(profile.is_online_store_enabled),
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+    }
+
+
+def _settings_payload(settings):
+    return {
+        "business_hours": {
+            "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
+            "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
+            "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
+            "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
+            "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
+            "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
+            "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed},
+        },
+        "payment_methods": {
+            "cash": settings.accept_cash,
+            "card": settings.accept_card,
+            "upi": settings.accept_upi,
+            "bank": settings.accept_bank_transfer,
+        },
+        "preferences": {
+            "language": settings.language,
+            "theme": settings.theme_mode,
+            "timezone": settings.timezone,
+        },
+    }
+
+
 # ==================== SERVICE CLASS ====================
 
 class ShopService:
@@ -58,7 +142,7 @@ class ShopService:
             email=data.get("email") or data.get("shop_email"),
             website=data.get("website"),
             gst_number=data.get("gst_number") or data.get("shop_gst") or data.get("gstin"),
-            primary_upi_id=data.get("primary_upi_id") or data.get("upi_id"),
+            upi_id=data.get("primary_upi_id") or data.get("upi_id"),
             shop_tagline=data.get("shop_tagline"),
             shop_description=data.get("shop_description"),
             latitude=data.get("latitude"),
@@ -153,8 +237,15 @@ class ShopService:
         
         profile = db.query(ShopProfile).filter_by(shop_id=user_id).first()
         if not profile:
-            # Auto-create default profile
-            profile = ShopProfile(shop_id=user_id, shop_name="My Shop")
+            # Auto-create a real profile for the authenticated owner. Never
+            # overwrite an existing profile and never use a shared placeholder.
+            user = db.query(User).filter(User.id == user_id).first()
+            default_name = (
+                (getattr(user, "shop_name", None) or "").strip()
+                or (getattr(user, "username", None) or "").strip()
+                or "My Shop"
+            )
+            profile = ShopProfile(shop_id=user_id, shop_name=default_name)
             db.add(profile)
             db.flush()  # Get id before commit
             
@@ -281,150 +372,57 @@ def create_shop_profile(data: dict, user_id: int = Depends(check_current_user), 
 
 @router.get("/profile")
 def get_profile(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Get shop profile with all settings"""
-    
+    """Return the authenticated owner's canonical shop profile.
+
+    The Bearer token is the only source of identity. Any query-string
+    user_id sent by an old client is intentionally ignored.
+    """
     try:
         profile = ShopService.get_shop_profile(db, user_id)
         settings = ShopService.get_shop_settings(db, profile.id)
-        
-        # Parse JSON fields
-        categories = json.loads(profile.shop_categories) if profile.shop_categories else []
-        upi_ids = json.loads(profile.upi_ids) if profile.upi_ids else []
-        
+        payload = _profile_payload(profile)
         return {
             "status": "success",
-            "profile": {
-                "id": profile.id,
-                "shop_name": profile.shop_name,
-                "shop_type": profile.shop_type,
-                "phone": profile.phone,
-                "phone_number": profile.phone,
-                "location": profile.location,
-                "email": profile.email,
-                "website": profile.website,
-                "shop_tagline": profile.shop_tagline,
-                "shop_description": profile.shop_description,
-                "address": profile.address,
-                "state": profile.state,
-                "city": profile.city,
-                "postal_code": profile.postal_code,
-                "gst_number": profile.gst_number,
-                "primary_upi_id": profile.upi_id,
-                "upi_ids": upi_ids,
-                "shop_categories": categories,
-                "logo_url": profile.logo_url,
-                "color_primary": profile.color_primary,
-                "color_secondary": profile.color_secondary,
-                "is_online_store_enabled": profile.is_online_store_enabled or False,
-                "created_at": profile.created_at,
-                "updated_at": profile.updated_at
-            },
-            "settings": {
-                "business_hours": {
-                    "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
-                    "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
-                    "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
-                    "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
-                    "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
-                    "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
-                    "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed},
-                },
-                "tax_config": {
-                    "tax_type": settings.tax_type,
-                    "igst": settings.igst_percentage,
-                    "sgst": settings.sgst_percentage,
-                    "utgst": settings.utgst_percentage,
-                    "flat_rate": settings.flat_tax_percentage
-                },
-                "payment_methods": {
-                    "cash": settings.accept_cash,
-                    "card": settings.accept_card,
-                    "upi": settings.accept_upi,
-                    "bank": settings.accept_bank_transfer
-                },
-                "preferences": {
-                    "language": settings.language,
-                    "theme": settings.theme_mode,
-                    "timezone": settings.timezone
-                }
-            }
+            "shop_id": profile.shop_id,
+            "user_id": profile.shop_id,
+            "profile_id": profile.id,
+            "profile": payload,
+            "settings": _settings_payload(settings),
         }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to load shop profile: {str(e)}")
 
 
 @router.put("/profile")
 def update_profile(data: dict, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Update shop profile"""
-    
+    """Upsert the authenticated owner's profile and return the persisted row."""
     try:
+        # Never trust a client supplied user_id. Identity comes from the JWT.
+        data = dict(data or {})
+        data.pop("user_id", None)
+        data.pop("shop_id", None)
+        data.pop("profile_id", None)
+
         profile = ShopService.update_shop_profile(db, user_id, data)
         settings = ShopService.get_shop_settings(db, profile.id)
-        
-        # Parse JSON fields
-        categories = json.loads(profile.shop_categories) if profile.shop_categories else []
-        upi_ids = json.loads(profile.upi_ids) if profile.upi_ids else []
-        
+        payload = _profile_payload(profile)
+
         return {
             "status": "success",
             "message": "Shop profile updated successfully",
-            "shop_id": profile.id,
-            "profile": {
-                "id": profile.id,
-                "shop_name": profile.shop_name,
-                "shop_type": profile.shop_type,
-                "phone": profile.phone,
-                "phone_number": profile.phone,
-                "location": profile.location,
-                "email": profile.email,
-                "website": profile.website,
-                "shop_tagline": profile.shop_tagline,
-                "shop_description": profile.shop_description,
-                "address": profile.address,
-                "state": profile.state,
-                "city": profile.city,
-                "postal_code": profile.postal_code,
-                "gst_number": profile.gst_number,
-                "primary_upi_id": profile.upi_id,
-                "upi_ids": upi_ids,
-                "shop_categories": categories,
-                "logo_url": profile.logo_url,
-                "color_primary": profile.color_primary,
-                "color_secondary": profile.color_secondary,
-                "is_online_store_enabled": profile.is_online_store_enabled or False,
-                "created_at": profile.created_at,
-                "updated_at": profile.updated_at
-            },
-            "settings": {
-                "business_hours": {
-                    "monday": {"open": settings.monday_open, "close": settings.monday_close, "closed": settings.monday_closed},
-                    "tuesday": {"open": settings.tuesday_open, "close": settings.tuesday_close, "closed": settings.tuesday_closed},
-                    "wednesday": {"open": settings.wednesday_open, "close": settings.wednesday_close, "closed": settings.wednesday_closed},
-                    "thursday": {"open": settings.thursday_open, "close": settings.thursday_close, "closed": settings.thursday_closed},
-                    "friday": {"open": settings.friday_open, "close": settings.friday_close, "closed": settings.friday_closed},
-                    "saturday": {"open": settings.saturday_open, "close": settings.saturday_close, "closed": settings.saturday_closed},
-                    "sunday": {"open": settings.sunday_open, "close": settings.sunday_close, "closed": settings.sunday_closed}
-                },
-                "receipt_settings": {
-                    "header": settings.receipt_header,
-                    "footer": settings.receipt_footer,
-                    "show_tax": settings.show_tax_on_receipt,
-                    "print_size": settings.default_print_size
-                },
-                "taxes": {
-                    "default_rate": settings.default_tax_rate,
-                    "is_inclusive": settings.tax_inclusive
-                },
-                "loyalty": {
-                    "enabled": settings.loyalty_enabled,
-                    "points_per_amount": settings.points_per_amount
-                }
-            }
+            "shop_id": profile.shop_id,
+            "user_id": profile.shop_id,
+            "profile_id": profile.id,
+            "profile": payload,
+            "settings": _settings_payload(settings),
         }
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to persist shop profile: {str(e)}")
 
 
 @router.delete("/profile")
@@ -496,9 +494,11 @@ def upload_logo(file: UploadFile = File(...), user_id: int = Depends(check_curre
         with open(file_path, "wb") as f:
             f.write(content)
         
-        # Update profile with logo path
+        # Update the canonical profile record with both the stored file path
+        # and the public API URL used by customer storefronts.
         profile = ShopService.get_shop_profile(db, user_id)
         profile.logo_file_path = file_path
+        profile.logo_url = f"/static/logos/{filename}"
         if profile.logo_version is None:
             profile.logo_version = 0
         profile.logo_version += 1
@@ -514,12 +514,43 @@ def upload_logo(file: UploadFile = File(...), user_id: int = Depends(check_curre
         return {
             "status": "success",
             "logo_path": file_path,
-            "url": f"/static/logos/{filename}"
+            "logo_url": profile.logo_url,
+            "url": profile.logo_url,
+            "shop_id": profile.shop_id,
+            "profile_id": profile.id,
+            "logo_version": profile.logo_version,
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/logo/{shop_id}")
+def get_public_shop_logo(shop_id: int, db: Session = Depends(get_db)):
+    """Return the current public logo for a shop storefront."""
+    try:
+        profile = (
+            db.query(ShopProfile)
+            .filter(ShopProfile.shop_id == shop_id)
+            .first()
+        )
+        if not profile or not profile.logo_file_path:
+            raise HTTPException(status_code=404, detail="Shop logo not found")
+
+        import os
+        if not os.path.isfile(profile.logo_file_path):
+            raise HTTPException(status_code=404, detail="Shop logo file not found")
+
+        return FileResponse(
+            profile.logo_file_path,
+            media_type="image/*",
+            filename=os.path.basename(profile.logo_file_path),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/business-hours")
@@ -575,15 +606,21 @@ def get_tax_config(user_id: int = Depends(check_current_user), db: Session = Dep
 
 @router.get("/online-settings")
 def get_online_settings(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Owner-only settings used exclusively by online marketplace orders."""
+    """Return the complete persisted online-store configuration for the owner."""
     try:
         profile = ShopService.get_shop_profile(db, user_id)
         return {
             "is_online_store_enabled": bool(profile.is_online_store_enabled),
             "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
+            "min_order": float(getattr(profile, "online_min_order", 0) or 0),
+            "delivery_fee": float(getattr(profile, "online_delivery_fee", 0) or 0),
+            "offer_delivery": bool(getattr(profile, "online_offer_delivery", True)),
+            "offer_pickup": bool(getattr(profile, "online_offer_pickup", True)),
+            "accept_cod": bool(getattr(profile, "online_accept_cod", True)),
+            "accept_online": bool(getattr(profile, "online_accept_online", False)),
         }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to load online settings: {str(e)}")
 
 
 @router.put("/online-settings")
@@ -592,24 +629,77 @@ def set_online_settings(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update online-only setup/service fee without changing POS prices."""
+    """Persist all online-store settings in the shop profile."""
     try:
         profile = ShopService.get_shop_profile(db, user_id)
-        try:
-            fee = round(float(data.get("online_setup_fee", 0)), 2)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=422, detail="Online setup fee must be a valid number.")
-        if fee < 0 or fee > 100000:
-            raise HTTPException(status_code=422, detail="Online setup fee must be between ₹0 and ₹100000.")
-        profile.online_setup_fee = fee
+
+        # The online-store screen is a single source of truth. Persist the
+        # publication switch together with the rest of the shop configuration
+        # so the Flutter app, customer web, and marketplace cannot drift apart.
+        if "is_online_store_enabled" in data:
+            profile.is_online_store_enabled = bool(data.get("is_online_store_enabled"))
+            if profile.is_online_store_enabled:
+                profile.is_active = True
+
+        # Preserve the shop location when the owner enables marketplace
+        # discovery from the location-aware configuration screen.
+        if data.get("latitude") is not None:
+            profile.latitude = float(data["latitude"])
+        if data.get("longitude") is not None:
+            profile.longitude = float(data["longitude"])
+
+        def money(key: str, default: float) -> float:
+            try:
+                value = round(float(data.get(key, default)), 2)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=422, detail=f"{key} must be a valid number.")
+            if value < 0 or value > 100000:
+                raise HTTPException(status_code=422, detail=f"{key} must be between ₹0 and ₹100000.")
+            return value
+
+        profile.online_setup_fee = money(
+            "online_setup_fee", float(getattr(profile, "online_setup_fee", 0) or 0)
+        )
+        profile.online_min_order = money(
+            "min_order", float(getattr(profile, "online_min_order", 0) or 0)
+        )
+        profile.online_delivery_fee = money(
+            "delivery_fee", float(getattr(profile, "online_delivery_fee", 0) or 0)
+        )
+        profile.online_offer_delivery = bool(
+            data.get("offer_delivery", getattr(profile, "online_offer_delivery", True))
+        )
+        profile.online_offer_pickup = bool(
+            data.get("offer_pickup", getattr(profile, "online_offer_pickup", True))
+        )
+        profile.online_accept_cod = bool(
+            data.get("accept_cod", getattr(profile, "online_accept_cod", True))
+        )
+        profile.online_accept_online = bool(
+            data.get("accept_online", getattr(profile, "online_accept_online", False))
+        )
+
         db.commit()
-        return {"success": True, "online_setup_fee": fee, "message": "Online-only setup fee updated."}
+        return {
+            "success": True,
+            "is_online_store_enabled": bool(profile.is_online_store_enabled),
+            "is_active": bool(profile.is_active),
+            "online_setup_fee": float(profile.online_setup_fee or 0),
+            "min_order": float(profile.online_min_order or 0),
+            "delivery_fee": float(profile.online_delivery_fee or 0),
+            "offer_delivery": bool(profile.online_offer_delivery),
+            "offer_pickup": bool(profile.online_offer_pickup),
+            "accept_cod": bool(profile.online_accept_cod),
+            "accept_online": bool(profile.online_accept_online),
+            "message": "Online store settings saved.",
+        }
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update online settings: {str(e)}")
+
 
 @router.get("/publish-status")
 def get_publish_status(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):

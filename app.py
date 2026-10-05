@@ -185,8 +185,14 @@ try:
         # Marketplace ratings — added after older production databases were initialized.
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_score FLOAT NOT NULL DEFAULT 0",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_count INTEGER NOT NULL DEFAULT 0",
-        # Online-only setup fee — charged once per online order, never modifies POS pricing.
+        # Online-only store configuration — source of truth for owner/customer flows.
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_min_order NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_delivery BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_pickup BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_cod BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_online BOOLEAN NOT NULL DEFAULT FALSE",
 
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS pan_number VARCHAR(50)",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS registration_number VARCHAR(100)",
@@ -388,7 +394,8 @@ api.include_router(gst_and_giftcards_router)      # /gift-cards, /gst/*
 # Legacy extended features
 api.include_router(new_features_router, tags=["Legacy Features"])
 
-# Debug routes are disabled by default in production. Enable explicitly only for controlled diagnostics.
+# Debug routes are disabled in production by default. Enable explicitly with
+# ENABLE_DEBUG_ROUTES=true for controlled diagnostics.
 if os.getenv("ENABLE_DEBUG_ROUTES", "false").strip().lower() == "true":
     api.include_router(debug_router)
 api.include_router(query_router, tags=["Query Retrieval"])
@@ -521,6 +528,12 @@ async def serve_shop_frontend(request: Request, shop_id: str):
             return {"error": "Shop not found", "shop_id": shop_id}, 404
     except Exception as e:
         return {"error": "Failed to retrieve shop data", "details": str(e)}, 500
+
+# Mount static asset folders for both Next.js (_next), Vite (assets),
+# and persisted shop logos.
+static_root = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_root, exist_ok=True)
+api.mount("/static", StaticFiles(directory=static_root), name="static")
 
 # Mount static asset folders for both Next.js (_next) and Vite (assets)
 frontend_web_out = os.path.join(os.path.dirname(__file__), "frontend-web", "out")

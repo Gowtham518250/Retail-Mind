@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - "production-finalization-*"
+      - "production-fix-2026-08-18-playstore"
   pull_request:
     branches:
       - "production-fix-2026-08-18"
+      - "production-fix-2026-08-18-playstore"
       - "main"
 
 jobs:
@@ -42,7 +44,13 @@ jobs:
           pip install pytest
       - name: Compile production modules
         run: |
-          python -m py_compile             app.py             invoices_billing.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py
+          python -m py_compile             app.py             invoices_billing.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py
+      - name: Validate Alembic migration graph
+        run: |
+          heads="$(alembic heads)"
+          echo "$heads"
+          count="$(printf '%s\n' "$heads" | grep -c '^022_online_store_configuration')"
+          test "$count" -eq 1
       - name: Run focused production tests
         env:
           PYTHONPATH: .

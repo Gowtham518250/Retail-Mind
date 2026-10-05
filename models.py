@@ -145,6 +145,8 @@ class OnlineOrderStatus(str, enum.Enum):
     ACCEPTED = "ACCEPTED"
     DISPATCHED = "DISPATCHED"
     DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+    RETURNED = "RETURNED"
     REJECTED = "REJECTED"
 
 class WhatsappOrderStatus(str, enum.Enum):
@@ -309,6 +311,8 @@ class sales(Base):
     quantity = Column(Integer, nullable=False)
     total = Column(Numeric(10, 2), nullable=False)
     sale_date = Column(Date, index=True)
+    # Online-order reference used to reverse accepted sales safely on cancellation/return.
+    reference_order_id = Column(Integer, nullable=True, index=True)
     
     # 🔒 PERFORMANCE FIX: Add index on foreign key (already has index=True)
     # Relationship
@@ -1068,6 +1072,15 @@ class ShopProfile(Base):
     upi_ids = Column(Text)  # JSON string
     shop_categories = Column(Text)  # JSON string
     is_online_store_enabled = Column(Boolean, default=False)
+    # Online-store configuration. These values are shop-level source of truth,
+    # not device-local preferences.
+    online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    online_min_order = Column(Numeric(10, 2), nullable=False, default=0)
+    online_delivery_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    online_offer_delivery = Column(Boolean, nullable=False, default=True)
+    online_offer_pickup = Column(Boolean, nullable=False, default=True)
+    online_accept_cod = Column(Boolean, nullable=False, default=True)
+    online_accept_online = Column(Boolean, nullable=False, default=False)
     # Marketplace reputation is maintained from verified customer order reviews.
     rating_score = Column(Float, nullable=False, default=0.0)
     rating_count = Column(Integer, nullable=False, default=0)

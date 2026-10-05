@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { API_BASE } from '../lib/api';
 import type { ShopProduct, ShopResponse } from '../lib/types';
@@ -11,6 +11,24 @@ import ProductCard from './ProductCard';
 
 interface StorefrontShellProps {
   shopId: number;
+}
+
+function StorefrontFallbackIcon() {
+  return <Store size={34} />;
+}
+
+function StarRating({ value }: { value: number }) {
+  return (
+    <span className="shop-profile-stars" aria-label={(value || 0) + ' out of 5'}>
+      {Array.from({ length: 5 }, (_, index) => (
+        <Star
+          key={index}
+          size={13}
+          fill={index < Math.round(value) ? 'currentColor' : 'none'}
+        />
+      ))}
+    </span>
+  );
 }
 
 export default function StorefrontShell({ shopId }: StorefrontShellProps) {
@@ -98,11 +116,36 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
           className="shop-hero-card"
         >
           <div className="shop-hero-copy">
+            <div className="shop-profile-identity">
+              <div className="shop-profile-avatar">
+                {shop?.shop_logo_url ? (
+                  <img
+                    src={
+                      shop.shop_logo_url.startsWith('http')
+                        ? shop.shop_logo_url
+                        : API_BASE + shop.shop_logo_url
+                    }
+                    alt={shop.shop_name + ' profile'}
+                  />
+                ) : (
+                  <StorefrontFallbackIcon />
+                )}
+              </div>
+              <div>
+                <div className="shop-profile-type">{shop?.shop_type || 'LOCAL STOREFRONT'} · ONLINE</div>
+                <div className="shop-profile-rating">
+                  <StarRating value={Number(shop?.rating || 0)} />
+                  <strong>{Number(shop?.rating || 0) > 0 ? Number(shop?.rating).toFixed(1) : 'New'}</strong>
+                  <span>{Number(shop?.rating_count || 0)} verified reviews</span>
+                </div>
+              </div>
+            </div>
+
             <div className="hero-pill">Trusted local storefront</div>
             <div className="shop-share-note">Browse freely · Sign in only when you checkout</div>
             <h1>{shop?.shop_name || 'Retail Mind Storefront'}</h1>
             <p>
-              {shop?.shop_tagline || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
+              {shop?.shop_tagline || shop?.shop_description || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
             </p>
 
             <div className="hero-meta-row">
@@ -111,9 +154,14 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
                   <Phone size={16} /> {shop.shop_phone}
                 </div>
               )}
-              {shop?.shop_address && (
+              {(shop?.shop_city || shop?.shop_address) && (
                 <div className="hero-meta-pill">
-                  <MapPin size={16} /> {shop.shop_address}
+                  <MapPin size={16} /> {shop.shop_city || shop.shop_address}
+                </div>
+              )}
+              {shop?.shop_website && (
+                <div className="hero-meta-pill">
+                  <Globe size={16} /> {shop.shop_website}
                 </div>
               )}
             </div>
@@ -129,14 +177,28 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
               </div>
               <div className="shop-stat-card">
                 <Sparkles size={18} />
-                <span>Fast dispatch</span>
+                <span>{shop?.offer_delivery === false ? 'Store pickup' : 'Fast dispatch'}</span>
               </div>
-              {(shop?.online_setup_fee || 0) > 0 && (
-                <div className="shop-stat-card online-fee-stat">
-                  <span className="online-fee-icon">₹</span>
-                  <span>Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>
-                </div>
-              )}
+              <div className="shop-stat-card">
+                <span className="online-fee-icon">₹</span>
+                <span>
+                  {Number(shop?.delivery_fee || 0) > 0
+                    ? `Delivery ₹${Number(shop?.delivery_fee || 0).toFixed(2)}`
+                    : 'Free delivery'}
+                </span>
+              </div>
+              <div className="shop-stat-card">
+                <span className="online-fee-icon">₹</span>
+                <span>
+                  {Number(shop?.min_order || 0) > 0
+                    ? `Min order ₹${Number(shop?.min_order || 0).toFixed(0)}`
+                    : 'No minimum order'}
+                </span>
+              </div>
+              <div className="shop-stat-card online-fee-stat">
+                <span className="online-fee-icon">₹</span>
+                <span>Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>
+              </div>
             </div>
           </div>
 
@@ -148,6 +210,9 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
                 <div><span>•</span> Fresh arrivals</div>
                 <div><span>•</span> Express delivery</div>
                 <div><span>•</span> Simple reordering</div>
+                {shop?.shop_categories && (
+                  <div><span>•</span> {shop.shop_categories}</div>
+                )}
               </div>
               <div className="shop-hero-actions">
                 <Link href="#products" className="hero-cta">

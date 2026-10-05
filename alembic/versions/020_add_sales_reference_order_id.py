@@ -18,28 +18,16 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
-    tables = set(inspector.get_table_names())
-
-    if "sales" not in tables:
+    if "sales" not in inspector.get_table_names():
         return
 
     columns = {column["name"] for column in inspector.get_columns("sales")}
     if "reference_order_id" not in columns:
-        op.add_column(
-            "sales",
-            sa.Column("reference_order_id", sa.Integer(), nullable=True),
-        )
+        op.add_column("sales", sa.Column("reference_order_id", sa.Integer(), nullable=True))
 
-    # Keep the lookup cheap when reconciling an online order with the
-    # dashboard sales ledger. Do not add a uniqueness constraint here because
-    # one online order can legitimately contain multiple line-item sales rows.
     indexes = {index["name"] for index in inspector.get_indexes("sales")}
     if "ix_sales_reference_order_id" not in indexes:
-        op.create_index(
-            "ix_sales_reference_order_id",
-            "sales",
-            ["reference_order_id"],
-        )
+        op.create_index("ix_sales_reference_order_id", "sales", ["reference_order_id"])
 
 
 def downgrade() -> None:

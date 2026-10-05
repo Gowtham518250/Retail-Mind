@@ -24,7 +24,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, text
+from sqlalchemy import func, or_
 
 from db import get_db
 from models import (
@@ -38,6 +38,7 @@ from models import (
     OnlineCustomerAuth,
     OnlineOrderDeliveryOtp,
     ShopReview,
+    OnlineOrderReturn,
     CustomerPasswordReset,
     CustomerPasswordResetOtp,
     sales,
@@ -71,33 +72,70 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
     return 0.0
 
 logger = logging.getLogger(__name__)
-
-def _lock_order_idempotency(db: Session, key: Optional[str]) -> None:
-    """Serialize duplicate checkout requests for the same idempotency key.
-
-    The web client intentionally reuses its key when a network response is
-    lost. PostgreSQL advisory locks make two simultaneous retries converge on
-    the same order instead of both decrementing stock and creating duplicates.
-    Other database engines simply skip the database-specific lock.
-    """
-    if not key:
-        return
-    try:
-        bind = db.get_bind()
-        if getattr(bind.dialect, "name", "") == "postgresql":
-            db.execute(
-                text("SELECT pg_advisory_xact_lock(hashtext(:idempotency_key))"),
-                {"idempotency_key": key},
-            )
-    except Exception:
-        # Never make checkout unavailable just because the optional
-        # serialization primitive is unsupported by a local/dev database.
-        logger.debug("Idempotency advisory lock unavailable", exc_info=True)
-
 from realtime import publish_realtime_event
 from audit_logging import AuditAction, AuditService
 
+
 router = APIRouter(prefix="/store", tags=["Online Store"])
+
+
+def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str) -> None:
+    """Restore reserved stock and reverse financial side effects when they exist."""
+    items = json.loads(order.items_json or "[]")
+
+    for item in items:
+        product_id = item.get("product_id")
+        quantity = float(item.get("quantity", 0) or 0)
+        if not product_id or quantity <= 0:
+            continue
+        product = db.query(Product).with_for_update().filter(
+            Product.id == int(product_id),
+            Product.user_id == shop_id,
+        ).first()
+        if product:
+            product.current_stock = (product.current_stock or 0) + quantity
+
+    tagged_sales = db.query(sales).filter(
+        sales.shopkeeper_id == shop_id,
+        sales.reference_order_id == order.id,
+    ).all()
+
+    invoice = db.query(Invoice).filter(
+        Invoice.source == "ONLINE_ORDER",
+        Invoice.notes.like(f"%Online Order #{order.id}%"),
+        Invoice.user_id == shop_id,
+    ).first()
+
+    # A PENDING order has reserved stock but has not yet created sales/invoice records.
+    # Only write financial reversal entries when ACCEPT already created those records.
+    if tagged_sales:
+        db.query(sales).filter(
+            sales.shopkeeper_id == shop_id,
+            sales.reference_order_id == order.id,
+        ).delete(synchronize_session=False)
+
+    if invoice:
+        invoice.status = "CANCELLED"
+        invoice.payment_status = "UNPAID"
+        invoice.paid_amount = 0
+
+    if tagged_sales or invoice:
+        reversal_ref = f"ONL-{order.id}-REVERSAL"
+        existing_reversal = db.query(UniversalTransaction).filter(
+            UniversalTransaction.shop_id == shop_id,
+            UniversalTransaction.reference_id == reversal_ref,
+        ).first()
+        if not existing_reversal:
+            db.add(UniversalTransaction(
+                shop_id=shop_id,
+                tx_type="EXPENSE",
+                category="SALE_REVERSAL",
+                amount=float(order.total_amount or 0),
+                reference_id=reversal_ref,
+                description=f"{reason}: Online Order #{order.id}",
+                tx_date=datetime.now(),
+            ))
+
 
 # =====================
 # CUSTOMER AUTH SCHEMAS
@@ -177,16 +215,6 @@ class CustomerVerifyPasswordResetOtp(BaseModel):
 class CustomerResetPassword(BaseModel):
     reset_token: str = Field(..., min_length=32, max_length=200)
     new_password: str = Field(..., min_length=8, max_length=128)
-
-    @field_validator("new_password")
-    def validate_new_password(cls, v):
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter.")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter.")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one number.")
-        return v
 
 
 class OrderItem(BaseModel):
@@ -720,6 +748,10 @@ def marketplace_search(
                 (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
                 or_(
                     ShopProfile.shop_name.ilike(like),
+                    ShopProfile.shop_type.ilike(like),
+                    ShopProfile.shop_categories.ilike(like),
+                    ShopProfile.shop_tagline.ilike(like),
+                    ShopProfile.shop_description.ilike(like),
                     ShopProfile.city.ilike(like),
                     ShopProfile.address.ilike(like),
                 ),
@@ -735,10 +767,27 @@ def marketplace_search(
                 "shop_id": shop.shop_id,
                 "shop_name": shop.shop_name,
                 "tagline": shop.shop_tagline or "",
+                "description": shop.shop_description or "",
+                "shop_type": shop.shop_type or "General",
                 "address": shop.address or "",
                 "city": shop.city or "",
+                "state": shop.state or "",
+                "postal_code": shop.postal_code or "",
                 "phone": shop.phone or "",
+                "website": shop.website or "",
                 "logo_url": shop.logo_url,
+                "categories": (
+                    [item.strip() for item in str(shop.shop_categories or "").split(",") if item.strip()]
+                    if shop.shop_categories and not str(shop.shop_categories).strip().startswith("[")
+                    else shop.shop_categories
+                ),
+                "online_setup_fee": float(getattr(shop, "online_setup_fee", 0) or 0),
+                "min_order": float(getattr(shop, "online_min_order", 0) or 0),
+                "delivery_fee": float(getattr(shop, "online_delivery_fee", 0) or 0),
+                "offer_delivery": bool(getattr(shop, "online_offer_delivery", True)),
+                "offer_pickup": bool(getattr(shop, "online_offer_pickup", True)),
+                "accept_cod": bool(getattr(shop, "online_accept_cod", True)),
+                "accept_online": bool(getattr(shop, "online_accept_online", False)),
                 **_shop_reputation(shop),
             }
             for shop in shop_rows
@@ -781,6 +830,9 @@ def marketplace_search(
                 "shop_id": shop.shop_id,
                 "shop_name": shop.shop_name,
                 "shop_address": shop.address or "",
+                "online_setup_fee": float(getattr(shop, "online_setup_fee", 0) or 0),
+                "delivery_fee": float(getattr(shop, "online_delivery_fee", 0) or 0),
+                "min_order": float(getattr(shop, "online_min_order", 0) or 0),
                 **_shop_reputation(shop),
             }
             for product, shop in rows
@@ -881,19 +933,47 @@ def ai_shopping_recommendations(
     }
 
 
-@router.get("/customer-ai")
-def customer_ai_legacy_alias(
-    q: str = Query(..., min_length=2, max_length=120),
-    limit: int = Query(10, ge=1, le=10),
+@router.get("/shops")
+def list_online_shops(
+    skip: int = 0,
+    limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
 ):
-    """Backward-compatible alias for older customer-web builds.
-
-    The canonical route is /store/ai/recommend. Keeping this alias prevents
-    an older deployed web client from turning a working AI backend into a
-    false "AI unavailable" screen during rolling deployments.
-    """
-    return ai_shopping_recommendations(q=q, limit=limit, db=db)
+    """List all public online-enabled shops for customer web/app discovery."""
+    rows = (
+        db.query(ShopProfile)
+        .filter(
+            ShopProfile.is_online_store_enabled == True,
+            (ShopProfile.is_active == True) | (ShopProfile.is_active.is_(None)),
+        )
+        .order_by(ShopProfile.shop_name.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "shops": [
+            {
+                "shop_id": shop.shop_id,
+                "shop_name": shop.shop_name,
+                "shop_type": shop.shop_type or "General",
+                "tagline": shop.shop_tagline or "",
+                "description": shop.shop_description or "",
+                "address": shop.address or "",
+                "city": shop.city or "",
+                "state": shop.state or "",
+                "postal_code": shop.postal_code or "",
+                "phone": shop.phone or "",
+                "email": shop.email or "",
+                "website": shop.website or "",
+                "logo_url": shop.logo_url,
+                "categories": _safe_json_list(shop.shop_categories) if '_safe_json_list' in globals() else [],
+                **_shop_reputation(shop),
+            }
+            for shop in rows
+        ],
+        "count": len(rows),
+    }
 
 
 @router.get("/shops/nearby")
@@ -957,6 +1037,12 @@ def find_nearby_shops(
                 "address": s.address,
                 "phone": s.phone,
                 "logo_url": s.logo_url,
+                "shop_type": s.shop_type or "General",
+                "tagline": s.shop_tagline or "",
+                "description": s.shop_description or "",
+                "city": s.city or "",
+                "state": s.state or "",
+                "website": s.website or "",
                 **_shop_reputation(s),
             }
             for s in all_shops
@@ -1001,13 +1087,25 @@ def browse_shop_products(
     return {
         "shop_name": profile.shop_name,
         "shop_tagline": profile.shop_tagline or "",
+        "shop_description": profile.shop_description or "",
+        "shop_type": profile.shop_type or "General",
         "shop_phone": profile.phone or "",
+        "shop_website": profile.website or "",
         "shop_address": profile.address or "",
         "shop_city": profile.city or "",
+        "shop_state": profile.state or "",
+        "shop_postal_code": profile.postal_code or "",
         "shop_logo_url": profile.logo_url,
+        "shop_categories": profile.shop_categories or "",
         "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),
         "rating_count": int(getattr(profile, "rating_count", 0) or 0),
         "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
+        "min_order": float(getattr(profile, "online_min_order", 0) or 0),
+        "delivery_fee": float(getattr(profile, "online_delivery_fee", 0) or 0),
+        "offer_delivery": bool(getattr(profile, "online_offer_delivery", True)),
+        "offer_pickup": bool(getattr(profile, "online_offer_pickup", True)),
+        "accept_cod": bool(getattr(profile, "online_accept_cod", True)),
+        "accept_online": bool(getattr(profile, "online_accept_online", False)),
         "is_online": True,
         "products": [
             (lambda p, discount: {
@@ -1040,7 +1138,6 @@ def place_order(
     customer_id = current_user["user_id"]
 
     idempotency_key = (data.idempotency_key or "").strip() or None
-    _lock_order_idempotency(db, idempotency_key)
     if idempotency_key:
         existing_order = db.query(OnlineOrder).filter(
             OnlineOrder.shop_id == data.shop_id,
@@ -1112,6 +1209,23 @@ def place_order(
 
     delivery_address = sanitize_input(data.delivery_address, "delivery_address")
     online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
+    min_order = round(float(getattr(profile, "online_min_order", 0) or 0), 2)
+    delivery_fee = round(float(getattr(profile, "online_delivery_fee", 0) or 0), 2)
+    offer_delivery = bool(getattr(profile, "online_offer_delivery", True))
+    offer_pickup = bool(getattr(profile, "online_offer_pickup", True))
+    accept_cod = bool(getattr(profile, "online_accept_cod", True))
+    accept_online = bool(getattr(profile, "online_accept_online", False))
+
+    if min_order > 0 and items_subtotal < min_order:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum online order is ₹{min_order:.2f}. Add ₹{max(0.0, min_order - items_subtotal):.2f} more.",
+        )
+    if not offer_delivery and not offer_pickup:
+        raise HTTPException(status_code=400, detail="This shop is not accepting online delivery or pickup orders.")
+    if not accept_cod and not accept_online:
+        raise HTTPException(status_code=400, detail="This shop has no online payment method enabled.")
+
     discount_amount = 0.0
     coupon_code = (data.coupon_code or "").strip().upper() or None
 
@@ -1137,7 +1251,13 @@ def place_order(
             raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
         coupon.used_count = int(coupon.used_count or 0) + 1
 
-    total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
+    delivery_charge = delivery_fee if offer_delivery else 0.0
+    total_amount = round(
+        max(0.0, items_subtotal - discount_amount)
+        + online_setup_fee
+        + delivery_charge,
+        2,
+    )
 
     order = OnlineOrder(
         shop_id=data.shop_id,
@@ -1186,6 +1306,10 @@ def place_order(
         "discount_amount": discount_amount,
         "coupon_code": coupon_code,
         "online_setup_fee": online_setup_fee,
+        "delivery_fee": delivery_charge,
+        "min_order": min_order,
+        "accept_cod": accept_cod,
+        "accept_online": accept_online,
         "total_amount": total_amount,
         "items": order_items,
         "status": "PENDING",
@@ -1230,7 +1354,6 @@ def place_guest_order(
         logger.info(f"No Firebase token provided for guest checkout, proceeding with unverified phone {data.phone}")
 
     idempotency_key = (data.idempotency_key or "").strip() or None
-    _lock_order_idempotency(db, idempotency_key)
     if idempotency_key:
         existing_order = db.query(OnlineOrder).filter(
             OnlineOrder.shop_id == data.shop_id,
@@ -1437,11 +1560,29 @@ def get_my_orders(
     db: Session = Depends(get_db),
     current_user: dict = Depends(customer_only),
 ):
-    """Customer: View all their orders"""
+    """Customer: View all their orders plus any verified review left for each delivered order."""
     customer_id = current_user["user_id"]
     orders = db.query(OnlineOrder).filter(
         OnlineOrder.customer_id == customer_id
     ).order_by(OnlineOrder.created_at.desc()).all()
+
+    order_ids = [o.id for o in orders]
+    reviews_by_order = {}
+    return_by_order = {}
+    if order_ids:
+        review_rows = db.query(ShopReview).filter(ShopReview.order_id.in_(order_ids)).all()
+        reviews_by_order = {r.order_id: r for r in review_rows}
+
+        return_rows = (
+            db.query(OnlineOrderReturn)
+            .filter(OnlineOrderReturn.order_id.in_(order_ids))
+            .order_by(OnlineOrderReturn.created_at.desc())
+            .all()
+        )
+        # Keep the most recent return request for each order.
+        for return_row in return_rows:
+            if return_row.order_id not in return_by_order:
+                return_by_order[return_row.order_id] = return_row
 
     return {
         "orders": [
@@ -1461,9 +1602,82 @@ def get_my_orders(
                 "delivery_address": o.delivery_address,
                 "items": json.loads(o.items_json),
                 "created_at": o.created_at,
+                "review": (
+                    {
+                        "rating": review.rating,
+                        "comment": review.comment,
+                        "created_at": review.created_at,
+                    }
+                    if (review := reviews_by_order.get(o.id))
+                    else None
+                ),
+                "can_cancel": o.order_status in {"PENDING", "ACCEPTED"},
+                "return_request": (
+                    {
+                        "id": return_req.id,
+                        "status": return_req.status,
+                        "reason": return_req.reason,
+                        "refund_amount": float(return_req.refund_amount or 0),
+                        "stock_restored": bool(return_req.stock_restored),
+                        "created_at": return_req.created_at,
+                        "processed_at": return_req.processed_at,
+                    }
+                    if (return_req := return_by_order.get(o.id))
+                    else None
+                ),
             }
             for o in orders
         ]
+    }
+
+
+@router.post("/order/{order_id}/cancel")
+def cancel_customer_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(customer_only),
+):
+    """Customer cancellation before the order has been dispatched."""
+    customer_id = current_user["user_id"]
+    order = db.query(OnlineOrder).with_for_update().filter(
+        OnlineOrder.id == order_id,
+        OnlineOrder.customer_id == customer_id,
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+
+    if order.order_status not in {"PENDING", "ACCEPTED"}:
+        raise HTTPException(
+            status_code=409,
+            detail="This order can no longer be cancelled. Only pending or accepted orders can be cancelled.",
+        )
+
+    previous_status = order.order_status
+    shop_id = order.shop_id
+    _reverse_online_order_financials(db, order, shop_id, "Customer cancellation")
+
+    order.order_status = "CANCELLED"
+    db.commit()
+
+    publish_realtime_event({
+        "event_id": str(uuid4()),
+        "type": "order.status_changed",
+        "shop_id": shop_id,
+        "order_id": order.id,
+        "customer_id": customer_id,
+        "previous_status": previous_status,
+        "status": "CANCELLED",
+        "total_amount": float(order.total_amount),
+        "delivery_address": order.delivery_address,
+        "items": json.loads(order.items_json),
+        "created_at": order.created_at,
+    })
+
+    return {
+        "success": True,
+        "message": "Order cancelled successfully.",
+        "order_id": order.id,
+        "status": "CANCELLED",
     }
 
 
@@ -1604,6 +1818,71 @@ def rate_completed_order(
         "shop_id": order.shop_id,
         "rating": shop.rating_score,
         "rating_count": shop.rating_count,
+    }
+
+
+@router.get("/owner/reviews")
+def get_owner_reviews(
+    skip: int = 0,
+    limit: int = Query(100, le=500),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    shop_id = current_user["user_id"]
+    rows = (
+        db.query(ShopReview, OnlineCustomerAuth, OnlineOrder)
+        .join(OnlineCustomerAuth, OnlineCustomerAuth.id == ShopReview.customer_id)
+        .join(OnlineOrder, OnlineOrder.id == ShopReview.order_id)
+        .filter(ShopReview.shop_id == shop_id)
+        .order_by(ShopReview.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "reviews": [
+            {
+                "id": review.id,
+                "order_id": review.order_id,
+                "customer_id": review.customer_id,
+                "customer_name": customer.user_name,
+                "rating": review.rating,
+                "comment": review.comment,
+                "created_at": review.created_at,
+                "items": json.loads(order.items_json or "[]"),
+            }
+            for review, customer, order in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.get("/shops/{shop_id}/reviews")
+def get_shop_reviews(
+    shop_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(ShopReview, OnlineCustomerAuth)
+        .join(OnlineCustomerAuth, OnlineCustomerAuth.id == ShopReview.customer_id)
+        .filter(ShopReview.shop_id == shop_id)
+        .order_by(ShopReview.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "reviews": [
+            {
+                "id": review.id,
+                "order_id": review.order_id,
+                "customer_name": "Verified customer",
+                "rating": review.rating,
+                "comment": review.comment,
+                "created_at": review.created_at,
+            }
+            for review, customer in rows
+        ]
     }
 
 
@@ -1799,19 +2078,6 @@ def update_order_status(
     if not new_status:
         raise HTTPException(status_code=400, detail=f"Invalid action. Choose from: {list(ACTION_MAP.keys())}")
 
-    # Idempotency: a client may retry an action after the original request
-    # committed successfully but its response was lost/timed out. Treat an
-    # already-applied transition as success instead of returning 409. This is
-    # especially important for mobile networks and prevents the owner UI from
-    # remaining in SYNCING after a successful ACCEPT/DISPATCH/DELIVER.
-    if order.order_status == new_status:
-        return {
-            "message": f"Order #{order_id} is already {new_status}.",
-            "order_id": order_id,
-            "new_status": new_status,
-            "already_applied": True,
-        }
-
     previous_status = order.order_status
     restored_inventory = []
     linked_invoice = None
@@ -1819,24 +2085,14 @@ def update_order_status(
     if order.order_status in ("DELIVERED", "REJECTED"):
         raise HTTPException(status_code=409, detail="Order is already finalized.")
 
-    # Enforce the same state machine on the server that the owner app
-    # presents in its UI. This prevents stale/double taps from skipping a
-    # fulfilment stage or rejecting an order after it has entered delivery.
-    expected_previous_status = {
-        "ACCEPTED": "PENDING",
-        "DISPATCHED": "ACCEPTED",
-        "DELIVERED": "DISPATCHED",
-        "REJECTED": "PENDING",
-    }.get(new_status)
-
-    if expected_previous_status and order.order_status != expected_previous_status:
+    if new_status == "DELIVERED" and order.order_status != "DISPATCHED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Cannot change order from {order.order_status} to {new_status}. "
-                f"Expected current status: {expected_previous_status}."
-            ),
+            detail="Order must be dispatched before it can be marked delivered.",
         )
+
+    if order.order_status != "PENDING" and new_status == "ACCEPTED":
+        raise HTTPException(status_code=409, detail="Order is already accepted or finalized.")
 
     # 🟢 On ACCEPT: record sales immediately in dashboard 🟢──────────────────
     if new_status == "ACCEPTED":
@@ -1854,6 +2110,7 @@ def update_order_status(
                 quantity=item.get("quantity", 1),
                 total=item.get("line_total", 0),
                 sale_date=date.today(),
+                reference_order_id=order.id,
             )
             db.add(sale_entry)
 
@@ -1963,7 +2220,7 @@ def update_order_status(
             linked_invoice.paid_amount = float(order.total_amount)
             linked_invoice.status = "PAID"
             
-    # 🟢 On REJECT: restore reserved stock 🟢
+    # Delivery is the accounting settlement point for online orders.\n    # Reconcile the canonical sale/invoice records here as well as at ACCEPT so\n    # an order can never become DELIVERED without appearing in Sales/Dashboard.\n    if new_status == "DELIVERED":\n        items = json.loads(order.items_json)\n        customer = db.query(OnlineCustomerAuth).filter(\n            OnlineCustomerAuth.id == order.customer_id\n        ).first()\n        customer_name = customer.user_name if customer else "Online Customer"\n        customer_phone = customer.phone if customer else ""\n        delivery_date = date.today()\n\n        # 1) Ensure exactly one legacy sales row exists for every delivered\n        # online-order item. Existing ACCEPT-created rows are reused and their\n        # business date is moved to the actual delivery date.\n        for item in items:\n            product_name = item.get("product_name", "Online Item")\n            existing_sale = db.query(sales).filter(\n                sales.shopkeeper_id == shop_id,\n                sales.reference_order_id == order.id,\n                sales.product_name == product_name,\n            ).first()\n            if existing_sale:\n                existing_sale.sale_date = delivery_date\n                existing_sale.price = item.get("unit_price", 0)\n                existing_sale.quantity = item.get("quantity", 1)\n                existing_sale.total = item.get("line_total", 0)\n            else:\n                db.add(sales(\n                    shopkeeper_id=shop_id,\n                    product_name=product_name,\n                    price=item.get("unit_price", 0),\n                    quantity=item.get("quantity", 1),\n                    total=item.get("line_total", 0),\n                    sale_date=delivery_date,\n                    reference_order_id=order.id,\n                ))\n\n        # 2) Ensure the online order has a canonical invoice. This repairs\n        # orders accepted by older deployments where invoice creation failed\n        # or was skipped.\n        if linked_invoice is None:\n            linked_invoice = db.query(Invoice).filter(\n                Invoice.user_id == shop_id,\n                Invoice.source == "ONLINE_ORDER",\n                Invoice.notes.like(f"%Online Order #{order.id}%"),\n            ).first()\n\n        if linked_invoice is None:\n            invoice_num = f"ONL-{order.id}"\n            linked_invoice = db.query(Invoice).filter(\n                Invoice.user_id == shop_id,\n                Invoice.invoice_number == invoice_num,\n            ).first()\n            if linked_invoice is None:\n                linked_invoice = Invoice(\n                    user_id=shop_id,\n                    customer_name=customer_name,\n                    customer_phone=customer_phone,\n                    invoice_number=invoice_num,\n                    invoice_date=delivery_date,\n                    due_date=delivery_date,\n                    subtotal=float(order.total_amount),\n                    tax=0,\n                    total_amount=float(order.total_amount),\n                    paid_amount=0,\n                    status="SENT",\n                    payment_status="UNPAID",\n                    source="ONLINE_ORDER",\n                    notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}",\n                )\n                db.add(linked_invoice)\n                db.flush()\n\n                for item in items:\n                    db.add(InvoiceLineItem(\n                        invoice_id=linked_invoice.id,\n                        product_id=item.get("product_id"),\n                        description=item.get("product_name", "Item"),\n                        quantity=item.get("quantity", 1),\n                        unit_price=item.get("unit_price", 0),\n                        line_total=item.get("line_total", 0),\n                    ))\n\n        # 3) Delivery is the moment the COD sale is completed. Keep the\n        # invoice date aligned with delivery and settle it as PAID.\n        linked_invoice.invoice_date = delivery_date\n        linked_invoice.payment_status = "PAID"\n        linked_invoice.paid_amount = float(order.total_amount)\n        linked_invoice.status = "PAID"\n\n        # 4) Ensure the dashboard/P&L journal has one SALE entry.\n        sale_reference = f"ONL-{order.id}"\n        existing_sale_tx = db.query(UniversalTransaction).filter(\n            UniversalTransaction.shop_id == shop_id,\n            UniversalTransaction.reference_id == sale_reference,\n            UniversalTransaction.category == "SALE",\n        ).first()\n        if existing_sale_tx is None:\n            db.add(UniversalTransaction(\n                shop_id=shop_id,\n                tx_type="INCOME",\n                category="SALE",\n                amount=float(order.total_amount),\n                reference_id=sale_reference,\n                description=f"Online Order Delivered: #{order.id} | {customer_name}",\n                tx_date=datetime.now(),\n            ))\n\n    # 🟢 On REJECT: restore reserved stock 🟢
     if new_status == "REJECTED":
         items = json.loads(order.items_json)
         for item in items:
@@ -2054,6 +2311,22 @@ def update_order_status(
             "amount": float(order.total_amount),
             "paid_amount": float(linked_invoice.paid_amount or 0),
             "payment_status": "PAID",
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+
+    if linked_invoice is not None and new_status == "DELIVERED":
+        # Notify realtime dashboard clients that the invoice itself changed.
+        publish_realtime_event({
+            "event_id": str(uuid4()),
+            "type": "invoice.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "status": "PAID",
+            "payment_status": "PAID",
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "total_amount": float(linked_invoice.total_amount or 0),
             "source": "ONLINE_ORDER_DELIVERY",
             "reference_id": f"ONL-{order.id}",
         })
