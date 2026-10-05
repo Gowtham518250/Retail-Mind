@@ -666,18 +666,44 @@ def set_online_settings(
         profile.online_delivery_fee = money(
             "delivery_fee", float(getattr(profile, "online_delivery_fee", 0) or 0)
         )
-        profile.online_offer_delivery = bool(
+        offer_delivery = bool(
             data.get("offer_delivery", getattr(profile, "online_offer_delivery", True))
         )
-        profile.online_offer_pickup = bool(
+        offer_pickup = bool(
             data.get("offer_pickup", getattr(profile, "online_offer_pickup", True))
         )
-        profile.online_accept_cod = bool(
+        accept_cod = bool(
             data.get("accept_cod", getattr(profile, "online_accept_cod", True))
         )
-        profile.online_accept_online = bool(
+        accept_online = bool(
             data.get("accept_online", getattr(profile, "online_accept_online", False))
         )
+
+        # Do not publish a checkout configuration that the customer checkout
+        # cannot actually fulfill. The current production checkout supports
+        # COD only; real UPI/card collection requires a payment-gateway
+        # integration and webhook verification before it can be enabled.
+        if profile.is_online_store_enabled:
+            if not offer_delivery and not offer_pickup:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Enable delivery or store pickup before enabling the online store.",
+                )
+            if not accept_cod and not accept_online:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Enable at least one supported payment method.",
+                )
+            if accept_online:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Online UPI/card payments are not configured yet. Keep COD enabled until a payment gateway is connected.",
+                )
+
+        profile.online_offer_delivery = offer_delivery
+        profile.online_offer_pickup = offer_pickup
+        profile.online_accept_cod = accept_cod
+        profile.online_accept_online = accept_online
 
         db.commit()
         return {
