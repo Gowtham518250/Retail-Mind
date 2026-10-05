@@ -14,10 +14,27 @@ export interface ShopProduct {
 export interface ShopResponse {
   shop_name: string;
   shop_tagline?: string;
+  shop_description?: string;
+  shop_type?: string;
   shop_phone?: string;
+  shop_email?: string;
+  shop_website?: string;
   shop_address?: string;
+  shop_city?: string;
+  shop_state?: string;
+  shop_postal_code?: string;
+  shop_logo_url?: string;
+  shop_categories?: string;
+  rating?: number;
+  rating_count?: number;
   products: ShopProduct[];
   online_setup_fee?: number;
+  min_order?: number;
+  delivery_fee?: number;
+  offer_delivery?: boolean;
+  offer_pickup?: boolean;
+  accept_cod?: boolean;
+  accept_online?: boolean;
 }
 
 export interface GuestOrderPayload {

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ShoppingCart, Sparkles, Package2, Truck, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Sparkles, Package2, Truck, ShieldCheck, CheckCircle2, Star } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { API_BASE } from '../../../../../lib/api';
 import { useCart } from '../../../../../context/CartContext';
 import type { ShopProduct } from '../../../../../lib/types';
@@ -15,23 +16,38 @@ export default function ProductClientPage() {
   const { addToCart } = useCart();
   const [product, setProduct] = useState<ShopProduct | null>(null);
   const [loading, setLoading] = useState(true);
+  const [added, setAdded] = useState(false);
+  const [reviews, setReviews] = useState<
+    Array<{ id: number; customer_name: string; rating: number; comment?: string | null; created_at?: string | null }>
+  >([]);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/store/shops/${shopId}/products`);
+        const res = await fetch(API_BASE + '/store/shops/' + shopId + '/products');
         if (!res.ok) throw new Error('Unable to load product');
         const data = await res.json();
-        const matched = data.products?.find((item: ShopProduct) => item.id === productId) || null;
-        setProduct(matched);
+        setProduct(data.products?.find((item: ShopProduct) => item.id === productId) || null);
+
+        try {
+          const reviewResponse = await fetch(
+            API_BASE + '/store/shops/' + shopId + '/reviews?limit=12',
+            { cache: 'no-store' },
+          );
+          if (reviewResponse.ok) {
+            const reviewData = await reviewResponse.json();
+            setReviews(Array.isArray(reviewData.reviews) ? reviewData.reviews : []);
+          }
+        } catch {
+          setReviews([]);
+        }
       } catch {
         setProduct(null);
       } finally {
         setLoading(false);
       }
     };
-
     load();
   }, [productId, shopId]);
 
@@ -43,48 +59,112 @@ export default function ProductClientPage() {
     return product.discount_pct || 0;
   }, [product]);
 
-  if (loading) {
-    return <div className="container" style={{ padding: '40px 20px' }}><div className="store-empty-state">Loading product…</div></div>;
-  }
+  if (loading) return <div className="page-loading">Loading product details…</div>;
+  if (!product) return <div className="container product-page"><div className="store-empty-state">This product is not available right now.</div></div>;
 
-  if (!product) {
-    return <div className="container" style={{ padding: '40px 20px' }}><div className="store-empty-state">This product is not available right now.</div></div>;
-  }
+  const stockAvailable = product.stock_available ?? 0;
+
+  const handleAdd = () => {
+    addToCart({ ...product, shop_id: shopId });
+    setAdded(true);
+    window.setTimeout(() => setAdded(false), 1300);
+  };
 
   return (
-    <div className="container" style={{ padding: '28px 20px 80px' }}>
-      <Link href={`/${shopId ? `?shop_id=${shopId}` : ''}`} className="hero-cta" style={{ width: 'fit-content', marginBottom: 20 }}>
-        <ArrowLeft size={16} /> Back to shop
-      </Link>
-      <div className="shop-hero-card" style={{ gridTemplateColumns: '1fr 0.9fr' }}>
-        <div className="store-product-media" style={{ borderRadius: 24, overflow: 'hidden' }}>
-          {product.image_url ? (
-            <img src={product.image_url} alt={product.name} className="store-product-image" />
-          ) : (
-            <div className="store-product-placeholder"><Package2 size={48} /></div>
-          )}
+    <main className="container product-page">
+      <Link href={'/shop/' + shopId} className="product-back"><ArrowLeft size={16} /> Back to shop</Link>
+      <motion.section className="product-detail" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .45 }}>
+        <div className="product-visual">
+          <div className="product-glow" />
+          <motion.div className="product-orbit" animate={{ rotate: 360 }} transition={{ duration: 22, repeat: Infinity, ease: 'linear' }}>
+            <span /><span /><span />
+          </motion.div>
+          <motion.div className="product-image-frame" animate={{ y: [0, -6, 0], rotateZ: [-1, 1, -1] }} transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}>
+            {product.image_url ? <img src={product.image_url} alt={product.name} /> : <Package2 size={70} />}
+          </motion.div>
+          <div className="product-floating-badge"><CheckCircle2 size={15} /> Local stock</div>
         </div>
-        <div>
-          <div className="hero-pill">{product.category || 'Featured'}</div>
-          <h1 style={{ margin: '14px 0 10px', fontSize: '34px' }}>{product.name}</h1>
-          <p style={{ color: 'rgba(255,255,255,0.68)', lineHeight: 1.7 }}>{product.description || 'A well-curated product chosen for daily convenience and quality.'}</p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-            <div className="store-price">₹{product.price.toFixed(2)}</div>
+
+        <div className="product-copy">
+          <span className="store-category-pill">{product.category || 'Featured'}</span>
+          <h1>{product.name}</h1>
+          <p>{product.description || 'A carefully selected everyday essential, available from your local shop.'}</p>
+
+          <div className="product-price-row">
+            <div className="product-main-price">₹{product.price.toFixed(2)}</div>
             {product.original_price && product.original_price > product.price && <div className="store-original-price">₹{product.original_price.toFixed(2)}</div>}
+            {discount > 0 && <span className="product-save-pill">Save {discount}%</span>}
           </div>
-          {discount > 0 && <div className="hero-meta-pill" style={{ marginTop: 12, width: 'fit-content' }}>{discount}% off today</div>}
-          <div className="shop-stats-grid" style={{ marginTop: 18 }}>
-            <div className="shop-stat-card"><Truck size={16} /> Fast delivery</div>
-            <div className="shop-stat-card"><ShieldCheck size={16} /> Secure checkout</div>
-            <div className="shop-stat-card"><Sparkles size={16} /> Premium quality</div>
+
+          <div className="product-benefits">
+            <div><Truck size={16} /><span>Fast delivery</span></div>
+            <div><ShieldCheck size={16} /><span>Secure checkout</span></div>
+            <div><Sparkles size={16} /><span>Retail Mind verified</span></div>
           </div>
-          <div className="store-card-actions" style={{ marginTop: 22 }}>
-            <button className="store-cart-btn" onClick={() => addToCart({ ...product, shop_id: shopId })}>
-              <ShoppingCart size={16} /> Add to cart
+
+          <div className="product-availability">
+            <span className={stockAvailable > 0 ? 'available' : 'unavailable'}>
+              {stockAvailable > 0 ? String(stockAvailable) + ' available' : 'Out of stock'}
+            </span>
+            <span>Shop #{shopId}</span>
+          </div>
+
+          <div className="product-actions">
+            <button className="store-cart-btn" onClick={handleAdd} disabled={stockAvailable <= 0}>
+              <ShoppingCart size={17} /> {added ? 'Added to cart' : 'Add to cart'}
             </button>
+            <Link href="/orders" className="store-link-btn">View orders</Link>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.section>
+
+      <motion.section
+        className="product-reviews-panel"
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: .45 }}
+      >
+        <div className="product-reviews-head">
+          <div>
+            <span className="store-category-pill">Verified customer voice</span>
+            <h2>What shoppers say</h2>
+            <p>Reviews are tied to completed orders from this shop.</p>
+          </div>
+          <div className="product-reviews-summary">
+            <strong>{reviews.length ? (reviews.reduce((sum, item) => sum + Number(item.rating || 0), 0) / reviews.length).toFixed(1) : '—'}</strong>
+            <span>/ 5 average</span>
+          </div>
+        </div>
+
+        {reviews.length === 0 ? (
+          <div className="product-review-empty">
+            <Sparkles size={18} />
+            No verified reviews yet. Your completed order can be the first voice here.
+          </div>
+        ) : (
+          <div className="product-reviews-grid">
+            {reviews.map((review) => (
+              <article key={review.id} className="product-review-card">
+                <div className="product-review-top">
+                  <strong>{review.customer_name || 'Customer'}</strong>
+                  <span>{review.created_at ? new Date(review.created_at).toLocaleDateString('en-IN') : ''}</span>
+                </div>
+                <div className="product-review-stars">
+                  {Array.from({ length: 5 }, (_, index) => (
+                    <Star
+                      key={index}
+                      size={14}
+                      fill={index < Number(review.rating || 0) ? 'currentColor' : 'none'}
+                    />
+                  ))}
+                </div>
+                {review.comment && <p>“{review.comment}”</p>}
+              </article>
+            ))}
+          </div>
+        )}
+      </motion.section>
+    </main>
   );
 }

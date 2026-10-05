@@ -7,15 +7,160 @@ Low stock alerts, inventory analytics
 from fastapi import APIRouter, Depends, HTTPException, Query, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
+import httpx
+import re
 from typing import List, Optional
+import time
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Product, StockMovement, ProductBatch, Notification
 from stock_service import StockService
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+_BARCODE_LOOKUP_CACHE: dict[str, tuple[float, dict]] = {}
+_BARCODE_CACHE_TTL_SECONDS = 6 * 60 * 60
+
+# ==================== BARCODE PRODUCT LOOKUP ====================
+
+@router.get("/barcode-lookup")
+def barcode_product_lookup(
+    barcode: str = Query(..., min_length=1, max_length=50),
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Look up a real product from a GTIN/UPC/EAN barcode.
+
+    This endpoint deliberately never invents a product name. The owner can use
+    the result to prefill the catalog, while price/MRP remain owner-controlled.
+    """
+    clean = re.sub(r"\D", "", str(barcode or ""))
+    if not clean:
+        raise HTTPException(status_code=400, detail="Barcode must contain at least one digit.")
+
+    # Inventory/SKU values may be longer than a standard GTIN. They are valid
+    # shop-local identifiers, but the external retail catalog only supports
+    # 8/12/13/14 digit GTIN/UPC/EAN values. Return a normal no-match response
+    # instead of FastAPI validation errors for local-only barcodes.
+    if len(clean) not in {8, 12, 13, 14}:
+        return {
+            "found": False,
+            "barcode": clean,
+            "message": "This barcode is stored as a shop-local SKU and is not eligible for external GTIN lookup.",
+        }
+
+    cached = _BARCODE_LOOKUP_CACHE.get(clean)
+    if cached and (time.time() - cached[0]) < _BARCODE_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    # Use a real external catalog rather than the old deterministic fake-product
+    # fallback. Keep the provider behind our authenticated API.
+    url = "https://api.upcitemdb.com/prod/trial/lookup"
+
+    try:
+        response = httpx.get(
+            url,
+            params={"upc": clean},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "RetailMind/1.0 barcode lookup",
+            },
+            timeout=6.0,
+        )
+
+        if response.status_code == 404:
+            return {
+                "found": False,
+                "barcode": clean,
+                "message": "Barcode is valid but no matching product was found in the external catalog.",
+            }
+
+        if response.status_code == 429:
+            return {
+                "found": False,
+                "barcode": clean,
+                "rate_limited": True,
+                "message": "Barcode lookup is temporarily rate limited. Enter the product name manually.",
+            }
+
+        response.raise_for_status()
+        payload = response.json()
+        items = payload.get("items") or []
+
+        if not items:
+            return {
+                "found": False,
+                "barcode": clean,
+                "message": "No product match was found. Please enter the product name manually.",
+            }
+
+        item = items[0] or {}
+        title = str(item.get("title") or "").strip()
+        if not title:
+            return {
+                "found": False,
+                "barcode": clean,
+                "message": "The barcode exists but the catalog returned no product title.",
+            }
+
+        inr_prices: list[float] = []
+        for offer in (item.get("offers") or []):
+            if str(offer.get("currency") or "").upper() != "INR":
+                continue
+            try:
+                offer_price = float(offer.get("price") or 0)
+            except (TypeError, ValueError):
+                offer_price = 0
+            if offer_price > 0:
+                inr_prices.append(offer_price)
+
+        currency = str(item.get("currency") or "").upper()
+        if not inr_prices and currency == "INR":
+            for raw_price in (
+                item.get("lowest_recorded_price"),
+                item.get("highest_recorded_price"),
+            ):
+                try:
+                    value = float(raw_price or 0)
+                except (TypeError, ValueError):
+                    value = 0
+                if value > 0:
+                    inr_prices.append(value)
+
+        online_price = min(inr_prices) if inr_prices else None
+
+        result = {
+            "found": True,
+            "barcode": clean,
+            "name": title,
+            "brand": item.get("brand"),
+            "model": item.get("model"),
+            "category": item.get("category"),
+            "description": item.get("description"),
+            "image_url": (item.get("images") or [None])[0],
+            "catalog_currency": currency or None,
+            "online_price": online_price,
+            "price_source": "INR offer" if online_price is not None else None,
+            "lowest_recorded_price": item.get("lowest_recorded_price"),
+            "highest_recorded_price": item.get("highest_recorded_price"),
+            "provider": "UPCitemdb",
+        }
+        _BARCODE_LOOKUP_CACHE[clean] = (time.time(), result)
+        return result
+
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=502,
+            detail="Barcode catalog is temporarily unavailable. You can still add the product manually.",
+        )
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=502,
+            detail="Barcode catalog returned an invalid response.",
+        )
+
 
 # ==================== BATCH OPERATIONS ====================
 
@@ -122,16 +267,35 @@ def create_product(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new product"""
-    # Scoped uniqueness per user (not global)
+    """Create or idempotently restore a product for this account.
+
+    SKU is the shop-scoped identity for an inventory product. Repeated offline
+    retries, double taps, or concurrent sync workers must not turn an already
+    persisted product into a 500 error.
+    """
     existing = db.query(Product).filter(
         Product.user_id == user_id,
         Product.sku == product.sku,
-        Product.is_active == True
     ).first()
+
     if existing:
-        raise HTTPException(status_code=400, detail="SKU already exists for this account")
-    
+        existing.product_name = product.product_name
+        existing.description = product.description
+        existing.current_stock = product.current_stock
+        existing.min_stock = product.min_stock
+        existing.max_stock = product.max_stock
+        existing.reorder_level = product.reorder_level
+        existing.unit_price = product.unit_price
+        existing.category = product.category
+        existing.is_active = True
+        try:
+            db.commit()
+            db.refresh(existing)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to restore existing product: {str(e)}")
+        return existing
+
     db_product = Product(
         user_id=user_id,
         **product.dict()
@@ -140,6 +304,26 @@ def create_product(
     try:
         db.commit()
         db.refresh(db_product)
+    except IntegrityError:
+        db.rollback()
+        raced = db.query(Product).filter(
+            Product.user_id == user_id,
+            Product.sku == product.sku,
+        ).first()
+        if raced:
+            raced.product_name = product.product_name
+            raced.description = product.description
+            raced.current_stock = product.current_stock
+            raced.min_stock = product.min_stock
+            raced.max_stock = product.max_stock
+            raced.reorder_level = product.reorder_level
+            raced.unit_price = product.unit_price
+            raced.category = product.category
+            raced.is_active = True
+            db.commit()
+            db.refresh(raced)
+            return raced
+        raise HTTPException(status_code=500, detail="Failed to create product due to a database constraint.")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")

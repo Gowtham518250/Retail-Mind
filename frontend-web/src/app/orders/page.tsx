@@ -18,6 +18,10 @@ import {
   ChevronDown,
   ChevronUp,
   ShoppingBag,
+  Star,
+  Ban,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 
@@ -31,6 +35,22 @@ interface OrderItem {
   line_total?: number;
 }
 
+interface OrderReview {
+  rating: number;
+  comment?: string | null;
+  created_at?: string | null;
+}
+
+interface ReturnRequest {
+  id: number;
+  status: string;
+  reason: string;
+  refund_amount: number;
+  stock_restored?: boolean;
+  created_at?: string | null;
+  processed_at?: string | null;
+}
+
 interface Order {
   order_id: number;
   shop_id: number;
@@ -40,6 +60,9 @@ interface Order {
   delivery_address: string;
   items: OrderItem[];
   created_at: string;
+  review?: OrderReview | null;
+  can_cancel?: boolean;
+  return_request?: ReturnRequest | null;
 }
 
 const STATUS_STEPS = ['PENDING', 'ACCEPTED', 'DISPATCHED', 'DELIVERED'] as const;
@@ -78,12 +101,27 @@ const STATUS_META: Record<
     tone: '#10b981',
   },
   REJECTED: {
-    label: 'Order rejected',
+    label: 'Rejected by shop',
     description: 'The shop could not accept this order.',
     icon: XCircle,
     tone: '#f87171',
   },
+  CANCELLED: {
+    label: 'Cancelled',
+    description: 'This order was cancelled before dispatch.',
+    icon: Ban,
+    tone: '#fb7185',
+  },
+  RETURNED: {
+    label: 'Returned',
+    description: 'The shop accepted the return and reversed the online sale.',
+    icon: RotateCcw,
+    tone: '#a78bfa',
+  },
 };
+
+const TERMINAL_STATUSES = ['DELIVERED', 'REJECTED', 'CANCELLED', 'RETURNED'];
+const REVERSIBLE_STATUSES = ['PENDING', 'ACCEPTED'];
 
 function statusIndex(status: string) {
   return STATUS_STEPS.indexOf(status as (typeof STATUS_STEPS)[number]);
@@ -97,7 +135,8 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function formatDate(value: string) {
+function formatDate(value?: string | null) {
+  if (!value) return '—';
   return new Date(value).toLocaleString('en-IN', {
     day: '2-digit',
     month: 'short',
@@ -107,17 +146,47 @@ function formatDate(value: string) {
   });
 }
 
+function activeReturnRequest(order: Order) {
+  const status = String(order.return_request?.status || '').toUpperCase();
+  return Boolean(
+    order.return_request &&
+      status !== 'REJECTED',
+  );
+}
+
+function returnLabel(order: Order) {
+  const status = String(order.return_request?.status || '').toUpperCase();
+  if (order.status === 'RETURNED' || status === 'REFUND_PENDING' || status === 'REFUNDED') {
+    return 'Return complete';
+  }
+  if (status === 'REQUESTED') return 'Return requested';
+  return 'Return in progress';
+}
+
 function OrderTimeline({ status }: { status: string }) {
   const current = statusIndex(status);
-  const rejected = status === 'REJECTED';
+  const terminal = !STATUS_STEPS.includes(status as (typeof STATUS_STEPS)[number]);
+  if (terminal) {
+    const meta = STATUS_META[status] || STATUS_META.REJECTED;
+    const Icon = meta.icon;
+    return (
+      <div className="rejected-banner">
+        <Icon size={17} />
+        <div>
+          <strong>{meta.label}</strong>
+          <span>{meta.description}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="order-timeline">
       {STATUS_STEPS.map((step, index) => {
         const meta = STATUS_META[step];
         const Icon = meta.icon;
-        const completed = !rejected && current >= index;
-        const active = !rejected && current === index;
+        const completed = current >= index;
+        const active = current === index;
 
         return (
           <div className="timeline-step" key={step}>
@@ -147,7 +216,7 @@ function OrderTimeline({ status }: { status: string }) {
               <div
                 className={
                   'timeline-line ' +
-                  (!rejected && current > index ? 'filled' : '')
+                  (current > index ? 'filled' : '')
                 }
               />
             )}
@@ -155,15 +224,6 @@ function OrderTimeline({ status }: { status: string }) {
         );
       })}
 
-      {rejected && (
-        <div className="rejected-banner">
-          <XCircle size={17} />
-          <div>
-            <strong>{STATUS_META.REJECTED.label}</strong>
-            <span>{STATUS_META.REJECTED.description}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -176,11 +236,15 @@ export default function MyOrdersPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
   const [filter, setFilter] = useState<
-    'ALL' | 'ACTIVE' | 'DELIVERED' | 'REJECTED'
+    'ALL' | 'ACTIVE' | 'DELIVERED' | 'RETURNED' | 'CANCELLED'
   >('ALL');
   const [query, setQuery] = useState('');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
+  const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
+  const [reviewingOrderId, setReviewingOrderId] = useState<number | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
   const [deliveryByOrder, setDeliveryByOrder] = useState<Record<number, any>>({});
   const [deliveryLoadingId, setDeliveryLoadingId] = useState<number | null>(null);
   const router = useRouter();
@@ -310,6 +374,7 @@ export default function MyOrdersPage() {
                     ? {
                         ...order,
                         status: nextStatus,
+                        can_cancel: ['PENDING', 'ACCEPTED'].includes(nextStatus),
                         total_amount: Number(event.total_amount ?? order.total_amount),
                         delivery_address: event.delivery_address || order.delivery_address,
                         items: Array.isArray(event.items) ? event.items : order.items,
@@ -344,6 +409,20 @@ export default function MyOrdersPage() {
 
     void connectRealtime();
 
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void fetchOrders(true);
+      }
+    }, 30000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchOrders(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       stopped = true;
       setLiveConnected(false);
@@ -359,14 +438,24 @@ export default function MyOrdersPage() {
           // ignore cleanup errors
         }
       }
+
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [fetchOrders, router]);
 
   const activeCount = useMemo(
-    () =>
-      orders.filter(
-        (order) => !['DELIVERED', 'REJECTED'].includes(order.status),
-      ).length,
+    () => orders.filter((order) => !TERMINAL_STATUSES.includes(order.status)).length,
+    [orders],
+  );
+
+  const returnedCount = useMemo(
+    () => orders.filter((order) => activeReturnRequest(order)).length,
+    [orders],
+  );
+
+  const cancelledCount = useMemo(
+    () => orders.filter((order) => ['CANCELLED', 'REJECTED'].includes(order.status)).length,
     [orders],
   );
 
@@ -376,7 +465,14 @@ export default function MyOrdersPage() {
   );
 
   const totalSpent = useMemo(
-    () => orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0),
+    () =>
+      orders.reduce(
+        (sum, order) =>
+          ['CANCELLED', 'REJECTED', 'RETURNED'].includes(order.status)
+            ? sum
+            : sum + Number(order.total_amount || 0),
+        0,
+      ),
     [orders],
   );
 
@@ -387,9 +483,11 @@ export default function MyOrdersPage() {
       const filterMatch =
         filter === 'ALL' ||
         (filter === 'ACTIVE' &&
-          !['DELIVERED', 'REJECTED'].includes(order.status)) ||
+          !TERMINAL_STATUSES.includes(order.status)) ||
         (filter === 'DELIVERED' && order.status === 'DELIVERED') ||
-        (filter === 'REJECTED' && order.status === 'REJECTED');
+        (filter === 'RETURNED' && activeReturnRequest(order)) ||
+        (filter === 'CANCELLED' &&
+          ['CANCELLED', 'REJECTED'].includes(order.status));
 
       const queryMatch =
         !q ||
@@ -442,6 +540,55 @@ export default function MyOrdersPage() {
       setDeliveryLoadingId(null);
     }
   };
+  const cancelOrder = async (order: Order) => {
+    const canCancel =
+      order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status);
+    if (!canCancel || cancelingOrderId !== null) return;
+
+    const confirmed = window.confirm(
+      'Cancel Order #' +
+        order.order_id +
+        '? Reserved stock will be released and the online order will be closed.',
+    );
+    if (!confirmed) return;
+
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      router.push('/auth');
+      return;
+    }
+
+    setCancelingOrderId(order.order_id);
+    try {
+      const response = await fetch(
+        API_BASE + '/store/order/' + order.order_id + '/cancel',
+        {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token },
+          cache: 'no-store',
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('customerToken');
+        router.push('/auth');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.detail || 'Unable to cancel this order.');
+      }
+
+      setError('Order #' + order.order_id + ' was cancelled successfully.');
+      await fetchOrders(true);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to cancel this order.');
+    } finally {
+      setCancelingOrderId(null);
+    }
+  };
+
   const requestReturn = async (order: Order) => {
     if (order.status !== 'DELIVERED' || returningOrderId !== null) return;
     const reason = window.prompt(
@@ -496,6 +643,59 @@ export default function MyOrdersPage() {
       setReturningOrderId(null);
     }
   };
+
+  const submitReview = async (order: Order) => {
+    if (
+      order.status !== 'DELIVERED' ||
+      order.review ||
+      reviewingOrderId !== order.order_id
+    ) {
+      return;
+    }
+
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      router.push('/auth');
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        API_BASE + '/store/order/' + order.order_id + '/rating',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token,
+          },
+          body: JSON.stringify({
+            rating: reviewRating,
+            comment: reviewComment.trim() || null,
+          }),
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('customerToken');
+        router.push('/auth');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.detail || 'Unable to save your review.');
+      }
+
+      setError('Thanks! Your verified review is now visible on the shop.');
+      setReviewingOrderId(null);
+      setReviewComment('');
+      setReviewRating(5);
+      await fetchOrders(true);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to save your review.');
+    }
+  };
+
 
 
   return (
@@ -554,7 +754,15 @@ export default function MyOrdersPage() {
             <strong>{deliveredCount}</strong>
           </div>
           <div className="orders-fk-stat">
-            <span>Total spent</span>
+            <span>Returned</span>
+            <strong>{returnedCount}</strong>
+          </div>
+          <div className="orders-fk-stat">
+            <span>Cancelled</span>
+            <strong>{cancelledCount}</strong>
+          </div>
+          <div className="orders-fk-stat">
+            <span>Net spent</span>
             <strong>{formatCurrency(totalSpent)}</strong>
           </div>
         </section>
@@ -569,7 +777,8 @@ export default function MyOrdersPage() {
               ['ALL', 'All orders'],
               ['ACTIVE', 'Active'],
               ['DELIVERED', 'Delivered'],
-              ['REJECTED', 'Cancelled'],
+              ['RETURNED', 'Returned'],
+              ['CANCELLED', 'Cancelled'],
             ] as const).map(([value, label]) => (
               <button
                 key={value}
@@ -660,7 +869,24 @@ export default function MyOrdersPage() {
             <div className="orders-fk-list">
               {visibleOrders.map((order, orderIndex) => {
                 const meta = STATUS_META[order.status] || STATUS_META.PENDING;
-                const Icon = meta.icon;
+                const returnActive = activeReturnRequest(order);
+                const effectiveStatus =
+                  returnActive && order.status === 'DELIVERED'
+                    ? 'RETURN_REQUESTED'
+                    : order.status;
+                const effectiveMeta =
+                  effectiveStatus === 'RETURN_REQUESTED'
+                    ? {
+                        label: returnLabel(order),
+                        description:
+                          order.return_request?.status === 'REQUESTED'
+                            ? 'Your return request is waiting for the shop to review it.'
+                            : 'Your return request is being processed.',
+                        icon: RotateCcw,
+                        tone: '#8b5cf6',
+                      }
+                    : meta;
+                const Icon = effectiveMeta.icon;
                 const isOpen = expandedOrders.has(order.order_id);
                 const firstItem = order.items[0];
                 const firstName =
@@ -711,14 +937,32 @@ export default function MyOrdersPage() {
                       <span
                         className={
                           'orders-fk-status ' +
-                          order.status.toLowerCase()
+                          effectiveStatus.toLowerCase()
                         }
                       >
-                        <Icon size={14} /> {meta.label}
+                        <Icon size={14} /> {effectiveMeta.label}
                       </span>
                     </div>
 
-                    <OrderTimeline status={order.status} />
+                    {effectiveStatus === 'RETURN_REQUESTED' ? (
+  <div className="orders-fk-return-state">
+    <div className="orders-fk-return-state-icon"><RotateCcw size={15} /></div>
+    <div>
+      <strong>{effectiveMeta.label}</strong>
+      <span>
+        {order.return_request?.reason || 'Return request submitted.'}
+        {order.return_request?.refund_amount
+          ? ' · Refund ' + formatCurrency(order.return_request.refund_amount)
+          : ''}
+      </span>
+    </div>
+    <span className="orders-fk-return-state-badge">
+      {String(order.return_request?.status || 'REQUESTED').replaceAll('_', ' ')}
+    </span>
+  </div>
+) : (
+  <OrderTimeline status={order.status} />
+)}
 
                     <div className="orders-fk-card-actions">
                       <div className="orders-fk-delivery">
@@ -726,22 +970,41 @@ export default function MyOrdersPage() {
                         <span>{order.delivery_address}</span>
                       </div>
                       <div className="orders-fk-details-actions">
-                        {order.status === 'DELIVERED' && (
+                        {(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status)) && (
+                          <button
+                            className="orders-fk-details-btn danger"
+                            onClick={() => void cancelOrder(order)}
+                            disabled={cancelingOrderId === order.order_id}
+                          >
+                            {cancelingOrderId === order.order_id ? 'Cancelling…' : 'Cancel order'}
+                            <Ban size={14} />
+                          </button>
+                        )}
+                        {order.status === 'DELIVERED' && !order.review && (
+                          <button
+                            className="orders-fk-details-btn review"
+                            onClick={() => {
+                              setReviewingOrderId(order.order_id);
+                              setReviewRating(5);
+                              setReviewComment('');
+                              if (!expandedOrders.has(order.order_id)) {
+                                setExpandedOrders((current) => new Set(current).add(order.order_id));
+                              }
+                            }}
+                          >
+                            Rate & review <Star size={14} fill="currentColor" />
+                          </button>
+                        )}
+                        {order.status === 'DELIVERED' && !returnActive && !order.review && (
                           <button
                             className="orders-fk-details-btn"
                             onClick={() => void requestReturn(order)}
                             disabled={returningOrderId === order.order_id}
                           >
-                            {returningOrderId === order.order_id
-                              ? 'Submitting…'
-                              : 'Return order'}
-                            <RefreshCw
+                            {returningOrderId === order.order_id ? 'Submitting…' : 'Return order'}
+                            <RotateCcw
                               size={14}
-                              className={
-                                returningOrderId === order.order_id
-                                  ? 'spin'
-                                  : ''
-                              }
+                              className={returningOrderId === order.order_id ? 'spin' : ''}
                             />
                           </button>
                         )}
@@ -768,7 +1031,11 @@ export default function MyOrdersPage() {
                           </div>
                           <div>
                             <span>Current status</span>
-                            <strong>{meta.label}</strong>
+                            <strong>
+                              {effectiveStatus === 'RETURN_REQUESTED'
+                                ? effectiveMeta.label
+                                : meta.label}
+                            </strong>
                           </div>
                           <div>
                             <span>Shop</span>
@@ -779,6 +1046,21 @@ export default function MyOrdersPage() {
                             <strong>{order.items.length}</strong>
                           </div>
                         </div>
+
+                        {returnActive && (
+                          <div className="orders-fk-return-state compact">
+                            <div className="orders-fk-return-state-icon"><RotateCcw size={14} /></div>
+                            <div>
+                              <strong>{effectiveMeta.label}</strong>
+                              <span>
+                                {order.return_request?.reason || 'Return request submitted.'}
+                              </span>
+                            </div>
+                            <span className="orders-fk-return-state-badge">
+                              {String(order.return_request?.status || 'REQUESTED').replaceAll('_', ' ')}
+                            </span>
+                          </div>
+                        )}
 
                         {deliveryLoadingId === order.order_id ? (
                           <div
@@ -858,6 +1140,72 @@ export default function MyOrdersPage() {
                             )}
                           </div>
                         ) : null}
+
+                        {order.status === 'DELIVERED' && order.review && (
+                          <div className="orders-fk-review-card">
+                            <div className="orders-fk-detail-eyebrow">YOUR VERIFIED REVIEW</div>
+                            <div className="orders-fk-review-row">
+                              <div className="orders-review-stars">
+                                {Array.from({ length: 5 }, (_, index) => (
+                                  <Star
+                                    key={index}
+                                    size={17}
+                                    fill={index < Number(order.review?.rating || 0) ? 'currentColor' : 'none'}
+                                  />
+                                ))}
+                              </div>
+                              <span>{formatDate(order.review.created_at)}</span>
+                            </div>
+                            {order.review.comment && <p>“{order.review.comment}”</p>}
+                          </div>
+                        )}
+
+                        {reviewingOrderId === order.order_id && !order.review && (
+                          <div className="orders-fk-review-card editor">
+                            <div className="orders-fk-detail-eyebrow">SHARE YOUR EXPERIENCE</div>
+                            <h3>How was your order from {order.shop_name || 'the shop'}?</h3>
+                            <div className="orders-review-stars">
+                              {Array.from({ length: 5 }, (_, index) => {
+                                const star = index + 1;
+                                const active = star <= reviewRating;
+                                return (
+                                  <button
+                                    key={star}
+                                    type="button"
+                                    className={active ? 'active' : ''}
+                                    onClick={() => setReviewRating(star)}
+                                    aria-label={'Rate ' + star}
+                                  >
+                                    <Star size={18} fill={active ? 'currentColor' : 'none'} />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <textarea
+                              value={reviewComment}
+                              onChange={(event) => setReviewComment(event.target.value)}
+                              maxLength={500}
+                              placeholder="Tell future shoppers what you liked about the shop, product quality or delivery."
+                              rows={4}
+                            />
+                            <div className="orders-fk-review-actions">
+                              <button
+                                type="button"
+                                className="orders-fk-details-btn"
+                                onClick={() => setReviewingOrderId(null)}
+                              >
+                                Not now
+                              </button>
+                              <button
+                                type="button"
+                                className="orders-fk-primary-btn"
+                                onClick={() => void submitReview(order)}
+                              >
+                                Publish review <Sparkles size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="orders-fk-items">
                           {order.items.map((item, idx) => {

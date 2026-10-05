@@ -15,7 +15,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
-from sqlalchemy import or_, and_, desc, func
+from sqlalchemy import or_, and_, desc, func, cast, Integer
 from sqlalchemy.orm import Session, joinedload
 from decimal import Decimal
 import logging
@@ -23,7 +23,7 @@ from sqlalchemy.exc import IntegrityError
 
 from db import get_db
 from models import (
-    Invoice, InvoiceLineItem, Product, Customer,
+    Invoice, InvoiceLineItem, Product, Customer, FlashSale,
     UniversalTransaction, StockMovement, Payment, PaymentMethod,
     PaymentStatus, InvoiceStatus
 )
@@ -58,6 +58,8 @@ class InvoiceLineItemCreate(BaseModel):
     quantity: Decimal = Field(..., gt=0)
     unit_price: Decimal = Field(..., ge=0)
     discount_amount: Decimal = Field(Decimal("0"), ge=0)
+    discount_reason: Optional[str] = Field(default=None, max_length=120)
+    discount_source: Optional[str] = Field(default=None, max_length=50)
 
 class InvoiceSyncCreate(BaseModel):
     invoice_number: str
@@ -503,19 +505,138 @@ def sync_offline_invoice(
     try:
         sub_t = Decimal(str(data.total_amount)) - Decimal(str(data.tax))
 
-        if data.line_items and len(data.line_items) > 0:
-            computed_subtotal = sum(
-                item.quantity * item.unit_price
-                for item in data.line_items
+        now_utc = datetime.utcnow()
+        active_flash_sale = (
+            db.query(FlashSale)
+            .filter(
+                FlashSale.user_id == shop_id,
+                FlashSale.is_active == True,
+                FlashSale.end_time > now_utc,
             )
-            tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
+            .order_by(FlashSale.start_time.desc())
+            .first()
+        )
+
+        prepared_line_items = []
+        special_discount_total = Decimal("0")
+
+        if data.line_items and len(data.line_items) > 0:
+            for item in data.line_items:
+                base_line = (
+                    Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+                )
+                client_discount = min(
+                    base_line,
+                    max(Decimal("0"), Decimal(str(item.discount_amount or 0))),
+                )
+
+                flash_discount = Decimal("0")
+                flash_reason = ""
+                product = None
+
+                if item.product_id:
+                    product = (
+                        db.query(Product)
+                        .filter(
+                            Product.id == item.product_id,
+                            Product.user_id == shop_id,
+                        )
+                        .first()
+                    )
+                if product is None:
+                    product = (
+                        db.query(Product)
+                        .filter(
+                            func.lower(Product.product_name) ==
+                            item.product_name.lower().strip(),
+                            Product.user_id == shop_id,
+                        )
+                        .first()
+                    )
+
+                if active_flash_sale and product:
+                    sale_category = (
+                        active_flash_sale.category or ""
+                    ).strip().lower()
+                    product_category = (
+                        getattr(product, "category", None) or ""
+                    ).strip().lower()
+                    applies = (
+                        sale_category in {
+                            "all", "*", "all products"
+                        }
+                        or (
+                            sale_category
+                            and product_category == sale_category
+                        )
+                    )
+                    if applies:
+                        flash_discount = (
+                            base_line
+                            * Decimal(
+                                str(active_flash_sale.discount_pct or 0)
+                            )
+                            / Decimal("100")
+                        ).quantize(Decimal("0.01"))
+                        flash_discount = min(
+                            base_line,
+                            max(Decimal("0"), flash_discount),
+                        )
+                        flash_reason = (
+                            f"Special Discount: Flash Sale "
+                            f"{float(active_flash_sale.discount_pct):g}%"
+                        )
+
+                client_has_flash = "flash sale" in (
+                    ((item.discount_reason or "") + " " +
+                     (item.discount_source or "")).lower()
+                )
+
+                effective_discount = client_discount
+                if flash_discount > Decimal("0") and not client_has_flash:
+                    effective_discount = min(
+                        base_line,
+                        client_discount + flash_discount,
+                    )
+                elif client_has_flash:
+                    effective_discount = min(
+                        base_line,
+                        max(client_discount, flash_discount),
+                    )
+
+                special_discount_total += max(
+                    Decimal("0"),
+                    effective_discount,
+                )
+                prepared_line_items.append({
+                    "item": item,
+                    "product": product,
+                    "discount_amount": effective_discount,
+                    "discount_reason": flash_reason
+                        if flash_discount > Decimal("0")
+                        else item.discount_reason,
+                })
+
+            computed_subtotal = sum(
+                (
+                    entry["item"].quantity *
+                    entry["item"].unit_price
+                ) - entry["discount_amount"]
+                for entry in prepared_line_items
+            )
+            computed_subtotal = max(Decimal("0"), computed_subtotal)
+            tolerance = max(
+                Decimal("0.5"),
+                computed_subtotal * Decimal("0.01"),
+            )
             if abs(computed_subtotal - sub_t) > tolerance:
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Invoice total mismatch: line items sum to {computed_subtotal}, "
-                        f"but total_amount - tax = {sub_t}. Please recalculate."
-                    )
+                        f"Invoice total mismatch: discounted line items "
+                        f"sum to {computed_subtotal}, but total_amount - "
+                        f"tax = {sub_t}. Please recalculate."
+                    ),
                 )
 
         # FEATURE (staff sales leaderboard): validate the claimed worker
@@ -549,81 +670,100 @@ def sync_offline_invoice(
             status="SENT",
             payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
             source="OFFLINE_SYNC",
-            notes=sanitize_input(data.notes or "", "notes"),
+            notes=sanitize_input(
+                (
+                    (data.notes or "").strip()
+                    + (
+                        f" | Special Discount: ₹{special_discount_total:.2f}"
+                        if special_discount_total > Decimal("0")
+                        else ""
+                    )
+                ),
+                "notes",
+            ),
             sold_by_worker_id=validated_worker_id,
         )
         db.add(invoice)
         db.flush()
 
         inventory_changes = []
-        if data.line_items and len(data.line_items) > 0:
-            for item in data.line_items:
-                line_total = item.quantity * item.unit_price
-                db_line = InvoiceLineItem(
-                    invoice_id=invoice.id,
-                    product_id=item.product_id,
-                    description=sanitize_input(item.product_name, "product_name"),
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    discount_amount=item.discount_amount,
-                    line_total=line_total,
-                )
-                db.add(db_line)
+        for prepared in prepared_line_items:
+            item = prepared["item"]
+            discount_amount = prepared["discount_amount"]
+            line_total = max(
+                Decimal("0"),
+                (item.quantity * item.unit_price) - discount_amount,
+            )
+            product_id = item.product_id or (
+                prepared["product"].id if prepared["product"] else None
+            )
 
-                if item.product_id:
-                    product = db.query(Product).filter(
-                        Product.id == item.product_id,
-                        Product.user_id == shop_id
-                    ).with_for_update().first()
-                    if product:
-                        current_stock = product.current_stock or Decimal("0")
-                        if current_stock < item.quantity:
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f"Insufficient stock for product {item.product_name}. Available: {current_stock}, Required: {item.quantity}"
-                            )
-                        logger.info(f"Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
-                        product.current_stock = max(Decimal("0"), current_stock - item.quantity)
-                        inventory_changes.append({
-                            "product_id": product.id,
-                            "quantity": float(item.quantity),
-                            "new_stock": float(product.current_stock),
-                        })
-                        mov = StockMovement(
-                            product_id=product.id,
-                            movement_type="OUT",
-                            quantity=item.quantity,
-                            reason="Sales Sync",
-                            reference_id=invoice_number,
-                        )
-                        db.add(mov)
-                        logger.info(f"Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
-                else:
-                    product = db.query(Product).filter(
-                        func.lower(Product.product_name) == item.product_name.lower().strip(),
-                        Product.user_id == shop_id
-                    ).with_for_update().first()
-                    if product:
-                        current_stock = product.current_stock or Decimal("0")
-                        if current_stock < item.quantity:
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Required: {item.quantity}"
-                            )
-                        product.current_stock = max(Decimal("0"), current_stock - item.quantity)
-                        inventory_changes.append({
-                            "product_id": product.id,
-                            "quantity": float(item.quantity),
-                            "new_stock": float(product.current_stock),
-                        })
-                        mov = StockMovement(
-                            product_id=product.id,
-                            movement_type="OUT",
-                            quantity=item.quantity,
-                            reason="Sales Sync (by name)",
-                            reference_id=invoice_number,
-                        )
-                        db.add(mov)
+            db_line = InvoiceLineItem(
+                invoice_id=invoice.id,
+                product_id=product_id,
+                description=sanitize_input(item.product_name, "product_name"),
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                discount_amount=discount_amount,
+                line_total=line_total,
+            )
+            db.add(db_line)
+
+            if product_id:
+                product = db.query(Product).filter(
+                    Product.id == product_id,
+                    Product.user_id == shop_id
+                ).with_for_update().first()
+            else:
+                product = db.query(Product).filter(
+                    func.lower(Product.product_name) ==
+                    item.product_name.lower().strip(),
+                    Product.user_id == shop_id
+                ).with_for_update().first()
+
+            if product:
+                current_stock = product.current_stock or Decimal("0")
+                # Offline invoices must never be lost just because the
+                # server's stock is stale or was already decremented locally.
+                # The invoice/sale is the source of truth for the completed sale.
+                # Clamp inventory at zero rather than rejecting the financial
+                # transaction. This makes offline sync idempotent from the
+                # business perspective while still preventing negative stock.
+                available_stock = max(Decimal("0"), current_stock)
+                shortage = max(Decimal("0"), item.quantity - available_stock)
+                deducted = min(item.quantity, available_stock)
+                product.current_stock = available_stock - deducted
+
+                inventory_changes.append({
+                    "product_id": product.id,
+                    "quantity": float(item.quantity),
+                    "deducted_quantity": float(deducted),
+                    "shortage_quantity": float(shortage),
+                    "new_stock": float(product.current_stock),
+                    "forced_sale": bool(shortage > 0),
+                })
+                if shortage > 0:
+                    logger.warning(
+                        "FORCED OFFLINE SALE: product=%s available=%s requested=%s shortage=%s invoice=%s",
+                        item.product_name,
+                        available_stock,
+                        item.quantity,
+                        shortage,
+                        invoice_number,
+                    )
+
+                mov = StockMovement(
+                    product_id=product.id,
+                    movement_type="OUT",
+                    quantity=item.quantity,
+                    reason=(
+                        "Flash Sale Sale"
+                        if prepared["discount_amount"] > 0
+                        else ("Offline Sale - Stock Shortage" if shortage > 0 else "Sales Sync")
+                    ),
+                    reference_id=invoice_number,
+                )
+                db.add(mov)
 
         tx = UniversalTransaction(
             shop_id=shop_id,
@@ -689,12 +829,14 @@ def sync_offline_invoice(
             "due_date": str(invoice.due_date) if invoice.due_date else None,
             "created_at": invoice.created_at.isoformat(),
             "message": "Invoice synced and inventory deducted.",
+            "special_discount_total": float(special_discount_total),
             "line_items": [
                 {
                     "product_id": li.product_id,
                     "product_name": li.description,
                     "quantity": float(li.quantity),
                     "unit_price": float(li.unit_price),
+                    "discount_amount": float(li.discount_amount or 0),
                     "total": float(li.line_total),
                 }
                 for li in line_items_out
@@ -756,6 +898,57 @@ def get_invoices(
     return query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
 
 
+@router.get("/next-bill-number")
+def get_next_bill_number(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    """
+    Return the highest customer-facing BILL-NNNN sequence currently stored for
+    this shop. The phone keeps the next number locally, but the server history
+    is authoritative when local app data has been cleared.
+    """
+    shop_id = resolve_shop_id(current_user)
+
+    # Do not load every invoice into Python for a simple sequence lookup.
+    # The previous implementation scanned the complete invoice table on every
+    # sale, which became increasingly expensive as the shop history grew.
+    # SUBSTR is supported by PostgreSQL and SQLite and lets the database do the
+    # aggregation in one query.
+    highest = (
+        db.query(
+            func.max(
+                cast(
+                    func.substr(Invoice.invoice_number, 6),
+                    # SQLAlchemy maps this to the database integer type.
+                    # Non-BILL invoice numbers are excluded by the filter.
+                    Integer,
+                )
+            )
+        )
+        .filter(
+            Invoice.user_id == shop_id,
+            Invoice.invoice_number.ilike("BILL-%"),
+        )
+        .scalar()
+        or 0
+    )
+
+    total_invoices = (
+        db.query(func.count(Invoice.id))
+        .filter(Invoice.user_id == shop_id)
+        .scalar()
+        or 0
+    )
+
+    return {
+        "shop_id": shop_id,
+        "highest_bill_number": int(highest),
+        "next_bill_number": f"BILL-{int(highest) + 1:04d}",
+        "total_invoices": int(total_invoices),
+    }
+
+
 @router.post("/create")
 def create_invoice(
     data: InvoiceSyncCreate,
@@ -801,17 +994,119 @@ def create_invoice(
 
     sub_t2 = Decimal(str(data.total_amount)) - Decimal(str(data.tax))
 
-    if data.line_items and len(data.line_items) > 0:
-        computed_subtotal = sum(
-            item.quantity * item.unit_price
-            for item in data.line_items
+    # Resolve the currently active shop Flash Sale once per invoice. The
+    # backend is authoritative: a client cannot accidentally omit a live
+    # discount just because its local cache is stale.
+    now_utc = datetime.utcnow()
+    active_flash_sale = (
+        db.query(FlashSale)
+        .filter(
+            FlashSale.user_id == shop_id,
+            FlashSale.is_active == True,
+            FlashSale.end_time > now_utc,
         )
+        .order_by(FlashSale.start_time.desc())
+        .first()
+    )
+
+    prepared_line_items = []
+    special_discount_total = Decimal("0")
+
+    if data.line_items and len(data.line_items) > 0:
+        for item in data.line_items:
+            base_line = Decimal(str(item.quantity)) * Decimal(str(item.unit_price))
+            client_discount = min(
+                base_line,
+                max(Decimal("0"), Decimal(str(item.discount_amount or 0))),
+            )
+
+            flash_discount = Decimal("0")
+            flash_reason = ""
+            product = None
+
+            if item.product_id:
+                product = (
+                    db.query(Product)
+                    .filter(
+                        Product.id == item.product_id,
+                        Product.user_id == shop_id,
+                    )
+                    .first()
+                )
+            if product is None:
+                product = (
+                    db.query(Product)
+                    .filter(
+                        func.lower(Product.product_name) == item.product_name.lower().strip(),
+                        Product.user_id == shop_id,
+                    )
+                    .first()
+                )
+
+            if active_flash_sale and product:
+                sale_category = (active_flash_sale.category or "").strip().lower()
+                product_category = (getattr(product, "category", None) or "").strip().lower()
+                sale_applies = (
+                    sale_category in {"all", "*", "all products"} or
+                    (sale_category and product_category == sale_category)
+                )
+
+                if sale_applies:
+                    flash_discount = (
+                        base_line *
+                        Decimal(str(active_flash_sale.discount_pct or 0)) /
+                        Decimal("100")
+                    ).quantize(Decimal("0.01"))
+                    flash_discount = min(base_line, max(Decimal("0"), flash_discount))
+                    flash_reason = (
+                        f"Flash Sale {float(active_flash_sale.discount_pct):g}%"
+                    )
+
+            # If the client already included the verified Flash Sale discount,
+            # don't double-apply it. Otherwise the server adds the live one.
+            client_has_flash = "flash sale" in (
+                (item.discount_reason or "") + " " + (item.discount_source or "")
+            ).lower()
+
+            effective_discount = client_discount
+            if flash_discount > Decimal("0") and not client_has_flash:
+                effective_discount = min(
+                    base_line,
+                    client_discount + flash_discount,
+                )
+            elif client_has_flash:
+                effective_discount = min(
+                    base_line,
+                    max(client_discount, flash_discount),
+                )
+
+            special_discount_total += max(Decimal("0"), effective_discount)
+            prepared_line_items.append(
+                {
+                    "item": item,
+                    "product": product,
+                    "discount_amount": effective_discount,
+                    "discount_reason": (
+                        flash_reason
+                        if flash_discount > Decimal("0")
+                        else item.discount_reason
+                    ) or None,
+                }
+            )
+
+        computed_subtotal = sum(
+            (entry["item"].quantity * entry["item"].unit_price)
+            - entry["discount_amount"]
+            for entry in prepared_line_items
+        )
+        computed_subtotal = max(Decimal("0"), computed_subtotal)
+
         tolerance = max(Decimal("0.5"), computed_subtotal * Decimal("0.01"))
         if abs(computed_subtotal - sub_t2) > tolerance:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Invoice total mismatch: line items sum to {computed_subtotal}, "
+                    f"Invoice total mismatch: discounted line items sum to {computed_subtotal}, "
                     f"but total_amount - tax = {sub_t2}. Please recalculate."
                 )
             )
@@ -831,52 +1126,87 @@ def create_invoice(
         status="SENT",
         payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
         source="MANUAL_ENTRY",
-        notes=sanitize_input(data.notes or "", "notes"),
+        notes=sanitize_input(
+            (
+                (data.notes or "").strip()
+                + (
+                    f" | Special Discount: ₹{special_discount_total:.2f}"
+                    if special_discount_total > Decimal("0")
+                    else ""
+                )
+            ),
+            "notes",
+        ),
     )
     db.add(invoice)
     db.flush()
 
-    if data.line_items and len(data.line_items) > 0:
-        for item in data.line_items:
-            line_total = item.quantity * item.unit_price
+    if prepared_line_items:
+        for prepared in prepared_line_items:
+            item = prepared["item"]
+            discount_amount = prepared["discount_amount"]
+            line_total = max(
+                Decimal("0"),
+                (item.quantity * item.unit_price) - discount_amount,
+            )
             db_line = InvoiceLineItem(
                 invoice_id=invoice.id,
-                product_id=item.product_id,
+                product_id=item.product_id or (
+                    prepared["product"].id if prepared["product"] else None
+                ),
                 description=sanitize_input(item.product_name, "product_name"),
                 quantity=item.quantity,
                 unit_price=item.unit_price,
+                discount_amount=discount_amount,
                 line_total=line_total,
             )
             db.add(db_line)
 
-            if item.product_id:
-                product = db.query(Product).with_for_update().filter(
-                    Product.id == item.product_id,
-                    Product.user_id == shop_id
-                ).first()
+            product_id = item.product_id or (
+                prepared["product"].id if prepared["product"] else None
+            )
+
+            if product_id:
+                product = (
+                    db.query(Product)
+                    .with_for_update()
+                    .filter(
+                        Product.id == product_id,
+                        Product.user_id == shop_id,
+                    )
+                    .first()
+                )
                 if product:
                     current_stock = product.current_stock or Decimal("0")
                     if current_stock < item.quantity:
                         db.rollback()
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Insufficient stock for product ID {product.id}. Available: {current_stock}, Requested: {item.quantity}"
+                            detail=(
+                                f"Insufficient stock for product '{item.product_name}'. "
+                                f"Available: {current_stock}, Requested: {item.quantity}"
+                            ),
                         )
-                    logger.debug(f"🔍 [Backend Create] Deducting {item.quantity} from {item.product_name} (current: {current_stock})")
-                    product.current_stock = max(Decimal("0"), current_stock - item.quantity)
+                    product.current_stock = max(
+                        Decimal("0"),
+                        current_stock - item.quantity,
+                    )
                     mov = StockMovement(
                         product_id=product.id,
                         movement_type="OUT",
                         quantity=item.quantity,
-                        reason="Manual Sale",
+                        reason=(
+                            "Flash Sale Sale"
+                            if prepared["discount_reason"]
+                            else "Manual Sale"
+                        ),
                         reference_id=invoice_number,
                     )
                     db.add(mov)
-                    logger.debug(f"✅ [Backend Create] Stock updated: {item.product_name} ({current_stock} → {product.current_stock})")
             else:
                 product = db.query(Product).with_for_update().filter(
                     func.lower(Product.product_name) == item.product_name.lower().strip(),
-                    Product.user_id == shop_id
+                    Product.user_id == shop_id,
                 ).first()
                 if product:
                     current_stock = product.current_stock or Decimal("0")
@@ -884,17 +1214,28 @@ def create_invoice(
                         db.rollback()
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Insufficient stock for product '{item.product_name}'. Available: {current_stock}, Requested: {item.quantity}"
+                            detail=(
+                                f"Insufficient stock for product '{item.product_name}'. "
+                                f"Available: {current_stock}, Requested: {item.quantity}"
+                            ),
                         )
-                    product.current_stock = max(Decimal("0"), current_stock - item.quantity)
-                    mov = StockMovement(
-                        product_id=product.id,
-                        movement_type="OUT",
-                        quantity=item.quantity,
-                        reason="Manual Sale (by name)",
-                        reference_id=invoice_number,
+                    product.current_stock = max(
+                        Decimal("0"),
+                        current_stock - item.quantity,
                     )
-                    db.add(mov)
+                    db.add(
+                        StockMovement(
+                            product_id=product.id,
+                            movement_type="OUT",
+                            quantity=item.quantity,
+                            reason=(
+                                "Flash Sale Sale"
+                                if prepared["discount_reason"]
+                                else "Manual Sale (by name)"
+                            ),
+                            reference_id=invoice_number,
+                        )
+                    )
 
     tx = UniversalTransaction(
         shop_id=shop_id,
@@ -929,12 +1270,14 @@ def create_invoice(
         "due_date": str(invoice.due_date) if invoice.due_date else None,
         "created_at": invoice.created_at.isoformat(),
         "message": "Invoice created successfully.",
+        "special_discount_total": float(special_discount_total),
         "line_items": [
             {
                 "product_id": li.product_id,
                 "product_name": li.description,
                 "quantity": float(li.quantity),
                 "unit_price": float(li.unit_price),
+                "discount_amount": float(li.discount_amount or 0),
                 "total": float(li.line_total),
             }
             for li in line_items_out

@@ -21,6 +21,7 @@ from models import (
     ShopProfile,
     Product,
     Invoice,
+    InvoiceStatus,
     InvoiceLineItem,
     ShopExpense,
     OnlineOrder,
@@ -33,6 +34,8 @@ from models import (
     OnlineLoyaltyTransaction,
     OnlineDeliveryAssignment,
     AIQueryHistory,
+    UniversalTransaction,
+    sales,
 )
 from audit_logging import AuditLog
 
@@ -64,6 +67,52 @@ def _json_order_items(order: OnlineOrder):
         return value if isinstance(value, list) else []
     except Exception:
         return []
+
+def _reverse_accepted_online_order(db: Session, order: OnlineOrder, shop_id: int, reason: str) -> None:
+    """Reverse stock, sales, invoice and P&L side effects for an accepted order."""
+    items = _json_order_items(order)
+
+    for item in items:
+        product_id = item.get("product_id")
+        quantity = float(item.get("quantity", 0) or 0)
+        if not product_id or quantity <= 0:
+            continue
+        product = db.query(Product).with_for_update().filter(
+            Product.id == int(product_id),
+            Product.user_id == shop_id,
+        ).first()
+        if product:
+            product.current_stock = (product.current_stock or 0) + quantity
+
+    db.query(sales).filter(
+        sales.shopkeeper_id == shop_id,
+        sales.reference_order_id == order.id,
+    ).delete(synchronize_session=False)
+
+    invoice = db.query(Invoice).filter(
+        Invoice.source == "ONLINE_ORDER",
+        Invoice.notes.like(f"%Online Order #{order.id}%"),
+        Invoice.user_id == shop_id,
+    ).first()
+    if invoice:
+        invoice.status = "CANCELLED"
+        invoice.payment_status = "UNPAID"
+        invoice.paid_amount = 0
+
+    reversal_ref = f"ONL-{order.id}-REVERSAL"
+    if not db.query(UniversalTransaction).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.reference_id == reversal_ref,
+    ).first():
+        db.add(UniversalTransaction(
+            shop_id=shop_id,
+            tx_type="EXPENSE",
+            category="SALE_REVERSAL",
+            amount=float(order.total_amount or 0),
+            reference_id=reversal_ref,
+            description=f"{reason}: Online Order #{order.id}",
+            tx_date=datetime.now(),
+        ))
 
 
 def _coupon_value(coupon: RetailCoupon, subtotal: float) -> float:
@@ -151,7 +200,10 @@ def growth_overview(
 ):
     branch = _owner_branch(db, user_id, branch_id)
 
-    invoice_q = db.query(Invoice).filter(Invoice.user_id == user_id)
+    invoice_q = db.query(Invoice).filter(
+        Invoice.user_id == user_id,
+        Invoice.status != InvoiceStatus.CANCELLED,
+    )
     online_q = db.query(OnlineOrder).filter(OnlineOrder.shop_id == user_id)
     expense_q = db.query(ShopExpense).filter(ShopExpense.shop_id == user_id)
     product_q = db.query(Product).filter(Product.user_id == user_id)
@@ -176,7 +228,12 @@ def growth_overview(
         expense_q.filter(ShopExpense.expense_date >= month_start)
         .with_entities(func.coalesce(func.sum(ShopExpense.amount), 0)).scalar() or 0
     )
-    online_orders = online_q.count()
+    active_online_filter = OnlineOrder.order_status.notin_([
+        OnlineOrderStatus.CANCELLED,
+        OnlineOrderStatus.RETURNED,
+        OnlineOrderStatus.REJECTED,
+    ])
+    online_orders = online_q.filter(active_online_filter).count()
     pending_online = online_q.filter(OnlineOrder.order_status == OnlineOrderStatus.PENDING).count()
     low_stock = product_q.filter(Product.current_stock <= Product.min_stock).count()
     active_coupons = db.query(RetailCoupon).filter(
@@ -235,6 +292,7 @@ def growth_analytics(
     ).filter(
         Invoice.user_id == user_id,
         Invoice.created_at >= since,
+        Invoice.status != InvoiceStatus.CANCELLED,
     )
     if branch:
         invoice_q = invoice_q.filter(Invoice.branch_id == branch.id)
@@ -255,6 +313,11 @@ def growth_analytics(
     ).filter(
         OnlineOrder.shop_id == user_id,
         OnlineOrder.created_at >= since,
+        OnlineOrder.order_status.notin_([
+            OnlineOrderStatus.CANCELLED,
+            OnlineOrderStatus.RETURNED,
+            OnlineOrderStatus.REJECTED,
+        ]),
     )
     if branch:
         online_q = online_q.filter(OnlineOrder.branch_id == branch.id)
@@ -272,6 +335,7 @@ def growth_analytics(
         .filter(
             Product.user_id == user_id,
             Invoice.created_at >= since,
+            Invoice.status != InvoiceStatus.CANCELLED,
         )
         .group_by(Product.id, Product.product_name)
         .order_by(desc("revenue"))
@@ -334,6 +398,11 @@ def reorder_suggestions(
         for order in db.query(OnlineOrder).filter(
             OnlineOrder.shop_id == user_id,
             OnlineOrder.created_at >= since,
+            OnlineOrder.order_status.notin_([
+                OnlineOrderStatus.CANCELLED,
+                OnlineOrderStatus.RETURNED,
+                OnlineOrderStatus.REJECTED,
+            ]),
         ).all():
             for item in _json_order_items(order):
                 if int(item.get("product_id", 0)) == product.id:
@@ -627,19 +696,30 @@ def owner_returns(
     if status:
         q = q.filter(OnlineOrderReturn.status == status.upper())
     rows = q.order_by(desc(OnlineOrderReturn.created_at)).all()
-    return {"returns": [
-        {
+    result = []
+    for r in rows:
+        order = db.query(OnlineOrder).filter(OnlineOrder.id == r.order_id).first()
+        customer = db.query(OnlineCustomerAuth).filter(
+            OnlineCustomerAuth.id == r.customer_id
+        ).first()
+        result.append({
             "id": r.id,
             "order_id": r.order_id,
             "customer_id": r.customer_id,
+            "customer_name": customer.user_name if customer else "Customer",
+            "customer_phone": customer.phone if customer else "",
             "reason": r.reason,
             "status": r.status,
             "refund_amount": float(r.refund_amount or 0),
             "stock_restored": r.stock_restored,
+            "order_status": order.order_status if order else None,
+            "total_amount": float(order.total_amount or 0) if order else 0,
+            "delivery_address": order.delivery_address if order else "",
+            "items": _json_order_items(order) if order else [],
             "created_at": r.created_at.isoformat() if r.created_at else None,
-        }
-        for r in rows
-    ]}
+            "processed_at": r.processed_at.isoformat() if r.processed_at else None,
+        })
+    return {"returns": result}
 
 
 class ReturnDecision(BaseModel):
@@ -657,37 +737,63 @@ def decide_return(
     ret = db.query(OnlineOrderReturn).filter(
         OnlineOrderReturn.id == return_id,
         OnlineOrderReturn.shop_id == user_id,
-    ).first()
+    ).with_for_update().first()
     if not ret:
         raise HTTPException(status_code=404, detail="Return request not found.")
 
-    if ret.status in {"REFUNDED", "REJECTED"}:
-        raise HTTPException(status_code=409, detail=f"Return is already {ret.status.lower()}.")
+    if ret.status not in {"REQUESTED"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Return request is already {ret.status.lower()}."
+        )
+
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == ret.order_id,
+        OnlineOrder.shop_id == user_id,
+    ).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
 
     if not data.approve:
         ret.status = "REJECTED"
         ret.owner_note = data.note
         ret.processed_at = datetime.now(timezone.utc)
         db.commit()
-        return {"message": "Return rejected.", "status": ret.status}
+        return {
+            "message": "Return rejected.",
+            "status": ret.status,
+            "order_id": order.id,
+            "stock_restored": False,
+        }
 
-    order = db.query(OnlineOrder).filter(OnlineOrder.id == ret.order_id).first()
-    for item in _json_order_items(order):
-        product = db.query(Product).filter(
-            Product.id == int(item.get("product_id", 0)),
-            Product.user_id == user_id,
-        ).first()
-        if product:
-            product.current_stock = (product.current_stock or 0) + float(item.get("quantity", 0) or 0)
+    if order.order_status not in {"DELIVERED"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Only delivered orders can be approved for return."
+        )
+
+    _reverse_accepted_online_order(
+        db,
+        order,
+        user_id,
+        "Customer return accepted",
+    )
+    previous_status = order.order_status
+    order.order_status = OnlineOrderStatus.RETURNED
     ret.stock_restored = True
     ret.status = "REFUND_PENDING"
     ret.owner_note = data.note
     ret.processed_at = datetime.now(timezone.utc)
     db.commit()
+
     return {
-        "message": "Return approved and stock restored. Refund is now pending payment settlement.",
+        "message": "Return approved. Stock restored and online sales reversed. Refund is now pending settlement.",
         "status": ret.status,
+        "order_id": order.id,
+        "order_status": order.order_status,
         "refund_amount": float(ret.refund_amount or 0),
+        "stock_restored": True,
+        "previous_order_status": previous_status,
     }
 
 
