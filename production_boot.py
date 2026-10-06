@@ -8,6 +8,8 @@ Render should start this file after Alembic migrations.
 from datetime import datetime, time
 from decimal import Decimal
 from zoneinfo import ZoneInfo
+import threading
+import time as time_module
 import os
 from pathlib import Path
 
@@ -32,6 +34,85 @@ def _current_shift():
         if start <= now.time() < end:
             return name, now
     return None, now
+
+
+def _auto_checkout_expired_shifts():
+    """Close every open shift whose configured end time has passed.
+
+    This runs on the backend, so the worker's phone does not need to remain
+    open. A late check-in is still closed at the configured shift end rather
+    than being allowed to extend the shift indefinitely.
+    """
+    db = next(get_db())
+    try:
+        now = datetime.now(IST)
+        now_naive = now.replace(tzinfo=None)
+        rows = db.execute(text("""
+            SELECT id, attendance_date, shift, check_in_time
+            FROM attendance_shifts
+            WHERE check_in_time IS NOT NULL
+              AND check_out_time IS NULL
+              AND attendance_date <= :today
+            ORDER BY attendance_date, check_in_time
+        """), {"today": now.date()}).mappings().all()
+
+        updated = 0
+        for row in rows:
+            window = SHIFT_WINDOWS.get(str(row["shift"]).upper())
+            if not window:
+                continue
+
+            shift_end = datetime.combine(row["attendance_date"], window[1])
+            # All configured shifts currently end before midnight. Keep the
+            # comparison explicit so this remains safe if more shifts are added.
+            if shift_end > now_naive:
+                continue
+
+            check_in = row["check_in_time"]
+            checkout = shift_end
+            hours = max(0.0, (checkout - check_in).total_seconds() / 3600)
+            db.execute(text("""
+                UPDATE attendance_shifts
+                SET check_out_time = :check_out_time,
+                    working_hours = :working_hours,
+                    checkout_reason = 'SHIFT_EXPIRED'
+                WHERE id = :id
+                  AND check_out_time IS NULL
+            """), {
+                "check_out_time": checkout,
+                "working_hours": hours,
+                "id": row["id"],
+            })
+            updated += 1
+
+        if updated:
+            db.commit()
+            print(f"[ATTENDANCE] auto-checked out {updated} expired shift(s)", flush=True)
+        else:
+            db.rollback()
+    except Exception as exc:
+        db.rollback()
+        print(f"[ATTENDANCE] auto-checkout pass failed: {exc}", flush=True)
+    finally:
+        db.close()
+
+
+def _start_attendance_auto_checkout():
+    """Run an immediate reconciliation and then check for expired shifts."""
+    _auto_checkout_expired_shifts()
+
+    def loop():
+        while True:
+            time_module.sleep(30)
+            _auto_checkout_expired_shifts()
+
+    thread = threading.Thread(
+        target=loop,
+        name="attendance-auto-checkout",
+        daemon=True,
+    )
+    thread.start()
+    print("[ATTENDANCE] automatic shift checkout worker started", flush=True)
 
 
 def _ensure_online_order_status_enum():
@@ -142,10 +223,15 @@ def _ensure_shift_table():
                 check_out_time TIMESTAMP NULL,
                 status VARCHAR(30) NOT NULL DEFAULT 'PRESENT',
                 working_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
+                checkout_reason VARCHAR(30) NOT NULL DEFAULT 'MANUAL',
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT uq_attendance_shift UNIQUE
                     (employee_id, worker_id, attendance_date, shift)
             )
+        """))
+        db.execute(text("""
+            ALTER TABLE attendance_shifts
+            ADD COLUMN IF NOT EXISTS checkout_reason VARCHAR(30) NOT NULL DEFAULT 'MANUAL'
         """))
         db.commit()
     finally:
@@ -284,6 +370,7 @@ def _patch_routes():
         db.commit()
         return {
             "message": f"{row['shift'].title()} check-out successful",
+            "checkout_reason": "MANUAL",
             "employee_id": actual_employee_id,
             "worker_id": worker_id,
             "shift": row["shift"],
@@ -307,7 +394,7 @@ def _patch_routes():
 
         rows = db.execute(text(
             "SELECT id, employee_id, worker_id, attendance_date, shift, "
-            "check_in_time, check_out_time, status, working_hours "
+            "check_in_time, check_out_time, status, working_hours, checkout_reason "
             "FROM attendance_shifts WHERE " + " AND ".join(clauses) +
             " ORDER BY attendance_date DESC, check_in_time DESC"
         ), params).mappings().all()
@@ -339,5 +426,6 @@ if __name__ == "__main__":
     _ensure_online_delivery_payment_trigger()
     _ensure_shift_table()
     api = _patch_routes()
+    _start_attendance_auto_checkout()
     import uvicorn
     uvicorn.run(api, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
