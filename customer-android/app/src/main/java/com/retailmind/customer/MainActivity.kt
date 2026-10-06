@@ -47,7 +47,7 @@ class MainActivity : AppCompatActivity() {
 
         swipe.addView(webView, LinearLayout.LayoutParams(-1, -1))
         root.addView(swipe, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(errorView, LinearLayout.LayoutParams(-1, 0))
+        root.addView(errorView, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
 
         configureWebView()
