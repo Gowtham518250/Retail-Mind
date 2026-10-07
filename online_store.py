@@ -1895,27 +1895,42 @@ def get_incoming_orders(
     current_user: dict = Depends(owner_only),
 ):
     """Owner: View all incoming online orders for their shop"""
-    shop_id = current_user["user_id"]
-    q = db.query(OnlineOrder).filter(OnlineOrder.shop_id == shop_id)
+    shop_id = int(current_user["user_id"])
+    # The old implementation performed one customer query per order (N+1).
+    # Join customer data in the same query so 50 orders do not become 51 DB
+    # round-trips. Keep the response contract unchanged.
+    q = (
+        db.query(OnlineOrder, OnlineCustomerAuth)
+        .outerjoin(
+            OnlineCustomerAuth,
+            OnlineCustomerAuth.id == OnlineOrder.customer_id,
+        )
+        .filter(OnlineOrder.shop_id == shop_id)
+    )
     if status:
         q = q.filter(OnlineOrder.order_status == status.upper())
-    orders = q.order_by(OnlineOrder.created_at.desc()).offset(skip).limit(limit).all()
 
-    # Build response with customer info joined
-    result = []
-    for o in orders:
-        customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == o.customer_id).first()
-        result.append({
-            "order_id": o.id,
-            "customer_id": o.customer_id,
+    rows = (
+        q.order_by(OnlineOrder.created_at.desc())
+        .offset(max(0, skip))
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+
+    result = [
+        {
+            "order_id": order.id,
+            "customer_id": order.customer_id,
             "customer_name": customer.user_name if customer else "Guest",
             "customer_phone": customer.phone if customer else "",
-            "status": o.order_status,
-            "total_amount": float(o.total_amount),
-            "delivery_address": o.delivery_address,
-            "items": json.loads(o.items_json),
-            "created_at": str(o.created_at),
-        })
+            "status": order.order_status,
+            "total_amount": float(order.total_amount or 0),
+            "delivery_address": order.delivery_address,
+            "items": json.loads(order.items_json or "[]"),
+            "created_at": str(order.created_at),
+        }
+        for order, customer in rows
+    ]
 
     return {
         "orders": result,
