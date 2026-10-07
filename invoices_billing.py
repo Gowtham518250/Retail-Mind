@@ -881,14 +881,21 @@ def get_invoices(
     status: Optional[str] = None,
     payment_status: Optional[str] = None,
     source: Optional[str] = None,
-    skip: int = Query(0),
-    limit: int = Query(100),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
     """Get all invoices for the shop"""
     shop_id = resolve_shop_id(current_user)
-    query = db.query(Invoice).options(joinedload(Invoice.line_items)).filter(Invoice.user_id == shop_id)
+    # Keep invoice list responses bounded. The dashboard only needs a recent
+    # page; fetching the full invoice history repeatedly makes serialization
+    # and joined line-items increasingly expensive.
+    query = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.line_items))
+        .filter(Invoice.user_id == shop_id)
+    )
     if status:
         query = query.filter(Invoice.status == status.upper())
     if payment_status:

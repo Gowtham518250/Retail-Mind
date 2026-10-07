@@ -348,12 +348,14 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/askquery/history")
 def get_query_history(
-    limit: int = 100,
+    limit: int = 30,
     offset: int = 0,
     db: Session = Depends(get_db),
     user_id: int = Depends(check_current_user),
 ):
-    limit = max(1, min(limit, 500))
+    # History is paginated by default; the dashboard should not pull hundreds
+    # of large AI answers on every load.
+    limit = max(1, min(limit, 100))
     offset = max(0, offset)
 
     base = db.query(AIQueryHistory).filter(
@@ -653,7 +655,9 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
             messages=[{"role": "user", "content": formatted_prompt}],
             temperature=0.1,
-            max_tokens=2048,
+            # Keep generation below the Groq on-demand OTPM limit while still
+            # leaving enough room for a compact SQL response.
+            max_tokens=700,
             top_p=0.9,
             stream=True,
             stop=None,
@@ -671,7 +675,15 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
         print("Groq completion failed:")
         print(f"Exception type: {type(exc).__name__}")
         print(f"Exception: {exc}")
-        raise HTTPException(status_code=502, detail="The SQL generation service is temporarily unavailable.") from exc
+        if type(exc).__name__ == "RateLimitError":
+            raise HTTPException(
+                status_code=429,
+                detail="The AI assistant is temporarily rate-limited. Please try again shortly.",
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail="The SQL generation service is temporarily unavailable.",
+        ) from exc
 
     llm_ms = (time.perf_counter() - llm_started) * 1000
     generated_text = "".join(generated_parts).strip()
