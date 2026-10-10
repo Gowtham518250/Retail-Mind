@@ -7,7 +7,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import Form, HTTPException, Depends, APIRouter
+from fastapi import Form, File, UploadFile, HTTPException, Depends, APIRouter
+import httpx
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -342,8 +343,12 @@ def _fast_business_query(query: str, db: Session, user_id: int):
     }
 
 
-app= APIRouter()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+app = APIRouter()
+# Keep the module importable for route tests and deterministic KPI fast paths
+# when optional LLM credentials are absent. Non-fast-path queries receive a
+# clear 503 instead of failing at import time.
+GROQ_API_KEY = (os.getenv("GROQ_API_KEY") or "").strip()
+client = Groq(api_key=GROQ_API_KEY or "unconfigured-groq-api-key")
 
 
 @app.get("/askquery/history")
@@ -416,6 +421,102 @@ def clear_query_history(
     return {"success": True}
 
 
+# Voice questions use a separate self-hosted open-source model service.
+# The translated English question then goes through this same authenticated
+# RAG/table retrieval + SQL generation and execution route.
+VOICE_LANGUAGE_CODES = {
+    "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
+    "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur", "en",
+}
+VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
+VOICE_AUDIO_SUFFIXES = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
+
+
+@app.post("/askquery/voice")
+async def ask_query_voice(
+    audio: UploadFile = File(...),
+    language_code: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    language_code = language_code.strip().lower()
+    if language_code not in VOICE_LANGUAGE_CODES:
+        raise HTTPException(status_code=422, detail="Unsupported voice language.")
+
+    service_url = (os.getenv("INDIC_SPEECH_SERVICE_URL") or "").strip().rstrip("/")
+    service_key = (os.getenv("INDIC_SPEECH_SERVICE_API_KEY") or "").strip()
+    if not service_url or not service_key:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Open-source voice service is not configured. Set "
+                "INDIC_SPEECH_SERVICE_URL and INDIC_SPEECH_SERVICE_API_KEY."
+            ),
+        )
+
+    suffix = Path(audio.filename or "").suffix.lower()
+    content_type = (audio.content_type or "").lower()
+    if not content_type.startswith("audio/") and suffix not in VOICE_AUDIO_SUFFIXES:
+        raise HTTPException(status_code=415, detail="Upload a supported audio recording.")
+
+    content = await audio.read(VOICE_AUDIO_MAX_BYTES + 1)
+    if not content:
+        raise HTTPException(status_code=422, detail="The audio recording is empty.")
+    if len(content) > VOICE_AUDIO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="The audio recording exceeds the 20 MB limit.")
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
+            speech_response = await client.post(
+                f"{service_url}/transcribe-and-translate",
+                headers={"X-Speech-Service-Key": service_key},
+                files={
+                    "audio": (
+                        audio.filename or "voice-query.wav",
+                        content,
+                        content_type if content_type.startswith("audio/") else "audio/wav",
+                    )
+                },
+                data={"language_code": language_code},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Speech processing timed out. Try a shorter recording.")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="The self-hosted speech model is temporarily unreachable.")
+
+    if speech_response.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail="The open-source speech model could not process this recording.",
+        )
+
+    try:
+        speech_data = speech_response.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="The speech model returned an invalid response.")
+
+    transcript = str(speech_data.get("transcript") or "").strip()
+    english_query = str(
+        speech_data.get("english_query") or speech_data.get("translated_query") or ""
+    ).strip()
+    if not transcript or not english_query:
+        raise HTTPException(status_code=422, detail="No clear English question was produced. Please try again.")
+
+    # This delegates to the exact existing SQL/RAG pipeline with the same DB
+    # session and authenticated owner. No second SQL execution path is created.
+    result = await ask_query(query=english_query, db=db, user_id=user_id)
+    result["voice"] = {
+        "language_code": language_code,
+        "transcript": transcript,
+        "translated_query": english_query,
+        "asr_model": speech_data.get("asr_model", "AI4Bharat IndicConformer"),
+        "translation_model": speech_data.get("translation_model", "AI4Bharat IndicTrans2"),
+    }
+    result["original_query"] = transcript
+    result["query"] = english_query
+    return result
+
+
 @app.post("/askquery")
 async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=Depends(check_current_user)):
     started = time.perf_counter()
@@ -444,6 +545,12 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             "row_count": len(fast_result["results"]),
             "results": fast_result["results"],
         }
+    if not GROQ_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="AI SQL generation is not configured. Set GROQ_API_KEY on the Retail Mind backend.",
+        )
+
     print("🔥 ENDPOINT CALLED")
     print("QUERY ENGINE VERSION:", QUERY_ENGINE_VERSION)
     print("QUERY:", query)
