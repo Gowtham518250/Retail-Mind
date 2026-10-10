@@ -72,8 +72,13 @@ def append_sync_event(db: Session, event: Dict[str, Any]) -> Dict[str, Any]:
     # customer clock is committed with the order transaction, so one customer
     # can recover events across multiple shops without mixing shop cursors.
     customer_id = 0
+    # Only online-order lifecycle events use OnlineCustomerAuth IDs. Invoice
+    # events may carry a different CRM Customer.id; forwarding those into this
+    # feed could expose unrelated business/customer data across identity spaces.
+    customer_visible_types = {"order.created", "order.status_changed"}
     try:
-        customer_id = int(payload.get("customer_id") or 0)
+        if event_type in customer_visible_types:
+            customer_id = int(payload.get("customer_id") or 0)
     except (TypeError, ValueError):
         customer_id = 0
 
