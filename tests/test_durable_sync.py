@@ -70,8 +70,17 @@ def test_customer_change_feed_has_independent_cursors_across_shops():
             "customer_id": 99,
             "order_id": 300,
         })
+        # Invoice customer IDs belong to the CRM Customer table, not the
+        # OnlineCustomerAuth identity namespace, and must not enter this feed.
+        invoice_event = append_sync_event(db, {
+            "type": "invoice.created",
+            "shop_id": 8,
+            "customer_id": 42,
+            "invoice_id": 900,
+        })
         db.commit()
 
+        assert "customer_seq" not in invoice_event
         assert first["customer_seq"] == 1
         assert second["customer_seq"] == 2
         assert other_customer["customer_seq"] == 1
