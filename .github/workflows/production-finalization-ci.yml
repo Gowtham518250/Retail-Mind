@@ -57,6 +57,7 @@ jobs:
         run: |
           pytest -q tests/test_realtime.py
           pytest -q tests/test_durable_sync.py
+          pytest -q tests/test_ai_query_history_contract.py
           pytest -q tests/test_customer_otp_password_reset.py
           pytest -q tests/test_growth_suite.py
           pytest -q tests/test_voice_query_contract.py
