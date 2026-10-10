@@ -7,7 +7,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import Form, HTTPException, Depends, APIRouter
+from fastapi import Form, File, UploadFile, HTTPException, Depends, APIRouter
+import httpx
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -412,6 +413,112 @@ def clear_query_history(
     )
     db.commit()
     return {"success": True}
+
+
+
+# Voice questions are transcribed and translated by the separate open-source
+# speech service. The translated English question then uses the exact same
+# table-retrieval + SQL generation path as typed questions.
+VOICE_LANGUAGE_CODES = {
+    "as", "bn", "br", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
+    "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur", "en",
+}
+VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
+
+
+@app.post("/askquery/voice")
+async def ask_query_voice(
+    audio: UploadFile = File(...),
+    language_code: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    language_code = language_code.strip().lower()
+    if language_code not in VOICE_LANGUAGE_CODES:
+        raise HTTPException(status_code=422, detail="Unsupported voice language.")
+
+    service_url = os.getenv("INDIC_SPEECH_SERVICE_URL", "").strip().rstrip("/")
+    service_key = os.getenv("INDIC_SPEECH_SERVICE_API_KEY", "").strip()
+    if not service_url or not service_key:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Open-source voice service is not configured. Set "
+                "INDIC_SPEECH_SERVICE_URL and INDIC_SPEECH_SERVICE_API_KEY "
+                "for the self-hosted Indic speech service."
+            ),
+        )
+
+    if not (audio.content_type or "").lower().startswith("audio/"):
+        raise HTTPException(status_code=415, detail="Upload a supported audio recording.")
+
+    content = await audio.read(VOICE_AUDIO_MAX_BYTES + 1)
+    if not content:
+        raise HTTPException(status_code=422, detail="The audio recording is empty.")
+    if len(content) > VOICE_AUDIO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="The audio recording is too large. Keep it under 60 seconds.")
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(180.0, connect=10.0)
+        ) as client:
+            speech_response = await client.post(
+                f"{service_url}/transcribe-and-translate",
+                headers={"X-Speech-Service-Key": service_key},
+                files={
+                    "audio": (
+                        audio.filename or "voice-query.wav",
+                        content,
+                        audio.content_type or "audio/wav",
+                    )
+                },
+                data={"language_code": language_code},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="The speech model took too long. Try a shorter recording or retry.",
+        )
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=502,
+            detail="The self-hosted speech model is temporarily unreachable.",
+        )
+
+    if speech_response.status_code != 200:
+        # Keep model internals and local filesystem paths out of client errors.
+        raise HTTPException(
+            status_code=502,
+            detail="The open-source speech model could not process this recording.",
+        )
+
+    try:
+        speech_data = speech_response.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="The speech model returned an invalid response.")
+
+    transcript = str(speech_data.get("transcript") or "").strip()
+    english_query = str(
+        speech_data.get("english_query") or speech_data.get("translated_query") or ""
+    ).strip()
+    if not transcript or not english_query:
+        raise HTTPException(
+            status_code=422,
+            detail="No clear English question was produced. Speak slowly and try again.",
+        )
+
+    # Critical: use the existing authenticated endpoint pipeline, so spoken
+    # and typed English questions retrieve the same top table context and share
+    # the same SQL generation, safety checks, and query-history behavior.
+    result = await ask_query(query=english_query, db=db, user_id=user_id)
+    result["voice"] = {
+        "language_code": language_code,
+        "transcript": transcript,
+        "translated_query": english_query,
+    }
+    result["original_query"] = transcript
+    result["query"] = english_query
+    return result
 
 
 @app.post("/askquery")
