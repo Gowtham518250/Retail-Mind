@@ -9,6 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import Form, File, UploadFile, HTTPException, Depends, APIRouter
+from fastapi.concurrency import run_in_threadpool
 import httpx
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
@@ -898,30 +899,57 @@ def _translate_query_to_english(query: str, language_code: str) -> str:
 
 VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
 VOICE_AUDIO_SUFFIXES = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3")
+# Whisper's API language parameter is ISO-639-1. Three-letter picker codes are
+# deliberately left out so Whisper can detect those languages automatically.
+GROQ_STT_LANGUAGE_CODES = {
+    "as", "bn", "en", "gu", "hi", "kn", "ks", "ml", "mr", "ne",
+    "or", "pa", "sd", "ta", "te", "ur",
+}
 
 
-@app.post("/askquery/voice")
-async def ask_query_voice(
-    audio: UploadFile = File(...),
-    language_code: str = Form(...),
-    db: Session = Depends(get_db),
-    user_id: int = Depends(check_current_user),
-):
-    language_code = language_code.strip().lower()
-    if language_code not in VOICE_LANGUAGE_CODES:
-        raise HTTPException(status_code=422, detail="Unsupported voice language.")
-
-    service_url = (os.getenv("INDIC_SPEECH_SERVICE_URL") or "").strip().rstrip("/")
-    service_key = (os.getenv("INDIC_SPEECH_SERVICE_API_KEY") or "").strip()
-    if not service_url or not service_key:
+def _transcribe_audio_with_groq(
+    audio_bytes: bytes,
+    filename: str,
+    content_type: str,
+    language_code: str,
+) -> str:
+    """Use Groq Whisper to convert uploaded audio into text in the spoken language."""
+    if not GROQ_API_KEY:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "Open-source voice service is not configured. Set "
-                "INDIC_SPEECH_SERVICE_URL and INDIC_SPEECH_SERVICE_API_KEY."
-            ),
+            detail="Speech recognition is not configured. Set GROQ_API_KEY on the Retail Mind backend.",
         )
+    kwargs = {
+        "file": (filename, audio_bytes, content_type or "audio/wav"),
+        "model": GROQ_STT_MODEL,
+        "response_format": "json",
+        "temperature": 0.0,
+    }
+    if language_code in GROQ_STT_LANGUAGE_CODES:
+        kwargs["language"] = language_code
 
+    try:
+        transcription = client.audio.transcriptions.create(**kwargs)
+    except Exception as exc:
+        # Do not expose provider diagnostics or secrets to callers.
+        print(f"Groq audio transcription failed: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=502,
+            detail="Groq could not transcribe this recording. Try a shorter, clearer recording.",
+        ) from exc
+
+    transcript = str(getattr(transcription, "text", "") or "").strip()
+    if not transcript:
+        raise HTTPException(
+            status_code=422,
+            detail="No clear speech was detected. Please record your question again.",
+        )
+    return transcript
+
+
+async def _read_voice_upload(audio: UploadFile) -> tuple[bytes, str, str]:
+    """Validate and read an audio upload once, with a strict size cap."""
     suffix = Path(audio.filename or "").suffix.lower()
     content_type = (audio.content_type or "").lower()
     if not content_type.startswith("audio/") and suffix not in VOICE_AUDIO_SUFFIXES:
@@ -931,56 +959,87 @@ async def ask_query_voice(
     if not content:
         raise HTTPException(status_code=422, detail="The audio recording is empty.")
     if len(content) > VOICE_AUDIO_MAX_BYTES:
-        raise HTTPException(status_code=413, detail="The audio recording exceeds the 20 MB limit.")
-
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
-            speech_response = await client.post(
-                f"{service_url}/transcribe-and-translate",
-                headers={"X-Speech-Service-Key": service_key},
-                files={
-                    "audio": (
-                        audio.filename or "voice-query.wav",
-                        content,
-                        content_type if content_type.startswith("audio/") else "audio/wav",
-                    )
-                },
-                data={"language_code": language_code},
-            )
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Speech processing timed out. Try a shorter recording.")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="The self-hosted speech model is temporarily unreachable.")
-
-    if speech_response.status_code != 200:
         raise HTTPException(
-            status_code=502,
-            detail="The open-source speech model could not process this recording.",
+            status_code=413,
+            detail="The audio recording exceeds the 20 MB limit.",
         )
+    filename = Path(audio.filename or "voice-query.wav").name
+    media_type = content_type if content_type.startswith("audio/") else "audio/wav"
+    return content, filename, media_type
 
-    try:
-        speech_data = speech_response.json()
-    except ValueError:
-        raise HTTPException(status_code=502, detail="The speech model returned an invalid response.")
 
-    transcript = str(speech_data.get("transcript") or "").strip()
+@app.post("/askquery/transcribe")
+async def transcribe_ask_query_audio(
+    audio: UploadFile = File(...),
+    language_code: str = Form(...),
+    user_id: int = Depends(check_current_user),
+):
+    """Transcribe audio only; the client shows the text before executing its query."""
+    language_code = (language_code or "").strip().lower()
+    if language_code not in VOICE_LANGUAGE_CODES:
+        raise HTTPException(status_code=422, detail="Unsupported voice language.")
+
+    content, filename, media_type = await _read_voice_upload(audio)
+    transcript = await run_in_threadpool(
+        _transcribe_audio_with_groq,
+        content,
+        filename,
+        media_type,
+        language_code,
+    )
+    return {
+        "transcript": transcript,
+        "language_code": language_code,
+        "asr_model": GROQ_STT_MODEL,
+        "provider": "Groq",
+    }
+
+
+@app.post("/askquery/voice")
+async def ask_query_voice(
+    audio: UploadFile = File(...),
+    language_code: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    """Backward-compatible one-shot voice query using Groq STT + Groq text translation."""
+    language_code = (language_code or "").strip().lower()
+    if language_code not in VOICE_LANGUAGE_CODES:
+        raise HTTPException(status_code=422, detail="Unsupported voice language.")
+
+    content, filename, media_type = await _read_voice_upload(audio)
+    transcript = await run_in_threadpool(
+        _transcribe_audio_with_groq,
+        content,
+        filename,
+        media_type,
+        language_code,
+    )
+
+    # Reuse the ordinary query path: it translates this transcript with the
+    # existing Groq text model and then executes the same guarded RAG/SQL query.
+    result = await ask_query(
+        query=transcript,
+        language_code=language_code,
+        db=db,
+        user_id=user_id,
+    )
     english_query = str(
-        speech_data.get("english_query") or speech_data.get("translated_query") or ""
+        result.get("translated_query") or result.get("query") or transcript
     ).strip()
-    if not transcript or not english_query:
-        raise HTTPException(status_code=422, detail="No clear English question was produced. Please try again.")
-
-    # This delegates to the exact existing SQL/RAG pipeline with the same DB
-    # session and authenticated owner. No second SQL execution path is created.
-    result = await ask_query(query=english_query, language_code="en", db=db, user_id=user_id)
     result["voice"] = {
         "language_code": language_code,
         "transcript": transcript,
         "translated_query": english_query,
-        "asr_model": speech_data.get("asr_model", "AI4Bharat IndicConformer"),
-        "translation_model": speech_data.get("translation_model", "AI4Bharat IndicTrans2"),
+        "asr_model": GROQ_STT_MODEL,
+        "translation_model": (
+            os.getenv("GROQ_TRANSLATION_MODEL")
+            or os.getenv("GROQ_MODEL")
+            or "qwen/qwen3.8-27b"
+        ),
     }
     result["original_query"] = transcript
+    result["translated_query"] = english_query
     result["query"] = english_query
     return result
 
