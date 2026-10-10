@@ -2,10 +2,10 @@ def test_voice_query_route_is_registered_and_has_full_language_set():
     from query_retrival import VOICE_LANGUAGE_CODES, app
 
     routes = {
-        (getattr(route, "path", ""), getattr(route, "methods", set()))
+        (getattr(route, "path", ""), frozenset(getattr(route, "methods", set())))
         for route in app.routes
     }
-    assert ("/askquery/voice", {"POST"}) in routes
+    assert ("/askquery/voice", frozenset({"POST"})) in routes
     assert "en" in VOICE_LANGUAGE_CODES
     # 22 scheduled Indian languages plus English.
     assert len(VOICE_LANGUAGE_CODES) == 23
