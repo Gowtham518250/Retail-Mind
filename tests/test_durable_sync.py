@@ -1,12 +1,14 @@
 import os
 
+import pytest
+
 os.environ.setdefault("SECRET_KEY", "ci-durable-sync-test-secret-key-1234567890")
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from db import Base
-from durable_sync import append_sync_event
+from durable_sync import append_sync_event, get_my_sync_changes
 from models import CustomerSyncClock, CustomerSyncEvent, SyncClock, SyncEvent
 
 
@@ -78,5 +80,44 @@ def test_customer_change_feed_has_independent_cursors_across_shops():
         assert db.query(CustomerSyncEvent).filter(
             CustomerSyncEvent.customer_id == 42
         ).count() == 2
+    finally:
+        db.close()
+
+
+def test_customer_changes_are_scoped_to_authenticated_customer():
+    db = _session()
+    try:
+        append_sync_event(db, {
+            "type": "order.created",
+            "shop_id": 7,
+            "customer_id": 42,
+            "order_id": 100,
+        })
+        append_sync_event(db, {
+            "type": "order.created",
+            "shop_id": 7,
+            "customer_id": 99,
+            "order_id": 200,
+        })
+        db.commit()
+
+        response = get_my_sync_changes(
+            after=0,
+            limit=100,
+            current_user={"role": "CUSTOMER", "user_id": 42},
+            db=db,
+        )
+        assert response["high_watermark"] == 1
+        assert len(response["events"]) == 1
+        assert response["events"][0]["order_id"] == 100
+
+        with pytest.raises(Exception) as error:
+            get_my_sync_changes(
+                after=0,
+                limit=100,
+                current_user={"role": "OWNER", "user_id": 7},
+                db=db,
+            )
+        assert getattr(error.value, "status_code", None) == 403
     finally:
         db.close()
