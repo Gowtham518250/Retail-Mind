@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 app = FastAPI(title="Retail Mind Open-source Indic Voice Service", version="1.0.0")
 
@@ -32,7 +33,7 @@ DEVICE_OVERRIDE = os.getenv("VOICE_MODEL_DEVICE", "").strip()
 INDIC_LANGUAGE_MAP: dict[str, tuple[str, str]] = {
     "as": ("as", "asm_Beng"),
     "bn": ("bn", "ben_Beng"),
-    "brx": ("brx", "brx_Deva"),
+    "brx": ("br", "brx_Deva"),
     "doi": ("doi", "doi_Deva"),
     "gu": ("gu", "guj_Gujr"),
     "hi": ("hi", "hin_Deva"),
@@ -239,16 +240,18 @@ async def transcribe_and_translate(
             tmp_path = tmp.name
 
         if code == "en":
-            transcript = _transcribe_english(tmp_path)
+            transcript = await run_in_threadpool(_transcribe_english, tmp_path)
             english_query = transcript
         else:
-            transcript = _transcribe_indic(tmp_path, code)
+            # Keep heavyweight model loading/inference off FastAPI's event loop,
+            # so health checks and other requests remain responsive.
+            transcript = await run_in_threadpool(_transcribe_indic, tmp_path, code)
             if not transcript:
                 raise HTTPException(
                     status_code=422,
                     detail="No clear speech was detected. Please record your question again.",
                 )
-            english_query = _translate_to_english(transcript, code)
+            english_query = await run_in_threadpool(_translate_to_english, transcript, code)
 
         if not english_query:
             raise HTTPException(
