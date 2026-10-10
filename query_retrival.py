@@ -897,6 +897,78 @@ def _translate_query_to_english(query: str, language_code: str) -> str:
     return translated
 
 
+def _translate_answer_to_language(answer: str, language_code: str) -> str:
+    """Translate an AI query answer for speech while preserving business facts."""
+    answer = (answer or "").strip()
+    if not answer:
+        raise HTTPException(status_code=422, detail="There is no answer to translate.")
+    if language_code == "en":
+        return answer
+    if not GROQ_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="AI translation is not configured. Set GROQ_API_KEY on the Retail Mind backend.",
+        )
+
+    target_language = QUERY_LANGUAGE_NAMES.get(language_code)
+    if not target_language:
+        raise HTTPException(status_code=422, detail="Unsupported answer language.")
+
+    translation_model = (
+        os.getenv("GROQ_TRANSLATION_MODEL")
+        or os.getenv("GROQ_MODEL")
+        or "qwen/qwen3.8-27b"
+    )
+    try:
+        completion = client.chat.completions.create(
+            model=translation_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"Translate the assistant's retail/business answer into natural {target_language}. "
+                        "Return only the translation, with no preamble, commentary, or explanation. "
+                        "Preserve all numbers, dates, amounts, currency symbols, quantities, product names, "
+                        "customer names, invoice numbers, IDs, and business-specific facts exactly. "
+                        "Do not add facts, change values, summarize, or answer a different question. "
+                        "Keep any tabular/structured labels understandable in the target language."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Target language: {target_language}\nAnswer to translate:\n{answer}",
+                },
+            ],
+            temperature=0.0,
+            max_tokens=700,
+            stream=False,
+        )
+        translated = (
+            completion.choices[0].message.content
+            if completion.choices
+            else ""
+        )
+        translated = str(translated or "").strip()
+    except Exception as exc:
+        print(f"LLM answer translation failed: {type(exc).__name__}: {exc}")
+        if type(exc).__name__ == "RateLimitError":
+            raise HTTPException(
+                status_code=429,
+                detail="The AI assistant is temporarily rate-limited. Please try again shortly.",
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not translate the answer to {target_language}. Please try again.",
+        ) from exc
+
+    if not translated:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No {target_language} answer was produced. Please try again.",
+        )
+    return translated
+
+
 VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
 VOICE_AUDIO_SUFFIXES = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
 GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3")
@@ -992,6 +1064,35 @@ async def transcribe_ask_query_audio(
         "language_code": language_code,
         "asr_model": GROQ_STT_MODEL,
         "provider": "Groq",
+    }
+
+
+@app.post("/askquery/translate-answer")
+async def translate_ask_query_answer(
+    text_to_translate: str = Form(..., alias="text"),
+    language_code: str = Form(...),
+    user_id: int = Depends(check_current_user),
+):
+    """Translate an existing answer for spoken playback in the selected language."""
+    language_code = (language_code or "").strip().lower()
+    if language_code not in VOICE_LANGUAGE_CODES:
+        raise HTTPException(status_code=422, detail="Unsupported answer language.")
+    if not text_to_translate.strip():
+        raise HTTPException(status_code=422, detail="There is no answer to translate.")
+
+    translated_text = await run_in_threadpool(
+        _translate_answer_to_language,
+        text_to_translate,
+        language_code,
+    )
+    return {
+        "translated_text": translated_text,
+        "language_code": language_code,
+        "translation_model": (
+            os.getenv("GROQ_TRANSLATION_MODEL")
+            or os.getenv("GROQ_MODEL")
+            or "qwen/qwen3.8-27b"
+        ),
     }
 
 
