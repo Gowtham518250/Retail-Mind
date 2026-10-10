@@ -253,6 +253,8 @@ def _make_query_plan(query: str, history: list[dict]) -> dict:
             temperature=0, max_tokens=220, stream=False,
         )
         raw = str(completion.choices[0].message.content or "").strip()
+        if "{" in raw and "}" in raw:
+            raw = raw[raw.find("{"):raw.rfind("}") + 1]
         plan = json.loads(raw)
         intents = {"aggregate", "list", "comparison", "trend", "general"}
         metrics = {"sales_amount", "sales_count", "units_sold", "expenses", "profit", "stock", "customers", "attendance", "payments", "other"}
