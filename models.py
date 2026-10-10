@@ -1410,3 +1410,27 @@ class SyncEvent(Base):
     __table_args__ = (
         Index("ix_sync_events_shop_type_seq", "shop_id", "event_type", "seq"),
     )
+
+
+class CustomerSyncClock(Base):
+    """Per-customer sequence allocator for authenticated order-history recovery."""
+    __tablename__ = "customer_sync_clocks"
+
+    customer_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, nullable=False, default=0, server_default="0")
+
+
+class CustomerSyncEvent(Base):
+    """Customer-visible durable order events; sequence is ordered per customer."""
+    __tablename__ = "customer_sync_events"
+
+    customer_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, primary_key=True, nullable=False)
+    event_id = Column(String(36), nullable=False, unique=True)
+    event_type = Column(String(80), nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_customer_sync_events_customer_type_seq", "customer_id", "event_type", "seq"),
+    )
