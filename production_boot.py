@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import threading
 import json
 import time as time_module
+import uuid
 import os
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from sqlalchemy import text
 
 from db import get_db
 from models import Worker, User
+from durable_sync import append_sync_event
+from realtime import publish_realtime_event
 
 SHIFT_WINDOWS = {
     "MORNING": (time(6, 0), time(12, 0)),
@@ -123,7 +126,7 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             current = current.astimezone(IST).replace(tzinfo=None)
 
         shift_rows = db.execute(text("""
-            SELECT id, attendance_date, shift, check_in_time
+            SELECT id, employee_id, worker_id, attendance_date, shift, check_in_time
             FROM attendance_shifts
             WHERE check_in_time IS NOT NULL
               AND check_out_time IS NULL
@@ -132,6 +135,7 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
         """), {"today": current.date()}).mappings().all()
 
         shift_updates = 0
+        durable_events = []
         for row in shift_rows:
             window = SHIFT_WINDOWS.get(str(row["shift"]).upper())
             if not window:
@@ -162,9 +166,23 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             })
             if getattr(result, "rowcount", 1) != 0:
                 shift_updates += 1
+                durable_events.append(append_sync_event(db, {
+                    "event_id": str(uuid.uuid4()),
+                    "type": "attendance.changed",
+                    "shop_id": int(row["employee_id"]),
+                    "attendance_record_id": int(row["id"]),
+                    "employee_id": int(row["employee_id"]),
+                    "worker_id": row.get("worker_id"),
+                    "attendance_date": str(row["attendance_date"]),
+                    "check_in_time": check_in.isoformat() if hasattr(check_in, "isoformat") else str(check_in),
+                    "check_out_time": shift_end.isoformat(),
+                    "status": "PRESENT",
+                    "change": "auto_checkout",
+                    "checkout_reason": "SHIFT_EXPIRED",
+                }))
 
         legacy_rows = db.execute(text("""
-            SELECT id, attendance_date, check_in_time, notes
+            SELECT id, employee_id, worker_id, attendance_date, check_in_time, notes
             FROM attendance
             WHERE check_in_time IS NOT NULL
               AND check_out_time IS NULL
@@ -197,9 +215,25 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             })
             if getattr(result, "rowcount", 1) != 0:
                 legacy_updates += 1
+                durable_events.append(append_sync_event(db, {
+                    "event_id": str(uuid.uuid4()),
+                    "type": "attendance.changed",
+                    "shop_id": int(row["employee_id"]),
+                    "attendance_record_id": int(row["id"]),
+                    "employee_id": int(row["employee_id"]),
+                    "worker_id": row.get("worker_id"),
+                    "attendance_date": str(row["attendance_date"]),
+                    "check_in_time": row["check_in_time"].isoformat() if hasattr(row["check_in_time"], "isoformat") else str(row["check_in_time"]),
+                    "check_out_time": checkout_at.isoformat(),
+                    "status": "PRESENT",
+                    "change": "auto_checkout",
+                    "checkout_reason": "SHIFT_EXPIRED",
+                }))
 
         if shift_updates or legacy_updates:
             db.commit()
+            for event in durable_events:
+                publish_realtime_event(event)
             print(
                 "[ATTENDANCE] auto-checkout completed: "
                 f"{shift_updates} shift row(s), {legacy_updates} legacy row(s)",
@@ -577,19 +611,35 @@ def _patch_routes():
                 f"{shift.title()} attendance is already active. Please check out first.",
             )
 
-        db.execute(text("""
+        inserted_id = db.execute(text("""
             INSERT INTO attendance_shifts
                 (employee_id, worker_id, attendance_date, shift, check_in_time, status)
             VALUES
                 (:employee_id, :worker_id, :attendance_date, :shift, :check_in_time, 'PRESENT')
+            RETURNING id
         """), {
             "employee_id": actual_employee_id,
             "worker_id": worker_id,
             "attendance_date": today,
             "shift": shift,
             "check_in_time": now.replace(tzinfo=None),
+        }).scalar_one()
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "attendance.changed",
+            "shop_id": int(current_user_id),
+            "attendance_record_id": int(inserted_id),
+            "employee_id": int(actual_employee_id),
+            "worker_id": worker_id,
+            "attendance_date": str(today),
+            "shift": shift,
+            "check_in_time": now.isoformat(),
+            "check_out_time": None,
+            "status": "PRESENT",
+            "change": "check_in",
         })
         db.commit()
+        publish_realtime_event(sync_event)
         return {
             "message": f"{shift.title()} check-in successful",
             "employee_id": actual_employee_id,
@@ -604,7 +654,8 @@ def _patch_routes():
         actual_employee_id, worker_id = _resolve_employee(employee_id, current_user_id, db)
         today = datetime.now(IST).date()
         row = db.execute(text("""
-            SELECT id, shift, check_in_time, check_out_time
+            SELECT id, employee_id, worker_id, attendance_date,
+                   shift, check_in_time, check_out_time
             FROM attendance_shifts
             WHERE employee_id = :employee_id
               AND worker_id IS NOT DISTINCT FROM :worker_id
@@ -634,7 +685,23 @@ def _patch_routes():
                 checkout_reason = 'MANUAL'
             WHERE id = :id AND check_out_time IS NULL
         """), {"check_out_time": now, "working_hours": hours, "id": row["id"]})
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "attendance.changed",
+            "shop_id": int(current_user_id),
+            "attendance_record_id": int(row["id"]),
+            "employee_id": int(actual_employee_id),
+            "worker_id": worker_id,
+            "attendance_date": str(row["attendance_date"]),
+            "shift": row["shift"],
+            "check_in_time": row["check_in_time"].isoformat() if hasattr(row["check_in_time"], "isoformat") else str(row["check_in_time"]),
+            "check_out_time": now.isoformat(),
+            "status": "PRESENT",
+            "change": "check_out",
+            "checkout_reason": "MANUAL",
+        })
         db.commit()
+        publish_realtime_event(sync_event)
         return {
             "message": f"{row['shift'].title()} check-out successful",
             "checkout_reason": "MANUAL",

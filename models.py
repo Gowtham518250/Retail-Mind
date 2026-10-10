@@ -3,7 +3,7 @@ Enhanced Database Models for Hybrid Search RAG
 Includes: Inventory, Attendance, Invoices, Payments, Customers, Notifications, Stock Management
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, date
@@ -1384,3 +1384,29 @@ class FlashSale(Base):
     is_active = Column(Boolean, default=True)
 
 # ==================== END OF MODELS ====================
+
+
+# ==================== DURABLE SYNC CHANGE LOG ====================
+
+class SyncClock(Base):
+    """Per-shop transactionally ordered cursor allocator."""
+    __tablename__ = "sync_clocks"
+
+    shop_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, nullable=False, default=0, server_default="0")
+
+
+class SyncEvent(Base):
+    """Durable event log used to recover notifications missed by Redis/WebSocket."""
+    __tablename__ = "sync_events"
+
+    shop_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, primary_key=True, nullable=False)
+    event_id = Column(String(36), nullable=False, unique=True)
+    event_type = Column(String(80), nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_sync_events_shop_type_seq", "shop_id", "event_type", "seq"),
+    )
