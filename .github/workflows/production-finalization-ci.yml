@@ -59,6 +59,7 @@ jobs:
           pytest -q tests/test_customer_otp_password_reset.py
           pytest -q tests/test_growth_suite.py
           pytest -q tests/test_voice_query_contract.py
+          pytest -q tests/test_attendance_auto_checkout_contract.py
 
   customer-web:
     runs-on: ubuntu-latest
