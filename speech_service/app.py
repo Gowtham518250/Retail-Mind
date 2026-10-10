@@ -32,7 +32,7 @@ DEVICE_OVERRIDE = os.getenv("VOICE_MODEL_DEVICE", "").strip()
 INDIC_LANGUAGE_MAP: dict[str, tuple[str, str]] = {
     "as": ("as", "asm_Beng"),
     "bn": ("bn", "ben_Beng"),
-    "br": ("br", "brx_Deva"),
+    "brx": ("brx", "brx_Deva"),
     "doi": ("doi", "doi_Deva"),
     "gu": ("gu", "guj_Gujr"),
     "hi": ("hi", "hin_Deva"),
