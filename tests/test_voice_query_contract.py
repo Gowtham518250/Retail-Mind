@@ -6,6 +6,7 @@ def test_voice_query_route_is_registered_and_has_full_language_set():
         for route in app.routes
     }
     assert ("/askquery/voice", frozenset({"POST"})) in routes
+    assert ("/askquery/transcribe", frozenset({"POST"})) in routes
     assert "en" in VOICE_LANGUAGE_CODES
     # 22 scheduled Indian languages plus English.
     assert len(VOICE_LANGUAGE_CODES) == 23
@@ -16,14 +17,14 @@ def test_voice_query_route_is_registered_and_has_full_language_set():
     } <= VOICE_LANGUAGE_CODES
 
 
-def test_speech_service_language_mappings_cover_all_22_scheduled_languages():
-    from speech_service.app import INDIC_LANGUAGE_MAP
+def test_groq_whisper_language_handling_covers_selected_voice_codes():
+    from query_retrival import GROQ_STT_LANGUAGE_CODES, VOICE_LANGUAGE_CODES
 
-    assert len(INDIC_LANGUAGE_MAP) == 22
-    assert INDIC_LANGUAGE_MAP["brx"] == ("brx", "brx_Deva")
-    assert INDIC_LANGUAGE_MAP["te"] == ("te", "tel_Telu")
-    assert INDIC_LANGUAGE_MAP["ta"] == ("ta", "tam_Taml")
-    assert INDIC_LANGUAGE_MAP["hi"] == ("hi", "hin_Deva")
+    assert "hi" in GROQ_STT_LANGUAGE_CODES
+    assert "te" in GROQ_STT_LANGUAGE_CODES
+    assert "ta" in GROQ_STT_LANGUAGE_CODES
+    assert "brx" in VOICE_LANGUAGE_CODES
+    assert "brx" not in GROQ_STT_LANGUAGE_CODES  # let Whisper auto-detect three-letter codes
 
 
 def test_text_query_route_accepts_language_and_translate_helper_is_registered():
@@ -78,3 +79,76 @@ def test_translate_query_uses_existing_llm_and_returns_english(monkeypatch):
     assert calls["temperature"] == 0.0
     assert calls["messages"][1]["content"].startswith("Source language: Telugu")
 
+
+
+def test_transcription_only_endpoint_is_registered():
+    from query_retrival import app
+
+    routes = {
+        (getattr(route, "path", ""), frozenset(getattr(route, "methods", set())))
+        for route in app.routes
+    }
+    assert ("/askquery/transcribe", frozenset({"POST"})) in routes
+
+
+def test_groq_audio_transcription_returns_spoken_text(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    calls = {}
+
+    def fake_create(**kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(text="నిన్న నా అమ్మకాలు ఎంత?")
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(
+            audio=SimpleNamespace(
+                transcriptions=SimpleNamespace(create=fake_create),
+            ),
+        ),
+    )
+
+    transcript = query_retrival._transcribe_audio_with_groq(
+        b"test-wave-bytes",
+        "question.wav",
+        "audio/wav",
+        "te",
+    )
+
+    assert transcript == "నిన్న నా అమ్మకాలు ఎంత?"
+    assert calls["model"] == query_retrival.GROQ_STT_MODEL
+    assert calls["language"] == "te"
+    assert calls["response_format"] == "json"
+    assert calls["temperature"] == 0.0
+    assert calls["file"][0] == "question.wav"
+
+
+def test_three_letter_language_uses_whisper_language_detection(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    calls = {}
+
+    def fake_create(**kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(text="recognised words")
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(
+            audio=SimpleNamespace(
+                transcriptions=SimpleNamespace(create=fake_create),
+            ),
+        ),
+    )
+
+    assert query_retrival._transcribe_audio_with_groq(
+        b"test-wave-bytes", "question.wav", "audio/wav", "brx"
+    ) == "recognised words"
+    assert "language" not in calls

@@ -1,5 +1,10 @@
 # Retail Mind open-source Indian voice service
 
+> **Architecture note (2026-10-10):** The current AI Query app uses Groq Whisper through the authenticated backend endpoints `POST /askquery/transcribe` and `POST /askquery/voice`. It then sends the recognized transcript to `POST /askquery`, where the existing Groq text model translates it to English before the RAG/SQL pipeline. The current app flow does **not** require `INDIC_SPEECH_SERVICE_URL` or `INDIC_SPEECH_SERVICE_API_KEY`.
+
+This directory preserves an optional self-hosted open-source Indian-language speech service. It is separate from the default Groq-based AI Query voice flow and should only be deployed if the project intentionally switches back to this architecture.
+
+
 This separate, self-hosted service records one spoken question, transcribes the selected language and translates it into English. The authenticated Retail Mind backend forwards the English question into the existing RAG/table-retrieval + SQL generation flow.
 
 ## Models and licenses
@@ -38,11 +43,7 @@ Run from the Retail-Mind repository root:
 
 Health check: GET http://127.0.0.1:8765/health.
 
-On the Retail Mind API deployment, configure:
-
-- INDIC_SPEECH_SERVICE_URL: private or otherwise secure URL that the API can reach for this service.
-- INDIC_SPEECH_SERVICE_API_KEY: the same shared secret as the speech service.
-- GROQ_API_KEY: required for non-fast-path LLM SQL generation, as before.
+Only if you intentionally enable this optional standalone service, configure the INDIC_SPEECH_SERVICE_URL and INDIC_SPEECH_SERVICE_API_KEY pair on the Retail Mind API and speech service. The default Groq-based AI Query voice flow needs GROQ_API_KEY for transcription and text translation.
 
 Do not expose the speech service directly to the public internet. It is intended to be reached through the authenticated backend proxy. The main hosted API does not automatically run the 600M ASR model or translation model. If you host the speech service on your GPU PC, the backend must have a stable network route to it; localhost in the hosted backend will not reach your PC.
 
