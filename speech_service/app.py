@@ -220,10 +220,12 @@ async def transcribe_and_translate(
     code = language_code.strip().lower()
     if code != "en" and code not in INDIC_LANGUAGE_MAP:
         raise HTTPException(status_code=422, detail="Unsupported language code.")
-    if not (audio.content_type or "").lower().startswith("audio/"):
+    allowed_audio_suffixes = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
+    suffix = Path(audio.filename or "voice-query.wav").suffix.lower() or ".wav"
+    if not (audio.content_type or "").lower().startswith("audio/") and suffix not in allowed_audio_suffixes:
         raise HTTPException(status_code=415, detail="Upload an audio recording.")
 
-    suffix = Path(audio.filename or "voice-query.wav").suffix or ".wav"
+    
     content = await audio.read(MAX_AUDIO_BYTES + 1)
     if not content:
         raise HTTPException(status_code=422, detail="The audio recording is empty.")
