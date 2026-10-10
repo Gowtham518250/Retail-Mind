@@ -449,7 +449,9 @@ async def ask_query_voice(
             ),
         )
 
-    if not (audio.content_type or "").lower().startswith("audio/"):
+    allowed_audio_suffixes = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
+    audio_suffix = os.path.splitext(audio.filename or "")[1].lower()
+    if not (audio.content_type or "").lower().startswith("audio/") and audio_suffix not in allowed_audio_suffixes:
         raise HTTPException(status_code=415, detail="Upload a supported audio recording.")
 
     content = await audio.read(VOICE_AUDIO_MAX_BYTES + 1)
