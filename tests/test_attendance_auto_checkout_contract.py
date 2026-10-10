@@ -104,12 +104,16 @@ def test_legacy_checkout_infers_evening_and_closes_at_midnight():
 def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
     shift_rows = [{
         "id": 17,
+        "employee_id": 10,
+        "worker_id": 22,
         "attendance_date": date(2026, 10, 10),
         "shift": "MORNING",
         "check_in_time": datetime(2026, 10, 10, 9, 0),
     }]
     legacy_rows = [{
         "id": 23,
+        "employee_id": 10,
+        "worker_id": 22,
         "attendance_date": date(2026, 10, 9),
         "check_in_time": datetime(2026, 10, 9, 8, 30),
         "notes": json.dumps({
@@ -129,6 +133,17 @@ def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
         yield fake_db
 
     monkeypatch.setattr(production_boot, "get_db", fake_get_db)
+    durable_events = []
+    monkeypatch.setattr(
+        production_boot,
+        "append_sync_event",
+        lambda db, event: {**event, "sync_seq": len(durable_events) + 1},
+    )
+    monkeypatch.setattr(
+        production_boot,
+        "publish_realtime_event",
+        lambda event: durable_events.append(event) or True,
+    )
     production_boot._auto_checkout_expired_shifts(
         now=datetime(2026, 10, 10, 16, 30, tzinfo=IST),
         log_summary=True,
@@ -137,6 +152,10 @@ def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
     assert fake_db.commits == 1
     assert fake_db.closed
     assert [kind for kind, _ in fake_db.updates] == ["shift", "legacy"]
+    assert len(durable_events) == 2
+    assert all(event["type"] == "attendance.changed" for event in durable_events)
+    assert all(event["change"] == "auto_checkout" for event in durable_events)
+    assert {event["attendance_record_id"] for event in durable_events} == {17, 23}
 
     shift_update = fake_db.updates[0][1]
     assert shift_update["id"] == 17
