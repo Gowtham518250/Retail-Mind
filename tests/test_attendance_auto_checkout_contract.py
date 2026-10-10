@@ -177,3 +177,44 @@ def test_production_boot_patches_routes_registered_on_the_running_app():
         # dependencies must not be dropped while swapping the endpoint handler.
         assert route.dependant.call is route.endpoint
         assert len(route.dependant.dependencies) >= 2
+
+
+
+def test_shift_rows_use_chronological_session_indices_not_shift_names():
+    rows = [
+        {
+            "id": 2,
+            "employee_id": 10,
+            "worker_id": 22,
+            "attendance_date": date(2026, 10, 10),
+            "shift": "AFTERNOON",
+            "check_in_time": datetime(2026, 10, 10, 15, 0),
+            "check_out_time": None,
+            "status": "PRESENT",
+            "working_hours": 0,
+            "checkout_reason": "MANUAL",
+        },
+    ]
+
+    normalized = production_boot._combine_shift_and_legacy_records(rows, [])
+
+    # A first check-in at 15:00 still corresponds to local session index 0.
+    assert len(normalized) == 1
+    assert normalized[0]["session_index"] == 0
+    assert normalized[0]["session_key"] == "afternoon"
+
+    rows.append({
+        "id": 1,
+        "employee_id": 10,
+        "worker_id": 22,
+        "attendance_date": date(2026, 10, 10),
+        "shift": "MORNING",
+        "check_in_time": datetime(2026, 10, 10, 9, 0),
+        "check_out_time": datetime(2026, 10, 10, 12, 0),
+        "status": "PRESENT",
+        "working_hours": 3,
+        "checkout_reason": "SHIFT_EXPIRED",
+    })
+    normalized = production_boot._combine_shift_and_legacy_records(rows, [])
+    by_time = sorted(normalized, key=lambda row: row["check_in_time"])
+    assert [row["session_index"] for row in by_time] == [0, 1]
