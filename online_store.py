@@ -73,6 +73,7 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
 
 logger = logging.getLogger(__name__)
 from realtime import publish_realtime_event
+from durable_sync import append_sync_event
 from audit_logging import AuditAction, AuditService
 
 
@@ -1273,6 +1274,28 @@ def place_order(
     )
     db.add(order)
     try:
+        # Persist the order and its change-feed events atomically. Redis is
+        # only the low-latency signal; /api/sync/changes is the recovery path.
+        db.flush()
+        durable_events = [
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "order.created",
+                "shop_id": data.shop_id,
+                "order_id": order.id,
+                "customer_id": customer_id,
+                "status": "PENDING",
+                "total_amount": float(total_amount),
+            }),
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "inventory.changed",
+                "shop_id": data.shop_id,
+                "reference_type": "ONLINE_ORDER",
+                "reference_id": str(order.id),
+                "changes": inventory_changes,
+            }),
+        ]
         db.commit()
         db.refresh(order)
     except Exception as e:
@@ -1280,23 +1303,8 @@ def place_order(
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "order.created",
-        "shop_id": data.shop_id,
-        "order_id": order.id,
-        "customer_id": customer_id,
-        "status": "PENDING",
-        "total_amount": float(total_amount),
-    })
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "inventory.changed",
-        "shop_id": data.shop_id,
-        "reference_type": "ONLINE_ORDER",
-        "reference_id": str(order.id),
-        "changes": inventory_changes,
-    })
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "message": "Order placed successfully! The shop will confirm shortly.",
@@ -1497,6 +1505,28 @@ def place_guest_order(
     )
     db.add(order)
     try:
+        # Persist the order and its change-feed events atomically. Redis is
+        # only the low-latency signal; /api/sync/changes is the recovery path.
+        db.flush()
+        durable_events = [
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "order.created",
+                "shop_id": data.shop_id,
+                "order_id": order.id,
+                "customer_id": customer_id,
+                "status": "PENDING",
+                "total_amount": float(total_amount),
+            }),
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "inventory.changed",
+                "shop_id": data.shop_id,
+                "reference_type": "ONLINE_ORDER",
+                "reference_id": str(order.id),
+                "changes": inventory_changes,
+            }),
+        ]
         db.commit()
         db.refresh(order)
     except Exception as e:
@@ -1525,23 +1555,8 @@ def place_guest_order(
     except Exception as e:
         logger.error(f"Failed to send FCM notification: {e}")
 
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "order.created",
-        "shop_id": data.shop_id,
-        "order_id": order.id,
-        "customer_id": customer.id,
-        "status": "PENDING",
-        "total_amount": float(total_amount),
-    })
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "inventory.changed",
-        "shop_id": data.shop_id,
-        "reference_type": "ONLINE_ORDER",
-        "reference_id": str(order.id),
-        "changes": inventory_changes,
-    })
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "message": "Guest order placed successfully!",
@@ -1657,21 +1672,23 @@ def cancel_customer_order(
     _reverse_online_order_financials(db, order, shop_id, "Customer cancellation")
 
     order.order_status = "CANCELLED"
-    db.commit()
+    try:
+        durable_event = append_sync_event(db, {
+            "event_id": str(uuid4()),
+            "type": "order.status_changed",
+            "shop_id": shop_id,
+            "order_id": order.id,
+            "customer_id": customer_id,
+            "previous_status": previous_status,
+            "status": "CANCELLED",
+            "total_amount": float(order.total_amount),
+        })
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to cancel order right now.")
 
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "order.status_changed",
-        "shop_id": shop_id,
-        "order_id": order.id,
-        "customer_id": customer_id,
-        "previous_status": previous_status,
-        "status": "CANCELLED",
-        "total_amount": float(order.total_amount),
-        "delivery_address": order.delivery_address,
-        "items": json.loads(order.items_json),
-        "created_at": order.created_at,
-    })
+    publish_realtime_event(durable_event)
 
     return {
         "success": True,
@@ -2253,7 +2270,54 @@ def update_order_status(
                     })
 
     order.order_status = new_status
+    realtime_events = [{
+        "event_id": str(uuid4()),
+        "type": "order.status_changed",
+        "shop_id": shop_id,
+        "order_id": order.id,
+        "customer_id": order.customer_id,
+        "previous_status": previous_status,
+        "status": new_status,
+        "total_amount": float(order.total_amount),
+    }]
+    if linked_invoice is not None and new_status == "DELIVERED":
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "payment.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "amount": float(order.total_amount),
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "payment_status": "PAID",
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "invoice.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "status": "PAID",
+            "payment_status": "PAID",
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "total_amount": float(linked_invoice.total_amount or 0),
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+    if restored_inventory:
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": shop_id,
+            "reference_type": "ONLINE_ORDER_REJECT",
+            "reference_id": str(order.id),
+            "changes": restored_inventory,
+        })
+
     try:
+        durable_events = [append_sync_event(db, event) for event in realtime_events]
         db.commit()
     except Exception as e:
         db.rollback()
@@ -2302,59 +2366,8 @@ def update_order_status(
             audit_error,
         )
 
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "order.status_changed",
-        "shop_id": shop_id,
-        "order_id": order_id,
-        "customer_id": order.customer_id,
-        "previous_status": previous_status,
-        "status": new_status,
-        "total_amount": float(order.total_amount),
-        "delivery_address": order.delivery_address,
-        "items": json.loads(order.items_json),
-        "created_at": order.created_at,
-    })
-
-    if linked_invoice is not None and new_status == "DELIVERED":
-        publish_realtime_event({
-            "event_id": str(uuid4()),
-            "type": "payment.updated",
-            "shop_id": shop_id,
-            "invoice_id": linked_invoice.id,
-            "invoice_number": linked_invoice.invoice_number,
-            "amount": float(order.total_amount),
-            "paid_amount": float(linked_invoice.paid_amount or 0),
-            "payment_status": "PAID",
-            "source": "ONLINE_ORDER_DELIVERY",
-            "reference_id": f"ONL-{order.id}",
-        })
-
-    if linked_invoice is not None and new_status == "DELIVERED":
-        # Notify realtime dashboard clients that the invoice itself changed.
-        publish_realtime_event({
-            "event_id": str(uuid4()),
-            "type": "invoice.updated",
-            "shop_id": shop_id,
-            "invoice_id": linked_invoice.id,
-            "invoice_number": linked_invoice.invoice_number,
-            "status": "PAID",
-            "payment_status": "PAID",
-            "paid_amount": float(linked_invoice.paid_amount or 0),
-            "total_amount": float(linked_invoice.total_amount or 0),
-            "source": "ONLINE_ORDER_DELIVERY",
-            "reference_id": f"ONL-{order.id}",
-        })
-
-    if restored_inventory:
-        publish_realtime_event({
-            "event_id": str(uuid4()),
-            "type": "inventory.changed",
-            "shop_id": shop_id,
-            "reference_type": "ONLINE_ORDER_REJECT",
-            "reference_id": str(order.id),
-            "changes": restored_inventory,
-        })
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "message": f"Order #{order_id} status updated to {new_status}.",
