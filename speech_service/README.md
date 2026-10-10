@@ -12,20 +12,25 @@ After downloading/caching the weights, inference runs locally with no paid infer
 
 ## Setup on a local GPU PC
 
-Use Linux/WSL2 for the NeMo speech dependencies. Install a PyTorch + torchaudio pair suitable for your driver first, then install the AI4Bharat NeMo fork (the official IndicConformer model uses this fork):
+Use Linux/WSL2 for the NeMo speech dependencies. Create and activate the environment first, then install a matching PyTorch + torchaudio pair for your driver before installing the AI4Bharat NeMo fork:
 
 ```bash
+python3.10 -m venv .venv
+source .venv/bin/activate
+
+# Choose the matching CUDA build at https://pytorch.org/get-started/locally/
+pip install torch torchvision torchaudio
+
 git clone https://github.com/AI4Bharat/NeMo.git
 cd NeMo
 git checkout nemo-v2
 bash reinstall.sh
 cd ..
-python -m venv .venv
-source .venv/bin/activate
+
 pip install -r speech_service/requirements.txt
 ```
 
-For Windows PowerShell, activate the equivalent virtual environment in WSL2 before running the Linux setup commands. Install PyTorch and torchaudio from the official PyTorch selector so both use matching versions.
+For Windows, run these Linux-oriented commands inside WSL2. Select compatible CUDA/PyTorch/torchaudio versions for your installed driver; do not install a CPU-only build if you expect GPU inference. If NeMo's installer adjusts dependency versions, install `speech_service/requirements.txt` afterward and verify both imports before serving.
 
 IndicTrans2's Hugging Face model page may require accepting its free model-access conditions while signed in. Create a read-only Hugging Face token and set it as `HF_TOKEN` for the initial download. You do not need a paid plan or inference endpoint.
 
