@@ -294,6 +294,34 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
     except ValueError:
         pass
+    month_numbers = {
+        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+    }
+    month_pattern = "|".join(month_numbers)
+    named = re.search(rf"\b({month_pattern})\s+(\d{{1,2}})(?:,?\s+(20\d{{2}}))?\b", q)
+    if named:
+        try:
+            d = date(int(named.group(3) or today.year), month_numbers[named.group(1)], int(named.group(2)))
+            return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
+        except ValueError:
+            pass
+    if re.search(r"\b(last week|previous week)\b", q):
+        start = today - timedelta(days=today.weekday() + 7)
+        end = start + timedelta(days=6)
+        return {"kind": "range", "start_date": start, "end_date": end, "label": "last week"}
+    if re.search(r"\b(this week|current week)\b", q):
+        start = today - timedelta(days=today.weekday())
+        return {"kind": "range", "start_date": start, "end_date": today, "label": "this week"}
+    if re.search(r"\b(last month|previous month)\b", q):
+        end = today.replace(day=1) - timedelta(days=1)
+        return {"kind": "range", "start_date": end.replace(day=1), "end_date": end, "label": "last month"}
+    if re.search(r"\b(this month|current month)\b", q):
+        return {"kind": "range", "start_date": today.replace(day=1), "end_date": today, "label": "this month"}
+    if re.search(r"\b(last year|previous year)\b", q):
+        return {"kind": "range", "start_date": date(today.year - 1, 1, 1), "end_date": date(today.year - 1, 12, 31), "label": "last year"}
+    if re.search(r"\b(this year|year to date|ytd)\b", q):
+        return {"kind": "range", "start_date": date(today.year, 1, 1), "end_date": today, "label": "this year"}
     found = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
     if len(found) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
         try:
