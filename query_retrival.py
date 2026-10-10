@@ -420,7 +420,7 @@ def clear_query_history(
 # speech service. The translated English question then uses the exact same
 # table-retrieval + SQL generation path as typed questions.
 VOICE_LANGUAGE_CODES = {
-    "as", "bn", "br", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
+    "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
     "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur", "en",
 }
 VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
