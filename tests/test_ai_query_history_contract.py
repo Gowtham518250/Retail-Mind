@@ -6,7 +6,7 @@ def test_ai_query_history_model_and_routes():
     assert hasattr(AIQueryHistory, "answer")
     assert hasattr(AIQueryHistory, "user_id")
 
-    routes = {(getattr(route, "path", ""), getattr(route, "methods", set())) for route in app.routes}
+    routes = {(getattr(route, "path", ""), frozenset(getattr(route, "methods", set()) or set())) for route in app.routes}
     assert any(path == "/askquery/history" and "GET" in methods for path, methods in routes)
     assert any(path == "/askquery/history" and "DELETE" in methods for path, methods in routes)
     assert any(path == "/askquery/history/{history_id}" and "DELETE" in methods for path, methods in routes)
