@@ -343,8 +343,11 @@ def _fast_business_query(query: str, db: Session, user_id: int):
     }
 
 
-app= APIRouter()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+app = APIRouter()
+# Keep module import/test collection independent of an optional provider secret.
+# Requests that need LLM-generated SQL get a deliberate 503 when it is missing.
+GROQ_API_KEY = (os.getenv("GROQ_API_KEY") or "").strip()
+client = Groq(api_key=GROQ_API_KEY or "unconfigured-groq-api-key")
 
 
 @app.get("/askquery/history")
@@ -551,6 +554,12 @@ async def ask_query(query:str=Form(...),db:Session=Depends(get_db),user_id:int=D
             "row_count": len(fast_result["results"]),
             "results": fast_result["results"],
         }
+    if not GROQ_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="AI SQL generation is not configured. Set GROQ_API_KEY on the Retail Mind backend.",
+        )
+
     print("🔥 ENDPOINT CALLED")
     print("QUERY ENGINE VERSION:", QUERY_ENGINE_VERSION)
     print("QUERY:", query)
