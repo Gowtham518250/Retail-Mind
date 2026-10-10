@@ -12,14 +12,18 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from db import get_db
-from models import SyncClock, SyncEvent
-from security import owner_only
+from models import (
+    CustomerSyncClock,
+    CustomerSyncEvent,
+    SyncClock,
+    SyncEvent,
+)
+from security import ROLE_CUSTOMER, get_current_user_dict, owner_only
 
 router = APIRouter(prefix="/api/sync", tags=["Durable Sync"])
 
@@ -64,6 +68,32 @@ def append_sync_event(db: Session, event: Dict[str, Any]) -> Dict[str, Any]:
     payload.setdefault("occurred_at", datetime.now(timezone.utc).isoformat())
     payload["sync_seq"] = seq
 
+    # Online-order events also receive a customer-specific sequence. The
+    # customer clock is committed with the order transaction, so one customer
+    # can recover events across multiple shops without mixing shop cursors.
+    customer_id = 0
+    try:
+        customer_id = int(payload.get("customer_id") or 0)
+    except (TypeError, ValueError):
+        customer_id = 0
+
+    customer_seq = None
+    if customer_id > 0:
+        if dialect == "postgresql":
+            insert_customer_clock = postgresql_insert(CustomerSyncClock)
+        else:
+            insert_customer_clock = sqlite_insert(CustomerSyncClock)
+        customer_clock_upsert = (
+            insert_customer_clock.values(customer_id=customer_id, seq=1)
+            .on_conflict_do_update(
+                index_elements=[CustomerSyncClock.customer_id],
+                set_={"seq": CustomerSyncClock.seq + 1},
+            )
+            .returning(CustomerSyncClock.seq)
+        )
+        customer_seq = int(db.execute(customer_clock_upsert).scalar_one())
+        payload["customer_seq"] = customer_seq
+
     db.add(
         SyncEvent(
             shop_id=shop_id,
@@ -73,6 +103,16 @@ def append_sync_event(db: Session, event: Dict[str, Any]) -> Dict[str, Any]:
             payload=payload,
         )
     )
+    if customer_seq is not None:
+        db.add(
+            CustomerSyncEvent(
+                customer_id=customer_id,
+                seq=customer_seq,
+                event_id=str(payload["event_id"]),
+                event_type=event_type,
+                payload=payload,
+            )
+        )
     # Flush exposes constraint errors before the business transaction commits.
     db.flush()
     return payload
@@ -125,6 +165,68 @@ def get_sync_changes(
                 "type": row.event_type,
                 "shop_id": row.shop_id,
                 "sync_seq": row.seq,
+                "occurred_at": (
+                    row.created_at.isoformat()
+                    if row.created_at
+                    else (row.payload or {}).get("occurred_at")
+                ),
+            }
+            for row in page
+        ],
+        "next_cursor": next_cursor,
+        "high_watermark": high_watermark,
+        "has_more": has_more,
+    }
+
+
+@router.get("/my-changes")
+def get_my_sync_changes(
+    after: int = Query(0, ge=0, description="Last successfully applied customer cursor"),
+    limit: int = Query(100, ge=1, le=500),
+    current_user: dict = Depends(get_current_user_dict),
+    db: Session = Depends(get_db),
+):
+    """Read customer-specific order changes across all shops the customer uses."""
+    if str(current_user.get("role", "")).upper() != ROLE_CUSTOMER:
+        raise HTTPException(status_code=403, detail="Customer account required")
+
+    customer_id = int(current_user["user_id"])
+    clock = db.get(CustomerSyncClock, customer_id)
+    high_watermark = int(clock.seq) if clock else 0
+
+    if after > high_watermark:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "customer_sync_cursor_ahead",
+                "message": "The saved customer cursor is ahead of the server; refresh the current order snapshot.",
+                "high_watermark": high_watermark,
+            },
+        )
+
+    rows = (
+        db.query(CustomerSyncEvent)
+        .filter(
+            CustomerSyncEvent.customer_id == customer_id,
+            CustomerSyncEvent.seq > after,
+            CustomerSyncEvent.seq <= high_watermark,
+        )
+        .order_by(CustomerSyncEvent.seq.asc())
+        .limit(limit + 1)
+        .all()
+    )
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    next_cursor = int(page[-1].seq) if has_more and page else high_watermark
+
+    return {
+        "events": [
+            {
+                **(row.payload if isinstance(row.payload, dict) else {}),
+                "event_id": row.event_id,
+                "type": row.event_type,
+                "customer_id": row.customer_id,
+                "customer_seq": row.seq,
                 "occurred_at": (
                     row.created_at.isoformat()
                     if row.created_at
