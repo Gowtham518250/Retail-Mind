@@ -148,3 +148,32 @@ def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
     assert legacy_update["check_out_time"] == datetime(2026, 10, 9, 14, 0)
     assert legacy_update["working_hours"] == 5.5
     assert "active_session" not in json.loads(legacy_update["notes"])["_retail_mind_sessions"]
+
+
+
+def test_production_boot_patches_routes_registered_on_the_running_app():
+    import app
+
+    api = production_boot._patch_routes()
+    assert api is app.api
+
+    expected = {
+        "/api/attendance/check-in": "shift_check_in",
+        "/api/attendance/check-out": "shift_check_out",
+        "/api/attendance/employee/{employee_id}": "get_shift_attendance",
+        "/api/attendance/date/{date_str}": "get_shift_attendance_by_date",
+    }
+    registered = {
+        getattr(route, "path", ""): route
+        for route in app.api.routes
+        if getattr(route, "path", "") in expected
+    }
+    assert set(registered) == set(expected)
+
+    for path, endpoint_name in expected.items():
+        route = registered[path]
+        assert route.endpoint.__name__ == endpoint_name
+        # Keep FastAPI's original dependency graph: authenticated user + DB
+        # dependencies must not be dropped while swapping the endpoint handler.
+        assert route.dependant.call is route.endpoint
+        assert len(route.dependant.dependencies) >= 2
