@@ -130,6 +130,21 @@ api = FastAPI(
 )
 
 # ========================
+# ATTENDANCE AUTO-CHECKOUT LIFECYCLE
+# Start reconciliation for every supported ASGI launch command (including
+# `uvicorn app:api`), not only when production_boot.py is executed directly.
+# ========================
+@api.on_event("startup")
+def _start_attendance_auto_checkout_on_startup():
+    try:
+        from production_boot import _ensure_shift_table, _start_attendance_auto_checkout
+        _ensure_shift_table()
+        _start_attendance_auto_checkout()
+        logger.info("Attendance auto-checkout scheduler initialized")
+    except Exception:
+        logger.exception("Attendance auto-checkout scheduler failed to initialize")
+
+# ========================
 # DB INIT ON STARTUP
 # ========================
 try:
