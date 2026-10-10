@@ -611,19 +611,35 @@ def _patch_routes():
                 f"{shift.title()} attendance is already active. Please check out first.",
             )
 
-        db.execute(text("""
+        inserted_id = db.execute(text("""
             INSERT INTO attendance_shifts
                 (employee_id, worker_id, attendance_date, shift, check_in_time, status)
             VALUES
                 (:employee_id, :worker_id, :attendance_date, :shift, :check_in_time, 'PRESENT')
+            RETURNING id
         """), {
             "employee_id": actual_employee_id,
             "worker_id": worker_id,
             "attendance_date": today,
             "shift": shift,
             "check_in_time": now.replace(tzinfo=None),
+        }).scalar_one()
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "attendance.changed",
+            "shop_id": int(current_user_id),
+            "attendance_record_id": int(inserted_id),
+            "employee_id": int(actual_employee_id),
+            "worker_id": worker_id,
+            "attendance_date": str(today),
+            "shift": shift,
+            "check_in_time": now.isoformat(),
+            "check_out_time": None,
+            "status": "PRESENT",
+            "change": "check_in",
         })
         db.commit()
+        publish_realtime_event(sync_event)
         return {
             "message": f"{shift.title()} check-in successful",
             "employee_id": actual_employee_id,
@@ -638,7 +654,8 @@ def _patch_routes():
         actual_employee_id, worker_id = _resolve_employee(employee_id, current_user_id, db)
         today = datetime.now(IST).date()
         row = db.execute(text("""
-            SELECT id, shift, check_in_time, check_out_time
+            SELECT id, employee_id, worker_id, attendance_date,
+                   shift, check_in_time, check_out_time
             FROM attendance_shifts
             WHERE employee_id = :employee_id
               AND worker_id IS NOT DISTINCT FROM :worker_id
@@ -668,7 +685,23 @@ def _patch_routes():
                 checkout_reason = 'MANUAL'
             WHERE id = :id AND check_out_time IS NULL
         """), {"check_out_time": now, "working_hours": hours, "id": row["id"]})
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "attendance.changed",
+            "shop_id": int(current_user_id),
+            "attendance_record_id": int(row["id"]),
+            "employee_id": int(actual_employee_id),
+            "worker_id": worker_id,
+            "attendance_date": str(row["attendance_date"]),
+            "shift": row["shift"],
+            "check_in_time": row["check_in_time"].isoformat() if hasattr(row["check_in_time"], "isoformat") else str(row["check_in_time"]),
+            "check_out_time": now.isoformat(),
+            "status": "PRESENT",
+            "change": "check_out",
+            "checkout_reason": "MANUAL",
+        })
         db.commit()
+        publish_realtime_event(sync_event)
         return {
             "message": f"{row['shift'].title()} check-out successful",
             "checkout_reason": "MANUAL",
