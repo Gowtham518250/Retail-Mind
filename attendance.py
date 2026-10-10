@@ -589,23 +589,39 @@ def record_manual_attendance(
         existing.worker_id = worker_id
         existing.status = normalized_status.upper().replace('-', '_')
         existing.notes = record.notes
+        attendance_record = existing
         db.add(existing)
     else:
-        attendance = Attendance(
+        attendance_record = Attendance(
             employee_id=employee_user_id,
             worker_id=worker_id,
             attendance_date=att_date,
             status=normalized_status.upper().replace('-', '_'),
             notes=record.notes
         )
-        db.add(attendance)
-    
+        db.add(attendance_record)
+
     try:
+        db.flush()
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "attendance.changed",
+            "shop_id": int(employee_user_id),
+            "attendance_id": int(attendance_record.id),
+            "employee_id": int(employee_user_id),
+            "worker_id": int(worker_id),
+            "attendance_date": str(att_date),
+            "check_in_time": _serialize_attendance_time(attendance_record.check_in_time),
+            "check_out_time": _serialize_attendance_time(attendance_record.check_out_time),
+            "status": str(attendance_record.status),
+            "change": "manual_record",
+        })
         db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to record attendance: {str(e)}")
-    
+
+    publish_realtime_event(sync_event)
     return {"message": "Attendance recorded successfully", "worker_id": record.employee_id, "status": normalized_status}
 
 @router.get("/employee/{employee_id}")
