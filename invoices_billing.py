@@ -29,6 +29,7 @@ from models import (
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 from realtime import publish_realtime_event
+from durable_sync import append_sync_event
 from audit_logging import AuditAction, AuditService
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
@@ -776,9 +777,9 @@ def sync_offline_invoice(
         )
         db.add(tx)
 
-        db.commit()
-
-        publish_realtime_event({
+        # Persist recovery events in the same transaction as the invoice,
+        # payments, stock movements, and universal transaction records.
+        realtime_events = [{
             "event_id": str(uuid.uuid4()),
             "type": "invoice.created",
             "shop_id": shop_id,
@@ -789,10 +790,10 @@ def sync_offline_invoice(
             "paid_amount": float(invoice.paid_amount),
             "payment_status": invoice.payment_status,
             "source": invoice.source,
-        })
+        }]
 
         if data.paid_amount > 0:
-            publish_realtime_event({
+            realtime_events.append({
                 "event_id": str(uuid.uuid4()),
                 "type": "payment.updated",
                 "shop_id": shop_id,
@@ -805,7 +806,7 @@ def sync_offline_invoice(
             })
 
         if inventory_changes:
-            publish_realtime_event({
+            realtime_events.append({
                 "event_id": str(uuid.uuid4()),
                 "type": "inventory.changed",
                 "shop_id": shop_id,
@@ -813,6 +814,14 @@ def sync_offline_invoice(
                 "reference_id": invoice_number,
                 "changes": inventory_changes,
             })
+
+        durable_events = [append_sync_event(db, event) for event in realtime_events]
+        db.commit()
+
+        # Redis/WebSocket is a fast notification path only. The durable event
+        # remains available to clients even if this publish fails.
+        for event in durable_events:
+            publish_realtime_event(event)
 
         line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
         payload = {
