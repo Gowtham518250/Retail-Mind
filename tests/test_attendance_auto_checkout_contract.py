@@ -1,0 +1,150 @@
+import json
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
+import production_boot
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+class FakeResult:
+    def __init__(self, rows=None, rowcount=1):
+        self.rows = rows or []
+        self.rowcount = rowcount
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return self.rows
+
+
+class FakeSession:
+    def __init__(self, shift_rows, legacy_rows):
+        self.shift_rows = shift_rows
+        self.legacy_rows = legacy_rows
+        self.updates = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.closed = False
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        params = params or {}
+
+        if sql.lstrip().startswith("SELECT") and "FROM attendance_shifts" in sql:
+            return FakeResult(self.shift_rows, rowcount=len(self.shift_rows))
+        if sql.lstrip().startswith("SELECT") and "FROM attendance" in sql:
+            return FakeResult(self.legacy_rows, rowcount=len(self.legacy_rows))
+        if sql.lstrip().startswith("UPDATE attendance_shifts"):
+            self.updates.append(("shift", params))
+            return FakeResult(rowcount=1)
+        if sql.lstrip().startswith("UPDATE attendance"):
+            self.updates.append(("legacy", params))
+            return FakeResult(rowcount=1)
+
+        raise AssertionError(f"Unexpected SQL in test fake: {sql}")
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+    def close(self):
+        self.closed = True
+
+
+def test_legacy_checkout_uses_session_deadline_and_saves_session_metadata():
+    check_in = datetime(2026, 10, 9, 8, 30)
+    notes = json.dumps({
+        "_retail_mind_sessions": {
+            "active_session": "morning",
+            "morning": {
+                "label": "Morning",
+                "window": "Before 2:00 PM",
+                "check_in_time": "2026-10-09T08:30:00+05:30",
+                "check_out_time": None,
+                "working_hours": 0,
+            },
+        },
+    })
+
+    session_key, checkout, hours, updated_notes = production_boot._legacy_checkout_details(
+        date(2026, 10, 9),
+        check_in,
+        notes,
+    )
+
+    assert session_key == "morning"
+    assert checkout == datetime(2026, 10, 9, 14, 0)
+    assert hours == 5.5
+    session_history = json.loads(updated_notes)["_retail_mind_sessions"]
+    assert "active_session" not in session_history
+    assert session_history["morning"]["check_out_time"] == "2026-10-09T14:00:00+05:30"
+    assert session_history["morning"]["working_hours"] == 5.5
+
+
+def test_legacy_checkout_infers_evening_and_closes_at_midnight():
+    session_key, checkout, hours, updated_notes = production_boot._legacy_checkout_details(
+        date(2026, 10, 9),
+        datetime(2026, 10, 9, 15, 0),
+        None,
+    )
+
+    assert session_key == "evening"
+    assert checkout == datetime(2026, 10, 10, 0, 0)
+    assert hours == 9.0
+    metadata = json.loads(updated_notes)["_retail_mind_sessions"]
+    assert metadata["evening"]["check_out_time"] == "2026-10-10T00:00:00+05:30"
+    assert metadata["evening"]["working_hours"] == 9.0
+
+
+def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
+    shift_rows = [{
+        "id": 17,
+        "attendance_date": date(2026, 10, 10),
+        "shift": "MORNING",
+        "check_in_time": datetime(2026, 10, 10, 9, 0),
+    }]
+    legacy_rows = [{
+        "id": 23,
+        "attendance_date": date(2026, 10, 9),
+        "check_in_time": datetime(2026, 10, 9, 8, 30),
+        "notes": json.dumps({
+            "_retail_mind_sessions": {
+                "active_session": "morning",
+                "morning": {
+                    "check_in_time": "2026-10-09T08:30:00+05:30",
+                    "check_out_time": None,
+                    "working_hours": 0,
+                },
+            },
+        }),
+    }]
+    fake_db = FakeSession(shift_rows, legacy_rows)
+
+    def fake_get_db():
+        yield fake_db
+
+    monkeypatch.setattr(production_boot, "get_db", fake_get_db)
+    production_boot._auto_checkout_expired_shifts(
+        now=datetime(2026, 10, 10, 16, 30, tzinfo=IST),
+        log_summary=True,
+    )
+
+    assert fake_db.commits == 1
+    assert fake_db.closed
+    assert [kind for kind, _ in fake_db.updates] == ["shift", "legacy"]
+
+    shift_update = fake_db.updates[0][1]
+    assert shift_update["id"] == 17
+    assert shift_update["check_out_time"] == datetime(2026, 10, 10, 12, 0)
+    assert shift_update["working_hours"] == 3.0
+
+    legacy_update = fake_db.updates[1][1]
+    assert legacy_update["id"] == 23
+    assert legacy_update["check_out_time"] == datetime(2026, 10, 9, 14, 0)
+    assert legacy_update["working_hours"] == 5.5
+    assert "active_session" not in json.loads(legacy_update["notes"])["_retail_mind_sessions"]
