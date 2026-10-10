@@ -23,7 +23,7 @@ from models import AIQueryHistory
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-09-30-schema-guard-v2"
+QUERY_ENGINE_VERSION = "2026-10-10-receivables-fastpath-v3"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -497,7 +497,7 @@ def _fast_receivables_query(
     ))
     asks_khata = bool(re.search(r"\b(khata|udhar|credit ledger|customer credit)\b", normalized))
     asks_invoice = bool(re.search(r"\b(invoice|invoices|bill|bills|billing)\b", normalized))
-    asks_customer = bool(re.search(r"\b(customer|customers|who|whose)\b", normalized))
+    asks_customer = bool(re.search(r"\b(customer|customers|user|users|who|whose)\b", normalized))
     if not debt_intent or not (asks_khata or asks_invoice or asks_customer):
         return None
 
