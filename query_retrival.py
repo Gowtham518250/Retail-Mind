@@ -242,8 +242,8 @@ def _make_query_plan(query: str, history: list[dict]) -> dict:
         "metric (sales_amount/sales_count/units_sold/expenses/profit/stock/customers/attendance/payments/other), "
         "dimensions (array), filters (array), confidence (0..1). Do not produce SQL. Recent owner-scoped history "
         "is context only to resolve follow-up references; never reuse prior answers as current data. The current "
-        "question's metric, filters, and date always override history. If ambiguous, choose general/other and low confidence.\\n"
-        + json.dumps(history[:5], ensure_ascii=False) + "\\nCurrent question: " + query
+        "question's metric, filters, and date always override history. If ambiguous, choose general/other and low confidence.\n"
+        + json.dumps(history[:5], ensure_ascii=False) + "\nCurrent question: " + query
     )
     try:
         completion = client.chat.completions.create(
@@ -277,14 +277,14 @@ def _make_query_plan(query: str, history: list[dict]) -> dict:
 def _resolve_explicit_date_scope(query: str) -> dict:
     """Resolve explicit exact dates/ranges using Asia/Kolkata business date."""
     today = _business_dates()[0]
-    q = re.sub(r"\\s+", " ", (query or "").lower()).strip()
-    if re.search(r"\\b(today|today's|todays)\\b", q):
+    q = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    if re.search(r"\b(today|today's|todays)\b", q):
         return {"kind": "exact", "start_date": today, "end_date": today, "label": "today"}
-    if re.search(r"\\byesterday(?:'s)?\\b", q):
+    if re.search(r"\byesterday(?:'s)?\b", q):
         d = today - timedelta(days=1)
         return {"kind": "exact", "start_date": d, "end_date": d, "label": "yesterday"}
-    iso = re.search(r"\\b(20\\d{2})-(\\d{1,2})-(\\d{1,2})\\b", q)
-    dmy = re.search(r"\\b(\\d{1,2})[/-](\\d{1,2})[/-](20\\d{2})\\b", q)
+    iso = re.search(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
+    dmy = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", q)
     try:
         if iso:
             d = date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
@@ -294,8 +294,8 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
     except ValueError:
         pass
-    found = re.findall(r"\\b(20\\d{2})-(\\d{1,2})-(\\d{1,2})\\b", q)
-    if len(found) >= 2 and re.search(r"\\b(from|between|to|through|until)\\b", q):
+    found = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
+    if len(found) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
         try:
             start, end = date(*map(int, found[0])), date(*map(int, found[1]))
             if start > end:
