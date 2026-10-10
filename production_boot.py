@@ -59,7 +59,7 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     try:
         meta = json.loads(raw_notes) if raw_notes else {}
     except (TypeError, ValueError):
-        meta = {}
+        meta = {"note": str(raw_notes)} if raw_notes else {}
     if not isinstance(meta, dict):
         meta = {"note": str(raw_notes)} if raw_notes else {}
 
@@ -669,7 +669,7 @@ def _patch_routes():
             except (TypeError, ValueError):
                 raise HTTPException(400, "Date must use YYYY-MM-DD format")
 
-            if employee_id is None or employee_id == current_user_id:
+            if employee_id is None:
                 actual_employee_id, worker_id = current_user_id, None
             else:
                 actual_employee_id, worker_id = _resolve_employee(employee_id, current_user_id, db)
