@@ -219,6 +219,130 @@ def _persist_query_history(db: Session, user_id: int, question: str, answer: str
         print(f"⚠️ AI query history persistence failed: {type(exc).__name__}: {exc}")
 
 
+
+def _recent_query_examples(db: Session, user_id: int, limit: int = 5) -> list[dict]:
+    """Owner-scoped history examples; history is guidance, never executable SQL."""
+    try:
+        rows = db.query(AIQueryHistory).filter(
+            AIQueryHistory.user_id == user_id
+        ).order_by(AIQueryHistory.created_at.desc(), AIQueryHistory.id.desc()).limit(max(1, min(limit, 8))).all()
+        return [{"question": str(r.question or "")[:400], "answer": str(r.answer or "")[:500]}
+                for r in rows if str(r.question or "").strip() and str(r.answer or "").strip()]
+    except Exception as exc:
+        print(f"Query history context unavailable: {type(exc).__name__}: {exc}")
+        return []
+
+
+def _make_query_plan(query: str, history: list[dict]) -> dict:
+    """Return a validated structured intent plan, never SQL."""
+    if not GROQ_API_KEY:
+        return {"intent": "general", "metric": "other", "dimensions": [], "filters": [], "confidence": 0.0}
+    prompt_text = (
+        "Classify this retail question. Return JSON only with intent (aggregate/list/comparison/trend/general), "
+        "metric (sales_amount/sales_count/units_sold/expenses/profit/stock/customers/attendance/payments/other), "
+        "dimensions (array), filters (array), confidence (0..1). Do not produce SQL. Recent owner-scoped history "
+        "is context only to resolve follow-up references; never reuse prior answers as current data. The current "
+        "question's metric, filters, and date always override history. If ambiguous, choose general/other and low confidence.\n"
+        + json.dumps(history[:5], ensure_ascii=False) + "\nCurrent question: " + query
+    )
+    try:
+        completion = client.chat.completions.create(
+            model=os.getenv("GROQ_PLANNER_MODEL") or os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
+            messages=[{"role": "system", "content": "Return one valid JSON object only."},
+                      {"role": "user", "content": prompt_text}],
+            temperature=0, max_tokens=220, stream=False,
+        )
+        raw = str(completion.choices[0].message.content or "").strip()
+        if "{" in raw and "}" in raw:
+            raw = raw[raw.find("{"):raw.rfind("}") + 1]
+        plan = json.loads(raw)
+        intents = {"aggregate", "list", "comparison", "trend", "general"}
+        metrics = {"sales_amount", "sales_count", "units_sold", "expenses", "profit", "stock", "customers", "attendance", "payments", "other"}
+        if not isinstance(plan, dict) or plan.get("intent") not in intents or plan.get("metric") not in metrics:
+            raise ValueError("Unsupported query plan")
+        confidence = float(plan.get("confidence", 0))
+        if not 0 <= confidence <= 1:
+            raise ValueError("Invalid planner confidence")
+        return {
+            "intent": plan["intent"], "metric": plan["metric"],
+            "dimensions": [str(v)[:80] for v in plan.get("dimensions", [])[:6]] if isinstance(plan.get("dimensions", []), list) else [],
+            "filters": [str(v)[:120] for v in plan.get("filters", [])[:8]] if isinstance(plan.get("filters", []), list) else [],
+            "confidence": confidence,
+        }
+    except Exception as exc:
+        print(f"Query planner fallback to schema-grounded SQL generation: {type(exc).__name__}: {exc}")
+        return {"intent": "general", "metric": "other", "dimensions": [], "filters": [], "confidence": 0.0}
+
+
+def _resolve_explicit_date_scope(query: str) -> dict:
+    """Resolve explicit exact dates/ranges using Asia/Kolkata business date."""
+    today = _business_dates()[0]
+    q = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    if re.search(r"\b(today|today's|todays)\b", q):
+        return {"kind": "exact", "start_date": today, "end_date": today, "label": "today"}
+    if re.search(r"\byesterday(?:'s)?\b", q):
+        d = today - timedelta(days=1)
+        return {"kind": "exact", "start_date": d, "end_date": d, "label": "yesterday"}
+    range_dates = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
+    if len(range_dates) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
+        try:
+            start, end = date(*map(int, range_dates[0])), date(*map(int, range_dates[1]))
+            if start > end:
+                start, end = end, start
+            return {"kind": "range", "start_date": start, "end_date": end, "label": f"{start.isoformat()} to {end.isoformat()}"}
+        except ValueError:
+            pass
+    iso = re.search(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
+    dmy = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", q)
+    try:
+        if iso:
+            d = date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+            return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
+        if dmy:
+            d = date(int(dmy.group(3)), int(dmy.group(2)), int(dmy.group(1)))
+            return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
+    except ValueError:
+        pass
+    month_numbers = {
+        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+    }
+    month_pattern = "|".join(month_numbers)
+    named = re.search(rf"\b({month_pattern})\s+(\d{{1,2}})(?:,?\s+(20\d{{2}}))?\b", q)
+    if named:
+        try:
+            d = date(int(named.group(3) or today.year), month_numbers[named.group(1)], int(named.group(2)))
+            return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
+        except ValueError:
+            pass
+    if re.search(r"\b(last week|previous week)\b", q):
+        start = today - timedelta(days=today.weekday() + 7)
+        end = start + timedelta(days=6)
+        return {"kind": "range", "start_date": start, "end_date": end, "label": "last week"}
+    if re.search(r"\b(this week|current week)\b", q):
+        start = today - timedelta(days=today.weekday())
+        return {"kind": "range", "start_date": start, "end_date": today, "label": "this week"}
+    if re.search(r"\b(last month|previous month)\b", q):
+        end = today.replace(day=1) - timedelta(days=1)
+        return {"kind": "range", "start_date": end.replace(day=1), "end_date": end, "label": "last month"}
+    if re.search(r"\b(this month|current month)\b", q):
+        return {"kind": "range", "start_date": today.replace(day=1), "end_date": today, "label": "this month"}
+    if re.search(r"\b(last year|previous year)\b", q):
+        return {"kind": "range", "start_date": date(today.year - 1, 1, 1), "end_date": date(today.year - 1, 12, 31), "label": "last year"}
+    if re.search(r"\b(this year|year to date|ytd)\b", q):
+        return {"kind": "range", "start_date": date(today.year, 1, 1), "end_date": today, "label": "this year"}
+    found = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
+    if len(found) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
+        try:
+            start, end = date(*map(int, found[0])), date(*map(int, found[1]))
+            if start > end:
+                start, end = end, start
+            return {"kind": "range", "start_date": start, "end_date": end, "label": f"{start.isoformat()} to {end.isoformat()}"}
+        except ValueError:
+            pass
+    return {"kind": "unspecified", "start_date": None, "end_date": None, "label": "not specified"}
+
+
 def _fast_business_query(query: str, db: Session, user_id: int):
     """Answer common owner KPI questions without FAISS/Groq latency.
 
@@ -630,7 +754,14 @@ async def ask_query(
     # Fast path for the most common dashboard KPI questions. This avoids the
     # FAISS + Groq round-trip that previously made simple questions feel stuck
     # on "loading".
-    fast_result = _fast_business_query(query, db, user_id)
+    query_history_context = _recent_query_examples(db, user_id)
+    query_plan = _make_query_plan(query, query_history_context)
+    date_scope = _resolve_explicit_date_scope(query)
+    # Use the predefined KPI SQL only for high-confidence plans and date scopes it handles correctly.
+    safe_fast_date = date_scope['kind'] == 'unspecified' or date_scope['label'] in {'today', 'yesterday'}
+    fast_result = None
+    if query_plan.get('intent') == 'aggregate' and query_plan.get('confidence', 0) >= 0.75 and safe_fast_date:
+        fast_result = _fast_business_query(query, db, user_id)
     if fast_result is not None:
         _persist_query_history(
             db=db,
@@ -860,10 +991,11 @@ async def ask_query(
     )
     retrived_table_information_str = "\n\n".join(retrived_table_information)
 
+    planner_context = json.dumps({'plan': query_plan, 'date_scope': {'kind': date_scope.get('kind'), 'start_date': date_scope.get('start_date').isoformat() if date_scope.get('start_date') else None, 'end_date': date_scope.get('end_date').isoformat() if date_scope.get('end_date') else None, 'label': date_scope.get('label')}, 'recent_question_history': query_history_context[:5]}, ensure_ascii=False)
     formatted_prompt = prompt.format(
             retrieved_table_information=retrived_table_information_str,
             question=query
-        )
+        ) + '\n\nValidated query plan and date context (current question takes precedence):\n' + planner_context
     llm_started = time.perf_counter()
     try:
         completion = client.chat.completions.create(
