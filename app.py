@@ -106,6 +106,7 @@ from security_hardening import router as security_hardening_router
 from observability_service import router as observability_router
 from operations_routes import router as operations_router
 from realtime import router as realtime_router
+from durable_sync import router as durable_sync_router
 
 # DB initialization
 from db import engine, get_db
@@ -128,6 +129,21 @@ api = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# ========================
+# ATTENDANCE AUTO-CHECKOUT LIFECYCLE
+# Start reconciliation for every supported ASGI launch command (including
+# `uvicorn app:api`), not only when production_boot.py is executed directly.
+# ========================
+@api.on_event("startup")
+def _start_attendance_auto_checkout_on_startup():
+    try:
+        from production_boot import _ensure_shift_table, _start_attendance_auto_checkout
+        _ensure_shift_table()
+        _start_attendance_auto_checkout()
+        logger.info("Attendance auto-checkout scheduler initialized")
+    except Exception:
+        logger.exception("Attendance auto-checkout scheduler failed to initialize")
 
 # ========================
 # DB INIT ON STARTUP
@@ -407,6 +423,7 @@ api.include_router(security_hardening_router, tags=["Security Hardening"])
 api.include_router(observability_router, tags=["Observability"])
 api.include_router(operations_router, prefix="/api", tags=["Operations"])
 api.include_router(realtime_router)
+api.include_router(durable_sync_router)
 
 # 🚀 PERFORMANCE: Setup performance monitoring middleware
 setup_performance_middleware(api)
