@@ -8,6 +8,7 @@ from models import DailyReport, Invoice, Payment, Product, StockMovement
 from sqlalchemy import func
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from fastapi import HTTPException
 
 
 from zoneinfo import ZoneInfo
