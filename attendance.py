@@ -14,6 +14,8 @@ import json
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Attendance, LeaveRequest, User, Worker
+from durable_sync import append_sync_event
+from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
@@ -405,12 +407,27 @@ def employee_check_in(
         meta = _session_meta(attendance)
         meta.setdefault(SESSION_META_KEY, {})["active_session"] = session_key
         _save_session_meta(attendance, meta)
+        db.flush()
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "attendance.changed",
+            "shop_id": actual_employee_id,
+            "attendance_id": attendance.id,
+            "employee_id": actual_employee_id,
+            "worker_id": worker_id_to_store,
+            "attendance_date": str(attendance.attendance_date),
+            "check_in_time": _serialize_attendance_time(attendance.check_in_time),
+            "check_out_time": _serialize_attendance_time(attendance.check_out_time),
+            "status": str(attendance.status),
+            "change": "check_in",
+        })
         db.commit()
         db.refresh(attendance)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Check-in failed: {str(e)}")
 
+    publish_realtime_event(sync_event)
     return {
         "message": f"{session_label} check-in successful",
         "employee_id": actual_employee_id,
@@ -499,12 +516,27 @@ def employee_check_out(
     _save_session_meta(attendance, meta)
 
     try:
+        db.flush()
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "attendance.changed",
+            "shop_id": actual_employee_id,
+            "attendance_id": attendance.id,
+            "employee_id": actual_employee_id,
+            "worker_id": worker_id_to_store,
+            "attendance_date": str(attendance.attendance_date),
+            "check_in_time": _serialize_attendance_time(attendance.check_in_time),
+            "check_out_time": _serialize_attendance_time(attendance.check_out_time),
+            "status": str(attendance.status),
+            "change": "check_out",
+        })
         db.commit()
         db.refresh(attendance)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Check-out failed: {str(e)}")
 
+    publish_realtime_event(sync_event)
     return {
         "message": f"{session_label} check-out successful",
         "employee_id": actual_employee_id,
