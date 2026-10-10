@@ -11,6 +11,7 @@ from datetime import datetime, date, timedelta
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 import json
+import uuid
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Attendance, LeaveRequest, User, Worker
