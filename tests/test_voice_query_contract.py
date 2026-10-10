@@ -152,3 +152,60 @@ def test_three_letter_language_uses_whisper_language_detection(monkeypatch):
         b"test-wave-bytes", "question.wav", "audio/wav", "brx"
     ) == "recognised words"
     assert "language" not in calls
+
+
+
+def test_answer_translation_route_is_registered():
+    from query_retrival import app
+
+    routes = {
+        (getattr(route, "path", ""), frozenset(getattr(route, "methods", set())))
+        for route in app.routes
+    }
+    assert ("/askquery/translate-answer", frozenset({"POST"})) in routes
+
+
+def test_translate_answer_uses_existing_llm_and_preserves_target_language(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    calls = {}
+
+    def fake_create(**kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="మీ మొత్తం అమ్మకాలు ₹12,450.")
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create=fake_create),
+            ),
+        ),
+    )
+
+    translated = query_retrival._translate_answer_to_language(
+        "Your total sales are ₹12,450.",
+        "te",
+    )
+
+    assert translated == "మీ మొత్తం అమ్మకాలు ₹12,450."
+    assert calls["stream"] is False
+    assert calls["temperature"] == 0.0
+    assert "Telugu" in calls["messages"][0]["content"]
+    assert "preserve all numbers" in calls["messages"][0]["content"].lower()
+
+
+def test_answer_translation_returns_english_without_llm(monkeypatch):
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "")
+    assert query_retrival._translate_answer_to_language("Total sales: ₹12,450", "en") == "Total sales: ₹12,450"
