@@ -593,7 +593,7 @@ async def ask_query_voice(
 
     # This delegates to the exact existing SQL/RAG pipeline with the same DB
     # session and authenticated owner. No second SQL execution path is created.
-    result = await ask_query(query=english_query, db=db, user_id=user_id)
+    result = await ask_query(query=english_query, language_code="en", db=db, user_id=user_id)
     result["voice"] = {
         "language_code": language_code,
         "transcript": transcript,
@@ -1232,8 +1232,8 @@ async def ask_query(
     return {
         "query_engine_version": QUERY_ENGINE_VERSION,
         "query": original_query,
-            "original_query": original_query,
-            "translated_query": query,
+        "original_query": original_query,
+        "translated_query": query,
         "answer": answer_text,
         "message": answer_text,
         "generated_sql": sql,
