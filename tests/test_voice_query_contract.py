@@ -59,9 +59,13 @@ def test_translate_query_uses_existing_llm_and_returns_english(monkeypatch):
         )
 
     monkeypatch.setattr(
-        query_retrival.client.chat.completions,
-        "create",
-        fake_create,
+        query_retrival,
+        "client",
+        SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create=fake_create),
+            ),
+        ),
     )
 
     translated = query_retrival._translate_query_to_english(
