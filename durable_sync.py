@@ -7,6 +7,8 @@ Redis remains a best-effort low-latency signal; this table is the recovery log.
 """
 from __future__ import annotations
 
+import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -26,6 +28,7 @@ from models import (
 from security import ROLE_CUSTOMER, get_current_user_dict, owner_only
 
 router = APIRouter(prefix="/api/sync", tags=["Durable Sync"])
+logger = logging.getLogger(__name__)
 
 
 def append_sync_event(db: Session, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -131,9 +134,13 @@ def get_sync_changes(
     db: Session = Depends(get_db),
 ):
     """Read a bounded, durable page of changes for the authenticated owner's shop."""
+    request_started = time.perf_counter()
     shop_id = int(current_user["user_id"])
+
+    clock_started = time.perf_counter()
     clock = db.get(SyncClock, shop_id)
     high_watermark = int(clock.seq) if clock else 0
+    clock_ms = (time.perf_counter() - clock_started) * 1000
 
     if after > high_watermark:
         raise HTTPException(
@@ -145,8 +152,34 @@ def get_sync_changes(
             },
         )
 
+    # Most real-time sync calls are polls with an already-current cursor. Avoid
+    # querying sync_events when there is no newer event to deliver.
+    if after == high_watermark:
+        total_ms = (time.perf_counter() - request_started) * 1000
+        if total_ms >= 250:
+            logger.warning(
+                "SLOW_SYNC_CHANGES shop_id=%s after=%s limit=%s rows=0 clock_ms=%.1f "
+                "query_ms=0.0 assembly_ms=0.0 total_ms=%.1f cursor_current=true",
+                shop_id, after, limit, clock_ms, total_ms,
+            )
+        return {
+            "events": [],
+            "next_cursor": high_watermark,
+            "high_watermark": high_watermark,
+            "has_more": False,
+        }
+
+    query_started = time.perf_counter()
+    # Project only response columns rather than hydrating full ORM objects.
+    # The primary key (shop_id, seq) already supports this tenant/cursor scan.
     rows = (
-        db.query(SyncEvent)
+        db.query(
+            SyncEvent.seq.label("seq"),
+            SyncEvent.event_id.label("event_id"),
+            SyncEvent.event_type.label("event_type"),
+            SyncEvent.payload.label("payload"),
+            SyncEvent.created_at.label("created_at"),
+        )
         .filter(
             SyncEvent.shop_id == shop_id,
             SyncEvent.seq > after,
@@ -156,19 +189,21 @@ def get_sync_changes(
         .limit(limit + 1)
         .all()
     )
+    query_ms = (time.perf_counter() - query_started) * 1000
     has_more = len(rows) > limit
     page = rows[:limit]
     # When there are more rows, return only the last row actually delivered.
     # Otherwise the cursor can skip the remainder of this bounded page.
     next_cursor = int(page[-1].seq) if has_more and page else high_watermark
 
-    return {
+    assembly_started = time.perf_counter()
+    response = {
         "events": [
             {
                 **(row.payload if isinstance(row.payload, dict) else {}),
                 "event_id": row.event_id,
                 "type": row.event_type,
-                "shop_id": row.shop_id,
+                "shop_id": shop_id,
                 "sync_seq": row.seq,
                 "occurred_at": (
                     row.created_at.isoformat()
@@ -182,6 +217,15 @@ def get_sync_changes(
         "high_watermark": high_watermark,
         "has_more": has_more,
     }
+    assembly_ms = (time.perf_counter() - assembly_started) * 1000
+    total_ms = (time.perf_counter() - request_started) * 1000
+    if total_ms >= 250:
+        logger.warning(
+            "SLOW_SYNC_CHANGES shop_id=%s after=%s limit=%s rows=%s has_more=%s "
+            "clock_ms=%.1f query_ms=%.1f assembly_ms=%.1f total_ms=%.1f",
+            shop_id, after, limit, len(page), has_more, clock_ms, query_ms, assembly_ms, total_ms,
+        )
+    return response
 
 
 @router.get("/my-changes")

@@ -4,6 +4,7 @@ import os
 import calendar
 import time
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -22,7 +23,7 @@ from models import AIQueryHistory
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-09-30-schema-guard-v2"
+QUERY_ENGINE_VERSION = "2026-10-10-receivables-fastpath-v3"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -183,6 +184,12 @@ vectorstore = FAISS.load_local(
     embeddings,
     allow_dangerous_deserialization=True,
 )
+
+@lru_cache(maxsize=128)
+def _cached_schema_search(normalized_query: str):
+    """Cache schema-only FAISS results per worker; no tenant data is cached."""
+    return tuple(vectorstore.similarity_search(normalized_query, k=6))
+
 
 # Complete table catalog generated alongside the FAISS index. This avoids
 # depending on the original .txt files being present at runtime and lets us
@@ -464,6 +471,254 @@ def _fast_business_query(query: str, db: Session, user_id: int):
         "generated_sql": "DIRECT_KPI: invoice/sales revenue",
         "generated_model_response": answer,
         "results": [{"total_sales_amount": value}],
+    }
+
+
+def _fast_receivables_query(
+    query: str,
+    db: Session,
+    user_id: int,
+    date_scope: dict | None = None,
+):
+    """Answer common receivables/khata questions from tenant-scoped canonical tables.
+
+    This intentionally handles only broad list/summary requests with known schemas.
+    Named-customer queries and dated khata queries fall back to the general RAG path,
+    since current khata_balances rows represent a current balance rather than a
+    historical balance snapshot.
+    """
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    date_scope = date_scope or {"kind": "unspecified", "start_date": None, "end_date": None}
+
+    debt_intent = bool(re.search(
+        r"\b(unpaid|not paid|outstanding|overdue|pending payment|pending dues|"
+        r"customer dues|owe|owes|owed|receivable|receivables|khata|udhar|credit ledger)\b",
+        normalized,
+    ))
+    asks_invoice = bool(re.search(r"\b(invoice|invoices|bill|bills|billing)\b", normalized))
+    asks_customer = bool(re.search(r"\b(customer|customers|user|users|who|whose)\b", normalized))
+    asks_khata = bool(
+        re.search(r"\b(khata|udhar|credit ledger|customer credit)\b", normalized)
+        or (asks_customer and not asks_invoice and re.search(r"\bbalances?\b", normalized))
+    )
+    if not debt_intent or not (asks_khata or asks_invoice or asks_customer):
+        return None
+
+    # Avoid returning a shop-wide list when the user explicitly asks about one
+    # named customer. That question should use the normal entity-resolution path.
+    named_customer = bool(
+        re.search(r"\b(customer named|customer called|specific customer|customer phone)\b", normalized)
+        or re.search(r"['\"][^'\"]{2,80}['\"]", query or "")
+        or re.search(r"\b\d{10}\b", normalized)
+    )
+    if named_customer:
+        return None
+
+    explicit_list_request = bool(re.search(
+        r"\b(all|list|show|details|detail|which|who|each|every|highest|top)\b",
+        normalized,
+    ))
+    asks_list = explicit_list_request or asks_customer
+    asks_total = bool(re.search(
+        r"\b(total|overall|sum|combined|total amount|total outstanding|in total)\b",
+        normalized,
+    ))
+    asks_count = bool(re.search(r"\b(how many|count|number of)\b", normalized))
+    explicit_invoice_rows = bool(re.search(
+        r"\b(invoice number|invoice details|each invoice|all invoices|invoice-wise|bill-wise|due date)\b",
+        normalized,
+    ))
+
+    if asks_khata:
+        # A khata record holds the current balance, not a historical daily balance.
+        if date_scope.get("kind") != "unspecified":
+            return None
+        params = {"user_id": int(user_id), "row_limit": 501}
+        if asks_total or (asks_count and not explicit_list_request):
+            sql = (
+                "SELECT COUNT(*) AS customer_count, "
+                "COALESCE(SUM(COALESCE(khata_balance, 0)), 0) AS total_outstanding "
+                "FROM khata_balances "
+                "WHERE shop_id = :user_id AND COALESCE(khata_balance, 0) > 0"
+            )
+            rows = [dict(db.execute(text(sql), {"user_id": int(user_id)}).mappings().one())]
+            customer_count = int(rows[0].get("customer_count") or 0)
+            amount = float(rows[0].get("total_outstanding") or 0)
+            answer = f"Total outstanding khata balance is ₹{amount:,.2f} across {customer_count} customer(s)."
+            return {
+                "answer": answer,
+                "generated_sql": sql,
+                "generated_model_response": "Deterministic tenant-scoped khata summary.",
+                "results": jsonable_encoder(rows),
+                "has_more": False,
+            }
+
+        sql = (
+            "SELECT customer_name, customer_phone, khata_balance AS outstanding_amount, last_transaction "
+            "FROM khata_balances "
+            "WHERE shop_id = :user_id AND COALESCE(khata_balance, 0) > 0 "
+            "ORDER BY khata_balance DESC, last_transaction DESC NULLS LAST "
+            "LIMIT :row_limit"
+        )
+        raw_rows = db.execute(text(sql), params).mappings().all()
+        has_more = len(raw_rows) > 500
+        rows = [dict(row) for row in raw_rows[:500]]
+        total = sum(float(row.get("outstanding_amount") or 0) for row in rows)
+        answer = (
+            f"Found {len(rows)} customer(s) with outstanding khata balances "
+            f"totaling ₹{total:,.2f} in the returned records."
+        )
+        if re.search(r"\boverdue\b", normalized):
+            answer += (
+                " These are current khata balances ordered highest first; this table has no due-date field, "
+                "so overdue status cannot be verified from khata records alone."
+            )
+        if has_more:
+            answer += " Showing the first 500 records; narrow the question to view a smaller set."
+        return {
+            "answer": answer,
+            "generated_sql": sql,
+            "generated_model_response": "Deterministic tenant-scoped khata details.",
+            "results": jsonable_encoder(rows),
+            "has_more": has_more,
+        }
+
+    # From this point, the canonical source is invoices. The authenticated owner
+    # is the invoice user_id; customer enrichment is joined within the same tenant.
+    if date_scope.get("kind") != "unspecified":
+        start_date = date_scope.get("start_date")
+        end_date = date_scope.get("end_date")
+        if not start_date or not end_date:
+            return None
+        date_filter = " AND i.invoice_date >= :scope_start AND i.invoice_date <= :scope_end"
+        params = {
+            "user_id": int(user_id),
+            "scope_start": start_date,
+            "scope_end": end_date,
+            "row_limit": 501,
+        }
+    else:
+        date_filter = ""
+        params = {"user_id": int(user_id), "row_limit": 501}
+
+    strict_unpaid = bool(re.search(r"\b(unpaid|not paid)\b", normalized))
+    payment_filter = (
+        "i.payment_status = 'UNPAID'"
+        if strict_unpaid
+        else "i.payment_status IN ('UNPAID', 'PARTIAL', 'OVERDUE')"
+    )
+    common_where = (
+        "i.user_id = :user_id "
+        f"AND {payment_filter} "
+        "AND i.status NOT IN ('CANCELLED', 'DRAFT') "
+        "AND COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0) > 0.01"
+        + date_filter
+    )
+
+    if asks_total or asks_count and not asks_list:
+        sql = (
+            "SELECT COUNT(*) AS invoice_count, "
+            "COALESCE(SUM(COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0)), 0) "
+            "AS total_outstanding "
+            "FROM invoices i "
+            "LEFT JOIN customers c ON c.id = i.customer_id AND c.user_id = i.user_id "
+            f"WHERE {common_where}"
+        )
+        raw = dict(db.execute(text(sql), params).mappings().one())
+        invoice_count = int(raw.get("invoice_count") or 0)
+        amount = float(raw.get("total_outstanding") or 0)
+        if asks_count and not asks_total:
+            answer = f"Found {invoice_count} qualifying unpaid/outstanding invoice(s)."
+        else:
+            answer = (
+                f"Found {invoice_count} qualifying unpaid/outstanding invoice(s) "
+                f"with ₹{amount:,.2f} remaining."
+            )
+        return {
+            "answer": answer,
+            "generated_sql": sql,
+            "generated_model_response": "Deterministic tenant-scoped invoice summary.",
+            "results": jsonable_encoder([raw]),
+            "has_more": False,
+        }
+
+    # When the question asks for customer details rather than invoice-by-invoice
+    # rows, aggregate open invoices by customer, preferring the CRM customer ID,
+    # then phone, then invoice ID so walk-in invoices are not accidentally merged.
+    customer_summary = asks_customer and not explicit_invoice_rows
+    if customer_summary:
+        sql = (
+            "WITH open_invoices AS ("
+            " SELECT "
+            "  COALESCE(NULLIF(TRIM(COALESCE(i.customer_name, c.customer_name, '')), ''), 'Unknown customer') "
+            "    AS customer_name, "
+            "  NULLIF(TRIM(COALESCE(i.customer_phone, c.phone, '')), '') AS customer_phone, "
+            "  COALESCE("
+            "    CASE WHEN i.customer_id IS NOT NULL THEN 'customer:' || CAST(i.customer_id AS TEXT) END, "
+            "    CASE WHEN NULLIF(TRIM(COALESCE(i.customer_phone, c.phone, '')), '') IS NOT NULL "
+            "      THEN 'phone:' || TRIM(COALESCE(i.customer_phone, c.phone, '')) END, "
+            "    'invoice:' || CAST(i.id AS TEXT)"
+            "  ) AS customer_key, "
+            "  COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0) AS outstanding_amount, "
+            "  i.due_date, i.invoice_date "
+            " FROM invoices i "
+            " LEFT JOIN customers c ON c.id = i.customer_id AND c.user_id = i.user_id "
+            f" WHERE {common_where}"
+            ") "
+            "SELECT customer_key, MIN(customer_name) AS customer_name, MIN(customer_phone) AS customer_phone, "
+            "COUNT(*) AS unpaid_invoice_count, "
+            "COALESCE(SUM(outstanding_amount), 0) AS outstanding_amount, "
+            "MIN(due_date) AS earliest_due_date, MAX(invoice_date) AS latest_invoice_date "
+            "FROM open_invoices GROUP BY customer_key "
+            "ORDER BY outstanding_amount DESC, customer_name ASC LIMIT :row_limit"
+        )
+        raw_rows = db.execute(text(sql), params).mappings().all()
+        has_more = len(raw_rows) > 500
+        rows = [dict(row) for row in raw_rows[:500]]
+        total = sum(float(row.get("outstanding_amount") or 0) for row in rows)
+        answer = (
+            f"Found {len(rows)} customer(s) with outstanding invoice balances "
+            f"totaling ₹{total:,.2f} in the returned records."
+        )
+        if has_more:
+            answer += " Showing the first 500 records; narrow the question to view a smaller set."
+        return {
+            "answer": answer,
+            "generated_sql": sql,
+            "generated_model_response": "Deterministic tenant-scoped unpaid customer details.",
+            "results": jsonable_encoder(rows),
+            "has_more": has_more,
+        }
+
+    sql = (
+        "SELECT i.id AS invoice_id, i.invoice_number, i.customer_id, "
+        "COALESCE(NULLIF(TRIM(i.customer_name), ''), c.customer_name, 'Unknown customer') AS customer_name, "
+        "COALESCE(NULLIF(TRIM(i.customer_phone), ''), c.phone) AS customer_phone, "
+        "i.invoice_date, i.due_date, i.total_amount, COALESCE(i.paid_amount, 0) AS paid_amount, "
+        "COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0) AS outstanding_amount, "
+        "i.payment_status, i.status "
+        "FROM invoices i "
+        "LEFT JOIN customers c ON c.id = i.customer_id AND c.user_id = i.user_id "
+        f"WHERE {common_where} "
+        "ORDER BY i.due_date ASC NULLS LAST, i.invoice_date DESC, i.id DESC "
+        "LIMIT :row_limit"
+    )
+    raw_rows = db.execute(text(sql), params).mappings().all()
+    has_more = len(raw_rows) > 500
+    rows = [dict(row) for row in raw_rows[:500]]
+    total = sum(float(row.get("outstanding_amount") or 0) for row in rows)
+    answer = (
+        f"Found {len(rows)} unpaid/outstanding invoice(s) with "
+        f"₹{total:,.2f} remaining in the returned records."
+    )
+    if has_more:
+        answer += " Showing the first 500 records; narrow the question to view a smaller set."
+    return {
+        "answer": answer,
+        "generated_sql": sql,
+        "generated_model_response": "Deterministic tenant-scoped invoice details.",
+        "results": jsonable_encoder(rows),
+        "has_more": has_more,
     }
 
 
@@ -754,9 +1009,39 @@ async def ask_query(
     # Fast path for the most common dashboard KPI questions. This avoids the
     # FAISS + Groq round-trip that previously made simple questions feel stuck
     # on "loading".
+    date_scope = _resolve_explicit_date_scope(query)
+
+    # Common receivables and khata requests use validated, tenant-scoped SQL.
+    # This prevents the text-to-SQL model from returning customer-only columns
+    # when the question requires invoice details, and avoids unnecessary RAG/LLM
+    # work for these known business operations.
+    receivables_result = _fast_receivables_query(query, db, user_id, date_scope)
+    if receivables_result is not None:
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=original_query,
+            answer=receivables_result["answer"],
+            result_count=len(receivables_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": receivables_result["answer"],
+            "message": receivables_result["answer"],
+            "generated_sql": receivables_result["generated_sql"],
+            "generated_model_response": receivables_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": receivables_result["generated_sql"],
+            "row_count": len(receivables_result["results"]),
+            "results": receivables_result["results"],
+            "has_more": receivables_result.get("has_more", False),
+        }
+
     query_history_context = _recent_query_examples(db, user_id)
     query_plan = _make_query_plan(query, query_history_context)
-    date_scope = _resolve_explicit_date_scope(query)
     # Use the predefined KPI SQL only for high-confidence plans and date scopes it handles correctly.
     safe_fast_date = date_scope['kind'] == 'unspecified' or date_scope['label'] in {'today', 'yesterday'}
     fast_result = None
@@ -795,7 +1080,7 @@ async def ask_query(
     print("QUERY:", query)
 
     retrieval_started = time.perf_counter()
-    answer = vectorstore.similarity_search(query, k=6)
+    answer = list(_cached_schema_search(re.sub(r"\s+", " ", query).strip().lower()))
     retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
     print("Relevant database information:")
