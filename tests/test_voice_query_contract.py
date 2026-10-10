@@ -78,3 +78,80 @@ def test_translate_query_uses_existing_llm_and_returns_english(monkeypatch):
     assert calls["temperature"] == 0.0
     assert calls["messages"][1]["content"].startswith("Source language: Telugu")
 
+
+
+def test_transcription_only_endpoint_is_registered():
+    from query_retrival import app
+
+    routes = {
+        (getattr(route, "path", ""), frozenset(getattr(route, "methods", set())))
+        for route in app.routes
+    }
+    assert ("/askquery/transcribe", frozenset({"POST"})) in routes
+
+
+def test_groq_audio_transcription_returns_spoken_text(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    calls = {}
+
+    def fake_create(**kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(text="నిన్న నా అమ్మకాలు ఎంత?")
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(
+            audio=SimpleNamespace(
+                transcriptions=SimpleNamespace(create=fake_create),
+            ),
+        ),
+    )
+
+    transcript = query_retrival._transcribe_audio_with_groq(
+        b"test-wave-bytes",
+        "question.wav",
+        "audio/wav",
+        "te",
+    )
+
+    assert transcript == "నిన్న నా అమ్మకాలు ఎంత?"
+    assert calls["model"] == query_retrieval_model(query_retrival)
+    assert calls["language"] == "te"
+    assert calls["response_format"] == "json"
+    assert calls["temperature"] == 0.0
+    assert calls["file"][0] == "question.wav"
+
+
+def query_retrieval_model(module):
+    return module.GROQ_STT_MODEL
+
+
+def test_three_letter_language_uses_whisper_language_detection(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    calls = {}
+
+    def fake_create(**kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(text="recognised words")
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(
+            audio=SimpleNamespace(
+                transcriptions=SimpleNamespace(create=fake_create),
+            ),
+        ),
+    )
+
+    assert query_retrival._transcribe_audio_with_groq(
+        b"test-wave-bytes", "question.wav", "audio/wav", "brx"
+    ) == "recognised words"
+    assert "language" not in calls
