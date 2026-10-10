@@ -14,12 +14,27 @@ import httpx
 import re
 from typing import List, Optional
 import time
+from uuid import uuid4
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Product, StockMovement, ProductBatch, Notification
 from stock_service import StockService
+from durable_sync import append_sync_event
+from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+
+def _queue_inventory_change(db: Session, shop_id: int, change: str, **details):
+    """Append inventory invalidation to the same transaction as the stock/catalog write."""
+    event = {
+        "event_id": str(uuid4()),
+        "type": "inventory.changed",
+        "shop_id": int(shop_id),
+        "change": change,
+        **details,
+    }
+    return append_sync_event(db, event)
+
 _BARCODE_LOOKUP_CACHE: dict[str, tuple[float, dict]] = {}
 _BARCODE_CACHE_TTL_SECONDS = 6 * 60 * 60
 
@@ -180,10 +195,15 @@ def bulk_import_products(items: list[dict], user_id: int = Depends(check_current
         db.add(p)
         created += 1
     try:
+        db.flush()
+        sync_event = _queue_inventory_change(
+            db, user_id, "bulk_product_import", product_count=created
+        )
         db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Bulk import failed: {str(e)}")
+    publish_realtime_event(sync_event)
     return {"imported": created}
 
 @router.post("/bulk-import/customers")
@@ -289,11 +309,15 @@ def create_product(
         existing.category = product.category
         existing.is_active = True
         try:
+            sync_event = _queue_inventory_change(
+                db, user_id, "product_restored", product_id=existing.id
+            )
             db.commit()
             db.refresh(existing)
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Failed to restore existing product: {str(e)}")
+        publish_realtime_event(sync_event)
         return existing
 
     db_product = Product(
@@ -302,6 +326,10 @@ def create_product(
     )
     db.add(db_product)
     try:
+        db.flush()
+        sync_event = _queue_inventory_change(
+            db, user_id, "product_created", product_id=db_product.id
+        )
         db.commit()
         db.refresh(db_product)
     except IntegrityError:
@@ -320,13 +348,19 @@ def create_product(
             raced.unit_price = product.unit_price
             raced.category = product.category
             raced.is_active = True
+            db.flush()
+            sync_event = _queue_inventory_change(
+                db, user_id, "product_restored", product_id=raced.id
+            )
             db.commit()
             db.refresh(raced)
+            publish_realtime_event(sync_event)
             return raced
         raise HTTPException(status_code=500, detail="Failed to create product due to a database constraint.")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")
+    publish_realtime_event(sync_event)
     return db_product
 
 @router.get("/products", response_model=List[ProductResponse])
@@ -384,11 +418,16 @@ def update_product(
     
     db.add(db_product)
     try:
+        db.flush()
+        sync_event = _queue_inventory_change(
+            db, user_id, "product_updated", product_id=db_product.id
+        )
         db.commit()
         db.refresh(db_product)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update product: {str(e)}")
+    publish_realtime_event(sync_event)
     return db_product
 
 @router.delete("/products/{product_id}")
@@ -407,10 +446,14 @@ def delete_product(
     
     db_product.is_active = False  # Soft delete — preserves all invoice line item history
     try:
+        sync_event = _queue_inventory_change(
+            db, user_id, "product_archived", product_id=db_product.id
+        )
         db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to archive product: {str(e)}")
+    publish_realtime_event(sync_event)
     return {"message": f"Product '{db_product.product_name}' archived. All invoice history preserved."}
 
 # ==================== STOCK MANAGEMENT ====================
@@ -443,11 +486,23 @@ def create_stock_movement(
             reason=movement.reason,
             reference_id=movement.reference_id,
         )
+        sync_event = _queue_inventory_change(
+            db,
+            user_id,
+            "stock_movement",
+            product_id=movement.product_id,
+            movement_type=movement_type,
+            quantity=float(movement.quantity),
+            current_stock=float(product.current_stock),
+            reason=str(movement.reason or ""),
+            reference_id=str(movement.reference_id or ""),
+        )
         db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Stock movement failed: {str(e)}")
-    
+
+    publish_realtime_event(sync_event)
     return {
         "message": "Stock movement recorded",
         "product_id": movement.product_id,

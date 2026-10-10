@@ -73,15 +73,17 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
 
 logger = logging.getLogger(__name__)
 from realtime import publish_realtime_event
+from durable_sync import append_sync_event
 from audit_logging import AuditAction, AuditService
 
 
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
 
-def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str) -> None:
-    """Restore reserved stock and reverse financial side effects when they exist."""
+def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
+    """Restore reserved stock and return mutations for durable change events."""
     items = json.loads(order.items_json or "[]")
+    restored_inventory = []
 
     for item in items:
         product_id = item.get("product_id")
@@ -94,6 +96,11 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
         ).first()
         if product:
             product.current_stock = (product.current_stock or 0) + quantity
+            restored_inventory.append({
+                "product_id": int(product.id),
+                "quantity": quantity,
+                "new_stock": float(product.current_stock),
+            })
 
     tagged_sales = db.query(sales).filter(
         sales.shopkeeper_id == shop_id,
@@ -135,6 +142,8 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
                 description=f"{reason}: Online Order #{order.id}",
                 tx_date=datetime.now(),
             ))
+
+    return restored_inventory, invoice
 
 
 # =====================
@@ -781,6 +790,13 @@ def marketplace_search(
                     if shop.shop_categories and not str(shop.shop_categories).strip().startswith("[")
                     else shop.shop_categories
                 ),
+                "online_setup_fee": float(getattr(shop, "online_setup_fee", 0) or 0),
+                "min_order": float(getattr(shop, "online_min_order", 0) or 0),
+                "delivery_fee": float(getattr(shop, "online_delivery_fee", 0) or 0),
+                "offer_delivery": bool(getattr(shop, "online_offer_delivery", True)),
+                "offer_pickup": bool(getattr(shop, "online_offer_pickup", True)),
+                "accept_cod": bool(getattr(shop, "online_accept_cod", True)),
+                "accept_online": bool(getattr(shop, "online_accept_online", False)),
                 **_shop_reputation(shop),
             }
             for shop in shop_rows
@@ -823,6 +839,9 @@ def marketplace_search(
                 "shop_id": shop.shop_id,
                 "shop_name": shop.shop_name,
                 "shop_address": shop.address or "",
+                "online_setup_fee": float(getattr(shop, "online_setup_fee", 0) or 0),
+                "delivery_fee": float(getattr(shop, "online_delivery_fee", 0) or 0),
+                "min_order": float(getattr(shop, "online_min_order", 0) or 0),
                 **_shop_reputation(shop),
             }
             for product, shop in rows
@@ -1090,6 +1109,12 @@ def browse_shop_products(
         "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),
         "rating_count": int(getattr(profile, "rating_count", 0) or 0),
         "online_setup_fee": float(getattr(profile, "online_setup_fee", 0) or 0),
+        "min_order": float(getattr(profile, "online_min_order", 0) or 0),
+        "delivery_fee": float(getattr(profile, "online_delivery_fee", 0) or 0),
+        "offer_delivery": bool(getattr(profile, "online_offer_delivery", True)),
+        "offer_pickup": bool(getattr(profile, "online_offer_pickup", True)),
+        "accept_cod": bool(getattr(profile, "online_accept_cod", True)),
+        "accept_online": bool(getattr(profile, "online_accept_online", False)),
         "is_online": True,
         "products": [
             (lambda p, discount: {
@@ -1193,6 +1218,23 @@ def place_order(
 
     delivery_address = sanitize_input(data.delivery_address, "delivery_address")
     online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
+    min_order = round(float(getattr(profile, "online_min_order", 0) or 0), 2)
+    delivery_fee = round(float(getattr(profile, "online_delivery_fee", 0) or 0), 2)
+    offer_delivery = bool(getattr(profile, "online_offer_delivery", True))
+    offer_pickup = bool(getattr(profile, "online_offer_pickup", True))
+    accept_cod = bool(getattr(profile, "online_accept_cod", True))
+    accept_online = bool(getattr(profile, "online_accept_online", False))
+
+    if min_order > 0 and items_subtotal < min_order:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum online order is ₹{min_order:.2f}. Add ₹{max(0.0, min_order - items_subtotal):.2f} more.",
+        )
+    if not offer_delivery and not offer_pickup:
+        raise HTTPException(status_code=400, detail="This shop is not accepting online delivery or pickup orders.")
+    if not accept_cod and not accept_online:
+        raise HTTPException(status_code=400, detail="This shop has no online payment method enabled.")
+
     discount_amount = 0.0
     coupon_code = (data.coupon_code or "").strip().upper() or None
 
@@ -1218,7 +1260,13 @@ def place_order(
             raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
         coupon.used_count = int(coupon.used_count or 0) + 1
 
-    total_amount = round(max(0.0, items_subtotal - discount_amount) + online_setup_fee, 2)
+    delivery_charge = delivery_fee if offer_delivery else 0.0
+    total_amount = round(
+        max(0.0, items_subtotal - discount_amount)
+        + online_setup_fee
+        + delivery_charge,
+        2,
+    )
 
     order = OnlineOrder(
         shop_id=data.shop_id,
@@ -1234,6 +1282,28 @@ def place_order(
     )
     db.add(order)
     try:
+        # Persist the order and its change-feed events atomically. Redis is
+        # only the low-latency signal; /api/sync/changes is the recovery path.
+        db.flush()
+        durable_events = [
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "order.created",
+                "shop_id": data.shop_id,
+                "order_id": order.id,
+                "customer_id": customer_id,
+                "status": "PENDING",
+                "total_amount": float(total_amount),
+            }),
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "inventory.changed",
+                "shop_id": data.shop_id,
+                "reference_type": "ONLINE_ORDER",
+                "reference_id": str(order.id),
+                "changes": inventory_changes,
+            }),
+        ]
         db.commit()
         db.refresh(order)
     except Exception as e:
@@ -1241,23 +1311,8 @@ def place_order(
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "order.created",
-        "shop_id": data.shop_id,
-        "order_id": order.id,
-        "customer_id": customer_id,
-        "status": "PENDING",
-        "total_amount": float(total_amount),
-    })
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "inventory.changed",
-        "shop_id": data.shop_id,
-        "reference_type": "ONLINE_ORDER",
-        "reference_id": str(order.id),
-        "changes": inventory_changes,
-    })
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "message": "Order placed successfully! The shop will confirm shortly.",
@@ -1267,6 +1322,10 @@ def place_order(
         "discount_amount": discount_amount,
         "coupon_code": coupon_code,
         "online_setup_fee": online_setup_fee,
+        "delivery_fee": delivery_charge,
+        "min_order": min_order,
+        "accept_cod": accept_cod,
+        "accept_online": accept_online,
         "total_amount": total_amount,
         "items": order_items,
         "status": "PENDING",
@@ -1454,6 +1513,28 @@ def place_guest_order(
     )
     db.add(order)
     try:
+        # Persist the order and its change-feed events atomically. Redis is
+        # only the low-latency signal; /api/sync/changes is the recovery path.
+        db.flush()
+        durable_events = [
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "order.created",
+                "shop_id": data.shop_id,
+                "order_id": order.id,
+                "customer_id": customer_id,
+                "status": "PENDING",
+                "total_amount": float(total_amount),
+            }),
+            append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "inventory.changed",
+                "shop_id": data.shop_id,
+                "reference_type": "ONLINE_ORDER",
+                "reference_id": str(order.id),
+                "changes": inventory_changes,
+            }),
+        ]
         db.commit()
         db.refresh(order)
     except Exception as e:
@@ -1482,23 +1563,8 @@ def place_guest_order(
     except Exception as e:
         logger.error(f"Failed to send FCM notification: {e}")
 
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "order.created",
-        "shop_id": data.shop_id,
-        "order_id": order.id,
-        "customer_id": customer.id,
-        "status": "PENDING",
-        "total_amount": float(total_amount),
-    })
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "inventory.changed",
-        "shop_id": data.shop_id,
-        "reference_type": "ONLINE_ORDER",
-        "reference_id": str(order.id),
-        "changes": inventory_changes,
-    })
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "message": "Guest order placed successfully!",
@@ -1611,12 +1677,12 @@ def cancel_customer_order(
 
     previous_status = order.order_status
     shop_id = order.shop_id
-    _reverse_online_order_financials(db, order, shop_id, "Customer cancellation")
+    restored_inventory, cancelled_invoice = _reverse_online_order_financials(
+        db, order, shop_id, "Customer cancellation"
+    )
 
     order.order_status = "CANCELLED"
-    db.commit()
-
-    publish_realtime_event({
+    realtime_events = [{
         "event_id": str(uuid4()),
         "type": "order.status_changed",
         "shop_id": shop_id,
@@ -1625,10 +1691,40 @@ def cancel_customer_order(
         "previous_status": previous_status,
         "status": "CANCELLED",
         "total_amount": float(order.total_amount),
-        "delivery_address": order.delivery_address,
-        "items": json.loads(order.items_json),
-        "created_at": order.created_at,
-    })
+    }]
+    if cancelled_invoice is not None:
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "invoice.updated",
+            "shop_id": shop_id,
+            "invoice_id": cancelled_invoice.id,
+            "invoice_number": cancelled_invoice.invoice_number,
+            "status": "CANCELLED",
+            "payment_status": str(cancelled_invoice.payment_status),
+            "paid_amount": float(cancelled_invoice.paid_amount or 0),
+            "total_amount": float(cancelled_invoice.total_amount or 0),
+            "source": "ONLINE_ORDER_CANCELLATION",
+            "reference_id": f"ONL-{order.id}",
+        })
+    if restored_inventory:
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": shop_id,
+            "reference_type": "ONLINE_ORDER_CANCELLATION",
+            "reference_id": str(order.id),
+            "changes": restored_inventory,
+        })
+
+    try:
+        durable_events = [append_sync_event(db, event) for event in realtime_events]
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to cancel order right now.")
+
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "success": True,
@@ -1852,27 +1948,42 @@ def get_incoming_orders(
     current_user: dict = Depends(owner_only),
 ):
     """Owner: View all incoming online orders for their shop"""
-    shop_id = current_user["user_id"]
-    q = db.query(OnlineOrder).filter(OnlineOrder.shop_id == shop_id)
+    shop_id = int(current_user["user_id"])
+    # The old implementation performed one customer query per order (N+1).
+    # Join customer data in the same query so 50 orders do not become 51 DB
+    # round-trips. Keep the response contract unchanged.
+    q = (
+        db.query(OnlineOrder, OnlineCustomerAuth)
+        .outerjoin(
+            OnlineCustomerAuth,
+            OnlineCustomerAuth.id == OnlineOrder.customer_id,
+        )
+        .filter(OnlineOrder.shop_id == shop_id)
+    )
     if status:
         q = q.filter(OnlineOrder.order_status == status.upper())
-    orders = q.order_by(OnlineOrder.created_at.desc()).offset(skip).limit(limit).all()
 
-    # Build response with customer info joined
-    result = []
-    for o in orders:
-        customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.id == o.customer_id).first()
-        result.append({
-            "order_id": o.id,
-            "customer_id": o.customer_id,
+    rows = (
+        q.order_by(OnlineOrder.created_at.desc())
+        .offset(max(0, skip))
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+
+    result = [
+        {
+            "order_id": order.id,
+            "customer_id": order.customer_id,
             "customer_name": customer.user_name if customer else "Guest",
             "customer_phone": customer.phone if customer else "",
-            "status": o.order_status,
-            "total_amount": float(o.total_amount),
-            "delivery_address": o.delivery_address,
-            "items": json.loads(o.items_json),
-            "created_at": str(o.created_at),
-        })
+            "status": order.order_status,
+            "total_amount": float(order.total_amount or 0),
+            "delivery_address": order.delivery_address,
+            "items": json.loads(order.items_json or "[]"),
+            "created_at": str(order.created_at),
+        }
+        for order, customer in rows
+    ]
 
     return {
         "orders": result,
@@ -2091,6 +2202,7 @@ def update_order_status(
         )
         db.add(invoice)
         db.flush()
+        linked_invoice = invoice
 
         # 3. Create InvoiceLineItems
         for item in items:
@@ -2195,7 +2307,68 @@ def update_order_status(
                     })
 
     order.order_status = new_status
+    realtime_events = [{
+        "event_id": str(uuid4()),
+        "type": "order.status_changed",
+        "shop_id": shop_id,
+        "order_id": order.id,
+        "customer_id": order.customer_id,
+        "previous_status": previous_status,
+        "status": new_status,
+        "total_amount": float(order.total_amount),
+    }]
+    if new_status == "ACCEPTED" and linked_invoice is not None:
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "invoice.created",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "total_amount": float(linked_invoice.total_amount or order.total_amount),
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "payment_status": str(linked_invoice.payment_status),
+            "status": str(linked_invoice.status),
+            "source": "ONLINE_ORDER",
+            "reference_id": f"ONL-{order.id}",
+        })
+    if linked_invoice is not None and new_status == "DELIVERED":
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "payment.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "amount": float(order.total_amount),
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "payment_status": "PAID",
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "invoice.updated",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "status": "PAID",
+            "payment_status": "PAID",
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "total_amount": float(linked_invoice.total_amount or 0),
+            "source": "ONLINE_ORDER_DELIVERY",
+            "reference_id": f"ONL-{order.id}",
+        })
+    if restored_inventory:
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": shop_id,
+            "reference_type": "ONLINE_ORDER_REJECT",
+            "reference_id": str(order.id),
+            "changes": restored_inventory,
+        })
+
     try:
+        durable_events = [append_sync_event(db, event) for event in realtime_events]
         db.commit()
     except Exception as e:
         db.rollback()
@@ -2244,59 +2417,8 @@ def update_order_status(
             audit_error,
         )
 
-    publish_realtime_event({
-        "event_id": str(uuid4()),
-        "type": "order.status_changed",
-        "shop_id": shop_id,
-        "order_id": order_id,
-        "customer_id": order.customer_id,
-        "previous_status": previous_status,
-        "status": new_status,
-        "total_amount": float(order.total_amount),
-        "delivery_address": order.delivery_address,
-        "items": json.loads(order.items_json),
-        "created_at": order.created_at,
-    })
-
-    if linked_invoice is not None and new_status == "DELIVERED":
-        publish_realtime_event({
-            "event_id": str(uuid4()),
-            "type": "payment.updated",
-            "shop_id": shop_id,
-            "invoice_id": linked_invoice.id,
-            "invoice_number": linked_invoice.invoice_number,
-            "amount": float(order.total_amount),
-            "paid_amount": float(linked_invoice.paid_amount or 0),
-            "payment_status": "PAID",
-            "source": "ONLINE_ORDER_DELIVERY",
-            "reference_id": f"ONL-{order.id}",
-        })
-
-    if linked_invoice is not None and new_status == "DELIVERED":
-        # Notify realtime dashboard clients that the invoice itself changed.
-        publish_realtime_event({
-            "event_id": str(uuid4()),
-            "type": "invoice.updated",
-            "shop_id": shop_id,
-            "invoice_id": linked_invoice.id,
-            "invoice_number": linked_invoice.invoice_number,
-            "status": "PAID",
-            "payment_status": "PAID",
-            "paid_amount": float(linked_invoice.paid_amount or 0),
-            "total_amount": float(linked_invoice.total_amount or 0),
-            "source": "ONLINE_ORDER_DELIVERY",
-            "reference_id": f"ONL-{order.id}",
-        })
-
-    if restored_inventory:
-        publish_realtime_event({
-            "event_id": str(uuid4()),
-            "type": "inventory.changed",
-            "shop_id": shop_id,
-            "reference_type": "ONLINE_ORDER_REJECT",
-            "reference_id": str(order.id),
-            "changes": restored_inventory,
-        })
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "message": f"Order #{order_id} status updated to {new_status}.",

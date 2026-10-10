@@ -29,6 +29,12 @@ export interface ShopResponse {
   rating_count?: number;
   products: ShopProduct[];
   online_setup_fee?: number;
+  min_order?: number;
+  delivery_fee?: number;
+  offer_delivery?: boolean;
+  offer_pickup?: boolean;
+  accept_cod?: boolean;
+  accept_online?: boolean;
 }
 
 export interface GuestOrderPayload {
