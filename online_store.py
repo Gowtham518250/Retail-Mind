@@ -80,9 +80,10 @@ from audit_logging import AuditAction, AuditService
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
 
-def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str) -> None:
-    """Restore reserved stock and reverse financial side effects when they exist."""
+def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
+    """Restore reserved stock and return mutations for durable change events."""
     items = json.loads(order.items_json or "[]")
+    restored_inventory = []
 
     for item in items:
         product_id = item.get("product_id")
@@ -95,6 +96,11 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
         ).first()
         if product:
             product.current_stock = (product.current_stock or 0) + quantity
+            restored_inventory.append({
+                "product_id": int(product.id),
+                "quantity": quantity,
+                "new_stock": float(product.current_stock),
+            })
 
     tagged_sales = db.query(sales).filter(
         sales.shopkeeper_id == shop_id,
@@ -136,6 +142,8 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
                 description=f"{reason}: Online Order #{order.id}",
                 tx_date=datetime.now(),
             ))
+
+    return restored_inventory, invoice
 
 
 # =====================
@@ -1669,26 +1677,54 @@ def cancel_customer_order(
 
     previous_status = order.order_status
     shop_id = order.shop_id
-    _reverse_online_order_financials(db, order, shop_id, "Customer cancellation")
+    restored_inventory, cancelled_invoice = _reverse_online_order_financials(
+        db, order, shop_id, "Customer cancellation"
+    )
 
     order.order_status = "CANCELLED"
-    try:
-        durable_event = append_sync_event(db, {
+    realtime_events = [{
+        "event_id": str(uuid4()),
+        "type": "order.status_changed",
+        "shop_id": shop_id,
+        "order_id": order.id,
+        "customer_id": customer_id,
+        "previous_status": previous_status,
+        "status": "CANCELLED",
+        "total_amount": float(order.total_amount),
+    }]
+    if cancelled_invoice is not None:
+        realtime_events.append({
             "event_id": str(uuid4()),
-            "type": "order.status_changed",
+            "type": "invoice.updated",
             "shop_id": shop_id,
-            "order_id": order.id,
-            "customer_id": customer_id,
-            "previous_status": previous_status,
+            "invoice_id": cancelled_invoice.id,
+            "invoice_number": cancelled_invoice.invoice_number,
             "status": "CANCELLED",
-            "total_amount": float(order.total_amount),
+            "payment_status": str(cancelled_invoice.payment_status),
+            "paid_amount": float(cancelled_invoice.paid_amount or 0),
+            "total_amount": float(cancelled_invoice.total_amount or 0),
+            "source": "ONLINE_ORDER_CANCELLATION",
+            "reference_id": f"ONL-{order.id}",
         })
+    if restored_inventory:
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": shop_id,
+            "reference_type": "ONLINE_ORDER_CANCELLATION",
+            "reference_id": str(order.id),
+            "changes": restored_inventory,
+        })
+
+    try:
+        durable_events = [append_sync_event(db, event) for event in realtime_events]
         db.commit()
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to cancel order right now.")
 
-    publish_realtime_event(durable_event)
+    for event in durable_events:
+        publish_realtime_event(event)
 
     return {
         "success": True,
@@ -2166,6 +2202,7 @@ def update_order_status(
         )
         db.add(invoice)
         db.flush()
+        linked_invoice = invoice
 
         # 3. Create InvoiceLineItems
         for item in items:
@@ -2280,6 +2317,20 @@ def update_order_status(
         "status": new_status,
         "total_amount": float(order.total_amount),
     }]
+    if new_status == "ACCEPTED" and linked_invoice is not None:
+        realtime_events.append({
+            "event_id": str(uuid4()),
+            "type": "invoice.created",
+            "shop_id": shop_id,
+            "invoice_id": linked_invoice.id,
+            "invoice_number": linked_invoice.invoice_number,
+            "total_amount": float(linked_invoice.total_amount or order.total_amount),
+            "paid_amount": float(linked_invoice.paid_amount or 0),
+            "payment_status": str(linked_invoice.payment_status),
+            "status": str(linked_invoice.status),
+            "source": "ONLINE_ORDER",
+            "reference_id": f"ONL-{order.id}",
+        })
     if linked_invoice is not None and new_status == "DELIVERED":
         realtime_events.append({
             "event_id": str(uuid4()),
