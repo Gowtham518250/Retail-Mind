@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from db import Base
-from durable_sync import append_sync_event, get_my_sync_changes
+from durable_sync import append_sync_event, get_my_sync_changes, get_sync_changes
 from models import CustomerSyncClock, CustomerSyncEvent, SyncClock, SyncEvent
 
 
@@ -128,5 +128,59 @@ def test_customer_changes_are_scoped_to_authenticated_customer():
                 db=db,
             )
         assert getattr(error.value, "status_code", None) == 403
+    finally:
+        db.close()
+
+
+def test_owner_sync_changes_are_shop_scoped_and_cursor_paged():
+    db = _session()
+    try:
+        for invoice_id in (101, 102, 103):
+            append_sync_event(
+                db,
+                {"type": "invoice.created", "shop_id": 7, "invoice_id": invoice_id},
+            )
+        append_sync_event(
+            db,
+            {"type": "invoice.created", "shop_id": 8, "invoice_id": 801},
+        )
+        db.commit()
+
+        first = get_sync_changes(
+            after=0,
+            limit=2,
+            current_user={"role": "OWNER", "user_id": 7},
+            db=db,
+        )
+        assert [event["sync_seq"] for event in first["events"]] == [1, 2]
+        assert [event["invoice_id"] for event in first["events"]] == [101, 102]
+        assert first["next_cursor"] == 2
+        assert first["high_watermark"] == 3
+        assert first["has_more"] is True
+
+        second = get_sync_changes(
+            after=first["next_cursor"],
+            limit=2,
+            current_user={"role": "OWNER", "user_id": 7},
+            db=db,
+        )
+        assert [event["sync_seq"] for event in second["events"]] == [3]
+        assert [event["invoice_id"] for event in second["events"]] == [103]
+        assert second["next_cursor"] == 3
+        assert second["has_more"] is False
+
+        # A caught-up poll is empty and keeps the current cursor stable.
+        caught_up = get_sync_changes(
+            after=second["next_cursor"],
+            limit=2,
+            current_user={"role": "OWNER", "user_id": 7},
+            db=db,
+        )
+        assert caught_up == {
+            "events": [],
+            "next_cursor": 3,
+            "high_watermark": 3,
+            "has_more": False,
+        }
     finally:
         db.close()
