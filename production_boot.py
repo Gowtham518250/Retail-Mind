@@ -476,6 +476,30 @@ def _combine_shift_and_legacy_records(shift_rows, legacy_records):
             record["local_pending"] = False
             records.append(record)
 
+    # The Flutter local-first service assigns session_index in chronological
+    # order, starting at zero for the first check-in that day. Do the same for
+    # shift rows instead of using the shift name as the index (the first check-in
+    # might be at 15:00, in which case it must still use index 0).
+    records_by_identity_date = {}
+    for record in records:
+        day = str(record.get("attendance_date") or "").split("T")[0]
+        identity = (
+            str(record.get("employee_id") or ""),
+            str(record.get("worker_id") or ""),
+            day,
+        )
+        records_by_identity_date.setdefault(identity, []).append(record)
+
+    for daily_records in records_by_identity_date.values():
+        daily_records.sort(
+            key=lambda item: (
+                _parse_attendance_datetime(item.get("check_in_time")) is None,
+                _parse_attendance_datetime(item.get("check_in_time")) or datetime.max,
+            )
+        )
+        for session_index, record in enumerate(daily_records):
+            record["session_index"] = session_index
+
     records.sort(
         key=lambda item: (
             str(item.get("attendance_date") or ""),
