@@ -426,6 +426,7 @@ if __name__ == "__main__":
     _ensure_online_delivery_payment_trigger()
     _ensure_shift_table()
     api = _patch_routes()
-    _start_attendance_auto_checkout()
+    # The FastAPI startup hook starts the scheduler for both production_boot.py
+    # and direct `uvicorn app:api` launches; do not start a duplicate thread here.
     import uvicorn
     uvicorn.run(api, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
