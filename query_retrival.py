@@ -495,9 +495,12 @@ def _fast_receivables_query(
         r"customer dues|owe|owes|owed|receivable|receivables|khata|udhar|credit ledger)\b",
         normalized,
     ))
-    asks_khata = bool(re.search(r"\b(khata|udhar|credit ledger|customer credit)\b", normalized))
     asks_invoice = bool(re.search(r"\b(invoice|invoices|bill|bills|billing)\b", normalized))
     asks_customer = bool(re.search(r"\b(customer|customers|user|users|who|whose)\b", normalized))
+    asks_khata = bool(
+        re.search(r"\b(khata|udhar|credit ledger|customer credit)\b", normalized)
+        or (asks_customer and not asks_invoice and re.search(r"\bbalances?\b", normalized))
+    )
     if not debt_intent or not (asks_khata or asks_invoice or asks_customer):
         return None
 
@@ -565,6 +568,11 @@ def _fast_receivables_query(
             f"Found {len(rows)} customer(s) with outstanding khata balances "
             f"totaling ₹{total:,.2f} in the returned records."
         )
+        if re.search(r"\boverdue\b", normalized):
+            answer += (
+                " These are current khata balances ordered highest first; this table has no due-date field, "
+                "so overdue status cannot be verified from khata records alone."
+            )
         if has_more:
             answer += " Showing the first 500 records; narrow the question to view a smaller set."
         return {
