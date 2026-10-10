@@ -283,6 +283,15 @@ def _resolve_explicit_date_scope(query: str) -> dict:
     if re.search(r"\byesterday(?:'s)?\b", q):
         d = today - timedelta(days=1)
         return {"kind": "exact", "start_date": d, "end_date": d, "label": "yesterday"}
+    range_dates = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
+    if len(range_dates) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
+        try:
+            start, end = date(*map(int, range_dates[0])), date(*map(int, range_dates[1]))
+            if start > end:
+                start, end = end, start
+            return {"kind": "range", "start_date": start, "end_date": end, "label": f"{start.isoformat()} to {end.isoformat()}"}
+        except ValueError:
+            pass
     iso = re.search(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
     dmy = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", q)
     try:
