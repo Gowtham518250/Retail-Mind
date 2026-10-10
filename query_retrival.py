@@ -511,10 +511,11 @@ def _fast_receivables_query(
     if named_customer:
         return None
 
-    asks_list = bool(re.search(
-        r"\b(all|list|show|details|detail|which|who|each|every|highest|top|customers?)\b",
+    explicit_list_request = bool(re.search(
+        r"\b(all|list|show|details|detail|which|who|each|every|highest|top)\b",
         normalized,
     ))
+    asks_list = explicit_list_request or asks_customer
     asks_total = bool(re.search(
         r"\b(total|overall|sum|combined|total amount|total outstanding|in total)\b",
         normalized,
@@ -530,10 +531,10 @@ def _fast_receivables_query(
         if date_scope.get("kind") != "unspecified":
             return None
         params = {"user_id": int(user_id), "row_limit": 501}
-        if asks_total or asks_count and not asks_list:
+        if asks_total or (asks_count and not explicit_list_request):
             sql = (
-                "SELECT COUNT(*)::bigint AS customer_count, "
-                "COALESCE(SUM(COALESCE(khata_balance, 0)), 0)::numeric AS total_outstanding "
+                "SELECT COUNT(*) AS customer_count, "
+                "COALESCE(SUM(COALESCE(khata_balance, 0)), 0) AS total_outstanding "
                 "FROM khata_balances "
                 "WHERE shop_id = :user_id AND COALESCE(khata_balance, 0) > 0"
             )
@@ -608,8 +609,8 @@ def _fast_receivables_query(
 
     if asks_total or asks_count and not asks_list:
         sql = (
-            "SELECT COUNT(*)::bigint AS invoice_count, "
-            "COALESCE(SUM(COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0)), 0)::numeric "
+            "SELECT COUNT(*) AS invoice_count, "
+            "COALESCE(SUM(COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0)), 0) "
             "AS total_outstanding "
             "FROM invoices i "
             "LEFT JOIN customers c ON c.id = i.customer_id AND c.user_id = i.user_id "
@@ -657,8 +658,8 @@ def _fast_receivables_query(
             f" WHERE {common_where}"
             ") "
             "SELECT customer_key, MIN(customer_name) AS customer_name, MIN(customer_phone) AS customer_phone, "
-            "COUNT(*)::bigint AS unpaid_invoice_count, "
-            "COALESCE(SUM(outstanding_amount), 0)::numeric AS outstanding_amount, "
+            "COUNT(*) AS unpaid_invoice_count, "
+            "COALESCE(SUM(outstanding_amount), 0) AS outstanding_amount, "
             "MIN(due_date) AS earliest_due_date, MAX(invoice_date) AS latest_invoice_date "
             "FROM open_invoices GROUP BY customer_key "
             "ORDER BY outstanding_amount DESC, customer_name ASC LIMIT :row_limit"
@@ -1071,7 +1072,7 @@ async def ask_query(
     print("QUERY:", query)
 
     retrieval_started = time.perf_counter()
-    answer = list(_cached_schema_search(re.sub(r"\\s+", " ", query).strip().lower()))
+    answer = list(_cached_schema_search(re.sub(r"\s+", " ", query).strip().lower()))
     retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
     print("Relevant database information:")
