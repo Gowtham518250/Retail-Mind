@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 from db import get_db
 from models import (
@@ -1494,6 +1495,8 @@ def place_guest_order(
                     "total_amount": float(existing_order.total_amount),
                     "items": json.loads(existing_order.items_json),
                     "status": existing_order.order_status,
+                    "payment_method": existing_order.payment_method or "COD",
+                    "payment_status": existing_order.payment_status or "COD_DUE",
                     "duplicate": True,
                 }
 
@@ -1643,6 +1646,34 @@ def place_guest_order(
         ]
         db.commit()
         db.refresh(order)
+    except IntegrityError as e:
+        db.rollback()
+        if idempotency_key:
+            duplicate_order = db.query(OnlineOrder).filter(
+                OnlineOrder.shop_id == data.shop_id,
+                OnlineOrder.customer_id == customer_id,
+                OnlineOrder.idempotency_key == idempotency_key,
+            ).first()
+            if duplicate_order:
+                return {
+                    "message": "Guest order already placed.",
+                    "order_id": duplicate_order.id,
+                    "shop_name": profile.shop_name if profile else "",
+                    "total_amount": float(duplicate_order.total_amount),
+                    "items": json.loads(duplicate_order.items_json),
+                    "status": duplicate_order.order_status,
+                    "payment_method": duplicate_order.payment_method or "COD",
+                    "payment_status": duplicate_order.payment_status or "COD_DUE",
+                    "duplicate": True,
+                }
+        logger.warning(
+            "Guest order idempotency/constraint conflict shop_id=%s phone=%s: %s",
+            data.shop_id, data.phone, e,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="This order may already have been submitted. Refresh your order history before retrying.",
+        )
     except Exception as e:
         logger.error(f"Failed to save guest order (shop_id={data.shop_id}, phone={data.phone}): {e}")
         db.rollback()
