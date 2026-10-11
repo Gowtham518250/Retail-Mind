@@ -2053,7 +2053,7 @@ def match_online_order_payment_from_notification(
                 "reason": "The matched invoice is not an online-order invoice; invoice payment sync owns this transaction.",
             }
 
-        order_match = re.search(r"Online Order #(\\d+)", linked_invoice.notes or "")
+        order_match = re.search(r"Online Order #(\d+)", linked_invoice.notes or "")
         if not order_match:
             return {
                 "matched": False,
