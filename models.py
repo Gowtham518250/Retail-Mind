@@ -3,7 +3,7 @@ Enhanced Database Models for Hybrid Search RAG
 Includes: Inventory, Attendance, Invoices, Payments, Customers, Notifications, Stock Management
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index, JSON, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, date
@@ -1115,6 +1115,15 @@ class OnlineOrder(Base):
             "shop_id",
             "payment_detection_key",
             unique=True,
+        ),
+        Index(
+            "uq_online_order_request_idempotency",
+            "shop_id",
+            "customer_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
         ),
     )
     
