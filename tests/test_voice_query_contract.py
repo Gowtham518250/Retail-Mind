@@ -209,3 +209,45 @@ def test_answer_translation_returns_english_without_llm(monkeypatch):
 
     monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "")
     assert query_retrival._translate_answer_to_language("Total sales: ₹12,450", "en") == "Total sales: ₹12,450"
+
+
+
+def test_deterministic_query_planner_avoids_extra_llm_for_simple_kpis():
+    from query_retrival import _can_use_fast_business_query, _make_deterministic_query_plan
+
+    plan = _make_deterministic_query_plan("What were my total sales yesterday?")
+    assert plan["planner"] == "deterministic"
+    assert plan["intent"] == "aggregate"
+    assert plan["metric"] == "sales_amount"
+    assert plan["confidence"] >= 0.9
+    assert _can_use_fast_business_query(
+        "What were my total sales yesterday?",
+        {"kind": "exact", "label": "yesterday"},
+    )
+
+
+def test_deterministic_query_planner_keeps_dimensional_questions_on_rag_sql():
+    from query_retrival import _can_use_fast_business_query, _make_deterministic_query_plan
+
+    query = "Show total sales by product this month"
+    plan = _make_deterministic_query_plan(query)
+    assert plan["planner"] == "deterministic"
+    assert plan["intent"] == "general"
+    assert plan["confidence"] == 0.0
+    assert not _can_use_fast_business_query(
+        query,
+        {"kind": "range", "label": "this month"},
+    )
+
+
+def test_deterministic_query_planner_does_not_fast_path_ambiguous_mixed_metric():
+    from query_retrival import _can_use_fast_business_query
+
+    assert not _can_use_fast_business_query(
+        "Show total sales and expenses",
+        {"kind": "unspecified", "label": "not specified"},
+    )
+    assert not _can_use_fast_business_query(
+        "What is my total profit?",
+        {"kind": "unspecified", "label": "not specified"},
+    )
