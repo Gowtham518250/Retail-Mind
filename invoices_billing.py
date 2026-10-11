@@ -392,45 +392,45 @@ def _apply_payment_write(
     if commit_transaction:
         # Business-level audit trail is best-effort and intentionally runs after
         # the financial transaction has committed. A logging failure must never
-    # turn a successful payment into an apparent API failure.
-    try:
-        AuditService.log_action(
-            db=db,
-            user_id=shop_id,
-            action=AuditAction.CREATE,
-            table_name="payments",
-            record_id=payment.id,
-            new_values={
-                "invoice_id": invoice.id,
-                "invoice_number": invoice.invoice_number,
-                "amount": float(delta),
-                "payment_method": payment_method.value,
-                "reference_id": (data.reference_id or "").strip() or None,
-                "source": data.source,
-            },
-            description=f"Payment recorded for invoice {invoice.invoice_number}",
-        )
-        AuditService.log_action(
-            db=db,
-            user_id=shop_id,
-            action=AuditAction.UPDATE,
-            table_name="invoices",
-            record_id=invoice.id,
-            new_values={
-                "paid_amount": float(invoice.paid_amount or 0),
-                "payment_status": (
-                    invoice.payment_status.value
-                    if hasattr(invoice.payment_status, "value")
-                    else str(invoice.payment_status)
-                ),
-            },
-            description=f"Invoice payment state updated for {invoice.invoice_number}",
-        )
-    except Exception as audit_error:
-        logger.warning(
-            "Payment audit logging failed after committed transaction: %s",
-            audit_error,
-        )
+        # turn a successful payment into an apparent API failure.
+        try:
+            AuditService.log_action(
+                db=db,
+                user_id=shop_id,
+                action=AuditAction.CREATE,
+                table_name="payments",
+                record_id=payment.id,
+                new_values={
+                    "invoice_id": invoice.id,
+                    "invoice_number": invoice.invoice_number,
+                    "amount": float(delta),
+                    "payment_method": payment_method.value,
+                    "reference_id": (data.reference_id or "").strip() or None,
+                    "source": data.source,
+                },
+                description=f"Payment recorded for invoice {invoice.invoice_number}",
+            )
+            AuditService.log_action(
+                db=db,
+                user_id=shop_id,
+                action=AuditAction.UPDATE,
+                table_name="invoices",
+                record_id=invoice.id,
+                new_values={
+                    "paid_amount": float(invoice.paid_amount or 0),
+                    "payment_status": (
+                        invoice.payment_status.value
+                        if hasattr(invoice.payment_status, "value")
+                        else str(invoice.payment_status)
+                    ),
+                },
+                description=f"Invoice payment state updated for {invoice.invoice_number}",
+            )
+        except Exception as audit_error:
+            logger.warning(
+                "Payment audit logging failed after committed transaction: %s",
+                audit_error,
+            )
 
         for event in payment_events:
             publish_realtime_event(event)
