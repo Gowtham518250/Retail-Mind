@@ -260,6 +260,18 @@ class OwnerOrderAction(BaseModel):
     )
 
 
+class PaymentNotificationMatch(BaseModel):
+    """Payment candidate detected by the authenticated owner app."""
+    amount: float = Field(..., gt=0, le=100000000)
+    payment_reference: str = Field(..., min_length=4, max_length=128)
+    idempotency_key: str = Field(..., min_length=8, max_length=128)
+    confidence_score: float = Field(..., ge=0, le=1)
+    decision: str = Field(..., min_length=1, max_length=20)
+    source: str = Field(default="PAYMENT_NOTIFICATION", max_length=50)
+    payer_name: Optional[str] = Field(default=None, max_length=120)
+    timestamp: Optional[str] = Field(default=None, max_length=80)
+
+
 class OrderRating(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     comment: Optional[str] = Field(None, max_length=500)
@@ -1961,6 +1973,133 @@ def get_shop_reviews(
     }
 
 
+@router.post("/owner/orders/match-notification-payment")
+def match_online_order_payment_from_notification(
+    data: PaymentNotificationMatch,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    """Match a trusted owner-device payment notification to a pending UPI order.
+
+    This uses the app's SMS/payment-app notification flow; it does not use a
+    payment gateway webhook. Ambiguous or low-confidence matches are not paid.
+    """
+    shop_id = int(current_user["user_id"])
+    if (
+        data.decision.strip().upper() != "CONFIRMED"
+        or data.confidence_score < 0.70
+        or not data.payment_reference.strip()
+    ):
+        return {
+            "matched": False,
+            "requires_manual_review": True,
+            "reason": "A high-confidence confirmed notification with a transaction reference is required.",
+        }
+
+    detection_key = hashlib.sha256(data.idempotency_key.strip().encode()).hexdigest()
+    existing_order = db.query(OnlineOrder).filter(
+        OnlineOrder.shop_id == shop_id,
+        OnlineOrder.payment_detection_key == detection_key,
+    ).first()
+    if existing_order:
+        return {
+            "matched": existing_order.payment_status == "PAID",
+            "duplicate": True,
+            "order_id": existing_order.id,
+            "payment_status": existing_order.payment_status,
+        }
+
+    amount = round(float(data.amount), 2)
+    candidates = (
+        db.query(OnlineOrder)
+        .filter(
+            OnlineOrder.shop_id == shop_id,
+            OnlineOrder.payment_method == "UPI",
+            OnlineOrder.payment_status != "PAID",
+            OnlineOrder.order_status.notin_(["CANCELLED", "REJECTED", "RETURNED"]),
+            func.abs(OnlineOrder.total_amount - amount) <= 0.01,
+        )
+        .with_for_update()
+        .limit(3)
+        .all()
+    )
+    if len(candidates) != 1:
+        return {
+            "matched": False,
+            "requires_manual_review": True,
+            "reason": "No unique pending UPI order matches this payment amount.",
+            "candidate_count": len(candidates),
+        }
+
+    order = candidates[0]
+    order.payment_status = "PAID"
+    order.payment_reference = data.payment_reference.strip()
+    order.payment_detection_key = detection_key
+    order.payment_confirmed_at = datetime.utcnow()
+
+    append_sync_event(db, {
+        "event_id": str(uuid4()),
+        "type": "order.payment_confirmed",
+        "shop_id": shop_id,
+        "order_id": order.id,
+        "customer_id": order.customer_id,
+        "amount": amount,
+        "payment_method": "UPI",
+        "payment_status": "PAID",
+        "payment_reference": order.payment_reference,
+        "source": data.source,
+    })
+
+    linked_invoice = db.query(Invoice).filter(
+        Invoice.user_id == shop_id,
+        Invoice.source == "ONLINE_ORDER",
+        Invoice.notes.like(f"%Online Order #{order.id}%"),
+        Invoice.status != "CANCELLED",
+    ).with_for_update().first()
+
+    if linked_invoice is not None:
+        outstanding = max(
+            0.0,
+            float(linked_invoice.total_amount or 0) - float(linked_invoice.paid_amount or 0),
+        )
+        if outstanding > 0.01:
+            from invoices_billing import PaymentWriteRequest, _apply_payment_write
+            payment_key = hashlib.sha256(
+                f"online-order:{shop_id}:{order.id}:{detection_key}".encode()
+            ).hexdigest()
+            _apply_payment_write(
+                data=PaymentWriteRequest(
+                    invoice_number=linked_invoice.invoice_number,
+                    amount=outstanding,
+                    payment_method="ONLINE",
+                    reference_id=order.payment_reference,
+                    idempotency_key=payment_key,
+                    payer_name=data.payer_name,
+                    source="PAYMENT_NOTIFICATION",
+                    timestamp=data.timestamp,
+                    notes=f"UPI notification matched to online order #{order.id}",
+                ),
+                db=db,
+                shop_id=shop_id,
+                mode="delta",
+            )
+        else:
+            db.commit()
+    else:
+        # Paid before owner acceptance: the durable order fields carry the
+        # reference until ACCEPT creates the invoice and payment-ledger row.
+        db.commit()
+
+    return {
+        "matched": True,
+        "duplicate": False,
+        "order_id": order.id,
+        "payment_status": order.payment_status,
+        "payment_reference": order.payment_reference,
+        "invoice_number": linked_invoice.invoice_number if linked_invoice else None,
+    }
+
+
 @router.get("/owner/orders")
 def get_incoming_orders(
     status: Optional[str] = None,
@@ -2206,6 +2345,7 @@ def update_order_status(
 
         # 2. Create Invoice (ACCEPTED = COD/pending payment)
         invoice_num = f"ONL-{order.id}-{int(datetime.now().timestamp())}"
+        order_already_paid = (order.payment_status or "").upper() == "PAID"
         invoice = Invoice(
             user_id=shop_id,
             customer_name=customer_name,
@@ -2216,9 +2356,9 @@ def update_order_status(
             subtotal=float(order.total_amount),
             tax=0,
             total_amount=float(order.total_amount),
-            paid_amount=0,
-            status="SENT",
-            payment_status="UNPAID",
+            paid_amount=float(order.total_amount) if order_already_paid else 0,
+            status="PAID" if order_already_paid else "SENT",
+            payment_status="PAID" if order_already_paid else "UNPAID",
             source="ONLINE_ORDER",
             notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}"
         )
@@ -2237,6 +2377,35 @@ def update_order_status(
                 line_total=item.get("line_total", 0),
             )
             db.add(db_line)
+
+        if order_already_paid:
+            payment_key = hashlib.sha256(
+                f"online-order:{shop_id}:{order.id}:{order.payment_detection_key or order.payment_reference}".encode()
+            ).hexdigest()
+            existing_payment = db.query(Payment).filter(
+                Payment.invoice_id == invoice.id,
+                Payment.idempotency_key == payment_key,
+            ).first()
+            if existing_payment is None:
+                payment_date = order.payment_confirmed_at or datetime.utcnow()
+                db.add(Payment(
+                    invoice_id=invoice.id,
+                    payment_method=PaymentMethod.ONLINE,
+                    amount=float(order.total_amount),
+                    payment_date=payment_date,
+                    reference_number=order.payment_reference,
+                    notes="Online order payment matched from owner-device notification",
+                    idempotency_key=payment_key,
+                ))
+                db.add(UniversalTransaction(
+                    shop_id=shop_id,
+                    tx_type="INCOME",
+                    category="PAYMENT",
+                    amount=float(order.total_amount),
+                    reference_id=invoice.invoice_number,
+                    description=f"Payment received for online order #{order.id}",
+                    tx_date=payment_date,
+                ))
 
         # 4. Write to universal P&L journal
         tx = UniversalTransaction(
@@ -2300,18 +2469,136 @@ def update_order_status(
         challenge.used = True
         challenge.verified_at = datetime.utcnow()
 
-        # Mark the linked invoice as PAID.
+        # Delivery OTP verifies fulfilment, not a UPI transfer. COD is
+        # settled at hand-off; UPI is settled by the notification matcher.
         linked_invoice = db.query(Invoice).filter(
             Invoice.source == "ONLINE_ORDER",
             Invoice.notes.like(f"%Online Order #{order.id}%"),
             Invoice.user_id == shop_id,
         ).first()
-        if linked_invoice:
+        if (order.payment_method or "COD").upper() == "COD":
+            order.payment_status = "PAID"
+            order.payment_confirmed_at = datetime.utcnow()
+            if linked_invoice:
+                linked_invoice.payment_status = "PAID"
+                linked_invoice.paid_amount = float(order.total_amount)
+                linked_invoice.status = "PAID"
+            
+    # Delivery is the accounting settlement point for online orders.
+    # Reconcile the canonical sale/invoice records here as well as at ACCEPT so
+    # an order can never become DELIVERED without appearing in Sales/Dashboard.
+    if new_status == "DELIVERED":
+        items = json.loads(order.items_json)
+        customer = db.query(OnlineCustomerAuth).filter(
+            OnlineCustomerAuth.id == order.customer_id
+        ).first()
+        customer_name = customer.user_name if customer else "Online Customer"
+        customer_phone = customer.phone if customer else ""
+        delivery_date = date.today()
+
+        # 1) Ensure exactly one legacy sales row exists for every delivered
+        # online-order item. Existing ACCEPT-created rows are reused and their
+        # business date is moved to the actual delivery date.
+        for item in items:
+            product_name = item.get("product_name", "Online Item")
+            existing_sale = db.query(sales).filter(
+                sales.shopkeeper_id == shop_id,
+                sales.reference_order_id == order.id,
+                sales.product_name == product_name,
+            ).first()
+            if existing_sale:
+                existing_sale.sale_date = delivery_date
+                existing_sale.price = item.get("unit_price", 0)
+                existing_sale.quantity = item.get("quantity", 1)
+                existing_sale.total = item.get("line_total", 0)
+            else:
+                db.add(sales(
+                    shopkeeper_id=shop_id,
+                    product_name=product_name,
+                    price=item.get("unit_price", 0),
+                    quantity=item.get("quantity", 1),
+                    total=item.get("line_total", 0),
+                    sale_date=delivery_date,
+                    reference_order_id=order.id,
+                ))
+
+        # 2) Ensure the online order has a canonical invoice. This repairs
+        # orders accepted by older deployments where invoice creation failed
+        # or was skipped.
+        if linked_invoice is None:
+            linked_invoice = db.query(Invoice).filter(
+                Invoice.user_id == shop_id,
+                Invoice.source == "ONLINE_ORDER",
+                Invoice.notes.like(f"%Online Order #{order.id}%"),
+            ).first()
+
+        if linked_invoice is None:
+            invoice_num = f"ONL-{order.id}"
+            linked_invoice = db.query(Invoice).filter(
+                Invoice.user_id == shop_id,
+                Invoice.invoice_number == invoice_num,
+            ).first()
+            if linked_invoice is None:
+                linked_invoice = Invoice(
+                    user_id=shop_id,
+                    customer_name=customer_name,
+                    customer_phone=customer_phone,
+                    invoice_number=invoice_num,
+                    invoice_date=delivery_date,
+                    due_date=delivery_date,
+                    subtotal=float(order.total_amount),
+                    tax=0,
+                    total_amount=float(order.total_amount),
+                    paid_amount=0,
+                    status="SENT",
+                    payment_status="UNPAID",
+                    source="ONLINE_ORDER",
+                    notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}",
+                )
+                db.add(linked_invoice)
+                db.flush()
+
+                for item in items:
+                    db.add(InvoiceLineItem(
+                        invoice_id=linked_invoice.id,
+                        product_id=item.get("product_id"),
+                        description=item.get("product_name", "Item"),
+                        quantity=item.get("quantity", 1),
+                        unit_price=item.get("unit_price", 0),
+                        line_total=item.get("line_total", 0),
+                    ))
+
+        # 3) Delivery closes fulfilment. COD is settled at hand-off; UPI
+        # remains unpaid until the owner-device notification matcher confirms it.
+        linked_invoice.invoice_date = delivery_date
+        if order.payment_status == "PAID":
             linked_invoice.payment_status = "PAID"
             linked_invoice.paid_amount = float(order.total_amount)
             linked_invoice.status = "PAID"
-            
-    # Delivery is the accounting settlement point for online orders.\n    # Reconcile the canonical sale/invoice records here as well as at ACCEPT so\n    # an order can never become DELIVERED without appearing in Sales/Dashboard.\n    if new_status == "DELIVERED":\n        items = json.loads(order.items_json)\n        customer = db.query(OnlineCustomerAuth).filter(\n            OnlineCustomerAuth.id == order.customer_id\n        ).first()\n        customer_name = customer.user_name if customer else "Online Customer"\n        customer_phone = customer.phone if customer else ""\n        delivery_date = date.today()\n\n        # 1) Ensure exactly one legacy sales row exists for every delivered\n        # online-order item. Existing ACCEPT-created rows are reused and their\n        # business date is moved to the actual delivery date.\n        for item in items:\n            product_name = item.get("product_name", "Online Item")\n            existing_sale = db.query(sales).filter(\n                sales.shopkeeper_id == shop_id,\n                sales.reference_order_id == order.id,\n                sales.product_name == product_name,\n            ).first()\n            if existing_sale:\n                existing_sale.sale_date = delivery_date\n                existing_sale.price = item.get("unit_price", 0)\n                existing_sale.quantity = item.get("quantity", 1)\n                existing_sale.total = item.get("line_total", 0)\n            else:\n                db.add(sales(\n                    shopkeeper_id=shop_id,\n                    product_name=product_name,\n                    price=item.get("unit_price", 0),\n                    quantity=item.get("quantity", 1),\n                    total=item.get("line_total", 0),\n                    sale_date=delivery_date,\n                    reference_order_id=order.id,\n                ))\n\n        # 2) Ensure the online order has a canonical invoice. This repairs\n        # orders accepted by older deployments where invoice creation failed\n        # or was skipped.\n        if linked_invoice is None:\n            linked_invoice = db.query(Invoice).filter(\n                Invoice.user_id == shop_id,\n                Invoice.source == "ONLINE_ORDER",\n                Invoice.notes.like(f"%Online Order #{order.id}%"),\n            ).first()\n\n        if linked_invoice is None:\n            invoice_num = f"ONL-{order.id}"\n            linked_invoice = db.query(Invoice).filter(\n                Invoice.user_id == shop_id,\n                Invoice.invoice_number == invoice_num,\n            ).first()\n            if linked_invoice is None:\n                linked_invoice = Invoice(\n                    user_id=shop_id,\n                    customer_name=customer_name,\n                    customer_phone=customer_phone,\n                    invoice_number=invoice_num,\n                    invoice_date=delivery_date,\n                    due_date=delivery_date,\n                    subtotal=float(order.total_amount),\n                    tax=0,\n                    total_amount=float(order.total_amount),\n                    paid_amount=0,\n                    status="SENT",\n                    payment_status="UNPAID",\n                    source="ONLINE_ORDER",\n                    notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}",\n                )\n                db.add(linked_invoice)\n                db.flush()\n\n                for item in items:\n                    db.add(InvoiceLineItem(\n                        invoice_id=linked_invoice.id,\n                        product_id=item.get("product_id"),\n                        description=item.get("product_name", "Item"),\n                        quantity=item.get("quantity", 1),\n                        unit_price=item.get("unit_price", 0),\n                        line_total=item.get("line_total", 0),\n                    ))\n\n        # 3) Delivery is the moment the COD sale is completed. Keep the\n        # invoice date aligned with delivery and settle it as PAID.\n        linked_invoice.invoice_date = delivery_date\n        linked_invoice.payment_status = "PAID"\n        linked_invoice.paid_amount = float(order.total_amount)\n        linked_invoice.status = "PAID"\n\n        # 4) Ensure the dashboard/P&L journal has one SALE entry.\n        sale_reference = f"ONL-{order.id}"\n        existing_sale_tx = db.query(UniversalTransaction).filter(\n            UniversalTransaction.shop_id == shop_id,\n            UniversalTransaction.reference_id == sale_reference,\n            UniversalTransaction.category == "SALE",\n        ).first()\n        if existing_sale_tx is None:\n            db.add(UniversalTransaction(\n                shop_id=shop_id,\n                tx_type="INCOME",\n                category="SALE",\n                amount=float(order.total_amount),\n                reference_id=sale_reference,\n                description=f"Online Order Delivered: #{order.id} | {customer_name}",\n                tx_date=datetime.now(),\n            ))\n\n    # 🟢 On REJECT: restore reserved stock 🟢
+        else:
+            linked_invoice.payment_status = "UNPAID"
+            linked_invoice.paid_amount = float(linked_invoice.paid_amount or 0)
+            linked_invoice.status = "SENT"
+
+        # 4) Ensure the dashboard/P&L journal has one SALE entry.
+        sale_reference = f"ONL-{order.id}"
+        existing_sale_tx = db.query(UniversalTransaction).filter(
+            UniversalTransaction.shop_id == shop_id,
+            UniversalTransaction.reference_id == sale_reference,
+            UniversalTransaction.category == "SALE",
+        ).first()
+        if existing_sale_tx is None:
+            db.add(UniversalTransaction(
+                shop_id=shop_id,
+                tx_type="INCOME",
+                category="SALE",
+                amount=float(order.total_amount),
+                reference_id=sale_reference,
+                description=f"Online Order Delivered: #{order.id} | {customer_name}",
+                tx_date=datetime.now(),
+            ))
+
+    # 🟢 On REJECT: restore reserved stock 🟢
     if new_status == "REJECTED":
         items = json.loads(order.items_json)
         for item in items:
@@ -2354,26 +2641,27 @@ def update_order_status(
             "reference_id": f"ONL-{order.id}",
         })
     if linked_invoice is not None and new_status == "DELIVERED":
-        realtime_events.append({
-            "event_id": str(uuid4()),
-            "type": "payment.updated",
-            "shop_id": shop_id,
-            "invoice_id": linked_invoice.id,
-            "invoice_number": linked_invoice.invoice_number,
-            "amount": float(order.total_amount),
-            "paid_amount": float(linked_invoice.paid_amount or 0),
-            "payment_status": "PAID",
-            "source": "ONLINE_ORDER_DELIVERY",
-            "reference_id": f"ONL-{order.id}",
-        })
+        if order.payment_status == "PAID":
+            realtime_events.append({
+                "event_id": str(uuid4()),
+                "type": "payment.updated",
+                "shop_id": shop_id,
+                "invoice_id": linked_invoice.id,
+                "invoice_number": linked_invoice.invoice_number,
+                "amount": float(order.total_amount),
+                "paid_amount": float(linked_invoice.paid_amount or 0),
+                "payment_status": "PAID",
+                "source": "ONLINE_ORDER_SETTLEMENT",
+                "reference_id": order.payment_reference or f"ONL-{order.id}",
+            })
         realtime_events.append({
             "event_id": str(uuid4()),
             "type": "invoice.updated",
             "shop_id": shop_id,
             "invoice_id": linked_invoice.id,
             "invoice_number": linked_invoice.invoice_number,
-            "status": "PAID",
-            "payment_status": "PAID",
+            "status": str(linked_invoice.status),
+            "payment_status": str(linked_invoice.payment_status),
             "paid_amount": float(linked_invoice.paid_amount or 0),
             "total_amount": float(linked_invoice.total_amount or 0),
             "source": "ONLINE_ORDER_DELIVERY",
@@ -2428,10 +2716,13 @@ def update_order_status(
                 table_name="invoices",
                 record_id=linked_invoice.id,
                 new_values={
-                    "payment_status": "PAID",
+                    "payment_status": str(linked_invoice.payment_status),
                     "paid_amount": float(linked_invoice.paid_amount or 0),
                 },
-                description=f"Online order #{order.id} marked invoice paid on delivery",
+                description=(
+                    f"Online order #{order.id} delivery reconciliation; "
+                    f"invoice payment status is {linked_invoice.payment_status}"
+                ),
             )
     except Exception as audit_error:
         logger.warning(
