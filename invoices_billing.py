@@ -148,7 +148,9 @@ def _apply_payment_write(
     db: Session,
     shop_id: int,
     mode: str,
+    commit_transaction: bool = True,
 ):
+    """Record a payment; callers may join it to a larger atomic transaction."""
     if data.amount is None and data.paid_amount is None:
         raise HTTPException(
             status_code=400,
@@ -339,9 +341,10 @@ def _apply_payment_write(
                 "source": data.source,
             }),
         ]
-        db.commit()
-        db.refresh(invoice)
-        db.refresh(payment)
+        if commit_transaction:
+            db.commit()
+            db.refresh(invoice)
+            db.refresh(payment)
     except IntegrityError:
         db.rollback()
         if idempotency_key:
@@ -384,8 +387,11 @@ def _apply_payment_write(
         logger.error("Payment transaction failed safely: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Payment transaction failed safely.")
 
-    # Business-level audit trail is best-effort and intentionally runs after
-    # the financial transaction has committed. A logging failure must never
+    # When the caller composes this payment into a larger transaction,
+    # defer audit logging and event publishing until that caller commits.
+    if commit_transaction:
+        # Business-level audit trail is best-effort and intentionally runs after
+        # the financial transaction has committed. A logging failure must never
     # turn a successful payment into an apparent API failure.
     try:
         AuditService.log_action(
@@ -426,8 +432,8 @@ def _apply_payment_write(
             audit_error,
         )
 
-    for event in payment_events:
-        publish_realtime_event(event)
+        for event in payment_events:
+            publish_realtime_event(event)
 
     return {
         "success": True,
@@ -438,6 +444,7 @@ def _apply_payment_write(
         "applied_amount": float(delta),
         "paid_amount": float(invoice.paid_amount or 0),
         "payment_status": payment_status,
+        "events": [] if commit_transaction else payment_events,
         "message": "Payment recorded successfully.",
     }
 
