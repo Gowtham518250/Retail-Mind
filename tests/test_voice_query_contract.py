@@ -334,7 +334,7 @@ def test_common_answer_templates_do_not_call_groq(monkeypatch):
     ) == "7 मिलते-जुलते रिकॉर्ड मिले।"
     assert query_retrival._translate_answer_to_language(
         "No matching records were found for your question.", "ta"
-    ) == "உங்கள் கேள்விக்குப் பொருந்தும் பதிவுகள் எதுவும் இல்லை。"
+    ) == "உங்கள் கேள்விக்குப் பொருந்தும் பதிவுகள் எதுவும் இல்லை."
 
 
 def test_combined_query_translation_keeps_plain_text_provider_fallback(monkeypatch):
