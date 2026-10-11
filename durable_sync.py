@@ -78,7 +78,7 @@ def append_sync_event(db: Session, event: Dict[str, Any]) -> Dict[str, Any]:
     # Only online-order lifecycle events use OnlineCustomerAuth IDs. Invoice
     # events may carry a different CRM Customer.id; forwarding those into this
     # feed could expose unrelated business/customer data across identity spaces.
-    customer_visible_types = {"order.created", "order.status_changed"}
+    customer_visible_types = {"order.created", "order.status_changed", "order.payment_confirmed"}
     try:
         if event_type in customer_visible_types:
             customer_id = int(payload.get("customer_id") or 0)
