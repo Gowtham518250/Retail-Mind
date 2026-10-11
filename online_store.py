@@ -133,6 +133,28 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
             invoice.payment_status = "UNPAID"
             invoice.paid_amount = 0
 
+    elif (order.payment_method or "").upper() == "UPI" and (order.payment_status or "").upper() == "PAID":
+        # A notification can be confirmed before the owner accepts the order,
+        # so no invoice/payment ledger row may exist yet. If that paid order is
+        # cancelled/rejected first, still record the money received and surface
+        # the refund obligation on the order rather than losing the transaction.
+        payment_reference = f"ONL-{order.id}-PAYMENT"
+        existing_payment_event = db.query(UniversalTransaction).filter(
+            UniversalTransaction.shop_id == shop_id,
+            UniversalTransaction.reference_id == payment_reference,
+            UniversalTransaction.category == "PAYMENT",
+        ).first()
+        if existing_payment_event is None:
+            db.add(UniversalTransaction(
+                shop_id=shop_id,
+                tx_type="INCOME",
+                category="PAYMENT",
+                amount=float(order.total_amount or 0),
+                reference_id=payment_reference,
+                description=f"UPI payment received for online order #{order.id}; refund follow-up required",
+                tx_date=order.payment_confirmed_at or datetime.utcnow(),
+            ))
+
     if tagged_sales or invoice:
         reversal_ref = f"ONL-{order.id}-REVERSAL"
         existing_reversal = db.query(UniversalTransaction).filter(
