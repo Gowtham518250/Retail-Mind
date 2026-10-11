@@ -34,6 +34,13 @@ def upgrade():
         "online_orders",
         sa.Column("payment_confirmed_at", sa.DateTime(), nullable=True),
     )
+    # The old order schema did not persist the payment method/status. Do not
+    # infer that historical UPI orders were COD or paid. Require owner review
+    # for existing rows; newly created orders keep the COD default.
+    op.execute(
+        "UPDATE online_orders "
+        "SET payment_method = 'UNKNOWN', payment_status = 'REVIEW_REQUIRED'"
+    )
     op.create_index(
         "uq_online_order_shop_payment_key",
         "online_orders",
