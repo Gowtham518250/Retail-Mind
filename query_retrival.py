@@ -241,6 +241,68 @@ def _recent_query_examples(db: Session, user_id: int, limit: int = 5) -> list[di
         return []
 
 
+def _make_deterministic_query_plan(query: str) -> dict:
+    """Classify only obvious aggregate KPI questions without spending an LLM call.
+
+    This deliberately returns a low-confidence general plan for anything that
+    is ambiguous, dimensional, comparative, or outside the small KPI fast path.
+    Such questions continue to the schema-grounded SQL-generation LLM.
+    """
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    blocked_dimensions = re.compile(
+        r"\b(by|per|each|every|product|products|item|items|customer|customers|"
+        r"category|categories|supplier|suppliers|worker|workers|employee|employees|"
+        r"branch|payment method|invoice|invoices|order|orders|profit|margin|"
+        r"comparison|compare|versus|trend|breakdown|details|list|top|lowest|highest|"
+        r"growth|forecast|refund|return|pending|unpaid|paid)\b"
+    )
+    aggregate_cue = re.search(
+        r"\b(total|sum|how much|amount|value|revenue|turnover|how many|"
+        r"number of|count|units|quantities|quantity)\b",
+        normalized,
+    )
+    wants_sales = bool(re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized))
+    wants_expenses = bool(re.search(r"\b(expense|expenses|spent|spending)\b", normalized))
+    simple_metric = wants_sales != wants_expenses
+    if simple_metric and aggregate_cue and not blocked_dimensions.search(normalized):
+        metric = "expenses" if wants_expenses else "sales_amount"
+        if re.search(r"\b(how many|number of|count)\b.*\bsales?\b", normalized):
+            metric = "sales_count"
+        elif re.search(r"\b(units|items|quantities|quantity)\b.*\b(sold|sales?)\b", normalized):
+            metric = "units_sold"
+        return {
+            "intent": "aggregate",
+            "metric": metric,
+            "dimensions": [],
+            "filters": [],
+            "confidence": 0.95,
+            "planner": "deterministic",
+        }
+    return {
+        "intent": "general",
+        "metric": "other",
+        "dimensions": [],
+        "filters": [],
+        "confidence": 0.0,
+        "planner": "deterministic",
+    }
+
+
+def _can_use_fast_business_query(query: str, date_scope: dict) -> bool:
+    """Gate predefined KPI SQL to narrow, unambiguous questions it can answer."""
+    safe_fast_date = (
+        date_scope.get("kind") == "unspecified"
+        or date_scope.get("label") in {"today", "yesterday"}
+    )
+    if not safe_fast_date:
+        return False
+    plan = _make_deterministic_query_plan(query)
+    if plan.get("intent") != "aggregate" or plan.get("confidence", 0) < 0.9:
+        return False
+    # The deterministic KPI path supports sales/expense totals, counts, and units.
+    return plan.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}
+
+
 def _make_query_plan(query: str, history: list[dict]) -> dict:
     """Return a validated structured intent plan, never SQL."""
     if not GROQ_API_KEY:
@@ -1163,8 +1225,12 @@ async def ask_query(
     # Translate before fast-path intent rules, retrieval, date normalization and SQL
     # generation. The phone still makes only one HTTP request per question.
     query = original_query
-    if language_code != "en" or any(not char.isascii() for char in query):
+    translation_used = language_code != "en" or any(not char.isascii() for char in query)
+    if translation_used:
         query = _translate_query_to_english(query, language_code)
+        print("ASKQUERY STAGE=question_translation provider=groq outcome=complete llm_calls=1")
+    else:
+        print("ASKQUERY STAGE=question_translation skipped reason=english_ascii llm_calls=0")
 
     # Fast path for the most common dashboard KPI questions. This avoids the
     # FAISS + Groq round-trip that previously made simple questions feel stuck
@@ -1177,6 +1243,10 @@ async def ask_query(
     # work for these known business operations.
     receivables_result = _fast_receivables_query(query, db, user_id, date_scope)
     if receivables_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_RECEIVABLES "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
         _persist_query_history(
             db=db,
             user_id=user_id,
@@ -1201,13 +1271,24 @@ async def ask_query(
         }
 
     query_history_context = _recent_query_examples(db, user_id)
-    query_plan = _make_query_plan(query, query_history_context)
-    # Use the predefined KPI SQL only for high-confidence plans and date scopes it handles correctly.
-    safe_fast_date = date_scope['kind'] == 'unspecified' or date_scope['label'] in {'today', 'yesterday'}
+    # Query planning is deterministic. The previous planner made a separate
+    # Groq chat-completion request for every non-receivables query, even when
+    # the SQL generator could interpret the original question directly.
+    # Ambiguous questions now go straight to RAG and SQL generation.
+    query_plan = _make_deterministic_query_plan(query)
     fast_result = None
-    if query_plan.get('intent') == 'aggregate' and query_plan.get('confidence', 0) >= 0.75 and safe_fast_date:
+    can_use_fast_path = _can_use_fast_business_query(query, date_scope)
+    print(
+        "ASKQUERY STAGE=query_planning planner=deterministic llm_calls=0 "
+        f"fast_path_eligible={str(can_use_fast_path).lower()}"
+    )
+    if can_use_fast_path:
         fast_result = _fast_business_query(query, db, user_id)
     if fast_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_KPI "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
         _persist_query_history(
             db=db,
             user_id=user_id,
@@ -1442,6 +1523,11 @@ async def ask_query(
             question=query
         ) + '\n\nValidated query plan and date context (current question takes precedence):\n' + planner_context
     llm_started = time.perf_counter()
+    print(
+        "ASKQUERY PATH=RAG_SQL "
+        f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=1 "
+        f"total_chat_calls_expected={int(translation_used) + 1}"
+    )
     try:
         completion = client.chat.completions.create(
             model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
@@ -1710,6 +1796,7 @@ async def ask_query(
             )
             generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
 
+    print("ASKQUERY STAGE=sql_generation outcome=complete")
     print("Generated SQL:")
     print(sql)
 
