@@ -269,6 +269,7 @@ class PaymentNotificationMatch(BaseModel):
     """Payment candidate detected by the authenticated owner app."""
     amount: float = Field(..., gt=0, le=100000000)
     payment_reference: str = Field(..., min_length=4, max_length=128)
+    invoice_number: Optional[str] = Field(default=None, max_length=100)
     idempotency_key: str = Field(..., min_length=8, max_length=128)
     confidence_score: float = Field(..., ge=0, le=1)
     decision: str = Field(..., min_length=1, max_length=20)
@@ -1999,14 +2000,15 @@ def match_online_order_payment_from_notification(
 ):
     """Match a trusted owner-device payment notification to a pending UPI order.
 
-    This uses the app's SMS/payment-app notification flow; it does not use a
-    payment gateway webhook. Ambiguous or low-confidence matches are not paid.
+    This uses SMS/payment-app notification detection, not a gateway webhook.
+    A low-confidence or ambiguous notification is never marked as paid.
     """
     shop_id = int(current_user["user_id"])
+    reference = data.payment_reference.strip()
     if (
         data.decision.strip().upper() != "CONFIRMED"
         or data.confidence_score < 0.70
-        or not data.payment_reference.strip()
+        or not reference
     ):
         return {
             "matched": False,
@@ -2028,30 +2030,93 @@ def match_online_order_payment_from_notification(
         }
 
     amount = round(float(data.amount), 2)
-    candidates = (
-        db.query(OnlineOrder)
-        .filter(
+    invoice_number = (data.invoice_number or "").strip()
+    linked_invoice = None
+    order = None
+
+    # If the payment detector already identified an invoice, that exact invoice
+    # is authoritative. Never redirect its payment to a different order that
+    # happens to have the same amount.
+    if invoice_number:
+        linked_invoice = db.query(Invoice).filter(
+            Invoice.user_id == shop_id,
+            Invoice.invoice_number == invoice_number,
+            Invoice.status != "CANCELLED",
+        ).with_for_update().first()
+        if (
+            linked_invoice is None
+            or linked_invoice.source != "ONLINE_ORDER"
+        ):
+            return {
+                "matched": False,
+                "requires_manual_review": True,
+                "reason": "The matched invoice is not an online-order invoice; invoice payment sync owns this transaction.",
+            }
+
+        order_match = re.search(r"Online Order #(\\d+)", linked_invoice.notes or "")
+        if not order_match:
+            return {
+                "matched": False,
+                "requires_manual_review": True,
+                "reason": "The online-order invoice has no resolvable order reference.",
+            }
+        order = db.query(OnlineOrder).with_for_update().filter(
+            OnlineOrder.id == int(order_match.group(1)),
             OnlineOrder.shop_id == shop_id,
             OnlineOrder.payment_method == "UPI",
-            OnlineOrder.payment_status != "PAID",
             OnlineOrder.order_status.notin_(["CANCELLED", "REJECTED", "RETURNED"]),
-            func.abs(OnlineOrder.total_amount - amount) <= 0.01,
+        ).first()
+        if order is None:
+            return {
+                "matched": False,
+                "requires_manual_review": True,
+                "reason": "The invoice's online order is unavailable or not eligible for payment matching.",
+            }
+        if abs(float(order.total_amount or 0) - amount) > 0.01:
+            return {
+                "matched": False,
+                "requires_manual_review": True,
+                "reason": "Notification amount does not match the linked online order.",
+            }
+    else:
+        candidates = (
+            db.query(OnlineOrder)
+            .filter(
+                OnlineOrder.shop_id == shop_id,
+                OnlineOrder.payment_method == "UPI",
+                OnlineOrder.payment_status != "PAID",
+                OnlineOrder.order_status.notin_(["CANCELLED", "REJECTED", "RETURNED"]),
+                func.abs(OnlineOrder.total_amount - amount) <= 0.01,
+            )
+            .with_for_update()
+            .limit(3)
+            .all()
         )
-        .with_for_update()
-        .limit(3)
-        .all()
-    )
-    if len(candidates) != 1:
+        if len(candidates) != 1:
+            return {
+                "matched": False,
+                "requires_manual_review": True,
+                "reason": "No unique pending UPI order matches this payment amount.",
+                "candidate_count": len(candidates),
+            }
+        order = candidates[0]
+        linked_invoice = db.query(Invoice).filter(
+            Invoice.user_id == shop_id,
+            Invoice.source == "ONLINE_ORDER",
+            Invoice.notes.like(f"%Online Order #{order.id}%"),
+            Invoice.status != "CANCELLED",
+        ).with_for_update().first()
+
+    if order.payment_status == "PAID":
         return {
-            "matched": False,
-            "requires_manual_review": True,
-            "reason": "No unique pending UPI order matches this payment amount.",
-            "candidate_count": len(candidates),
+            "matched": True,
+            "duplicate": True,
+            "order_id": order.id,
+            "payment_status": "PAID",
         }
 
-    order = candidates[0]
     order.payment_status = "PAID"
-    order.payment_reference = data.payment_reference.strip()
+    order.payment_reference = reference
     order.payment_detection_key = detection_key
     order.payment_confirmed_at = datetime.utcnow()
 
@@ -2068,14 +2133,12 @@ def match_online_order_payment_from_notification(
         "source": data.source,
     })
 
-    linked_invoice = db.query(Invoice).filter(
-        Invoice.user_id == shop_id,
-        Invoice.source == "ONLINE_ORDER",
-        Invoice.notes.like(f"%Online Order #{order.id}%"),
-        Invoice.status != "CANCELLED",
-    ).with_for_update().first()
-
-    if linked_invoice is not None:
+    # When invoice_number was provided, PaymentProcessingManager is already
+    # responsible for the invoice write. Update only order state here to avoid
+    # counting the same notification twice. Without a matched invoice, this
+    # endpoint owns the invoice write if an accepted-order invoice exists.
+    invoice_payment_delegated = bool(invoice_number)
+    if linked_invoice is not None and not invoice_payment_delegated:
         outstanding = max(
             0.0,
             float(linked_invoice.total_amount or 0) - float(linked_invoice.paid_amount or 0),
@@ -2090,7 +2153,7 @@ def match_online_order_payment_from_notification(
                     invoice_number=linked_invoice.invoice_number,
                     amount=outstanding,
                     payment_method="ONLINE",
-                    reference_id=order.payment_reference,
+                    reference_id=reference,
                     idempotency_key=payment_key,
                     payer_name=data.payer_name,
                     source="PAYMENT_NOTIFICATION",
@@ -2104,8 +2167,8 @@ def match_online_order_payment_from_notification(
         else:
             db.commit()
     else:
-        # Paid before owner acceptance: the durable order fields carry the
-        # reference until ACCEPT creates the invoice and payment-ledger row.
+        # Paid before owner acceptance, or invoice-write will be handled by the
+        # existing notification-to-invoice sync path.
         db.commit()
 
     return {
@@ -2115,6 +2178,7 @@ def match_online_order_payment_from_notification(
         "payment_status": order.payment_status,
         "payment_reference": order.payment_reference,
         "invoice_number": linked_invoice.invoice_number if linked_invoice else None,
+        "invoice_payment_delegated_to_invoice_sync": invoice_payment_delegated,
     }
 
 
