@@ -1110,7 +1110,12 @@ class OnlineOrder(Base):
     """Customer orders placed via the separate customer login"""
     __tablename__ = "online_orders"
     __table_args__ = (
-        UniqueConstraint("shop_id", "payment_detection_key", name="uq_online_order_shop_payment_key"),
+        Index(
+            "uq_online_order_shop_payment_key",
+            "shop_id",
+            "payment_detection_key",
+            unique=True,
+        ),
     )
     
     id = Column(Integer, primary_key=True)
