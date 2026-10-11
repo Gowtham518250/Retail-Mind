@@ -2140,7 +2140,7 @@ def match_online_order_payment_from_notification(
             Invoice.user_id == shop_id,
             Invoice.invoice_number == invoice_number,
             Invoice.status != "CANCELLED",
-        ).with_for_update().first()
+        ).first()
         if (
             linked_invoice is None
             or linked_invoice.source != "ONLINE_ORDER"
@@ -2169,6 +2169,18 @@ def match_online_order_payment_from_notification(
                 "matched": False,
                 "requires_manual_review": True,
                 "reason": "The invoice's online order is unavailable or not eligible for payment matching.",
+            }
+        linked_invoice = db.query(Invoice).filter(
+            Invoice.user_id == shop_id,
+            Invoice.invoice_number == invoice_number,
+            Invoice.status != "CANCELLED",
+            Invoice.source == "ONLINE_ORDER",
+        ).with_for_update().first()
+        if linked_invoice is None:
+            return {
+                "matched": False,
+                "requires_manual_review": True,
+                "reason": "The online-order invoice is no longer available for payment matching.",
             }
         if abs(float(order.total_amount or 0) - amount) > 0.01:
             return {
