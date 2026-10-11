@@ -1318,10 +1318,12 @@ async def translate_ask_query_answer(
         "translated_text": translated_text,
         "language_code": language_code,
         "translation_method": translation_method,
+        # Retain the legacy string field for clients; translation_method says
+        # whether this response actually invoked the model.
         "translation_model": (
-            (os.getenv("GROQ_TRANSLATION_MODEL") or os.getenv("GROQ_MODEL") or "qwen/qwen3.8-27b")
-            if translation_method == "llm"
-            else None
+            os.getenv("GROQ_TRANSLATION_MODEL")
+            or os.getenv("GROQ_MODEL")
+            or "qwen/qwen3.8-27b"
         ),
     }
 
