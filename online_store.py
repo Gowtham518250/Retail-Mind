@@ -2680,10 +2680,6 @@ def update_order_status(
         if (order.payment_method or "COD").upper() == "COD":
             order.payment_status = "PAID"
             order.payment_confirmed_at = datetime.utcnow()
-            if linked_invoice:
-                linked_invoice.payment_status = "PAID"
-                linked_invoice.paid_amount = float(order.total_amount)
-                linked_invoice.status = "PAID"
             
     # Delivery is the accounting settlement point for online orders.
     # Reconcile the canonical sale/invoice records here as well as at ACCEPT so
@@ -2769,17 +2765,56 @@ def update_order_status(
                         line_total=item.get("line_total", 0),
                     ))
 
-        # 3) Delivery closes fulfilment. COD is settled at hand-off; UPI
-        # remains unpaid until the owner-device notification matcher confirms it.
+        # 3) Delivery closes fulfilment, but payment is written through the
+        # canonical invoice payment service. A delivery OTP is not a UPI receipt.
         linked_invoice.invoice_date = delivery_date
-        if order.payment_status == "PAID":
-            linked_invoice.payment_status = "PAID"
-            linked_invoice.paid_amount = float(order.total_amount)
-            linked_invoice.status = "PAID"
-        else:
-            linked_invoice.payment_status = "UNPAID"
-            linked_invoice.paid_amount = float(linked_invoice.paid_amount or 0)
-            linked_invoice.status = "SENT"
+        if (
+            (order.payment_method or "COD").upper() == "COD"
+            and (order.payment_status or "").upper() == "PAID"
+        ):
+            outstanding = round(
+                max(
+                    0.0,
+                    float(linked_invoice.total_amount or 0)
+                    - float(linked_invoice.paid_amount or 0),
+                ),
+                2,
+            )
+            if outstanding > 0.01:
+                from invoices_billing import PaymentWriteRequest, _apply_payment_write
+
+                cod_payment_key = hashlib.sha256(
+                    f"online-order-cod-delivered:{shop_id}:{order.id}".encode("utf-8")
+                ).hexdigest()
+                try:
+                    _apply_payment_write(
+                        data=PaymentWriteRequest(
+                            invoice_number=linked_invoice.invoice_number,
+                            amount=outstanding,
+                            payment_method="CASH",
+                            reference_id=f"ONL-{order.id}-COD",
+                            idempotency_key=cod_payment_key,
+                            source="ONLINE_ORDER_COD_DELIVERY",
+                            timestamp=(order.payment_confirmed_at or datetime.utcnow()).isoformat(),
+                            notes=f"Cash collected at delivery for online order #{order.id}",
+                        ),
+                        db=db,
+                        shop_id=shop_id,
+                        mode="delta",
+                    )
+                    db.refresh(linked_invoice)
+                except Exception as payment_error:
+                    db.rollback()
+                    logger.exception(
+                        "Failed to record COD payment for order_id=%s invoice=%s: %s",
+                        order.id,
+                        linked_invoice.invoice_number,
+                        payment_error,
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Delivery was not completed because the COD payment could not be recorded.",
+                    ) from payment_error
 
         # 4) Ensure the dashboard/P&L journal has one SALE entry.
         sale_reference = f"ONL-{order.id}"
