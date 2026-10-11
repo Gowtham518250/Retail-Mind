@@ -125,8 +125,13 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
 
     if invoice:
         invoice.status = "CANCELLED"
-        invoice.payment_status = "UNPAID"
-        invoice.paid_amount = 0
+        if (order.payment_status or "").upper() == "PAID":
+            # Cancellation is not a refund. Preserve the received-payment
+            # history and let the owner handle any required refund separately.
+            invoice.payment_status = "PAID"
+        else:
+            invoice.payment_status = "UNPAID"
+            invoice.paid_amount = 0
 
     if tagged_sales or invoice:
         reversal_ref = f"ONL-{order.id}-REVERSAL"
@@ -1609,6 +1614,8 @@ def place_guest_order(
         "online_setup_fee": online_setup_fee,
         "total_amount": total_amount,
         "status": "PENDING",
+        "payment_method": order.payment_method,
+        "payment_status": order.payment_status,
     }
 
 
@@ -1653,6 +1660,8 @@ def get_my_orders(
                     or f"Shop #{o.shop_id}"
                 ),
                 "status": o.order_status,
+                "payment_method": o.payment_method or "COD",
+                "payment_status": o.payment_status or "COD_DUE",
                 "subtotal": round(float(o.total_amount) - float(getattr(o, "online_setup_fee", 0) or 0), 2),
                 "online_setup_fee": float(getattr(o, "online_setup_fee", 0) or 0),
                 "total_amount": float(o.total_amount),
@@ -1716,6 +1725,11 @@ def cancel_customer_order(
     )
 
     order.order_status = "CANCELLED"
+    if (
+        (order.payment_method or "").upper() == "UPI"
+        and (order.payment_status or "").upper() == "PAID"
+    ):
+        order.payment_status = "REFUND_REQUIRED"
     realtime_events = [{
         "event_id": str(uuid4()),
         "type": "order.status_changed",
@@ -1724,6 +1738,7 @@ def cancel_customer_order(
         "customer_id": customer_id,
         "previous_status": previous_status,
         "status": "CANCELLED",
+        "payment_status": order.payment_status,
         "total_amount": float(order.total_amount),
     }]
     if cancelled_invoice is not None:
@@ -1805,6 +1820,9 @@ def track_order(
         "shop_id": order.shop_id,
         "shop_name": shop_name,
         "status": order.order_status,
+        "payment_method": order.payment_method or "COD",
+        "payment_status": order.payment_status or "COD_DUE",
+        "payment_reference": order.payment_reference,
         "progress_step": current_step + 1,
         "total_steps": len(STATUS_STEPS),
         "total_amount": float(order.total_amount),
@@ -2138,6 +2156,9 @@ def get_incoming_orders(
             "customer_name": customer.user_name if customer else "Guest",
             "customer_phone": customer.phone if customer else "",
             "status": order.order_status,
+            "payment_method": order.payment_method or "COD",
+            "payment_status": order.payment_status or "COD_DUE",
+            "payment_reference": order.payment_reference,
             "total_amount": float(order.total_amount or 0),
             "delivery_address": order.delivery_address,
             "items": json.loads(order.items_json or "[]"),
@@ -2598,22 +2619,17 @@ def update_order_status(
                 tx_date=datetime.now(),
             ))
 
-    # 🟢 On REJECT: restore reserved stock 🟢
+    # Rejecting an order reverses prior accepted sales/invoice rows and
+    # restores reserved stock through the same helper as customer cancellation.
     if new_status == "REJECTED":
-        items = json.loads(order.items_json)
-        for item in items:
-            if item.get("product_id"):
-                product = db.query(Product).with_for_update().filter(
-                    Product.id == item["product_id"],
-                    Product.user_id == shop_id,
-                ).first()
-                if product:
-                    product.current_stock = (product.current_stock or 0) + item["quantity"]
-                    restored_inventory.append({
-                        "product_id": product.id,
-                        "quantity": item["quantity"],
-                        "new_stock": float(product.current_stock),
-                    })
+        restored_inventory, linked_invoice = _reverse_online_order_financials(
+            db, order, shop_id, "Owner rejected order"
+        )
+        if (
+            (order.payment_method or "").upper() == "UPI"
+            and (order.payment_status or "").upper() == "PAID"
+        ):
+            order.payment_status = "REFUND_REQUIRED"
 
     order.order_status = new_status
     realtime_events = [{
@@ -2624,6 +2640,7 @@ def update_order_status(
         "customer_id": order.customer_id,
         "previous_status": previous_status,
         "status": new_status,
+        "payment_status": order.payment_status,
         "total_amount": float(order.total_amount),
     }]
     if new_status == "ACCEPTED" and linked_invoice is not None:
