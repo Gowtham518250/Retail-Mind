@@ -64,6 +64,7 @@ jobs:
           pytest -q tests/test_growth_suite.py
           pytest -q tests/test_voice_query_contract.py
           pytest -q tests/test_order_idempotency_contract.py
+          pytest -q tests/test_payment_contract.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
 
   customer-web:
