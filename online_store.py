@@ -1166,7 +1166,18 @@ def place_order(
     _rl: None = Depends(check_rate_limit),
 ):
     """Place an online order at a specific shop"""
-    customer_id = current_user["user_id"]
+    customer_id = int(current_user["user_id"])
+
+    # Serialize concurrent checkouts for this customer. With the order's
+    # idempotency key checked after the lock is acquired, a retry that races
+    # the first request returns the committed order instead of creating a
+    # second invoice/stock reservation.
+    customer_identity = db.query(OnlineCustomerAuth).with_for_update().filter(
+        OnlineCustomerAuth.id == customer_id,
+        OnlineCustomerAuth.is_active == True,
+    ).first()
+    if customer_identity is None:
+        raise HTTPException(status_code=401, detail="Customer account is not active.")
 
     idempotency_key = (data.idempotency_key or "").strip() or None
     if idempotency_key:
@@ -2430,17 +2441,22 @@ def update_order_status(
     restored_inventory = []
     linked_invoice = None
 
-    if order.order_status in ("DELIVERED", "REJECTED"):
-        raise HTTPException(status_code=409, detail="Order is already finalized.")
-
-    if new_status == "DELIVERED" and order.order_status != "DISPATCHED":
+    current_status = str(
+        getattr(order.order_status, "value", order.order_status)
+    ).upper()
+    allowed_previous_statuses = {
+        "ACCEPTED": {"PENDING"},
+        "DISPATCHED": {"ACCEPTED"},
+        "DELIVERED": {"DISPATCHED"},
+        "REJECTED": {"PENDING", "ACCEPTED"},
+    }
+    if current_status in {"DELIVERED", "REJECTED", "CANCELLED", "RETURNED"}:
+        raise HTTPException(status_code=409, detail="Order is already finalized or cancelled.")
+    if current_status not in allowed_previous_statuses[new_status]:
         raise HTTPException(
             status_code=409,
-            detail="Order must be dispatched before it can be marked delivered.",
+            detail=f"Cannot change an order from {current_status} to {new_status}.",
         )
-
-    if order.order_status != "PENDING" and new_status == "ACCEPTED":
-        raise HTTPException(status_code=409, detail="Order is already accepted or finalized.")
 
     # 🟢 On ACCEPT: record sales immediately in dashboard 🟢──────────────────
     if new_status == "ACCEPTED":
