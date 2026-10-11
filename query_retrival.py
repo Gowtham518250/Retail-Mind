@@ -1308,13 +1308,20 @@ async def translate_ask_query_answer(
         text_to_translate,
         language_code,
     )
+    predefined = _translate_common_answer_template(text_to_translate, language_code)
+    translation_method = (
+        "identity" if language_code == "en"
+        else "predefined_template" if predefined is not None
+        else "llm"
+    )
     return {
         "translated_text": translated_text,
         "language_code": language_code,
+        "translation_method": translation_method,
         "translation_model": (
-            os.getenv("GROQ_TRANSLATION_MODEL")
-            or os.getenv("GROQ_MODEL")
-            or "qwen/qwen3.8-27b"
+            (os.getenv("GROQ_TRANSLATION_MODEL") or os.getenv("GROQ_MODEL") or "qwen/qwen3.8-27b")
+            if translation_method == "llm"
+            else None
         ),
     }
 
