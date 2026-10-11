@@ -266,3 +266,110 @@ def test_mixed_sales_and_inventory_questions_never_use_kpi_fast_path():
             query,
             {"kind": "unspecified", "label": "not specified"},
         )
+
+
+
+def test_combined_query_translation_and_classification_uses_one_chat_call(monkeypatch):
+    from types import SimpleNamespace
+    import json
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps({
+                            "english_query": "What were my total sales yesterday?",
+                            "intent": "aggregate",
+                            "metric": "sales_amount",
+                            "confidence": 0.98,
+                        })
+                    )
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))),
+    )
+
+    result = query_retrival._translate_query_and_classify(
+        "నిన్న నా మొత్తం అమ్మకాలు ఎంత?",
+        "te",
+    )
+
+    assert result["english_query"] == "What were my total sales yesterday?"
+    assert result["classification"]["intent"] == "aggregate"
+    assert result["classification"]["metric"] == "sales_amount"
+    assert result["classification"]["confidence"] == 0.98
+    assert len(calls) == 1
+    assert calls[0]["stream"] is False
+    assert "classify" in calls[0]["messages"][0]["content"].lower()
+
+
+def test_common_answer_templates_do_not_call_groq(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "")
+    def unexpected_call(**kwargs):
+        raise AssertionError("A predefined summary must not call Groq")
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=unexpected_call))),
+    )
+
+    assert query_retrival._translate_answer_to_language("The total is ₹12,450.", "te") == "మొత్తం ₹12,450."
+    assert query_retrival._translate_answer_to_language(
+        "Found 7 matching result(s).", "hi"
+    ) == "7 मिलते-जुलते रिकॉर्ड मिले।"
+    assert query_retrival._translate_answer_to_language(
+        "No matching records were found for your question.", "ta"
+    ) == "உங்கள் கேள்விக்குப் பொருந்தும் பதிவுகள் எதுவும் இல்லை。"
+
+
+def test_combined_query_translation_keeps_plain_text_provider_fallback(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=lambda **kwargs: SimpleNamespace(
+                        choices=[SimpleNamespace(message=SimpleNamespace(
+                            content="English translation: How much were sales yesterday?"
+                        ))]
+                    )
+                )
+            )
+        ),
+    )
+
+    result = query_retrival._translate_query_and_classify(
+        "నిన్న ఎంత అమ్మకాలు జరిగాయి?", "te"
+    )
+    assert result["english_query"] == "How much were sales yesterday?"
+    assert result["classification"]["source"] == "deterministic_fallback"
+
+
+def test_query_path_has_no_separate_llm_planner(monkeypatch):
+    import inspect
+    import query_retrival
+
+    source = inspect.getsource(query_retrival.ask_query)
+    assert "_translate_query_and_classify" in source
+    assert "_make_query_plan(" not in source
+    assert not hasattr(query_retrival, "_make_query_plan")
