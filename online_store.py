@@ -2094,6 +2094,7 @@ def match_online_order_payment_from_notification(
     data: PaymentNotificationMatch,
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """Match a trusted owner-device payment notification to a pending UPI order.
 
