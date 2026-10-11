@@ -10,7 +10,7 @@ def test_online_order_models_and_schemas_have_idempotency_key():
 
 def test_online_order_payment_state_and_request_contract():
     from models import OnlineOrder
-    from online_store import GuestOrder, PlaceOrder, app
+    from online_store import GuestOrder, PlaceOrder, router
 
     assert hasattr(OnlineOrder, "payment_method")
     assert hasattr(OnlineOrder, "payment_status")
@@ -21,7 +21,7 @@ def test_online_order_payment_state_and_request_contract():
 
     routes = {
         getattr(route, "path", "")
-        for route in app.routes
+        for route in router.routes
     }
     assert "/store/owner/orders/match-notification-payment" in routes
 
