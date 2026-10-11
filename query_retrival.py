@@ -252,9 +252,11 @@ def _make_deterministic_query_plan(query: str) -> dict:
     blocked_dimensions = re.compile(
         r"\b(by|per|each|every|product|products|item|items|customer|customers|"
         r"category|categories|supplier|suppliers|worker|workers|employee|employees|"
-        r"branch|payment method|invoice|invoices|order|orders|profit|margin|"
+        r"branch|stock|inventory|cash|received|payment|payments|tax|gst|discount|"
+        r"balance|receivable|receivables|payable|payables|credit|khata|transaction|transactions|"
+        r"payment method|invoice|invoices|order|orders|profit|margin|"
         r"comparison|compare|versus|trend|breakdown|details|list|top|lowest|highest|"
-        r"growth|forecast|refund|return|pending|unpaid|paid)\b"
+        r"growth|forecast|refund|refunds|return|returns|pending|unpaid|paid)\b"
     )
     aggregate_cue = re.search(
         r"\b(total|sum|how much|amount|value|revenue|turnover|how many|"
