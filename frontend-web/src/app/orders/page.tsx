@@ -56,9 +56,6 @@ interface Order {
   shop_id: number;
   shop_name?: string;
   status: string;
-  payment_method?: string;
-  payment_status?: string;
-  payment_reference?: string | null;
   total_amount: number;
   delivery_address: string;
   items: OrderItem[];
@@ -471,7 +468,7 @@ export default function MyOrdersPage() {
               eventId !== '' && seenRealtimeEventIdsRef.current.has(eventId);
             if (
               !alreadyAppliedByRealtime &&
-              (type === 'order.created' || type === 'order.status_changed' || type === 'order.payment_confirmed')
+              (type === 'order.created' || type === 'order.status_changed')
             ) {
               requiresOrderRefresh = true;
             }
@@ -590,23 +587,6 @@ export default function MyOrdersPage() {
                         total_amount: Number(event.total_amount ?? order.total_amount),
                         delivery_address: event.delivery_address || order.delivery_address,
                         items: Array.isArray(event.items) ? event.items : order.items,
-                      }
-                    : order,
-                ),
-              );
-              setError('');
-              setLastUpdated(new Date());
-              markRealtimeEventSeen(eventId);
-            } else if (event?.type === 'order.payment_confirmed') {
-              const orderId = Number(event.order_id);
-              setOrders((current) =>
-                current.map((order) =>
-                  order.order_id === orderId
-                    ? {
-                        ...order,
-                        payment_method: 'UPI',
-                        payment_status: 'PAID',
-                        payment_reference: event.payment_reference || order.payment_reference,
                       }
                     : order,
                 ),
@@ -1183,19 +1163,6 @@ export default function MyOrdersPage() {
                       <div className="orders-fk-card-total">
                         <span>Order total</span>
                         <strong>{formatCurrency(order.total_amount)}</strong>
-                        <span className="orders-fk-payment-state">
-                          {(() => {
-                            const paymentStatus = String(order.payment_status || '').toUpperCase();
-                            const paymentMethod = String(order.payment_method || '').toUpperCase();
-                            if (paymentStatus === 'REFUND_REQUIRED') return 'Refund required';
-                            if (paymentStatus === 'REVIEW_REQUIRED') return 'Payment needs review';
-                            if (paymentStatus === 'PAID') return paymentMethod === 'UPI' ? 'UPI payment confirmed' : 'Paid';
-                            if (paymentStatus === 'PENDING') return 'UPI payment pending';
-                            if (paymentStatus === 'COD_DUE') return 'Cash on delivery';
-                            if (paymentStatus === 'UNPAID') return 'Payment due';
-                            return '';
-                          })()}
-                        </span>
                       </div>
                     </div>
 
