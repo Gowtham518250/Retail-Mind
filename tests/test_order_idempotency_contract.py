@@ -5,6 +5,9 @@ def test_online_order_models_and_schemas_have_idempotency_key():
     assert hasattr(OnlineOrder, "idempotency_key")
     assert "idempotency_key" in PlaceOrder.model_fields
     assert "idempotency_key" in GuestOrder.model_fields
+    index_names = {index.name for index in OnlineOrder.__table__.indexes}
+    assert "uq_online_order_request_idempotency" in index_names
+    assert "uq_online_order_shop_payment_key" in index_names
 
 
 
