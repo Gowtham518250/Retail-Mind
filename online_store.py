@@ -17,7 +17,7 @@ import hashlib
 import os
 import re
 from urllib.parse import quote
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime, timezone, timedelta, date
 from uuid import uuid4
 
@@ -35,6 +35,8 @@ from models import (
     Invoice,
     InvoiceLineItem,
     UniversalTransaction,
+    Payment,
+    PaymentMethod,
     OnlineCustomerAuth,
     OnlineOrderDeliveryOtp,
     ShopReview,
@@ -236,6 +238,7 @@ class PlaceOrder(BaseModel):
     delivery_address: str = Field(..., min_length=5)
     idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
     coupon_code: Optional[str] = Field(None, min_length=3, max_length=50)
+    payment_method: Literal["COD", "UPI"] = "COD"
 
 class GuestOrder(BaseModel):
     shop_id: int
@@ -245,6 +248,7 @@ class GuestOrder(BaseModel):
     items: List[OrderItem] = Field(..., min_length=1, max_length=50)
     idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
     coupon_code: Optional[str] = Field(None, min_length=3, max_length=50)
+    payment_method: Literal["COD", "UPI"] = "COD"
     firebase_id_token: Optional[str] = Field(None, description="Firebase Auth ID token for phone verification (optional)")
 class OwnerOrderAction(BaseModel):
     """Optional verification payload for owner order state changes."""
@@ -1164,6 +1168,8 @@ def place_order(
                 "total_amount": float(existing_order.total_amount),
                 "items": json.loads(existing_order.items_json),
                 "status": existing_order.order_status,
+                "payment_method": existing_order.payment_method or "COD",
+                "payment_status": existing_order.payment_status or "COD_DUE",
                 "duplicate": True,
             }
 
@@ -1234,6 +1240,16 @@ def place_order(
         raise HTTPException(status_code=400, detail="This shop is not accepting online delivery or pickup orders.")
     if not accept_cod and not accept_online:
         raise HTTPException(status_code=400, detail="This shop has no online payment method enabled.")
+    selected_payment_method = data.payment_method.upper()
+    if selected_payment_method == "COD" and not accept_cod:
+        raise HTTPException(status_code=400, detail="Cash on delivery is disabled for this shop.")
+    if selected_payment_method == "UPI" and not accept_online:
+        raise HTTPException(status_code=400, detail="Online UPI payment is not enabled for this shop.")
+    selected_payment_method = data.payment_method.upper()
+    if selected_payment_method == "COD" and not accept_cod:
+        raise HTTPException(status_code=400, detail="Cash on delivery is disabled for this shop.")
+    if selected_payment_method == "UPI" and not accept_online:
+        raise HTTPException(status_code=400, detail="Online UPI payment is not enabled for this shop.")
 
     discount_amount = 0.0
     coupon_code = (data.coupon_code or "").strip().upper() or None
@@ -1272,6 +1288,8 @@ def place_order(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
+        payment_method=selected_payment_method,
+        payment_status="PENDING" if selected_payment_method == "UPI" else "COD_DUE",
         online_setup_fee=online_setup_fee,
         coupon_code=coupon_code,
         discount_amount=discount_amount,
@@ -1329,6 +1347,8 @@ def place_order(
         "total_amount": total_amount,
         "items": order_items,
         "status": "PENDING",
+        "payment_method": order.payment_method,
+        "payment_status": order.payment_status,
     }
 
 
@@ -1503,6 +1523,8 @@ def place_guest_order(
         shop_id=data.shop_id,
         customer_id=customer_id,
         total_amount=total_amount,
+        payment_method=selected_payment_method,
+        payment_status="PENDING" if selected_payment_method == "UPI" else "COD_DUE",
         online_setup_fee=online_setup_fee,
         coupon_code=coupon_code,
         discount_amount=discount_amount,
