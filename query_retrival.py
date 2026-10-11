@@ -1446,17 +1446,12 @@ async def ask_query(
             "has_more": receivables_result.get("has_more", False),
         }
 
-    query_history_context = _recent_query_examples(db, user_id)
-    # Query planning is deterministic. The previous planner made a separate
-    # Groq chat-completion request for every non-receivables query, even when
-    # the SQL generator could interpret the original question directly.
-    # Ambiguous questions now go straight to RAG and SQL generation.
-    query_plan = _make_deterministic_query_plan(query)
+    # Check only the reliable KPI rules first. Avoid even the deterministic
+    # planner/history work for a query that can be answered by a fixed SQL path.
     fast_result = None
     can_use_fast_path = _can_use_fast_business_query(query, date_scope)
     # For translated questions, require the combined classifier to agree with
-    # the deterministic KPI intent before using the no-LLM path. Complex or
-    # uncertain queries continue to schema retrieval and single-pass SQL generation.
+    # the deterministic KPI intent before using the no-LLM path.
     if translation_used:
         classification = query_classification or {}
         classifier_agrees = (
@@ -1466,7 +1461,7 @@ async def ask_query(
         )
         can_use_fast_path = can_use_fast_path and classifier_agrees
     print(
-        "ASKQUERY STAGE=query_planning planner=deterministic llm_calls=0 "
+        "ASKQUERY STAGE=fast_path_check planner_llm_calls=0 "
         f"fast_path_eligible={str(can_use_fast_path).lower()}"
     )
     if can_use_fast_path:
@@ -1497,6 +1492,15 @@ async def ask_query(
             "row_count": len(fast_result["results"]),
             "results": fast_result["results"],
         }
+    # Only questions that miss the trusted deterministic paths need recent
+    # follow-up context and a lightweight local intent plan before direct RAG/SQL generation.
+    query_history_context = _recent_query_examples(db, user_id)
+    query_plan = _make_deterministic_query_plan(query)
+    print(
+        "ASKQUERY STAGE=query_planning planner=deterministic llm_calls=0 "
+        f"intent={query_plan.get('intent')} metric={query_plan.get('metric')}"
+    )
+
     if not GROQ_API_KEY:
         raise HTTPException(
             status_code=503,
