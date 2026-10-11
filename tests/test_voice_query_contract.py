@@ -251,3 +251,18 @@ def test_deterministic_query_planner_does_not_fast_path_ambiguous_mixed_metric()
         "What is my total profit?",
         {"kind": "unspecified", "label": "not specified"},
     )
+
+
+
+def test_mixed_sales_and_inventory_questions_never_use_kpi_fast_path():
+    from query_retrival import _can_use_fast_business_query
+
+    for query in (
+        "What are my total sales and stock value?",
+        "Show total sales and payments received",
+        "What is my total sales tax?",
+    ):
+        assert not _can_use_fast_business_query(
+            query,
+            {"kind": "unspecified", "label": "not specified"},
+        )
