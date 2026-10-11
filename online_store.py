@@ -1350,6 +1350,39 @@ def place_order(
     for event in durable_events:
         publish_realtime_event(event)
 
+    # The PostgreSQL order is the source of truth. Also send a best-effort FCM
+    # push to the owner so web-originated customer orders can alert the mobile
+    # app even when the owner isn't actively connected to the realtime socket.
+    try:
+        owner_user = db.query(User).filter(
+            User.id == data.shop_id,
+            User.is_active.is_(True),
+        ).first()
+        if owner_user and owner_user.fcm_token:
+            import firebase_admin
+            from firebase_admin import messaging
+            if firebase_admin._apps:
+                messaging.send(
+                    messaging.Message(
+                        notification=messaging.Notification(
+                            title="New online order",
+                            body=f"Order #{order.id} received · ₹{total_amount:.2f}",
+                        ),
+                        data={
+                            "type": "NEW_ONLINE_ORDER",
+                            "order_id": str(order.id),
+                            "shop_id": str(data.shop_id),
+                        },
+                        token=owner_user.fcm_token,
+                    )
+                )
+    except Exception as notification_error:
+        # Notifications must never turn a successfully saved order into a failed order.
+        logger.warning(
+            "Online order push failed for shop_id=%s order_id=%s: %s",
+            data.shop_id, order.id, notification_error,
+        )
+
     return {
         "message": "Order placed successfully! The shop will confirm shortly.",
         "order_id": order.id,
