@@ -2506,6 +2506,7 @@ def update_order_status(
     previous_status = order.order_status
     restored_inventory = []
     linked_invoice = None
+    pending_payment_events = []
 
     current_status = str(
         getattr(order.order_status, "value", order.order_status)
@@ -2787,7 +2788,7 @@ def update_order_status(
                     f"online-order-cod-delivered:{shop_id}:{order.id}".encode("utf-8")
                 ).hexdigest()
                 try:
-                    _apply_payment_write(
+                    payment_result = _apply_payment_write(
                         data=PaymentWriteRequest(
                             invoice_number=linked_invoice.invoice_number,
                             amount=outstanding,
@@ -2801,8 +2802,9 @@ def update_order_status(
                         db=db,
                         shop_id=shop_id,
                         mode="delta",
+                        commit_transaction=False,
                     )
-                    db.refresh(linked_invoice)
+                    pending_payment_events.extend(payment_result.get("events", []))
                 except Exception as payment_error:
                     db.rollback()
                     logger.exception(
@@ -2962,6 +2964,10 @@ def update_order_status(
             audit_error,
         )
 
+    # The canonical payment writer created these rows/events inside the
+    # same delivery transaction. Publish only after the final commit succeeds.
+    for event in pending_payment_events:
+        publish_realtime_event(event)
     for event in durable_events:
         publish_realtime_event(event)
 
