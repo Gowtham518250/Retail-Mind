@@ -41,6 +41,34 @@ def upgrade():
         "UPDATE online_orders "
         "SET payment_method = 'UNKNOWN', payment_status = 'REVIEW_REQUIRED'"
     )
+    # Preserve one canonical row for each previously used request key, then
+    # enforce idempotency at the database level. Older duplicates remain in
+    # order history but no longer claim the retry key.
+    op.execute(
+        """
+        WITH ranked AS (
+            SELECT id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY shop_id, customer_id, idempotency_key
+                       ORDER BY created_at ASC, id ASC
+                   ) AS rn
+            FROM online_orders
+            WHERE idempotency_key IS NOT NULL
+        )
+        UPDATE online_orders AS orders
+        SET idempotency_key = NULL
+        FROM ranked
+        WHERE orders.id = ranked.id AND ranked.rn > 1
+        """
+    )
+    op.create_index(
+        "uq_online_order_request_idempotency",
+        "online_orders",
+        ["shop_id", "customer_id", "idempotency_key"],
+        unique=True,
+        postgresql_where=sa.text("idempotency_key IS NOT NULL"),
+        sqlite_where=sa.text("idempotency_key IS NOT NULL"),
+    )
     op.create_index(
         "uq_online_order_shop_payment_key",
         "online_orders",
@@ -51,6 +79,7 @@ def upgrade():
 
 def downgrade():
     op.drop_index("uq_online_order_shop_payment_key", table_name="online_orders")
+    op.drop_index("uq_online_order_request_idempotency", table_name="online_orders")
     op.drop_column("online_orders", "payment_confirmed_at")
     op.drop_column("online_orders", "payment_detection_key")
     op.drop_column("online_orders", "payment_reference")
