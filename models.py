@@ -3,7 +3,7 @@ Enhanced Database Models for Hybrid Search RAG
 Includes: Inventory, Attendance, Invoices, Payments, Customers, Notifications, Stock Management
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index, JSON, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, date
@@ -1109,12 +1109,37 @@ class ShopProfile(Base):
 class OnlineOrder(Base):
     """Customer orders placed via the separate customer login"""
     __tablename__ = "online_orders"
+    __table_args__ = (
+        Index(
+            "uq_online_order_shop_payment_key",
+            "shop_id",
+            "payment_detection_key",
+            unique=True,
+        ),
+        Index(
+            "uq_online_order_request_idempotency",
+            "shop_id",
+            "customer_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
     
     id = Column(Integer, primary_key=True)
     shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
     customer_id = Column(Integer, nullable=False) # In future, link to a CustomerUser table
     order_status = Column(Enum(OnlineOrderStatus, name="online_order_status"), default=OnlineOrderStatus.PENDING)
     total_amount = Column(Numeric(10, 2), nullable=False)
+    # Payment state is independent from order fulfilment state. UPI is marked
+    # paid only after an authenticated owner-device notification match; COD is
+    # settled at delivery through the existing owner workflow.
+    payment_method = Column(String(20), nullable=False, default="COD", server_default="COD")
+    payment_status = Column(String(24), nullable=False, default="COD_DUE", server_default="COD_DUE")
+    payment_reference = Column(String(128), nullable=True)
+    payment_detection_key = Column(String(128), nullable=True)
+    payment_confirmed_at = Column(DateTime, nullable=True)
     # Snapshot of the online-only setup fee applied to this order.
     online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
     coupon_code = Column(String(50), nullable=True)

@@ -64,6 +64,13 @@ def test_customer_change_feed_has_independent_cursors_across_shops():
             "customer_id": 42,
             "order_id": 200,
         })
+        payment_confirmed = append_sync_event(db, {
+            "type": "order.payment_confirmed",
+            "shop_id": 8,
+            "customer_id": 42,
+            "order_id": 200,
+            "payment_status": "PAID",
+        })
         other_customer = append_sync_event(db, {
             "type": "order.created",
             "shop_id": 8,
@@ -83,12 +90,13 @@ def test_customer_change_feed_has_independent_cursors_across_shops():
         assert "customer_seq" not in invoice_event
         assert first["customer_seq"] == 1
         assert second["customer_seq"] == 2
+        assert payment_confirmed["customer_seq"] == 3
         assert other_customer["customer_seq"] == 1
-        assert db.get(CustomerSyncClock, 42).seq == 2
+        assert db.get(CustomerSyncClock, 42).seq == 3
         assert db.get(CustomerSyncClock, 99).seq == 1
         assert db.query(CustomerSyncEvent).filter(
             CustomerSyncEvent.customer_id == 42
-        ).count() == 2
+        ).count() == 3
     finally:
         db.close()
 
