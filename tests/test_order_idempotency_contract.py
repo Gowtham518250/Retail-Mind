@@ -5,3 +5,47 @@ def test_online_order_models_and_schemas_have_idempotency_key():
     assert hasattr(OnlineOrder, "idempotency_key")
     assert "idempotency_key" in PlaceOrder.model_fields
     assert "idempotency_key" in GuestOrder.model_fields
+
+
+
+def test_online_order_payment_state_and_request_contract():
+    from models import OnlineOrder
+    from online_store import GuestOrder, PlaceOrder, app
+
+    assert hasattr(OnlineOrder, "payment_method")
+    assert hasattr(OnlineOrder, "payment_status")
+    assert hasattr(OnlineOrder, "payment_reference")
+    assert hasattr(OnlineOrder, "payment_detection_key")
+    assert PlaceOrder.model_fields["payment_method"].default == "COD"
+    assert GuestOrder.model_fields["payment_method"].default == "COD"
+
+    routes = {
+        getattr(route, "path", "")
+        for route in app.routes
+    }
+    assert "/store/owner/orders/match-notification-payment" in routes
+
+
+def test_payment_notification_match_requires_reference_confidence_and_idempotency():
+    import pytest
+    from pydantic import ValidationError
+    from online_store import PaymentNotificationMatch
+
+    valid = PaymentNotificationMatch(
+        amount=125.00,
+        payment_reference="UTR12345",
+        idempotency_key="payment-event-fingerprint",
+        confidence_score=0.95,
+        decision="CONFIRMED",
+    )
+    assert valid.amount == 125.00
+    assert valid.confidence_score == 0.95
+
+    with pytest.raises(ValidationError):
+        PaymentNotificationMatch(
+            amount=125.00,
+            payment_reference="x",
+            idempotency_key="short",
+            confidence_score=0.95,
+            decision="CONFIRMED",
+        )
