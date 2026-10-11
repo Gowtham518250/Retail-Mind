@@ -2120,7 +2120,7 @@ def match_online_order_payment_from_notification(
     order.payment_detection_key = detection_key
     order.payment_confirmed_at = datetime.utcnow()
 
-    append_sync_event(db, {
+    order_payment_event = append_sync_event(db, {
         "event_id": str(uuid4()),
         "type": "order.payment_confirmed",
         "shop_id": shop_id,
@@ -2171,6 +2171,7 @@ def match_online_order_payment_from_notification(
         # existing notification-to-invoice sync path.
         db.commit()
 
+    publish_realtime_event(order_payment_event)
     return {
         "matched": True,
         "duplicate": False,
