@@ -52,3 +52,15 @@ def test_payment_notification_match_requires_reference_confidence_and_idempotenc
             confidence_score=0.95,
             decision="CONFIRMED",
         )
+
+
+
+def test_cod_delivery_records_payment_in_the_delivery_transaction():
+    import inspect
+    from online_store import update_order_status
+
+    source = inspect.getsource(update_order_status)
+    assert 'payment_method="CASH"' in source
+    assert "commit_transaction=False" in source
+    assert "pending_payment_events.extend(payment_result.get(\"events\", []))" in source
+    assert "cod_payment_key" in source
