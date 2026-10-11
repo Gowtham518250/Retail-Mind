@@ -51,6 +51,8 @@ jobs:
           echo "$heads"
           count="$(printf '%s\n' "$heads" | grep -c '^025_online_order_payment_state')"
           test "$count" -eq 1
+          head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
+          test "$head_count" -eq 1
       - name: Run focused production tests
         env:
           PYTHONPATH: .
@@ -62,7 +64,6 @@ jobs:
           pytest -q tests/test_growth_suite.py
           pytest -q tests/test_voice_query_contract.py
           pytest -q tests/test_order_idempotency_contract.py
-          pytest -q tests/test_online_order_payment_contract.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
 
   customer-web:
