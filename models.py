@@ -1109,12 +1109,23 @@ class ShopProfile(Base):
 class OnlineOrder(Base):
     """Customer orders placed via the separate customer login"""
     __tablename__ = "online_orders"
+    __table_args__ = (
+        UniqueConstraint("shop_id", "payment_detection_key", name="uq_online_order_shop_payment_key"),
+    )
     
     id = Column(Integer, primary_key=True)
     shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
     customer_id = Column(Integer, nullable=False) # In future, link to a CustomerUser table
     order_status = Column(Enum(OnlineOrderStatus, name="online_order_status"), default=OnlineOrderStatus.PENDING)
     total_amount = Column(Numeric(10, 2), nullable=False)
+    # Payment state is independent from order fulfilment state. UPI is marked
+    # paid only after an authenticated owner-device notification match; COD is
+    # settled at delivery through the existing owner workflow.
+    payment_method = Column(String(20), nullable=False, default="COD", server_default="COD")
+    payment_status = Column(String(24), nullable=False, default="COD_DUE", server_default="COD_DUE")
+    payment_reference = Column(String(128), nullable=True)
+    payment_detection_key = Column(String(128), nullable=True)
+    payment_confirmed_at = Column(DateTime, nullable=True)
     # Snapshot of the online-only setup fee applied to this order.
     online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
     coupon_code = Column(String(50), nullable=True)
