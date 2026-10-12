@@ -758,6 +758,10 @@ def _fast_profit_query(query: str, db: Session, user_id: int, date_scope: dict |
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
     if not re.search(r"\b(net profit|profits?|profit and loss|p&l)\b", normalized):
         return None
+    # Route only numerical profit questions. Explanations, causes, margins and
+    # comparisons need a different analysis path.
+    if re.search(r"\b(why|explain|reason|increase|increased|decrease|decreased|fall|fell|rise|risen|trend|compare|comparison)\b", normalized):
+        return None
     if re.search(
         r"\b(gross|margin|by|per|each|every|product|products|item|items|"
         r"customer|customers|worker|workers|employee|employees|branch|branches|"
@@ -773,9 +777,10 @@ def _fast_profit_query(query: str, db: Session, user_id: int, date_scope: dict |
     start_date = date_scope.get("start_date")
     end_date = date_scope.get("end_date")
     if start_date and end_date:
-        date_filter = " AND tx_date::date >= :period_start AND tx_date::date <= :period_end"
-        params["period_start"] = start_date
-        params["period_end"] = end_date
+        # Use the same timestamp boundaries as Retail Intelligence's P&L endpoint.
+        date_filter = " AND tx_date >= :period_start AND tx_date <= :period_end"
+        params["period_start"] = datetime.combine(start_date, datetime.min.time())
+        params["period_end"] = datetime.combine(end_date, datetime.max.time())
 
     sql = (
         "SELECT COUNT(*)::bigint AS transaction_count, "
@@ -827,8 +832,12 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
     """
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
     has_worker = bool(re.search(r"\b(worker|workers|employee|employees|staff|labou?rers?)\b", normalized))
+    # Payment-history questions need actual payment records and must not be
+    # answered from attendance alone.
+    if re.search(r"\b(how much did i pay|already paid|payment history|pay history|salary paid|paid salary)\b", normalized):
+        return None
     has_pay_intent = bool(re.search(
-        r"\b(pay|paying|paid|salary|salaries|wage|wages|payroll|deduct|deduction|"
+        r"\b(pay|paying|salary|salaries|wage|wages|payroll|deduct|deduction|"
         r"full amount|less amount|amount to pay|payment)\b",
         normalized,
     ))
@@ -941,13 +950,6 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
         total_working_hours += float(hours_by_record[index] or 0.0)
 
     salary = float(worker.salary or 0)
-    sql = (
-        "SELECT w.id AS worker_id, w.name, w.salary, a.attendance_date, a.status "
-        "FROM workers w LEFT JOIN attendance a ON a.worker_id = w.id "
-        "AND a.attendance_date >= :period_start AND a.attendance_date <= :period_end "
-        "WHERE w.shopkeeper_id = :user_id AND w.id = :worker_id "
-        "ORDER BY a.attendance_date"
-    )
     if not attendance_rows:
         attendance_summary = (
             f"No attendance records were found from {period_start.isoformat()} to {period_end.isoformat()}."
@@ -988,7 +990,7 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
     }]
     return {
         "answer": answer,
-        "generated_sql": sql,
+        "generated_sql": "",
         "generated_model_response": answer,
         "results": results,
         "has_more": False,
