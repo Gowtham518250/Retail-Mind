@@ -373,3 +373,130 @@ def test_query_path_has_no_separate_llm_planner(monkeypatch):
     assert "_translate_query_and_classify" in source
     assert "_make_query_plan(" not in source
     assert not hasattr(query_retrival, "_make_query_plan")
+
+def test_invoices_schema_repair_fixes_wrong_tenant_and_date_columns():
+    from query_retrival import _repair_known_schema_aliases
+
+    broken = (
+        "SELECT SUM(total_amount) AS total_sales FROM invoices "
+        "WHERE shopkeeper_id = :user_id AND business_date = :business_date "
+        "AND status NOT IN ('CANCELLED', 'DRAFT')"
+    )
+    repaired = _repair_known_schema_aliases(broken)
+
+    assert "shopkeeper_id" not in repaired
+    assert "WHERE user_id = :user_id" in repaired
+    assert "invoice_date = :business_date" in repaired
+    # The bind parameter must not be accidentally renamed.
+    assert ":business_date" in repaired
+
+
+def test_invoices_schema_repair_handles_table_aliases_without_touching_sales():
+    from query_retrival import _repair_known_schema_aliases
+
+    invoice_sql = (
+        "SELECT SUM(i.total_amount) FROM invoices i "
+        "WHERE i.shopkeeper_id = :user_id AND i.business_date = :business_date"
+    )
+    repaired_invoice = _repair_known_schema_aliases(invoice_sql)
+    assert "i.user_id = :user_id" in repaired_invoice
+    assert "i.invoice_date = :business_date" in repaired_invoice
+
+    sales_sql = (
+        "SELECT SUM(total) FROM sales "
+        "WHERE shopkeeper_id = :user_id AND sale_date = :business_date"
+    )
+    assert _repair_known_schema_aliases(sales_sql) == sales_sql
+
+
+def test_uncertain_telugu_sales_translation_gets_high_reasoning_verification(monkeypatch):
+    from types import SimpleNamespace
+    import json
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            answer = {
+                "english_query": "Could you tell me about today's sales details?",
+                "intent": "general",
+                "metric": "other",
+                "confidence": 0.58,
+            }
+        else:
+            answer = {
+                "english_query": "Can you tell me roughly how much sales my shop made today?",
+                "intent": "aggregate",
+                "metric": "sales_amount",
+                "confidence": 0.99,
+            }
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))]
+        )
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))),
+    )
+
+    result = query_retrival._translate_query_and_classify(
+        "నాకు ఈరోజు సేల్స్ ఎంత అమ్ముడయ్యాయో కొద్దిగా చెప్పగలవా?",
+        "te",
+    )
+
+    assert len(calls) == 2
+    assert calls[1]["model"] == "openai/gpt-oss-120b"
+    assert calls[1]["reasoning_effort"] == "high"
+    assert calls[1]["response_format"] == {"type": "json_object"}
+    assert result["english_query"] == "Can you tell me roughly how much sales my shop made today?"
+    assert result["classification"]["intent"] == "aggregate"
+    assert result["classification"]["metric"] == "sales_amount"
+    assert result["classification"]["confidence"] == 0.99
+    assert result["classification"]["source"] == "high_reasoning_translation_verifier"
+
+
+def test_failed_sql_repair_requires_read_only_tenant_scoped_sql(monkeypatch):
+    from types import SimpleNamespace
+    import json
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    answers = [
+        {"sql": "SELECT SUM(total_amount) FROM invoices WHERE user_id = :user_id AND invoice_date = :business_date"},
+        {"sql": "UPDATE invoices SET total_amount = 0"},
+    ]
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(answers[len(calls) - 1])))]
+        )
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))),
+    )
+
+    repaired = query_retrival._repair_failed_sql_with_groq(
+        question="How much sales did I make today?",
+        failed_sql="SELECT SUM(total_amount) FROM invoices WHERE shopkeeper_id = :user_id",
+        execution_error='column "shopkeeper_id" does not exist',
+        schema_context="TABLE invoices: user_id, invoice_date, total_amount",
+    )
+    assert repaired is not None
+    assert "user_id = :user_id" in repaired
+
+    rejected = query_retrival._repair_failed_sql_with_groq(
+        question="How much sales did I make today?",
+        failed_sql="SELECT broken",
+        execution_error="syntax error",
+        schema_context="TABLE invoices: user_id, invoice_date, total_amount",
+    )
+    assert rejected is None
+
