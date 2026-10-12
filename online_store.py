@@ -2296,16 +2296,20 @@ def match_online_order_payment_from_notification(
 @router.get("/owner/orders")
 def get_incoming_orders(
     status: Optional[str] = None,
-    skip: int = 0,
-    limit: int = Query(50, le=200),
+    search: Optional[str] = Query(None, min_length=1, max_length=120),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Owner: View all incoming online orders for their shop"""
+    """Owner: View and search this shop's online order history.
+
+    Search matches customer name or phone (case-insensitive/partial); a numeric
+    search also matches an exact order ID. The total is counted before paging,
+    so the UI can distinguish the number of matches from the returned page.
+    """
     shop_id = int(current_user["user_id"])
-    # The old implementation performed one customer query per order (N+1).
-    # Join customer data in the same query so 50 orders do not become 51 DB
-    # round-trips. Keep the response contract unchanged.
+    # Join the customer row to avoid N+1 queries while making customer history searchable.
     q = (
         db.query(OnlineOrder, OnlineCustomerAuth)
         .outerjoin(
@@ -2317,10 +2321,26 @@ def get_incoming_orders(
     if status:
         q = q.filter(OnlineOrder.order_status == status.upper())
 
+    clean_search = (search or "").strip()
+    if clean_search:
+        pattern = f"%{clean_search}%"
+        search_filters = [
+            OnlineCustomerAuth.user_name.ilike(pattern),
+            OnlineCustomerAuth.phone.ilike(pattern),
+        ]
+        # Also allow an exact numeric order ID, handy when searching from a receipt.
+        if clean_search.isdigit():
+            try:
+                search_filters.append(OnlineOrder.id == int(clean_search))
+            except (ValueError, OverflowError):
+                pass
+        q = q.filter(or_(*search_filters))
+
+    total_matches = int(q.with_entities(func.count(OnlineOrder.id)).scalar() or 0)
     rows = (
         q.order_by(OnlineOrder.created_at.desc())
-        .offset(max(0, skip))
-        .limit(max(1, min(limit, 100)))
+        .offset(skip)
+        .limit(max(1, min(limit, 200)))
         .all()
     )
 
@@ -2344,7 +2364,11 @@ def get_incoming_orders(
 
     return {
         "orders": result,
-        "total": len(result),
+        "total": total_matches,
+        "returned": len(result),
+        "skip": skip,
+        "limit": limit,
+        "search": clean_search or None,
     }
 
 
