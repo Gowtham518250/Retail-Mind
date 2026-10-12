@@ -1721,7 +1721,8 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
                 },
             ],
             temperature=0.0,
-            max_tokens=1200,
+            # Short JSON translation/classification only; keep below Groq's current OTPM cap.
+            max_tokens=600,
             response_format={"type": "json_object"},
             stream=False,
         )
