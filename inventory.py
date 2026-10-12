@@ -650,7 +650,8 @@ def bulk_export_products(user_id: int = Depends(check_current_user), db: Session
     """Export all products for bulk operations"""
     products = db.query(Product).filter_by(user_id=user_id, is_active=True).all()
     return [{"id": p.id, "product_name": p.product_name, "sku": p.sku,
-             "unit_price": float(p.unit_price), "current_stock": p.current_stock} for p in products]
+             "unit_price": float(p.unit_price), "purchase_price": float(p.purchase_price or 0),
+             "current_stock": float(p.current_stock or 0)} for p in products]
 
 @router.post("/bulk-import/products")
 def bulk_import_products(items: list[dict], user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
@@ -706,6 +707,7 @@ class ProductCreate(BaseModel):
     max_stock: int = Field(100, gt=0)
     reorder_level: int = Field(20, ge=0)
     unit_price: float = Field(..., ge=0)
+    purchase_price: float = Field(0, ge=0)
     category: Optional[str] = None
 
 class ProductUpdate(BaseModel):
@@ -716,6 +718,7 @@ class ProductUpdate(BaseModel):
     max_stock: Optional[int] = Field(None, gt=0)
     reorder_level: Optional[int] = Field(None, ge=0)
     unit_price: Optional[float] = Field(None, ge=0)
+    purchase_price: Optional[float] = Field(None, ge=0)
     category: Optional[str] = None
 
 class StockMovementCreate(BaseModel):
@@ -740,6 +743,7 @@ class ProductResponse(BaseModel):
     min_stock: int
     max_stock: int
     unit_price: float
+    purchase_price: float = 0
     category: Optional[str]
 
     class Config:
@@ -772,6 +776,7 @@ def create_product(
         existing.max_stock = product.max_stock
         existing.reorder_level = product.reorder_level
         existing.unit_price = product.unit_price
+        existing.purchase_price = product.purchase_price
         existing.category = product.category
         existing.is_active = True
         try:
@@ -812,6 +817,7 @@ def create_product(
             raced.max_stock = product.max_stock
             raced.reorder_level = product.reorder_level
             raced.unit_price = product.unit_price
+            raced.purchase_price = product.purchase_price
             raced.category = product.category
             raced.is_active = True
             db.flush()
