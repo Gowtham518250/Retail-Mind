@@ -4,7 +4,7 @@ CRUD operations for Products, Stock Movements, Batches
 Low stock alerts, inventory analytics
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile
 import difflib
 import json
 import os
@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 import httpx
 import re
 from typing import List, Optional
@@ -1063,3 +1064,81 @@ async def parse_voice_billing(
         "model": model,
         "catalog_candidates": len(candidates),
     }
+
+
+@router.post("/voice-billing/parse-audio")
+async def parse_voice_billing_audio(
+    audio: UploadFile = File(...),
+    language_code: str = Form("auto"),
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Transcribe a short billing recording with Groq Whisper, then extract a catalog-grounded draft."""
+    language_code = (language_code or "auto").strip().lower()
+    content_type = (audio.content_type or "").lower()
+    suffix = Path(audio.filename or "").suffix.lower()
+    allowed_suffixes = {".wav", ".mp3", ".m4a", ".mp4", ".mpeg", ".mpga", ".webm", ".ogg", ".flac"}
+    if not content_type.startswith("audio/") and suffix not in allowed_suffixes:
+        raise HTTPException(status_code=415, detail="Upload a supported audio recording.")
+
+    audio_bytes = await audio.read(20 * 1024 * 1024 + 1)
+    if not audio_bytes:
+        raise HTTPException(status_code=422, detail="The audio recording is empty.")
+    if len(audio_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="The audio recording exceeds the 20 MB limit.")
+
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice billing AI is not configured. Set GROQ_API_KEY on the backend.",
+        )
+
+    stt_model = (os.getenv("GROQ_VOICE_STT_MODEL") or "whisper-large-v3").strip()
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=8.0)) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                data={
+                    "model": stt_model,
+                    "response_format": "json",
+                    "temperature": "0",
+                },
+                files={
+                    "file": (
+                        Path(audio.filename or "voice-billing.wav").name,
+                        audio_bytes,
+                        content_type if content_type.startswith("audio/") else "audio/wav",
+                    )
+                },
+            )
+            if response.status_code == 429:
+                raise HTTPException(status_code=429, detail="Groq speech recognition is busy. Please retry.")
+            response.raise_for_status()
+            transcription = response.json()
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Speech recognition timed out. Please record a shorter phrase.")
+    except httpx.HTTPStatusError as exc:
+        logging.warning("Groq voice billing transcription returned HTTP %s", exc.response.status_code)
+        raise HTTPException(status_code=502, detail="Groq could not transcribe this recording. Please try again.")
+    except Exception as exc:
+        logging.warning("Groq voice billing transcription failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Groq could not transcribe this recording. Please try again.")
+
+    transcript = str(transcription.get("text") or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=422, detail="No clear speech was detected. Please record again.")
+
+    parsed = await parse_voice_billing(
+        VoiceBillingParseRequest(transcript=transcript, language_code=language_code),
+        user_id=user_id,
+        db=db,
+    )
+    parsed["transcript"] = transcript
+    parsed["transcription_provider"] = "Groq"
+    parsed["transcription_model"] = stt_model
+    parsed["detected_language"] = str(transcription.get("language") or "") or None
+    return parsed
