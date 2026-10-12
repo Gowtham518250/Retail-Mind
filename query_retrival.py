@@ -2,6 +2,7 @@ import json
 import re
 import os
 import calendar
+import difflib
 import time
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -20,11 +21,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from groq import Groq
 from db import get_db
 from security import get_current_user as check_current_user
-from models import AIQueryHistory
+from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-10-receivables-fastpath-v3"
+QUERY_ENGINE_VERSION = "2026-10-12-grounded-business-intents-v4"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -746,6 +747,254 @@ def _fast_receivables_query(
     }
 
 
+
+def _fast_profit_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
+    """Answer simple net-profit totals from the same journal used by Enterprise P&L.
+
+    Profit is posted income minus posted expenses. This path is deliberately
+    limited to totals; dimensional/gross-profit questions continue to the
+    schema-grounded query path instead of guessing a cost formula.
+    """
+    normalized = re.sub(r"\\s+", " ", (query or "").lower()).strip()
+    if not re.search(r"\\b(net profit|profits?|profit and loss|p&l)\\b", normalized):
+        return None
+    if re.search(
+        r"\\b(gross|margin|by|per|each|every|product|products|item|items|"
+        r"customer|customers|worker|workers|employee|employees|branch|branches|"
+        r"category|categories|compare|comparison|trend|forecast|breakdown)\\b",
+        normalized,
+    ):
+        return None
+
+    date_scope = date_scope or {"kind": "unspecified", "start_date": None, "end_date": None, "label": "all recorded dates"}
+    params = {"user_id": int(user_id)}
+    date_filter = ""
+    label = str(date_scope.get("label") or "all recorded dates")
+    start_date = date_scope.get("start_date")
+    end_date = date_scope.get("end_date")
+    if start_date and end_date:
+        date_filter = " AND tx_date::date >= :period_start AND tx_date::date <= :period_end"
+        params["period_start"] = start_date
+        params["period_end"] = end_date
+
+    sql = (
+        "SELECT COUNT(*)::bigint AS transaction_count, "
+        "COALESCE(SUM(CASE WHEN tx_type = 'INCOME' THEN amount ELSE 0 END), 0)::numeric AS total_income, "
+        "COALESCE(SUM(CASE WHEN tx_type = 'EXPENSE' THEN amount ELSE 0 END), 0)::numeric AS total_expenses "
+        "FROM universal_transactions "
+        "WHERE shop_id = :user_id AND tx_type IN ('INCOME', 'EXPENSE')"
+        + date_filter
+    )
+    row = dict(db.execute(text(sql), params).mappings().one())
+    transaction_count = int(row.get("transaction_count") or 0)
+    income = float(row.get("total_income") or 0)
+    expenses = float(row.get("total_expenses") or 0)
+    if transaction_count == 0:
+        answer = (
+            f"No income or expense transactions are recorded for {label}. "
+            "I can't verify net profit from the current financial journal, so I won't report an assumed zero."
+        )
+        result_rows = []
+    else:
+        net_profit = income - expenses
+        answer = (
+            f"For {label}, recorded income is ₹{income:,.2f} and recorded expenses are ₹{expenses:,.2f}. "
+            f"Net profit is ₹{net_profit:,.2f} (income minus expenses), based on Retail Mind's financial journal."
+        )
+        result_rows = [{
+            "period": label,
+            "transaction_count": transaction_count,
+            "total_income": income,
+            "total_expenses": expenses,
+            "net_profit": net_profit,
+        }]
+
+    return {
+        "answer": answer,
+        "generated_sql": sql,
+        "generated_model_response": answer,
+        "results": result_rows,
+        "has_more": False,
+    }
+
+
+def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
+    """Return verified worker salary/attendance facts without inventing deductions.
+
+    Retail Mind stores a configured worker salary and attendance records, but
+    this workflow does not persist a formula for attendance-based salary cuts.
+    It therefore reports facts and explicitly avoids guessing a reduced amount.
+    """
+    normalized = re.sub(r"\\s+", " ", (query or "").lower()).strip()
+    has_worker = bool(re.search(r"\\b(worker|workers|employee|employees|staff|labou?rers?)\\b", normalized))
+    has_pay_intent = bool(re.search(
+        r"\\b(pay|paying|paid|salary|salaries|wage|wages|payroll|deduct|deduction|"
+        r"full amount|less amount|amount to pay|payment)\\b",
+        normalized,
+    ))
+    if not (has_worker and has_pay_intent):
+        return None
+
+    workers = db.query(Worker).filter(Worker.shopkeeper_id == int(user_id)).all()
+    if not workers:
+        answer = (
+            "I couldn't find any worker records for this shop. Add the worker in Worker Management "
+            "before asking me to check salary or attendance."
+        )
+        return {"answer": answer, "generated_sql": "", "generated_model_response": answer, "results": [], "has_more": False}
+
+    normalized_tokens = set(re.findall(r"[a-z][a-z'-]{2,}", normalized))
+    stopwords = {
+        "have", "today", "need", "money", "worker", "workers", "employee", "employees", "staff",
+        "labourers", "laborers", "pay", "paying", "paid", "salary", "salaries", "wage", "wages",
+        "payroll", "deduct", "deduction", "full", "amount", "less", "should", "would", "could",
+        "him", "her", "them", "our", "the", "and", "for", "from", "with", "based", "attendance",
+        "present", "absent", "hours", "working", "what", "how", "much", "tell", "please", "give",
+        "show", "can", "you", "this", "month", "last", "month", "period", "record", "records",
+        "according", "whether", "little", "more", "than", "fuller", "his", "their", "name",
+    }
+    candidate_tokens = {token for token in normalized_tokens if token not in stopwords}
+    normalized_names = {
+        worker.id: re.sub(r"[^a-z0-9]+", " ", str(worker.name or "").lower()).strip()
+        for worker in workers
+    }
+    exact_matches = []
+    for worker in workers:
+        worker_name = normalized_names[worker.id]
+        if worker_name and re.search(rf"(?<![a-z0-9]){re.escape(worker_name)}(?![a-z0-9])", normalized):
+            exact_matches.append(worker)
+
+    if len(exact_matches) > 1:
+        names = ", ".join(sorted({str(worker.name) for worker in exact_matches}))
+        answer = (
+            f"I found more than one worker matching that name ({names}). Please provide the exact worker name "
+            "or worker ID so I don't use the wrong person's attendance for a pay decision."
+        )
+        return {"answer": answer, "generated_sql": "", "generated_model_response": answer, "results": [], "has_more": False}
+
+    if not exact_matches:
+        scored = []
+        for worker in workers:
+            name_tokens = normalized_names[worker.id].split()
+            score = max(
+                (difflib.SequenceMatcher(None, q_token, name_token).ratio()
+                 for q_token in candidate_tokens
+                 for name_token in name_tokens),
+                default=0.0,
+            )
+            scored.append((score, worker))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if scored and scored[0][0] >= 0.82 and (len(scored) == 1 or scored[0][0] - scored[1][0] >= 0.10):
+            candidate = scored[0][1]
+            answer = (
+                f"I heard the worker's name as a close match to '{candidate.name}', but I haven't confirmed it. "
+                "Please confirm the exact name as saved in Retail Mind before I inspect salary or attendance."
+            )
+        else:
+            answer = (
+                "I couldn't confidently match the worker's name to a saved record. Please enter or say the exact "
+                "worker name as shown in Worker Management. I won't guess which person to pay."
+            )
+        return {"answer": answer, "generated_sql": "", "generated_model_response": answer, "results": [], "has_more": False}
+
+    worker = exact_matches[0]
+    today = _business_dates()[0]
+    date_scope = date_scope or {"kind": "unspecified", "start_date": None, "end_date": None, "label": "current month to date"}
+    # A payment made "today" is not evidence that the wage period is one day.
+    # Use the explicit month/range when given; otherwise report current month to date.
+    if date_scope.get("kind") == "range" and date_scope.get("start_date") and date_scope.get("end_date"):
+        period_start = date_scope["start_date"]
+        period_end = date_scope["end_date"]
+        period_label = str(date_scope.get("label") or f"{period_start.isoformat()} to {period_end.isoformat()}")
+    elif re.search(r"\\b(last month|previous month)\\b", normalized):
+        period_end = today.replace(day=1) - timedelta(days=1)
+        period_start = period_end.replace(day=1)
+        period_label = "last month"
+    else:
+        period_start = today.replace(day=1)
+        period_end = today
+        period_label = f"current month to date ({period_start.isoformat()} to {period_end.isoformat()})"
+
+    attendance_rows = (
+        db.query(Attendance)
+        .filter(
+            Attendance.worker_id == worker.id,
+            Attendance.attendance_date >= period_start,
+            Attendance.attendance_date <= period_end,
+        )
+        .order_by(Attendance.attendance_date.asc())
+        .all()
+    )
+    counts = {"PRESENT": 0, "ABSENT": 0, "LEAVE": 0, "HALF_DAY": 0, "LATE": 0}
+    total_working_hours = 0.0
+    try:
+        from attendance import _session_breakdown
+        hours_by_record = [_session_breakdown(record)[1] for record in attendance_rows]
+    except Exception:
+        hours_by_record = [float(record.working_hours or 0.0) for record in attendance_rows]
+
+    for index, record in enumerate(attendance_rows):
+        status_value = getattr(record.status, "value", record.status)
+        status_key = str(status_value or "").upper()
+        if status_key in counts:
+            counts[status_key] += 1
+        total_working_hours += float(hours_by_record[index] or 0.0)
+
+    salary = float(worker.salary or 0)
+    sql = (
+        "SELECT w.id AS worker_id, w.name, w.salary, a.attendance_date, a.status "
+        "FROM workers w LEFT JOIN attendance a ON a.worker_id = w.id "
+        "AND a.attendance_date >= :period_start AND a.attendance_date <= :period_end "
+        "WHERE w.shopkeeper_id = :user_id AND w.id = :worker_id "
+        "ORDER BY a.attendance_date"
+    )
+    if not attendance_rows:
+        attendance_summary = (
+            f"No attendance records were found from {period_start.isoformat()} to {period_end.isoformat()}."
+        )
+    else:
+        attendance_summary = (
+            f"From {period_start.isoformat()} to {period_end.isoformat()}, records show "
+            f"{counts['PRESENT']} present, {counts['ABSENT']} absent, {counts['LEAVE']} on leave, "
+            f"{counts['HALF_DAY']} half-days, {counts['LATE']} late records, and "
+            f"{total_working_hours:.2f} recorded working hours."
+        )
+
+    if salary <= 0:
+        salary_text = "No positive salary amount is configured for this worker."
+    else:
+        salary_text = f"The configured salary is ₹{salary:,.2f} for the salary-payment workflow."
+
+    answer = (
+        f"{worker.name}: {salary_text} {attendance_summary} "
+        "Retail Mind's current salary-payment workflow records the configured salary for a selected month "
+        "and does not apply an attendance-based deduction formula. I can't safely recommend paying less from "
+        "attendance alone because no deduction rule is configured; follow the agreed employment policy and "
+        "confirm any deduction before payment. This lookup does not make a payment."
+    )
+    results = [{
+        "worker_id": worker.id,
+        "worker_name": worker.name,
+        "configured_salary": salary,
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "attendance_records": len(attendance_rows),
+        "present_days": counts["PRESENT"],
+        "absent_days": counts["ABSENT"],
+        "leave_days": counts["LEAVE"],
+        "half_days": counts["HALF_DAY"],
+        "late_records": counts["LATE"],
+        "total_working_hours": round(total_working_hours, 2),
+    }]
+    return {
+        "answer": answer,
+        "generated_sql": sql,
+        "generated_model_response": answer,
+        "results": results,
+        "has_more": False,
+    }
+
+
 app = APIRouter()
 # Keep the module importable for route tests and deterministic KPI fast paths
 # when optional LLM credentials are absent. Non-fast-path queries receive a
@@ -1415,6 +1664,56 @@ async def ask_query(
     # on "loading".
     date_scope = _resolve_explicit_date_scope(query)
 
+    # Financial totals and worker-pay questions use data-grounded deterministic
+    # handlers; never ask the SQL-generating model to infer these formulas.
+    profit_result = _fast_profit_query(query, db, user_id, date_scope)
+    if profit_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_PROFIT "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(db=db, user_id=user_id, question=original_query,
+                               answer=profit_result["answer"], result_count=len(profit_result["results"]))
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": profit_result["answer"],
+            "message": profit_result["answer"],
+            "generated_sql": profit_result["generated_sql"],
+            "generated_model_response": profit_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": profit_result["generated_sql"],
+            "row_count": len(profit_result["results"]),
+            "results": profit_result["results"],
+            "has_more": False,
+        }
+
+    worker_pay_result = _fast_worker_payroll_query(query, db, user_id, date_scope)
+    if worker_pay_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_WORKER_PAYROLL "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(db=db, user_id=user_id, question=original_query,
+                               answer=worker_pay_result["answer"], result_count=len(worker_pay_result["results"]))
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": worker_pay_result["answer"],
+            "message": worker_pay_result["answer"],
+            "generated_sql": worker_pay_result["generated_sql"],
+            "generated_model_response": worker_pay_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": worker_pay_result["generated_sql"],
+            "row_count": len(worker_pay_result["results"]),
+            "results": worker_pay_result["results"],
+            "has_more": False,
+        }
+
     # Common receivables and khata requests use validated, tenant-scoped SQL.
     # This prevents the text-to-SQL model from returning customer-only columns
     # when the question requires invoice details, and avoids unnecessary RAG/LLM
@@ -1494,9 +1793,10 @@ async def ask_query(
             "row_count": len(fast_result["results"]),
             "results": fast_result["results"],
         }
-    # Only questions that miss the trusted deterministic paths need recent
-    # follow-up context and a lightweight local intent plan before direct RAG/SQL generation.
-    query_history_context = _recent_query_examples(db, user_id)
+    # The current question is the sole source of filters/entities for SQL.
+    # Reusing prior questions here leaked stale product filters (for example "fish")
+    # into unrelated questions. Follow-up context must be resolved explicitly, not
+    # supplied as a bag of recent SQL-driving examples.
     query_plan = _make_deterministic_query_plan(query)
     print(
         "ASKQUERY STAGE=query_planning planner=deterministic llm_calls=0 "
@@ -1710,7 +2010,7 @@ async def ask_query(
     )
     retrived_table_information_str = "\n\n".join(retrived_table_information)
 
-    planner_context = json.dumps({'plan': query_plan, 'date_scope': {'kind': date_scope.get('kind'), 'start_date': date_scope.get('start_date').isoformat() if date_scope.get('start_date') else None, 'end_date': date_scope.get('end_date').isoformat() if date_scope.get('end_date') else None, 'label': date_scope.get('label')}, 'recent_question_history': query_history_context[:5]}, ensure_ascii=False)
+    planner_context = json.dumps({'plan': query_plan, 'date_scope': {'kind': date_scope.get('kind'), 'start_date': date_scope.get('start_date').isoformat() if date_scope.get('start_date') else None, 'end_date': date_scope.get('end_date').isoformat() if date_scope.get('end_date') else None, 'label': date_scope.get('label')}}, ensure_ascii=False)
     formatted_prompt = prompt.format(
             retrieved_table_information=retrived_table_information_str,
             question=query
