@@ -368,9 +368,11 @@ def test_spoken_modifier_must_match_before_catalog_stock_id_is_used():
     assert _voice_billing_product_has_evidence("2 kg black rice 50", sona_masoori) is False
 
 
-def test_voice_parser_recognizes_romanized_indian_speech_as_needing_translation():
+def test_voice_parser_requires_english_normalization_when_language_is_auto():
     assert _voice_billing_should_translate("rendu kilo biyyam 50", "auto") is True
+    assert _voice_billing_should_translate("2 kg rice 50", "auto") is True
     assert _voice_billing_should_translate("2 kg rice 50", "en-IN") is False
+    assert _voice_billing_should_translate("2 kg rice 50", "english") is False
     assert _voice_billing_should_translate("రెండు kg rice 50", "auto") is True
 
 
@@ -438,7 +440,7 @@ def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monke
     assert captured["data"]["model"] == "whisper-large-v3"
     assert captured["headers"]["Authorization"] == "Bearer unit-test-key"
     assert captured["transcript"] == "2 kg rice 50"
-    assert captured["language_code"] == "auto"
+    assert captured["language_code"] == "english"
     assert captured["user_id"] == 7
     assert result["transcription_provider"] == "Groq"
     assert result["transcription_model"] == "whisper-large-v3"
