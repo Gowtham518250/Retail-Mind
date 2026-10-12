@@ -924,6 +924,7 @@ async def parse_voice_billing(
                     ],
                     "temperature": 0,
                     "max_tokens": 900,
+                    "response_format": {"type": "json_object"},
                     "stream": False,
                 },
             )
