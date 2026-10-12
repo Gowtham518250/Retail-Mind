@@ -194,6 +194,90 @@ def _repair_known_schema_aliases(sql: str) -> str:
     return repaired_sql
 
 
+
+def _repair_failed_sql_with_groq(
+    question: str,
+    failed_sql: str,
+    execution_error: str,
+    schema_context: str,
+) -> str | None:
+    """Ask a stronger model to repair one failed query; never execute unchecked output."""
+    if not GROQ_API_KEY:
+        return None
+    model = os.getenv("GROQ_SQL_REPAIR_MODEL") or "openai/gpt-oss-120b"
+    prompt = (
+        "Repair a failed PostgreSQL read-only SELECT query for Retail Mind. "
+        "Return only a JSON object with one key named sql containing one SQL SELECT or WITH statement. "
+        "Use only the listed schema and relationships. Keep authenticated tenant isolation with :user_id. "
+        "Do not use any writes, DDL, multiple statements, unrelated tables, guessed columns, or literal tenant IDs. "
+        "For invoices, valid tenant column is user_id, valid date column is invoice_date, and amount is total_amount. "
+        "invoices does not have shopkeeper_id or business_date. shopkeeper_id and sale_date belong to legacy sales. "
+        "For today use the app-provided :business_date parameter; for yesterday use :previous_business_date. "
+        "The user question defines the requested meaning. Do not change it. "
+        "Schema catalog:\n" + str(schema_context or "")[:24000] +
+        "\nUser question:\n" + str(question or "")[:1200] +
+        "\nFailed SQL:\n" + str(failed_sql or "")[:5000] +
+        "\nDatabase error:\n" + str(execution_error or "")[:1800]
+    )
+    try:
+        options = {}
+        if model in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"}:
+            options["reasoning_effort"] = "high"
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a careful PostgreSQL schema-repair function. Follow the schema exactly."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.0,
+            max_tokens=2400,
+            response_format={"type": "json_object"},
+            stream=False,
+            **options,
+        )
+        raw = str(completion.choices[0].message.content if completion.choices else "").strip()
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            return None
+        candidate = str(payload.get("sql") or "").strip()
+        if not candidate:
+            return None
+        fence = chr(96) * 3
+        if candidate.startswith(fence):
+            candidate = candidate[3:]
+            if candidate.lstrip().lower().startswith("sql"):
+                candidate = candidate.lstrip()[3:]
+        if candidate.endswith(fence):
+            candidate = candidate[:-3]
+        candidate = re.sub(r";\s*$", "", candidate.strip())
+        candidate = _repair_known_schema_aliases(candidate)
+        candidate = re.sub(r":shop_id\b", ":user_id", candidate, flags=re.IGNORECASE)
+
+        # Same guardrails as the first generated query, before executing a retry.
+        if (
+            not re.match(r"^(?:SELECT|WITH)\b", candidate, re.IGNORECASE)
+            or not re.search(r"\bSELECT\b", candidate, re.IGNORECASE)
+            or ";" in candidate
+            or re.search(
+                r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\b",
+                candidate,
+                re.IGNORECASE,
+            )
+            or re.search(
+                r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export)\s*\(",
+                candidate,
+                re.IGNORECASE,
+            )
+            or not re.search(r":user_id\b", candidate, re.IGNORECASE)
+        ):
+            print("ASKQUERY SQL_REPAIR outcome=rejected reason=validation")
+            return None
+        return candidate
+    except Exception as exc:
+        print(f"ASKQUERY SQL_REPAIR outcome=unavailable error={type(exc).__name__}")
+        return None
+
+
 class MiniLMONNXEmbeddings(Embeddings):
     """all-MiniLM-L6-v2 embeddings without loading PyTorch."""
 
@@ -2804,7 +2888,40 @@ async def ask_query(
         print(f"Exception: {exc}")
         print("SQL:")
         print(sql)
-        raise HTTPException(status_code=400, detail="The generated SQL could not be executed.") from exc
+
+        # One bounded corrective attempt is cheaper and safer than returning a
+        # generic failure when the model used a nonexistent schema column.
+        retry_sql = _repair_failed_sql_with_groq(
+            question=query,
+            failed_sql=sql,
+            execution_error=str(exc),
+            schema_context=retrived_table_information_str,
+        )
+        if retry_sql:
+            try:
+                business_date, previous_business_date = _business_dates()
+                rows = db.execute(
+                    text(retry_sql),
+                    {
+                        "user_id": user_id,
+                        "business_date": business_date,
+                        "previous_business_date": previous_business_date,
+                    },
+                ).mappings().all()
+                sql = retry_sql
+                print("ASKQUERY SQL_REPAIR outcome=success repair_llm_calls=1")
+            except Exception as retry_exc:
+                db.rollback()
+                print(f"ASKQUERY SQL_REPAIR outcome=failed error={type(retry_exc).__name__}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="The generated SQL could not be executed after one schema-repair attempt. Please rephrase the question.",
+                ) from retry_exc
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="The generated SQL could not be executed. Please try rephrasing the question.",
+            ) from exc
 
     db_ms = (time.perf_counter() - db_started) * 1000
     total_ms = (time.perf_counter() - started) * 1000
