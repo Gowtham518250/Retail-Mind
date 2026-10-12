@@ -523,13 +523,15 @@ def test_low_confidence_translated_question_stops_before_sql_generation(monkeypa
 
     monkeypatch.setattr(query_retrival, "_cached_schema_search", unexpected_schema_search)
 
+    import asyncio
+
     try:
-        query_retrival.ask_query(
+        asyncio.run(query_retrival.ask_query(
             query="ప్రశ్న స్పష్టంగా అర్థం కాలేదు",
             language_code="te",
             db=object(),
             user_id=7,
-        )
+        ))
     except HTTPException as exc:
         assert exc.status_code == 422
         assert "no shop data was queried" in exc.detail.lower()
