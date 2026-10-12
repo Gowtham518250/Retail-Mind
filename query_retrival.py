@@ -3,7 +3,10 @@ import re
 import os
 import calendar
 import difflib
+import asyncio
+import math
 import time
+from urllib.parse import quote_plus
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -1626,6 +1629,251 @@ async def ask_query_voice(
     result["translated_query"] = english_query
     result["query"] = english_query
     return result
+
+
+# ============================
+# AI CHAT: PRODUCT DISCOVERY
+# ============================
+def _clean_product_discovery_query(query: str) -> str:
+    """Strip shopping intent words; retain the product name, brand and pack size."""
+    value = re.sub(r"\s+", " ", (query or "").strip())
+    value = re.sub(
+        r"^(?:please\s+)?(?:i\s+need|i\s+want|i'?d\s+like|i\s+am\s+looking\s+for|"
+        r"i'm\s+looking\s+for|looking\s+for|want\s+to\s+buy|need\s+to\s+buy|"
+        r"where\s+can\s+i\s+(?:buy|get|find)|find\s+me|search\s+for|get\s+me|"
+        r"buy\s+me|buy|purchase|find|search)\s+",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    )
+    value = re.sub(
+        r"\b(?:around\s+me|near\s+me|nearby|around\s+here|online|please|"
+        r"compare\s+(?:the\s+)?prices?|price\s+comparison|show\s+me)\b",
+        " ",
+        value,
+        flags=re.IGNORECASE,
+    )
+    value = re.sub(r"\s+", " ", value).strip(" \t\r\n.,!?")
+    return value[:120]
+
+
+def _product_discovery_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate straight-line distance between the device and a returned map result."""
+    earth_radius_km = 6371.0088
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return earth_radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
+
+
+@app.post("/askquery/product-discovery")
+async def ask_query_product_discovery(
+    query: str = Form(...),
+    language_code: str = Form("en"),
+    latitude: float | None = Form(None),
+    longitude: float | None = Form(None),
+    radius_km: float = Form(10),
+    user_id: int = Depends(check_current_user),
+):
+    """Search online product listings and nearby shops for an explicit shopping request.
+
+    Online offers include provider-reported prices. Nearby shops are leads to contact;
+    Google Maps does not prove that a shop has the exact item or its current shelf price.
+    """
+    del user_id  # Authenticate the route, but do not store or use location in shop data.
+    original_query = (query or "").strip()
+    language_code = (language_code or "en").strip().lower()
+    if not original_query:
+        raise HTTPException(status_code=422, detail="Tell me which product you are looking for.")
+    if language_code not in VOICE_LANGUAGE_CODES:
+        raise HTTPException(status_code=422, detail="Unsupported query language.")
+    if not math.isfinite(radius_km) or radius_km < 1 or radius_km > 25:
+        raise HTTPException(status_code=422, detail="Search radius must be between 1 and 25 km.")
+
+    english_query = original_query
+    if language_code != "en" or any(not char.isascii() for char in original_query):
+        translated = _translate_query_and_classify(original_query, language_code)
+        english_query = str(translated.get("english_query") or "").strip()
+    product_query = _clean_product_discovery_query(english_query)
+    if not product_query:
+        raise HTTPException(status_code=422, detail="Please include a product name, such as ghee or rice.")
+
+    location_available = (
+        latitude is not None
+        and longitude is not None
+        and math.isfinite(latitude)
+        and math.isfinite(longitude)
+        and -90 <= latitude <= 90
+        and -180 <= longitude <= 180
+    )
+    if not location_available:
+        latitude = longitude = None
+
+    api_key = (os.getenv("SERPAPI_API_KEY") or os.getenv("SERPAPI_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Online product search is not configured. Add SERPAPI_API_KEY to the Retail Mind backend environment.",
+        )
+
+    shopping_params = {
+        "engine": "google_shopping",
+        "q": product_query,
+        "gl": "in",
+        "hl": "en",
+        "num": 10,
+        "api_key": api_key,
+    }
+    map_params = None
+    if location_available:
+        map_params = {
+            "engine": "google_maps",
+            "type": "search",
+            "q": f"{product_query} grocery shops near me",
+            "ll": f"@{latitude},{longitude},14z",
+            "nearby": True,
+            "hl": "en",
+            "gl": "in",
+            "api_key": api_key,
+        }
+
+    async def provider_search(client: httpx.AsyncClient, params: dict) -> dict:
+        try:
+            response = await client.get("https://serpapi.com/search.json", params=params)
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("error"):
+                return {"error": "The search provider could not complete this search."}
+            return payload
+        except (httpx.HTTPError, ValueError, TypeError):
+            return {"error": "The search provider is temporarily unavailable."}
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
+            tasks = [provider_search(client, shopping_params)]
+            if map_params is not None:
+                tasks.append(provider_search(client, map_params))
+            responses = await asyncio.gather(*tasks)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Online search is temporarily unavailable. Please retry.")
+
+    shopping_data = responses[0]
+    map_data = responses[1] if map_params is not None else {}
+    online_offers = []
+    for result in (shopping_data.get("shopping_results") or [])[:20]:
+        try:
+            price = float(result.get("extracted_price"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(price) or price <= 0:
+            continue
+        title = str(result.get("title") or "").strip()
+        if not title:
+            continue
+        url = str(result.get("product_link") or "").strip()
+        thumbnail = str(result.get("thumbnail") or "").strip()
+        online_offers.append({
+            "title": title[:240],
+            "source": str(result.get("source") or "Online retailer")[:120],
+            "price": round(price, 2),
+            "price_text": str(result.get("price") or f"₹{price:.2f}")[:60],
+            "currency": "INR",
+            "delivery": str(result.get("delivery") or "")[:160],
+            "rating": result.get("rating"),
+            "reviews": result.get("reviews"),
+            "url": url if url.startswith("https://") else "",
+            "image_url": thumbnail if thumbnail.startswith("https://") else "",
+        })
+    online_offers.sort(key=lambda item: item["price"])
+
+    nearby_shops = []
+    if location_available:
+        for place in (map_data.get("local_results") or [])[:30]:
+            coords = place.get("gps_coordinates") or {}
+            try:
+                shop_lat = float(coords["latitude"])
+                shop_lon = float(coords["longitude"])
+                distance = _product_discovery_distance_km(latitude, longitude, shop_lat, shop_lon)
+            except (KeyError, TypeError, ValueError):
+                # Without coordinates we cannot claim that the result is nearby.
+                continue
+            if not math.isfinite(distance) or distance > radius_km:
+                continue
+            title = str(place.get("title") or "").strip()
+            address = str(place.get("address") or "").strip()
+            if not title:
+                continue
+            maps_url = "https://www.google.com/maps/search/?" + quote_plus(
+                "api=1&query=" + f"{title} {address}"
+            )
+            # Build a conventional Google Maps URL with correctly encoded query.
+            from urllib.parse import urlencode
+            maps_url = "https://www.google.com/maps/search/?" + urlencode({
+                "api": "1",
+                "query": f"{title} {address}".strip(),
+            })
+            nearby_shops.append({
+                "name": title[:180],
+                "address": address[:300],
+                "distance_km": round(distance, 2),
+                "rating": place.get("rating"),
+                "reviews": place.get("reviews"),
+                "phone": str(place.get("phone") or "")[:50],
+                "open_state": str(place.get("open_state") or place.get("hours") or "")[:100],
+                "website": str(place.get("website") or "")[:500],
+                "maps_url": maps_url,
+                "price": None,
+                "price_note": "Call the shop to confirm current price and availability.",
+            })
+    nearby_shops.sort(key=lambda place: place["distance_km"])
+
+    lowest = online_offers[0] if online_offers else None
+    if online_offers:
+        answer = (
+            f"I found {len(online_offers)} online listings for {product_query}. "
+            f"The lowest displayed listing is {lowest['price_text']} from {lowest['source']}."
+        )
+    else:
+        answer = (
+            f"I couldn't find priced online listings for {product_query}. "
+            "Try adding a brand or pack size, or check the search links again later."
+        )
+    if location_available:
+        answer += f" I found {len(nearby_shops)} nearby shop listing(s) within {radius_km:g} km."
+    else:
+        answer += " Allow location access to find nearby shops; online listings are shown without your location."
+    answer += " Nearby map listings do not confirm product stock or shelf prices, so call before visiting."
+
+    return {
+        "query_engine_version": "product-discovery-v1",
+        "query": original_query,
+        "translated_query": english_query,
+        "answer": answer,
+        "product_discovery": {
+            "product_query": product_query,
+            "location_available": location_available,
+            "radius_km": radius_km,
+            "online_offers": online_offers[:10],
+            "nearby_shops": nearby_shops[:12],
+            "online_search_error": shopping_data.get("error"),
+            "nearby_search_error": map_data.get("error") if location_available else None,
+            "price_comparison_note": (
+                "Online listings may differ by brand, package size, unit weight, delivery fees and seller. "
+                "Prices shown are search-result prices, not a guaranteed checkout price. Nearby shop prices "
+                "are not publicly verified; contact each store for an exact quote."
+            ),
+            "sources": ["Google Shopping via SerpApi"] + (["Google Maps via SerpApi"] if location_available else []),
+        },
+        "results": [],
+        "has_more": False,
+    }
+
+
+@app.post("/askquery")
 
 
 @app.post("/askquery")
