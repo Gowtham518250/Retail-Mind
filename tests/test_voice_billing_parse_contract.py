@@ -50,3 +50,11 @@ def test_small_catalog_is_not_artificially_trimmed():
     ]
     candidates = _voice_billing_catalog_candidates("two rice", products, limit=80)
     assert [product.id for product in candidates] == [1, 2]
+
+
+def test_large_catalog_does_not_return_random_candidates_for_unknown_product():
+    products = [
+        _product(index, f"Unrelated household item {index}", f"SKU-{index}")
+        for index in range(1, 110)
+    ]
+    assert _voice_billing_catalog_candidates("dragonfruit 17", products, limit=80) == []
