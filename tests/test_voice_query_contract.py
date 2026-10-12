@@ -452,7 +452,7 @@ def test_uncertain_telugu_sales_translation_gets_high_reasoning_verification(mon
 
     assert len(calls) == 2
     assert calls[1]["model"] == "openai/gpt-oss-120b"
-    assert calls[1]["reasoning_effort"] == "high"
+    assert "reasoning_effort" not in calls[1]  # Groq SDK 0.10.0 rejects this keyword
     assert calls[1]["response_format"] == {"type": "json_object"}
     assert result["english_query"] == "Can you tell me roughly how much sales my shop made today?"
     assert result["classification"]["intent"] == "aggregate"
