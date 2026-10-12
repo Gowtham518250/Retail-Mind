@@ -1458,6 +1458,16 @@ def get_invoice_analytics(
     }
 
 
+@router.get("/sync", include_in_schema=False)
+def reject_invoice_sync_get():
+    """Make incorrect GET calls to the write-only offline sync route explicit."""
+    raise HTTPException(
+        status_code=405,
+        detail="Invoice sync requires POST with a JSON invoice payload.",
+        headers={"Allow": "POST"},
+    )
+
+
 @router.get("/{invoice_id}")
 def get_invoice(
     invoice_id: int,
