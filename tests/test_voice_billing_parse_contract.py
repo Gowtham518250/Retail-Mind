@@ -219,7 +219,7 @@ def _run_voice_billing_endpoint(
     return result, api_capture, db, products
 
 def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
-    result, api_capture, db = _run_voice_billing_endpoint(
+    result, api_capture, db, products = _run_voice_billing_endpoint(
         monkeypatch,
         [{
             "product_id": 42,
@@ -245,7 +245,7 @@ def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
 
 
 def test_groq_cannot_inject_product_id_not_in_shop_catalog(monkeypatch):
-    result, _, _ = _run_voice_billing_endpoint(
+    result, _, _, _ = _run_voice_billing_endpoint(
         monkeypatch,
         [{
             "product_id": 999999,
