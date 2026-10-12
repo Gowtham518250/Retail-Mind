@@ -28,7 +28,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-12-multilingual-query-confidence-v6"
+QUERY_ENGINE_VERSION = "2026-10-12-multilingual-query-confidence-v7"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -436,49 +436,149 @@ def _make_deterministic_query_plan(query: str) -> dict:
 
 
 def _can_use_fast_business_query(query: str, date_scope: dict) -> bool:
-    """Gate predefined KPI SQL to narrow, unambiguous questions it can answer."""
+    """Gate deterministic KPI SQL to clear aggregates with a resolved date scope."""
+    kind = date_scope.get("kind")
+    has_valid_bounds = (
+        kind in {"exact", "range"}
+        and date_scope.get("start_date") is not None
+        and date_scope.get("end_date") is not None
+    )
     safe_fast_date = (
-        date_scope.get("kind") == "unspecified"
+        kind == "unspecified"
         or date_scope.get("label") in {"today", "yesterday"}
+        or has_valid_bounds
     )
     if not safe_fast_date:
         return False
     plan = _make_deterministic_query_plan(query)
     if plan.get("intent") != "aggregate" or plan.get("confidence", 0) < 0.9:
         return False
-    # The deterministic KPI path supports sales/expense totals, counts, and units.
     return plan.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}
 
 
 def _resolve_explicit_date_scope(query: str) -> dict:
-    """Resolve explicit exact dates/ranges using Asia/Kolkata business date."""
+    """Resolve exact and relative date ranges using the Asia/Kolkata business date.
+
+    "Last month" means the previous calendar month. Explicit rolling phrases such
+    as "last 1 month", "past month", and "last 30 days" include the business date.
+    """
     today = _business_dates()[0]
     q = re.sub(r"\s+", " ", (query or "").lower()).strip()
-    if re.search(r"\b(today|today's|todays)\b", q):
-        return {"kind": "exact", "start_date": today, "end_date": today, "label": "today"}
-    if re.search(r"\byesterday(?:'s)?\b", q):
-        d = today - timedelta(days=1)
-        return {"kind": "exact", "start_date": d, "end_date": d, "label": "yesterday"}
+
+    # Rolling windows are checked before "today": a phrase such as
+    # "sales in the last 1 month up to today" is a range, not today-only.
+    if re.search(r"\b(?:last|past|previous)\s+(?:30|thirty)\s+days?\b", q):
+        start = today - timedelta(days=29)
+        return {
+            "kind": "range",
+            "start_date": start,
+            "end_date": today,
+            "label": "last 30 days",
+        }
+
+    if re.search(
+        r"\b(?:last|past|previous)\s+(?:1|one)\s+months?\b|\bpast\s+month\b",
+        q,
+    ):
+        previous_month = today.month - 1 or 12
+        previous_year = today.year if today.month > 1 else today.year - 1
+        start_day = min(today.day, calendar.monthrange(previous_year, previous_month)[1])
+        start = date(previous_year, previous_month, start_day)
+        return {
+            "kind": "range",
+            "start_date": start,
+            "end_date": today,
+            "label": "last 1 month",
+        }
+
+    # Explicit date ranges take precedence over individual mentions of today.
     range_dates = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
     if len(range_dates) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
         try:
             start, end = date(*map(int, range_dates[0])), date(*map(int, range_dates[1]))
             if start > end:
                 start, end = end, start
-            return {"kind": "range", "start_date": start, "end_date": end, "label": f"{start.isoformat()} to {end.isoformat()}"}
+            return {
+                "kind": "range",
+                "start_date": start,
+                "end_date": end,
+                "label": f"{start.isoformat()} to {end.isoformat()}",
+            }
         except ValueError:
             pass
+
+    # Calendar periods are distinct from rolling windows.
+    if re.search(r"\b(last week|previous week)\b", q):
+        start = today - timedelta(days=today.weekday() + 7)
+        end = start + timedelta(days=6)
+        return {"kind": "range", "start_date": start, "end_date": end, "label": "last week"}
+
+    if re.search(r"\b(this week|current week)\b", q):
+        start = today - timedelta(days=today.weekday())
+        return {"kind": "range", "start_date": start, "end_date": today, "label": "this week"}
+
+    if re.search(r"\b(last month|previous month)\b", q):
+        end = today.replace(day=1) - timedelta(days=1)
+        return {"kind": "range", "start_date": end.replace(day=1), "end_date": end, "label": "last month"}
+
+    if re.search(r"\b(this month|current month)\b", q):
+        return {
+            "kind": "range",
+            "start_date": today.replace(day=1),
+            "end_date": today,
+            "label": "this month",
+        }
+
+    if re.search(r"\b(last year|previous year)\b", q):
+        return {
+            "kind": "range",
+            "start_date": date(today.year - 1, 1, 1),
+            "end_date": date(today.year - 1, 12, 31),
+            "label": "last year",
+        }
+
+    if re.search(r"\b(this year|year to date|ytd)\b", q):
+        return {
+            "kind": "range",
+            "start_date": date(today.year, 1, 1),
+            "end_date": today,
+            "label": "this year",
+        }
+
+    if re.search(r"\b(today|today's|todays)\b", q):
+        return {"kind": "exact", "start_date": today, "end_date": today, "label": "today"}
+
+    if re.search(r"\byesterday(?:'s)?\b", q):
+        yesterday = today - timedelta(days=1)
+        return {
+            "kind": "exact",
+            "start_date": yesterday,
+            "end_date": yesterday,
+            "label": "yesterday",
+        }
+
     iso = re.search(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
     dmy = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", q)
     try:
         if iso:
-            d = date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
-            return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
+            exact_date = date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+            return {
+                "kind": "exact",
+                "start_date": exact_date,
+                "end_date": exact_date,
+                "label": exact_date.isoformat(),
+            }
         if dmy:
-            d = date(int(dmy.group(3)), int(dmy.group(2)), int(dmy.group(1)))
-            return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
+            exact_date = date(int(dmy.group(3)), int(dmy.group(2)), int(dmy.group(1)))
+            return {
+                "kind": "exact",
+                "start_date": exact_date,
+                "end_date": exact_date,
+                "label": exact_date.isoformat(),
+            }
     except ValueError:
         pass
+
     month_numbers = {
         "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
         "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
@@ -487,59 +587,69 @@ def _resolve_explicit_date_scope(query: str) -> dict:
     named = re.search(rf"\b({month_pattern})\s+(\d{{1,2}})(?:,?\s+(20\d{{2}}))?\b", q)
     if named:
         try:
-            d = date(int(named.group(3) or today.year), month_numbers[named.group(1)], int(named.group(2)))
-            return {"kind": "exact", "start_date": d, "end_date": d, "label": d.isoformat()}
+            exact_date = date(
+                int(named.group(3) or today.year),
+                month_numbers[named.group(1)],
+                int(named.group(2)),
+            )
+            return {
+                "kind": "exact",
+                "start_date": exact_date,
+                "end_date": exact_date,
+                "label": exact_date.isoformat(),
+            }
         except ValueError:
             pass
-    if re.search(r"\b(last week|previous week)\b", q):
-        start = today - timedelta(days=today.weekday() + 7)
-        end = start + timedelta(days=6)
-        return {"kind": "range", "start_date": start, "end_date": end, "label": "last week"}
-    if re.search(r"\b(this week|current week)\b", q):
-        start = today - timedelta(days=today.weekday())
-        return {"kind": "range", "start_date": start, "end_date": today, "label": "this week"}
-    if re.search(r"\b(last month|previous month)\b", q):
-        end = today.replace(day=1) - timedelta(days=1)
-        return {"kind": "range", "start_date": end.replace(day=1), "end_date": end, "label": "last month"}
-    if re.search(r"\b(this month|current month)\b", q):
-        return {"kind": "range", "start_date": today.replace(day=1), "end_date": today, "label": "this month"}
-    if re.search(r"\b(last year|previous year)\b", q):
-        return {"kind": "range", "start_date": date(today.year - 1, 1, 1), "end_date": date(today.year - 1, 12, 31), "label": "last year"}
-    if re.search(r"\b(this year|year to date|ytd)\b", q):
-        return {"kind": "range", "start_date": date(today.year, 1, 1), "end_date": today, "label": "this year"}
-    found = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
-    if len(found) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
-        try:
-            start, end = date(*map(int, found[0])), date(*map(int, found[1]))
-            if start > end:
-                start, end = end, start
-            return {"kind": "range", "start_date": start, "end_date": end, "label": f"{start.isoformat()} to {end.isoformat()}"}
-        except ValueError:
-            pass
+
     return {"kind": "unspecified", "start_date": None, "end_date": None, "label": "not specified"}
 
 
-def _fast_business_query(query: str, db: Session, user_id: int):
-    """Answer common owner KPI questions without FAISS/Groq latency.
-
-    The normal RAG/Text-to-SQL engine remains the fallback for arbitrary
-    questions. Common sales/expense KPI questions use the same tenant and
-    business-date rules but execute directly against the canonical tables.
-    """
-    normalized = re.sub(r"\s+", " ", query.lower()).strip()
+def _fast_business_query(
+    query: str,
+    db: Session,
+    user_id: int,
+    date_scope: dict | None = None,
+):
+    """Answer supported aggregate KPIs with tenant-scoped, deterministic SQL."""
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
     wants_sales = bool(re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized))
     wants_expense = bool(re.search(r"\b(expense|expenses|spent|spending)\b", normalized))
     if not (wants_sales or wants_expense):
         return None
 
-    if re.search(r"\b(today|today's|todays)\b", normalized):
-        business_date, previous_business_date = _business_dates()
-        date_scope = ("today", business_date, "invoice_date", "sale_date")
-    elif re.search(r"\byesterday\b", normalized):
-        business_date, previous_business_date = _business_dates()
-        date_scope = ("yesterday", previous_business_date, "invoice_date", "sale_date")
+    resolved_scope = date_scope or _resolve_explicit_date_scope(query)
+    scope_kind = resolved_scope.get("kind", "unspecified")
+    scope_label = resolved_scope.get("label") or "all time"
+    params = {"user_id": user_id}
+
+    if scope_kind == "exact" and scope_label == "today":
+        params["business_date"] = resolved_scope.get("start_date") or _business_dates()[0]
+        invoice_date = "i.invoice_date = :business_date"
+        legacy_date = "s.sale_date = :business_date"
+        display_range = "today"
+        tx_date_filter = " AND tx_date::date = :business_date"
+    elif scope_kind == "exact" and scope_label == "yesterday":
+        params["previous_business_date"] = resolved_scope.get("start_date") or _business_dates()[1]
+        invoice_date = "i.invoice_date = :previous_business_date"
+        legacy_date = "s.sale_date = :previous_business_date"
+        display_range = "yesterday"
+        tx_date_filter = " AND tx_date::date = :previous_business_date"
+    elif (
+        scope_kind in {"exact", "range"}
+        and resolved_scope.get("start_date") is not None
+        and resolved_scope.get("end_date") is not None
+    ):
+        params["start_date"] = resolved_scope["start_date"]
+        params["end_date"] = resolved_scope["end_date"]
+        invoice_date = "i.invoice_date BETWEEN :start_date AND :end_date"
+        legacy_date = "s.sale_date BETWEEN :start_date AND :end_date"
+        display_range = scope_label
+        tx_date_filter = " AND tx_date::date BETWEEN :start_date AND :end_date"
     else:
-        date_scope = ("all time", None, "invoice_date", "sale_date")
+        invoice_date = "1=1"
+        legacy_date = "1=1"
+        display_range = "all time"
+        tx_date_filter = ""
 
     wants_units = bool(
         re.search(r"\b(items?|units?)\b", normalized)
@@ -550,36 +660,23 @@ def _fast_business_query(query: str, db: Session, user_id: int):
     )
 
     if wants_expense:
-        if date_scope[1] is None:
-            row = db.execute(
-                text(
-                    "SELECT COALESCE(SUM(amount), 0) AS total_expenses "
-                    "FROM universal_transactions "
-                    "WHERE shop_id = :user_id AND tx_type = 'EXPENSE'"
-                ),
-                {"user_id": user_id},
-            ).mappings().one()
-        else:
-            row = db.execute(
-                text(
-                    "SELECT COALESCE(SUM(amount), 0) AS total_expenses "
-                    "FROM universal_transactions "
-                    "WHERE shop_id = :user_id AND tx_type = 'EXPENSE' "
-                    "AND tx_date::date = :business_date"
-                ),
-                {"user_id": user_id, "business_date": date_scope[1]},
-            ).mappings().one()
+        row = db.execute(
+            text(
+                "SELECT COALESCE(SUM(amount), 0) AS total_expenses "
+                "FROM universal_transactions "
+                "WHERE shop_id = :user_id AND tx_type = 'EXPENSE'"
+                + tx_date_filter
+            ),
+            params,
+        ).mappings().one()
         value = float(row["total_expenses"] or 0)
-        answer = f"Your expenses {date_scope[0]} are ₹{value:,.2f}."
+        answer = f"Your expenses {display_range} are ₹{value:,.2f}."
         return {
             "answer": answer,
             "generated_sql": "DIRECT_KPI: universal_transactions expense total",
             "generated_model_response": answer,
             "results": [{"total_expenses": value}],
         }
-
-    invoice_date = "i.invoice_date = :business_date" if date_scope[1] is not None else "1=1"
-    legacy_date = "s.sale_date = :business_date" if date_scope[1] is not None else "1=1"
 
     if wants_count:
         row = db.execute(
@@ -590,10 +687,10 @@ def _fast_business_query(query: str, db: Session, user_id: int):
                 "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt FROM sales s "
                 f"WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
             ),
-            {"user_id": user_id, "business_date": date_scope[1]},
+            params,
         ).mappings().one()
         value = int(row["sales_count"] or 0)
-        answer = f"You have {value} sale(s) {date_scope[0]}."
+        answer = f"You have {value} sale(s) {display_range}."
         return {
             "answer": answer,
             "generated_sql": "DIRECT_KPI: invoice/sales count",
@@ -611,10 +708,10 @@ def _fast_business_query(query: str, db: Session, user_id: int):
                 "CROSS JOIN (SELECT COALESCE(SUM(s.quantity),0)::numeric AS qty FROM sales s "
                 f"WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
             ),
-            {"user_id": user_id, "business_date": date_scope[1]},
+            params,
         ).mappings().one()
         value = float(row["total_units_sold"] or 0)
-        answer = f"You sold {value:g} item(s) {date_scope[0]}."
+        answer = f"You sold {value:g} item(s) {display_range}."
         return {
             "answer": answer,
             "generated_sql": "DIRECT_KPI: invoice/sales units",
@@ -631,19 +728,16 @@ def _fast_business_query(query: str, db: Session, user_id: int):
             "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(s.total),0)::numeric AS total "
             f"FROM sales s WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
         ),
-        {"user_id": user_id, "business_date": date_scope[1]},
+        params,
     ).mappings().one()
     value = float(row["total_sales_amount"] or 0)
-    answer = f"Your total sales amount {date_scope[0]} is ₹{value:,.2f}."
+    answer = f"Your total sales amount {display_range} is ₹{value:,.2f}."
     return {
         "answer": answer,
         "generated_sql": "DIRECT_KPI: invoice/sales revenue",
         "generated_model_response": answer,
         "results": [{"total_sales_amount": value}],
     }
-
-
-
 
 
 def _fast_top_product_revenue_query(
@@ -2585,6 +2679,9 @@ async def ask_query(
     # FAISS + Groq round-trip that previously made simple questions feel stuck
     # on "loading".
     date_scope = _resolve_explicit_date_scope(query)
+    source_date_scope = _resolve_explicit_date_scope(original_query)
+    if source_date_scope.get("kind") != "unspecified":
+        date_scope = source_date_scope
 
     # Ranked revenue questions must run before generic product listing and
     # generic total-sales matching, otherwise "highest revenue product" can
@@ -2783,7 +2880,7 @@ async def ask_query(
         f"fast_path_eligible={str(can_use_fast_path).lower()}"
     )
     if can_use_fast_path:
-        fast_result = _fast_business_query(query, db, user_id)
+        fast_result = _fast_business_query(query, db, user_id, date_scope)
     if fast_result is not None:
         print(
             "ASKQUERY PATH=FAST_KPI "
@@ -2989,6 +3086,7 @@ async def ask_query(
     - If the user says "today", filter to today's Asia/Kolkata business date only.
     - If the user gives a specific date, filter to that exact date only.
     - If the user gives a range such as yesterday, this week, last week, this month, or last month, use that exact range.
+    - "Last 1 month" / "past month" means a rolling one-calendar-month window ending today; "last 30 days" includes today and the prior 29 days. "Last month" without a number means the previous calendar month.
     - If no date or range is mentioned, do not silently assume today; answer across the full available period requested by the question.
     - For normal sales questions in this application, use the invoices table because the current sale workflow records completed sales as invoices:
       - count completed/active invoices for sale counts;
@@ -3168,8 +3266,52 @@ async def ask_query(
             or re.search(r"\b(count|number)\s+of\s+sales?\b", normalized_query)
         )
 
+        request_date_scope = date_scope if isinstance(date_scope, dict) else {}
+
         def build_date_filters(column_name: str):
+            resolved_kind = request_date_scope.get("kind")
+            resolved_label = request_date_scope.get("label") or "all time"
+            resolved_start = request_date_scope.get("start_date")
+            resolved_end = request_date_scope.get("end_date")
+
+            # The app resolver is authoritative for recognized periods.
+            if (
+                resolved_kind == "range"
+                and resolved_start is not None
+                and resolved_end is not None
+            ):
+                return (
+                    f"{column_name} BETWEEN DATE '{resolved_start.isoformat()}' "
+                    f"AND DATE '{resolved_end.isoformat()}'",
+                    resolved_label,
+                )
+
+            if resolved_kind == "exact" and resolved_start is not None:
+                if resolved_label == "today":
+                    return f"{column_name} = CAST(:business_date AS date)", "today"
+                if resolved_label == "yesterday":
+                    return f"{column_name} = CAST(:previous_business_date AS date)", "yesterday"
+                return f"{column_name} = DATE '{resolved_start.isoformat()}'", resolved_label
+
             today_expr = "CAST(:business_date AS date)"
+
+            # Defensive fallback for any period phrase not handled by the resolver.
+            if re.search(r"\b(?:last|past|previous)\s+(?:30|thirty)\s+days?\b", normalized_query):
+                return (
+                    f"{column_name} >= ({today_expr} - INTERVAL '29 days')::date "
+                    f"AND {column_name} <= {today_expr}",
+                    "last 30 days",
+                )
+
+            if re.search(
+                r"\b(?:last|past|previous)\s+(?:1|one)\s+months?\b|\bpast\s+month\b",
+                normalized_query,
+            ):
+                return (
+                    f"{column_name} >= ({today_expr} - INTERVAL '1 month')::date "
+                    f"AND {column_name} <= {today_expr}",
+                    "last 1 month",
+                )
 
             if re.search(r"\b(today|todays|today's)\b", normalized_query):
                 return f"{column_name} = {today_expr}", "today"
@@ -3177,7 +3319,6 @@ async def ask_query(
             if re.search(r"\byesterday\b", normalized_query):
                 return f"{column_name} = CAST(:previous_business_date AS date)", "yesterday"
 
-            # Exact ISO date: 2026-09-20
             iso_match = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", normalized_query)
             if iso_match:
                 y, m, d = map(int, iso_match.groups())
@@ -3187,7 +3328,6 @@ async def ask_query(
                 except ValueError:
                     pass
 
-            # Exact Indian/common date: 20/09/2026 or 20-09-2026
             dmy_match = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", normalized_query)
             if dmy_match:
                 d, m, y = map(int, dmy_match.groups())
@@ -3197,7 +3337,6 @@ async def ask_query(
                 except ValueError:
                     pass
 
-            # Named month + day, with optional year: "September 20" / "September 20, 2026"
             month_names = {
                 "january": 1, "february": 2, "march": 3, "april": 4,
                 "may": 5, "june": 6, "july": 7, "august": 8,
@@ -3205,52 +3344,23 @@ async def ask_query(
             }
             month_pattern = "|".join(month_names)
             month_match = re.search(
-                rf"\b({month_pattern})\s+(\d{{1,2}})(?:,\s*(20\d{{2}}))?\b",
+                rf"\b({month_pattern})\s+(\d{{1,2}})(?:,?\s*(20\d{{2}}))?\b",
                 normalized_query,
                 re.IGNORECASE,
             )
             if month_match:
                 month_num = month_names[month_match.group(1).lower()]
                 day_num = int(month_match.group(2))
-                year_num = int(month_match.group(3)) if month_match.group(3) else date.today().year
+                year_num = int(month_match.group(3)) if month_match.group(3) else _business_dates()[0].year
                 try:
                     exact = date(year_num, month_num, day_num).isoformat()
                     return f"{column_name} = DATE '{exact}'", exact
                 except ValueError:
                     pass
 
-            # Common natural-language ranges.
-            if re.search(r"\b(this week|current week)\b", normalized_query):
-                return (
-                    f"{column_name} >= date_trunc('week', {today_expr})::date "
-                    f"AND {column_name} < (date_trunc('week', {today_expr}) + INTERVAL '7 days')::date",
-                    "this week",
-                )
-
-            if re.search(r"\b(last week|previous week)\b", normalized_query):
-                return (
-                    f"{column_name} >= (date_trunc('week', {today_expr}) - INTERVAL '7 days')::date "
-                    f"AND {column_name} < date_trunc('week', {today_expr})::date",
-                    "last week",
-                )
-
-            if re.search(r"\b(this month|current month)\b", normalized_query):
-                return (
-                    f"{column_name} >= date_trunc('month', {today_expr})::date "
-                    f"AND {column_name} < (date_trunc('month', {today_expr}) + INTERVAL '1 month')::date",
-                    "this month",
-                )
-
-            if re.search(r"\b(last month|previous month)\b", normalized_query):
-                return (
-                    f"{column_name} >= (date_trunc('month', {today_expr}) - INTERVAL '1 month')::date "
-                    f"AND {column_name} < date_trunc('month', {today_expr})::date",
-                    "last month",
-                )
-
             return "", "all time"
 
-        invoice_date_filter, date_scope = build_date_filters("invoice_date")
+        invoice_date_filter, _invoice_date_label = build_date_filters("invoice_date")
         sales_date_filter, _ = build_date_filters("sale_date")
 
         invoice_where = (
