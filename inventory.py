@@ -737,30 +737,49 @@ def _voice_billing_expanded_tokens(value: str) -> set[str]:
 
 
 def _voice_billing_catalog_candidates(transcript: str, products: list[Product], limit: int = 80) -> list[Product]:
-    """Choose tenant-owned catalog rows without ever inventing a product."""
+    """Choose tenant-owned catalog rows with positive lexical evidence; avoid random nearest products."""
     if len(products) <= limit:
         return products
 
     normalized_transcript = _voice_billing_normalize(transcript)
-    query_tokens = _voice_billing_expanded_tokens(transcript)
+    stop_tokens = {
+        "a", "an", "the", "please", "add", "want", "need", "give", "me", "for", "at",
+        "price", "cost", "rupee", "rupees", "rs", "inr", "only", "total", "each", "per",
+        "kg", "kgs", "kilo", "kilos", "kilogram", "g", "gm", "gram", "grams", "ml",
+        "l", "ltr", "litre", "liter", "packet", "packets", "pack", "piece", "pieces",
+        "pcs", "bottle", "bottles", "one", "two", "three", "four", "five", "six",
+        "seven", "eight", "nine", "ten", "ek", "do", "teen", "char", "panch",
+        "rendu", "moodu", "nalugu", "aidu", "aaru", "edu", "padi",
+    }
+    query_tokens = {
+        token for token in _voice_billing_expanded_tokens(transcript)
+        if token not in stop_tokens and not token.isdigit()
+    }
     scored: list[tuple[float, Product]] = []
     for product in products:
         name = str(product.product_name or "")
         sku = str(product.sku or "")
         normalized_name = _voice_billing_normalize(name)
         normalized_sku = _voice_billing_normalize(sku)
-        name_tokens = _voice_billing_expanded_tokens(name)
-        score = 0.0
-        if normalized_name and normalized_name in normalized_transcript:
-            score += 100.0 + min(len(normalized_name), 30) / 10
-        if normalized_sku and normalized_sku in normalized_transcript:
-            score += 90.0
+        name_tokens = {
+            token for token in _voice_billing_expanded_tokens(name)
+            if token not in stop_tokens and not token.isdigit()
+        }
+        exact_name = bool(normalized_name and normalized_name in normalized_transcript)
+        exact_sku = bool(normalized_sku and normalized_sku in normalized_transcript)
         overlap = len(query_tokens.intersection(name_tokens))
-        if overlap:
-            score += 30.0 * overlap / max(1, len(name_tokens))
-        score += 20.0 * difflib.SequenceMatcher(None, normalized_name, normalized_transcript).ratio()
-        if score > 1.0:
-            scored.append((score, product))
+        similarity = difflib.SequenceMatcher(None, normalized_name, normalized_transcript).ratio()
+
+        # No arbitrary fallback candidates: if there is no exact, token, SKU, or
+        # strong fuzzy evidence, the API asks the cashier to repeat/select the item.
+        if not (exact_name or exact_sku or overlap > 0 or similarity >= 0.55):
+            continue
+
+        score = (120.0 if exact_name else 0.0)
+        score += 100.0 if exact_sku else 0.0
+        score += 24.0 * overlap / max(1, len(name_tokens))
+        score += 12.0 * similarity
+        scored.append((score, product))
 
     scored.sort(key=lambda entry: entry[0], reverse=True)
     return [product for _, product in scored[:limit]]
