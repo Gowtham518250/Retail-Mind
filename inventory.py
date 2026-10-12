@@ -1298,7 +1298,11 @@ def _voice_billing_should_translate(transcript: str, language_code: str) -> bool
     """Require English normalization before product/catalog matching for Indian-language input."""
     normalized_language = re.sub(r"[_\s]+", "-", (language_code or "auto").strip().lower())
     base_language = normalized_language.split("-", 1)[0]
-    if base_language not in {"", "auto", "und", "en", "english"}:
+    # "auto" is not proof that the transcript is English. Require translation
+    # before parsing because Romanized Telugu/Hindi/Tamil speech uses Latin letters.
+    if base_language in {"", "auto", "und"}:
+        return True
+    if base_language not in {"en", "english"}:
         return True
     for char in transcript:
         if unicodedata.category(char)[0] in {"L", "M"} and "LATIN" not in unicodedata.name(char, ""):
@@ -1776,13 +1780,20 @@ async def parse_voice_billing_audio(
     if not transcript:
         raise HTTPException(status_code=422, detail="No clear speech was detected. Please record again.")
 
+    detected_language = str(transcription.get("language") or "").strip().lower()
+    effective_language = language_code
+    if language_code in {"", "auto", "und"} and detected_language:
+        # Whisper's result gives us a language hint even when the UI requested auto.
+        # English can skip translation; other languages must be translated first.
+        effective_language = detected_language
+
     parsed = await parse_voice_billing(
-        VoiceBillingParseRequest(transcript=transcript, language_code=language_code),
+        VoiceBillingParseRequest(transcript=transcript, language_code=effective_language),
         user_id=user_id,
         db=db,
     )
     parsed["transcript"] = transcript
     parsed["transcription_provider"] = "Groq"
     parsed["transcription_model"] = stt_model
-    parsed["detected_language"] = str(transcription.get("language") or "") or None
+    parsed["detected_language"] = detected_language or None
     return parsed
