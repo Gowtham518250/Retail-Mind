@@ -707,16 +707,46 @@ class VoiceBillingParseRequest(BaseModel):
 
 
 _VOICE_BILLING_ALIASES = {
-    "rice": {"rice", "chawal", "chaval", "biyyam", "vari", "arisi", "akki"},
-    "milk": {"milk", "doodh", "dudh", "paalu", "paal", "haalu", "palk"},
-    "sugar": {"sugar", "cheeni", "shakkar", "sakkare", "sakkara"},
-    "oil": {"oil", "tel", "tail", "noone", "ennai", "enne"},
-    "salt": {"salt", "namak", "uppu", "upp"},
-    "water": {"water", "paani", "neeru", "thanni"},
-    "tea": {"tea", "chai", "chaha"},
-    "coffee": {"coffee", "kaapi", "kapi"},
-    "soap": {"soap", "sabun", "saabun", "sabbu"},
-    "dal": {"dal", "daal", "pappu", "paruppu"},
+    "rice": {
+        "rice", "chawal", "chaval", "biyyam", "vari", "arisi", "akki",
+        "బియ్యం", "వరి", "चावल", "चावल", "அரிசி", "ಅಕ್ಕಿ", "അരി",
+    },
+    "milk": {
+        "milk", "doodh", "dudh", "paalu", "paal", "haalu", "palk",
+        "పాలు", "పాల", "दूध", "பால்", "ಹಾಲು", "പാൽ",
+    },
+    "sugar": {
+        "sugar", "cheeni", "shakkar", "sakkare", "sakkara",
+        "చక్కెర", "పంచదార", "चीनी", "சர்க்கரை", "ಸಕ್ಕರೆ", "പഞ്ചസാര",
+    },
+    "oil": {
+        "oil", "tel", "tail", "noone", "ennai", "enne",
+        "నూనె", "तेल", "எண்ணெய்", "ಎಣ್ಣೆ", "എണ്ണ",
+    },
+    "salt": {
+        "salt", "namak", "uppu", "upp",
+        "ఉప్పు", "नमक", "உப்பு", "ಉಪ್ಪು", "ഉപ്പ്",
+    },
+    "water": {
+        "water", "paani", "neeru", "thanni",
+        "నీరు", "నీళ్లు", "पानी", "தண்ணீர்", "ನೀರು", "വെള്ളം",
+    },
+    "tea": {
+        "tea", "chai", "chaha",
+        "టీ", "చాయ్", "चाय", "தேநீர்", "ಚಹಾ", "ചായ",
+    },
+    "coffee": {
+        "coffee", "kaapi", "kapi",
+        "కాఫీ", "कॉफ़ी", "कॉफी", "காப்பி", "ಕಾಫಿ", "കാപ്പി",
+    },
+    "soap": {
+        "soap", "sabun", "saabun", "sabbu",
+        "సబ్బు", "साबुन", "சோப்பு", "ಸಾಬೂನು", "സോപ്പ്",
+    },
+    "dal": {
+        "dal", "daal", "pappu", "paruppu",
+        "పప్పు", "పప్పులు", "दाल", "பருப்பு", "ಬೇಳೆ", "പരിപ്പ്",
+    },
 }
 
 
