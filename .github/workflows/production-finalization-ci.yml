@@ -65,6 +65,7 @@ jobs:
           pytest -q tests/test_voice_query_contract.py
           pytest -q tests/test_product_discovery_contract.py
           pytest -q tests/test_voice_billing_parse_contract.py
+          pytest -q tests/test_inventory_upload_ai_contract.py
           pytest -q tests/test_purchase_order_recommendations_contract.py
           pytest -q tests/test_order_idempotency_contract.py
           pytest -q tests/test_payment_contract.py
