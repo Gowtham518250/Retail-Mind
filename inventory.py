@@ -5,11 +5,16 @@ Low stock alerts, inventory analytics
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile
+import base64
 import difflib
+import hashlib
+import io
 import unicodedata
 import json
 import os
 import logging
+import pandas as pd
+from PIL import Image, ImageOps
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +24,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 import httpx
 import re
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import time
 from uuid import uuid4
 from db import sessionLocal, get_db
@@ -182,6 +187,459 @@ def barcode_product_lookup(
             status_code=502,
             detail="Barcode catalog returned an invalid response.",
         )
+
+
+
+# ==================== AI-ASSISTED INVENTORY IMPORT ====================
+
+INVENTORY_IMPORT_FIELDS = (
+    "product_name", "sku", "description", "current_stock", "min_stock",
+    "max_stock", "reorder_level", "unit_price", "category",
+)
+_INVENTORY_IMPORT_MAX_BYTES = 10 * 1024 * 1024
+_INVENTORY_IMPORT_MAX_ROWS = 200
+_INVENTORY_IMPORT_IMAGE_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"
+}
+_INVENTORY_IMPORT_EXTENSIONS = {
+    ".csv", ".xlsx", ".xls", ".json", ".txt"
+} | _INVENTORY_IMPORT_IMAGE_EXTENSIONS
+
+
+def _inventory_import_auto_sku(product_name: str) -> str:
+    """Stable shop-local SKU for rows whose source file does not contain one."""
+    cleaned = re.sub(r"[^A-Z0-9]+", "-", str(product_name or "").upper()).strip("-")
+    suffix = hashlib.sha1(str(product_name or "").strip().casefold().encode("utf-8")).hexdigest()[:6].upper()
+    return f"AUTO-{(cleaned or 'PRODUCT')[:36]}-{suffix}"[:50]
+
+
+def _inventory_import_normalize_header(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", "", text.casefold())
+
+
+def _inventory_import_fallback_mapping(columns: List[str]) -> Dict[str, Optional[str]]:
+    """Conservative common-header map used to validate or supplement Groq mappings."""
+    aliases = {
+        "product_name": ("productname", "product", "itemname", "item", "name", "producttitle", "materialname", "stockitem"),
+        "sku": ("sku", "itemcode", "productcode", "barcode", "ean", "upc", "itemid", "code"),
+        "description": ("description", "details", "productdescription", "itemdescription", "notes"),
+        "current_stock": ("currentstock", "stock", "quantity", "qty", "availableqty", "availablequantity", "onhand", "onhandqty", "closingstock", "openingstock", "balance", "units"),
+        "min_stock": ("minstock", "minimumstock", "minimumquantity", "reorderpoint", "safetystock"),
+        "max_stock": ("maxstock", "maximumstock", "maximumquantity", "targetstock"),
+        "reorder_level": ("reorderlevel", "reorderquantity", "reorderqty", "replenishmentlevel"),
+        "unit_price": ("unitprice", "price", "rate", "purchaseprice", "costprice", "sellingprice", "mrp", "amountperunit", "unitcost", "saleprice"),
+        "category": ("category", "productcategory", "itemcategory", "department", "group"),
+    }
+    normalized = {column: _inventory_import_normalize_header(column) for column in columns}
+    return {
+        field: next((column for column, normalized_name in normalized.items() if normalized_name in choices), None)
+        for field, choices in aliases.items()
+    }
+
+
+def _inventory_import_select_mapping(model_mapping: Any, columns: List[str]) -> Dict[str, Optional[str]]:
+    """Accept only source column names actually present in the uploaded data."""
+    fallback = _inventory_import_fallback_mapping(columns)
+    exact_columns = {str(column) for column in columns}
+    supplied = model_mapping if isinstance(model_mapping, dict) else {}
+    result: Dict[str, Optional[str]] = {}
+    for target in INVENTORY_IMPORT_FIELDS:
+        source = supplied.get(target)
+        if isinstance(source, str) and source in exact_columns:
+            result[target] = source
+            continue
+        reverse = next(
+            (str(key) for key, value in supplied.items()
+             if isinstance(value, str) and value == target and str(key) in exact_columns),
+            None,
+        )
+        result[target] = reverse or fallback.get(target)
+    return result
+
+
+def _inventory_import_parse_structured(file_bytes: bytes, suffix: str) -> tuple[List[str], List[Dict[str, Any]], bool]:
+    """Read ordinary tabular files as data, preserving original headers and cell values."""
+    try:
+        if suffix == ".json":
+            payload = json.loads(file_bytes.decode("utf-8-sig"))
+            if isinstance(payload, dict):
+                nested = next(
+                    (payload.get(key) for key in ("products", "items", "rows", "data")
+                     if isinstance(payload.get(key), list)),
+                    None,
+                )
+                records = nested if nested is not None else [payload]
+            elif isinstance(payload, list):
+                records = payload
+            else:
+                raise ValueError("JSON must contain an object or a list of product rows.")
+            records = [item for item in records if isinstance(item, dict)]
+            if not records:
+                raise ValueError("No product rows were found in the JSON file.")
+            columns = []
+            for record in records:
+                for key in record.keys():
+                    if str(key) not in columns:
+                        columns.append(str(key))
+            truncated = len(records) > _INVENTORY_IMPORT_MAX_ROWS
+            rows = [
+                {column: record.get(column, "") for column in columns}
+                for record in records[:_INVENTORY_IMPORT_MAX_ROWS]
+            ]
+            return columns, rows, truncated
+
+        buffer = io.BytesIO(file_bytes)
+        if suffix == ".csv":
+            frame = pd.read_csv(buffer, dtype=str, keep_default_na=False, nrows=_INVENTORY_IMPORT_MAX_ROWS + 1)
+        elif suffix in {".xlsx", ".xls"}:
+            frame = pd.read_excel(
+                buffer, dtype=str, keep_default_na=False, nrows=_INVENTORY_IMPORT_MAX_ROWS + 1,
+                engine="xlrd" if suffix == ".xls" else "openpyxl",
+            )
+        elif suffix == ".txt":
+            frame = pd.read_csv(buffer, sep=None, engine="python", dtype=str, keep_default_na=False, nrows=_INVENTORY_IMPORT_MAX_ROWS + 1)
+        else:
+            raise ValueError("Unsupported tabular format.")
+        truncated = len(frame.index) > _INVENTORY_IMPORT_MAX_ROWS
+        frame = frame.iloc[:_INVENTORY_IMPORT_MAX_ROWS]
+        columns = [str(column).strip() for column in frame.columns]
+        if not columns:
+            raise ValueError("The file has no detectable column headers.")
+        records = []
+        for raw_record in frame.to_dict(orient="records"):
+            record = {}
+            for original, column in zip(frame.columns, columns):
+                value = raw_record.get(original, "")
+                record[column] = "" if value is None else str(value).strip()
+            records.append(record)
+        return columns, records, truncated
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not read this file as inventory data: {str(exc)[:180]}") from exc
+
+
+async def _inventory_import_groq_json(api_key: str, model: str, messages: list, *, max_tokens: int = 6000) -> Dict[str, Any]:
+    """Call Groq once and require a JSON object; never expose provider secrets in errors."""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(70.0, connect=10.0)) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": messages, "temperature": 0, "max_completion_tokens": max_tokens, "response_format": {"type": "json_object"}},
+            )
+            response.raise_for_status()
+            payload = response.json()
+        raw = str(((payload.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+        # Strip optional Markdown fences without embedding literal backticks in this source patch.
+        fence = chr(96) * 3
+        if raw.lstrip().startswith(fence):
+            raw = raw.lstrip()[3:]
+            if raw.lstrip().lower().startswith("json"):
+                raw = raw.lstrip()[4:]
+        if raw.rstrip().endswith(fence):
+            raw = raw.rstrip()[:-3]
+        decoded = json.loads(raw.strip())
+        if not isinstance(decoded, dict):
+            raise ValueError("AI response was not a JSON object.")
+        return decoded
+    except httpx.HTTPStatusError as exc:
+        logging.warning("Groq inventory import returned HTTP %s", exc.response.status_code)
+        raise HTTPException(status_code=502, detail="Groq could not analyze this inventory file. Please try a clearer image or a smaller file.") from exc
+    except httpx.RequestError as exc:
+        logging.warning("Groq inventory import request failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="The AI inventory service is temporarily unavailable. Please try again.") from exc
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        logging.warning("Groq inventory import returned an invalid response.")
+        raise HTTPException(status_code=502, detail="The AI could not return a readable inventory table. Try a clearer image or spreadsheet.") from exc
+
+
+def _inventory_import_parse_number(value: Any) -> Optional[float]:
+    if value is None or str(value).strip() == "":
+        return None
+    if isinstance(value, (int, float)):
+        parsed = float(value)
+    else:
+        cleaned = str(value).strip().replace(",", "")
+        cleaned = re.sub(r"^(?:₹|rs\.?|inr)\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
+        if not cleaned or cleaned in {".", "-", "-."}:
+            return None
+        parsed = float(cleaned)
+    if not (parsed == parsed and abs(parsed) != float("inf")):
+        return None
+    return parsed
+
+
+def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[Dict[str, Any]], mapping: Dict[str, Optional[str]]) -> List[Dict[str, Any]]:
+    """Convert source values to the canonical inventory schema and attach editable issues."""
+    normalized_rows: List[Dict[str, Any]] = []
+    for index, source_row in enumerate(source_rows):
+        issues: List[str] = []
+        original_lookup = {_inventory_import_normalize_header(key): value for key, value in source_row.items()}
+
+        def source_value(field: str) -> Any:
+            source_column = mapping.get(field)
+            if source_column and source_column in source_row:
+                return source_row.get(source_column)
+            if source_column:
+                return original_lookup.get(_inventory_import_normalize_header(source_column), "")
+            return ""
+
+        product_name = str(source_value("product_name") or "").strip()
+        if len(product_name) < 2:
+            issues.append("Product name is missing.")
+        sku = str(source_value("sku") or "").strip()
+        if not sku and product_name:
+            sku = _inventory_import_auto_sku(product_name)
+
+        price = None
+        try:
+            price = _inventory_import_parse_number(source_value("unit_price"))
+        except (ValueError, TypeError):
+            price = None
+        if price is None or price < 0:
+            issues.append("Unit price is missing or invalid; edit this row before uploading.")
+
+        numeric_values: Dict[str, Optional[int]] = {}
+        numeric_defaults = {"current_stock": 0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
+        for field, default in numeric_defaults.items():
+            raw = source_value(field)
+            if raw is None or str(raw).strip() == "":
+                numeric_values[field] = default
+                continue
+            try:
+                parsed = _inventory_import_parse_number(raw)
+                if parsed is None or parsed < 0 or not float(parsed).is_integer():
+                    raise ValueError("Expected a non-negative whole number.")
+                numeric_values[field] = int(parsed)
+            except (ValueError, TypeError, OverflowError):
+                numeric_values[field] = None
+                issues.append(f"{field.replace('_', ' ').title()} must be a non-negative whole number.")
+        if numeric_values.get("min_stock") is not None and numeric_values.get("max_stock") is not None:
+            if numeric_values["min_stock"] > numeric_values["max_stock"]:
+                issues.append("Minimum stock cannot exceed maximum stock.")
+        normalized_rows.append({
+            "row_number": index + 2,
+            "product_name": product_name,
+            "sku": sku,
+            "description": str(source_value("description") or "").strip() or None,
+            "current_stock": numeric_values["current_stock"],
+            "min_stock": numeric_values["min_stock"],
+            "max_stock": numeric_values["max_stock"],
+            "reorder_level": numeric_values["reorder_level"],
+            "unit_price": price,
+            "category": str(source_value("category") or "").strip() or None,
+            "issues": issues,
+        })
+
+    sku_rows: Dict[str, List[int]] = {}
+    for index, row in enumerate(normalized_rows):
+        sku = str(row.get("sku") or "").strip().casefold()
+        if sku:
+            sku_rows.setdefault(sku, []).append(index)
+    for indices in sku_rows.values():
+        if len(indices) > 1:
+            for index in indices:
+                message = "Duplicate SKU in this file; edit it to a unique SKU."
+                if message not in normalized_rows[index]["issues"]:
+                    normalized_rows[index]["issues"].append(message)
+    return normalized_rows
+
+
+@router.post("/upload/preview")
+async def preview_inventory_upload(file: UploadFile = File(...), user_id: int = Depends(check_current_user)):
+    """Extract a spreadsheet or photo with Groq, normalize columns, and return a review-only preview."""
+    filename = Path(file.filename or "inventory-upload").name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in _INVENTORY_IMPORT_EXTENSIONS:
+        raise HTTPException(status_code=415, detail="Supported files: CSV, XLSX, XLS, JSON, TXT, or common image formats (PNG, JPG, WEBP, BMP, GIF, TIFF).")
+    file_bytes = await file.read(_INVENTORY_IMPORT_MAX_BYTES + 1)
+    if not file_bytes:
+        raise HTTPException(status_code=422, detail="The selected file is empty.")
+    if len(file_bytes) > _INVENTORY_IMPORT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="The file exceeds the 10 MB upload limit.")
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="AI inventory import is not configured. Set GROQ_API_KEY on the backend.")
+    model = (os.getenv("GROQ_INVENTORY_MODEL") or "qwen/qwen3.8-27b").strip()
+    warnings: List[str] = []
+    source_rows: List[Dict[str, Any]]
+
+    if suffix in _INVENTORY_IMPORT_IMAGE_EXTENSIONS:
+        try:
+            with Image.open(io.BytesIO(file_bytes)) as opened_image:
+                image = ImageOps.exif_transpose(opened_image).convert("RGB")
+                image.thumbnail((2600, 2600))
+                image_buffer = io.BytesIO()
+                image.save(image_buffer, format="JPEG", quality=88, optimize=True)
+                image_bytes = image_buffer.getvalue()
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail="This image could not be opened. Please upload a clear JPG, PNG, WEBP, BMP, GIF, or TIFF image.") from exc
+
+        data_url = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
+        prompt = (
+            "Extract an inventory/product table from this image. The image may be a photo, screenshot, "
+            "handwritten list, invoice-like table, or spreadsheet screenshot. Return one JSON object with "
+            "keys source_columns (array of visible header labels), rows (array of objects whose keys are exact "
+            "visible header labels), mapping (object mapping each canonical field to an exact source header or null), "
+            "and notes (array of short uncertainty notes). Canonical fields: product_name, sku, description, "
+            "current_stock, min_stock, max_stock, reorder_level, unit_price, category. Use null when a field/header "
+            "is absent. Never invent prices, SKUs, quantities, product names, or other values. Copy visible cell "
+            "text as closely as possible. Ignore titles, totals, blank rows and decorative text. If a cell is "
+            "unreadable, leave it blank and add a note. Mapping values must be exact strings from source_columns. "
+            "Return only valid JSON."
+        )
+        extracted = await _inventory_import_groq_json(
+            api_key, model,
+            [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": data_url}}]}],
+            max_tokens=8000,
+        )
+        source_columns = extracted.get("source_columns") or extracted.get("columns") or []
+        raw_rows = extracted.get("rows") or []
+        if not isinstance(source_columns, list) or not isinstance(raw_rows, list):
+            raise HTTPException(status_code=422, detail="No readable product table was found in this image.")
+        columns = [str(column).strip() for column in source_columns if str(column).strip()]
+        source_rows = []
+        for raw_row in raw_rows[:_INVENTORY_IMPORT_MAX_ROWS + 1]:
+            if isinstance(raw_row, dict):
+                source_rows.append({column: raw_row.get(column, "") for column in columns})
+            elif isinstance(raw_row, list):
+                source_rows.append({column: raw_row[i] if i < len(raw_row) else "" for i, column in enumerate(columns)})
+        if not columns or not source_rows:
+            raise HTTPException(status_code=422, detail="No readable product rows were found. Try a sharper image with the full table visible.")
+        model_mapping = extracted.get("mapping") or {}
+        if not isinstance(model_mapping, dict) or not any(model_mapping.get(key) for key in INVENTORY_IMPORT_FIELDS):
+            warnings.append("Groq could not confidently match every column; common header matching was applied where possible.")
+        mapping = _inventory_import_select_mapping(model_mapping, columns)
+        truncated = len(raw_rows) > _INVENTORY_IMPORT_MAX_ROWS
+        notes = extracted.get("notes") or []
+        if isinstance(notes, list):
+            warnings.extend(str(note).strip()[:240] for note in notes[:8] if str(note).strip())
+    else:
+        columns, source_rows, truncated = _inventory_import_parse_structured(file_bytes, suffix)
+        mapping_prompt = (
+            "You map columns from user-provided retail inventory data. Return JSON only with a single key mapping. "
+            "Map each canonical field to an exact source header string present in source_columns, or null if no column "
+            "matches. Canonical fields are product_name, sku, description, current_stock, min_stock, max_stock, "
+            "reorder_level, unit_price, category. Do not transform or invent any source values. Match synonyms such "
+            "as item/product/name, qty/on-hand/stock, rate/cost/selling price, barcode/code, and category/group. "
+            "Never map an unrelated column. Input follows: " + json.dumps({"source_columns": columns, "sample_rows": source_rows[:10]}, ensure_ascii=False, default=str)[:18000]
+        )
+        mapped = await _inventory_import_groq_json(api_key, model, [{"role": "user", "content": mapping_prompt}], max_tokens=1200)
+        mapping = _inventory_import_select_mapping(mapped.get("mapping"), columns)
+
+    if truncated:
+        warnings.append("Only the first 200 data rows are included in this preview.")
+    if not mapping.get("product_name"):
+        warnings.append("No product-name column was detected. Edit the source file or use a clear product-name header.")
+    if not mapping.get("unit_price"):
+        warnings.append("No price column was detected. Unit prices must be supplied before uploading.")
+    rows = _inventory_import_build_preview_rows(columns, source_rows[:_INVENTORY_IMPORT_MAX_ROWS], mapping)
+    return {
+        "success": True,
+        "file_name": filename,
+        "provider": "Groq",
+        "model": model,
+        "source_columns": columns,
+        "mapping": mapping,
+        "rows": rows,
+        "row_count": len(rows),
+        "valid_count": sum(1 for row in rows if not row["issues"]),
+        "invalid_count": sum(1 for row in rows if row["issues"]),
+        "truncated": truncated,
+        "warnings": warnings,
+    }
+
+
+class InventoryUploadConfirmRequest(BaseModel):
+    rows: List[Dict[str, Any]] = Field(..., min_length=1, max_length=_INVENTORY_IMPORT_MAX_ROWS)
+
+
+@router.post("/upload/confirm")
+def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+    """Validate reviewed rows again and import them atomically only after explicit confirmation."""
+    prepared: List[Dict[str, Any]] = []
+    issues: List[Dict[str, Any]] = []
+    seen_skus: set[str] = set()
+
+    for index, row in enumerate(request.rows):
+        row_number = row.get("row_number", index + 2)
+        name = str(row.get("product_name") or "").strip()
+        sku = str(row.get("sku") or "").strip() or (_inventory_import_auto_sku(name) if name else "")
+        if len(name) < 2 or len(name) > 100:
+            issues.append({"row_number": row_number, "field": "product_name", "message": "Product name must contain 2–100 characters."})
+        if len(sku) < 2 or len(sku) > 50:
+            issues.append({"row_number": row_number, "field": "sku", "message": "SKU must contain 2–50 characters."})
+        if sku and sku.casefold() in seen_skus:
+            issues.append({"row_number": row_number, "field": "sku", "message": "SKU must be unique within this upload."})
+        seen_skus.add(sku.casefold())
+
+        try:
+            price = _inventory_import_parse_number(row.get("unit_price"))
+        except (TypeError, ValueError, OverflowError):
+            price = None
+        if price is None or price < 0:
+            issues.append({"row_number": row_number, "field": "unit_price", "message": "Unit price is required and must be zero or greater."})
+
+        numbers: Dict[str, Optional[int]] = {}
+        defaults = {"current_stock": 0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
+        for field, default in defaults.items():
+            raw = row.get(field)
+            if raw is None or str(raw).strip() == "":
+                numbers[field] = default
+            else:
+                try:
+                    parsed = _inventory_import_parse_number(raw)
+                    if parsed is None or parsed < 0 or not float(parsed).is_integer():
+                        raise ValueError()
+                    numbers[field] = int(parsed)
+                except (ValueError, TypeError, OverflowError):
+                    numbers[field] = None
+                    issues.append({"row_number": row_number, "field": field, "message": f"{field.replace('_', ' ').title()} must be a non-negative whole number."})
+        if numbers.get("min_stock") is not None and numbers.get("max_stock") is not None and numbers["min_stock"] > numbers["max_stock"]:
+            issues.append({"row_number": row_number, "field": "max_stock", "message": "Minimum stock cannot exceed maximum stock."})
+
+        row_has_issues = any(issue["row_number"] == row_number for issue in issues)
+        if not row_has_issues:
+            prepared.append({
+                "product_name": name,
+                "sku": sku,
+                "description": str(row.get("description") or "").strip() or None,
+                "current_stock": numbers["current_stock"],
+                "min_stock": numbers["min_stock"],
+                "max_stock": numbers["max_stock"],
+                "reorder_level": numbers["reorder_level"],
+                "unit_price": float(price),
+                "category": str(row.get("category") or "").strip() or None,
+            })
+
+    if issues or len(prepared) != len(request.rows):
+        raise HTTPException(status_code=422, detail={"message": "No inventory was changed. Correct the highlighted rows and confirm again.", "rows": issues})
+
+    created = 0
+    updated = 0
+    try:
+        for item in prepared:
+            existing = db.query(Product).filter(Product.user_id == int(user_id), Product.sku == item["sku"]).with_for_update().first()
+            if existing:
+                for field, value in item.items():
+                    setattr(existing, field, value)
+                existing.is_active = True
+                updated += 1
+            else:
+                db.add(Product(user_id=int(user_id), **item, is_active=True))
+                created += 1
+        db.flush()
+        sync_event = _queue_inventory_change(db, int(user_id), "inventory_file_import", product_count=len(prepared), created_count=created, updated_count=updated)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logging.exception("Inventory file import transaction rolled back.")
+        raise HTTPException(status_code=500, detail="Inventory import failed; no rows were committed. Please retry.") from exc
+
+    publish_realtime_event(sync_event)
+    return {"success": True, "imported": len(prepared), "created": created, "updated": updated, "message": f"Imported {len(prepared)} inventory rows ({created} created, {updated} updated)."}
 
 
 # ==================== BATCH OPERATIONS ====================
