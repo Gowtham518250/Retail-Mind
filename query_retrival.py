@@ -220,9 +220,6 @@ def _repair_failed_sql_with_groq(
         "\nDatabase error:\n" + str(execution_error or "")[:1800]
     )
     try:
-        options = {}
-        if model in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"}:
-            options["reasoning_effort"] = "high"
         completion = client.chat.completions.create(
             model=model,
             messages=[
@@ -233,7 +230,6 @@ def _repair_failed_sql_with_groq(
             max_tokens=2400,
             response_format={"type": "json_object"},
             stream=False,
-            **options,
         )
         raw = str(completion.choices[0].message.content if completion.choices else "").strip()
         payload = json.loads(raw)
@@ -1280,9 +1276,6 @@ def _verify_uncertain_translation(
         "If uncertain, say so with low confidence instead of inventing meaning."
     )
     try:
-        options = {}
-        if model in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"}:
-            options["reasoning_effort"] = "high"
         completion = client.chat.completions.create(
             model=model,
             messages=[
@@ -1300,7 +1293,6 @@ def _verify_uncertain_translation(
             max_tokens=1200,
             response_format={"type": "json_object"},
             stream=False,
-            **options,
         )
         raw = str(
             completion.choices[0].message.content
@@ -1363,9 +1355,6 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
         or "openai/gpt-oss-120b"
     )
     try:
-        options = {}
-        if translation_model in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"}:
-            options["reasoning_effort"] = "high"
         completion = client.chat.completions.create(
             model=translation_model,
             messages=[
@@ -1397,7 +1386,6 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
             max_tokens=1200,
             response_format={"type": "json_object"},
             stream=False,
-            **options,
         )
         raw = completion.choices[0].message.content if completion.choices else ""
         raw = str(raw or "").strip()
@@ -2591,9 +2579,6 @@ async def ask_query(
             or os.getenv("GROQ_MODEL")
             or "openai/gpt-oss-120b"
         )
-        sql_model_options = {}
-        if sql_model in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"}:
-            sql_model_options["reasoning_effort"] = "high"
         completion = client.chat.completions.create(
             model=sql_model,
             messages=[{"role": "user", "content": formatted_prompt}],
@@ -2603,7 +2588,6 @@ async def ask_query(
             top_p=0.9,
             stream=True,
             stop=None,
-            **sql_model_options,
         )
 
         generated_parts = []
