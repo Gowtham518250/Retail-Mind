@@ -647,19 +647,19 @@ def _fast_business_query(query: str, db: Session, user_id: int):
 
 def _fast_sold_products_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
     """List products from completed invoice lines, falling back to legacy sales only when needed."""
-    normalized = re.sub(r"\\s+", " ", (query or "").lower()).strip()
-    has_product_word = bool(re.search(r"\\b(products?|items?)\\b", normalized))
-    has_sale_word = bool(re.search(r"\\b(sold|sale|sales)\\b", normalized))
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    has_product_word = bool(re.search(r"\b(products?|items?)\b", normalized))
+    has_sale_word = bool(re.search(r"\b(sold|sale|sales)\b", normalized))
     asks_for_names = bool(
-        re.search(r"\\b(which|what|list|show|display|name)\\b.{0,80}\\b(products?|items?)\\b", normalized)
-        or re.search(r"\\b(products?|items?)\\b.{0,40}\\b(sold|sales)\\b", normalized)
+        re.search(r"\b(which|what|list|show|display|name)\b.{0,80}\b(products?|items?)\b", normalized)
+        or re.search(r"\b(products?|items?)\b.{0,40}\b(sold|sales)\b", normalized)
     )
     # Questions about counts/units must use the numeric KPI handlers, not a name list.
-    asks_for_count = bool(re.search(r"\\b(how many|count of|number of|total number of)\\b", normalized))
-    asks_for_amount = bool(re.search(r"\\b(how much|total amount|revenue|turnover|sales amount)\\b", normalized))
+    asks_for_count = bool(re.search(r"\b(how many|count of|number of|total number of)\b", normalized))
+    asks_for_amount = bool(re.search(r"\b(how much|total amount|revenue|turnover|sales amount)\b", normalized))
     if not (has_product_word and has_sale_word and asks_for_names) or asks_for_count or asks_for_amount:
         return None
-    if re.search(r"\\b(raw sales|sales table|raw sale|sale rows?)\\b", normalized):
+    if re.search(r"\b(raw sales|sales table|raw sale|sale rows?)\b", normalized):
         return None
 
     date_scope = date_scope or {"kind": "unspecified", "start_date": None, "end_date": None, "label": "not specified"}
