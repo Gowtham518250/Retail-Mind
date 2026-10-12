@@ -17,14 +17,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func, cast, Integer
 from sqlalchemy.orm import Session, joinedload
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import logging
 from sqlalchemy.exc import IntegrityError
 
 from db import get_db
 from models import (
     Invoice, InvoiceLineItem, Product, Customer, FlashSale,
-    UniversalTransaction, StockMovement, Payment, PaymentMethod,
+    UniversalTransaction, StockMovement, ShopExpense, Payment, PaymentMethod,
     PaymentStatus, InvoiceStatus
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
@@ -140,6 +140,87 @@ def _payment_status_for(invoice: Invoice) -> PaymentStatus:
     if paid > Decimal("0.01"):
         return PaymentStatus.PARTIAL
     return PaymentStatus.UNPAID
+
+
+def _calculate_sale_loss(*, purchase_price, quantity, net_sale_amount) -> Decimal:
+    """Return the non-negative shortfall versus recorded cost, excluding sales tax."""
+    try:
+        cost_per_unit = Decimal(str(purchase_price or 0))
+        qty = Decimal(str(quantity or 0))
+        net_sold = Decimal(str(net_sale_amount or 0))
+    except Exception:
+        return Decimal("0.00")
+    if (
+        not cost_per_unit.is_finite()
+        or not qty.is_finite()
+        or not net_sold.is_finite()
+        or cost_per_unit <= 0
+        or qty <= 0
+    ):
+        return Decimal("0.00")
+    total_cost = (cost_per_unit * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    net_sold = max(Decimal("0"), net_sold).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return max(Decimal("0.00"), total_cost - net_sold).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+
+def _record_below_cost_sale_loss(
+    *,
+    db: Session,
+    shop_id: int,
+    invoice_number: str,
+    sale_date: date,
+    product: Product,
+    quantity,
+    net_sale_amount,
+) -> Decimal:
+    """Persist below-cost loss into the shop expense ledger and universal P&L journal."""
+    purchase_price = getattr(product, "purchase_price", None)
+    loss_amount = _calculate_sale_loss(
+        purchase_price=purchase_price,
+        quantity=quantity,
+        net_sale_amount=net_sale_amount,
+    )
+    if loss_amount <= Decimal("0"):
+        return Decimal("0.00")
+
+    name = sanitize_input(str(product.product_name or "Catalog product"), "product_name")
+    cost = Decimal(str(purchase_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    description = (
+        f"Sold {name} below cost: qty {quantity}, cost ₹{cost:.2f}/unit, "
+        f"net sale ₹{Decimal(str(net_sale_amount or 0)):.2f}; invoice {invoice_number}"
+    )[:200]
+    db.add(
+        ShopExpense(
+            shop_id=shop_id,
+            category="SALE_LOSS",
+            amount=loss_amount,
+            description=description,
+            expense_date=sale_date,
+            payment_method="non_cash_adjustment",
+        )
+    )
+    db.add(
+        UniversalTransaction(
+            shop_id=shop_id,
+            tx_type="EXPENSE",
+            category="SALE_LOSS",
+            amount=loss_amount,
+            reference_id=invoice_number,
+            description=description,
+            tx_date=datetime.combine(sale_date, datetime.min.time()),
+        )
+    )
+    logger.info(
+        "SALE BELOW COST: shop=%s invoice=%s product_id=%s quantity=%s loss=%s",
+        shop_id,
+        invoice_number,
+        product.id,
+        quantity,
+        loss_amount,
+    )
+    return loss_amount
 
 
 def _apply_payment_write(
@@ -702,6 +783,7 @@ def sync_offline_invoice(
         db.flush()
 
         inventory_changes = []
+        sale_loss_total = Decimal("0.00")
         for prepared in prepared_line_items:
             item = prepared["item"]
             discount_amount = prepared["discount_amount"]
@@ -779,6 +861,15 @@ def sync_offline_invoice(
                     reference_id=invoice_number,
                 )
                 db.add(mov)
+                sale_loss_total += _record_below_cost_sale_loss(
+                    db=db,
+                    shop_id=shop_id,
+                    invoice_number=invoice_number,
+                    sale_date=inv_date,
+                    product=product,
+                    quantity=item.quantity,
+                    net_sale_amount=line_total,
+                )
 
         tx = UniversalTransaction(
             shop_id=shop_id,
@@ -853,6 +944,7 @@ def sync_offline_invoice(
             "created_at": invoice.created_at.isoformat(),
             "message": "Invoice synced and inventory deducted.",
             "special_discount_total": float(special_discount_total),
+            "sale_loss_total": float(sale_loss_total),
             "line_items": [
                 {
                     "product_id": li.product_id,
@@ -1170,6 +1262,7 @@ def create_invoice(
     )
     db.add(invoice)
     db.flush()
+    sale_loss_total = Decimal("0.00")
 
     if prepared_line_items:
         for prepared in prepared_line_items:
@@ -1267,6 +1360,17 @@ def create_invoice(
                         )
                     )
 
+            if product is not None:
+                sale_loss_total += _record_below_cost_sale_loss(
+                    db=db,
+                    shop_id=shop_id,
+                    invoice_number=invoice_number,
+                    sale_date=inv_date,
+                    product=product,
+                    quantity=item.quantity,
+                    net_sale_amount=line_total,
+                )
+
     tx = UniversalTransaction(
         shop_id=shop_id,
         tx_type="INCOME",
@@ -1330,6 +1434,7 @@ def create_invoice(
         "created_at": invoice.created_at.isoformat(),
         "message": "Invoice created successfully.",
         "special_discount_total": float(special_discount_total),
+        "sale_loss_total": float(sale_loss_total),
         "line_items": [
             {
                 "product_id": li.product_id,
