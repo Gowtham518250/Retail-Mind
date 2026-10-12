@@ -43,6 +43,42 @@ def test_catalog_shortlisting_matches_transliterated_product_alias():
     assert candidates[0].id == expected.id
 
 
+def test_native_script_telugu_rice_shortlists_catalog_product():
+    products = [
+        _product(index, f"Unrelated household item {index}", f"SKU-{index}")
+        for index in range(1, 110)
+    ]
+    expected = _product(999, "Sona Masoori Rice", "RICE-01")
+    products.append(expected)
+
+    candidates = _voice_billing_catalog_candidates(
+        "రెండు కిలోల బియ్యం 50",
+        products,
+        limit=80,
+    )
+
+    assert candidates
+    assert candidates[0].id == expected.id
+
+
+def test_native_script_hindi_sugar_shortlists_catalog_product():
+    products = [
+        _product(index, f"Unrelated household item {index}", f"SKU-{index}")
+        for index in range(1, 110)
+    ]
+    expected = _product(999, "White Sugar", "SUGAR-01")
+    products.append(expected)
+
+    candidates = _voice_billing_catalog_candidates(
+        "दो किलो चीनी 60",
+        products,
+        limit=80,
+    )
+
+    assert candidates
+    assert candidates[0].id == expected.id
+
+
 def test_small_catalog_is_not_artificially_trimmed():
     products = [
         _product(1, "Rice", "RICE"),
