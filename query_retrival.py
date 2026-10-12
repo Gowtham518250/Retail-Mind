@@ -645,6 +645,117 @@ def _fast_business_query(query: str, db: Session, user_id: int):
 
 
 
+
+def _fast_top_product_revenue_query(
+    query: str,
+    db: Session,
+    user_id: int,
+    date_scope: dict | None = None,
+):
+    """Return the single product with the highest recorded sales-line revenue."""
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    if not re.search(r"\b(products?|items?)\b", normalized):
+        return None
+
+    revenue_words = r"(?:revenue|sales|earnings?|income|turnover|money|amount)"
+    rank_words = r"(?:highest|most|maximum|max(?:imum)?|greatest|top|best|largest)"
+    ranks_revenue = bool(
+        re.search(rf"\b{rank_words}\b.{{0,60}}\b{revenue_words}\b", normalized)
+        or re.search(rf"\b{revenue_words}\b.{{0,60}}\b{rank_words}\b", normalized)
+        or re.search(
+            rf"\b(products?|items?)\b.{{0,80}}\b{rank_words}\b.{{0,40}}\b{revenue_words}\b",
+            normalized,
+        )
+    )
+    if not ranks_revenue:
+        return None
+
+    date_scope = date_scope or {
+        "kind": "unspecified",
+        "start_date": None,
+        "end_date": None,
+        "label": "not specified",
+    }
+    start_date = date_scope.get("start_date")
+    end_date = date_scope.get("end_date")
+    params = {"user_id": user_id}
+    invoice_date_filter = ""
+    legacy_date_filter = ""
+    if start_date is not None and end_date is not None:
+        invoice_date_filter = " AND i.invoice_date BETWEEN :start_date AND :end_date"
+        legacy_date_filter = " AND s.sale_date BETWEEN :start_date AND :end_date"
+        params["start_date"] = start_date
+        params["end_date"] = end_date
+
+    sql = (
+        "WITH invoice_product_revenue AS ("
+        "SELECT MIN(COALESCE(NULLIF(BTRIM(p.product_name), ''), "
+        "NULLIF(BTRIM(ili.description), ''))) AS product_name, "
+        "SUM(ili.line_total)::numeric AS revenue "
+        "FROM invoices i "
+        "JOIN invoice_line_items ili ON ili.invoice_id = i.id "
+        "LEFT JOIN products p ON p.id = ili.product_id AND p.user_id = i.user_id "
+        "WHERE i.user_id = :user_id "
+        "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+        + invoice_date_filter
+        + " AND COALESCE(NULLIF(BTRIM(p.product_name), ''), "
+        "NULLIF(BTRIM(ili.description), '')) IS NOT NULL "
+        "GROUP BY LOWER(COALESCE(NULLIF(BTRIM(p.product_name), ''), "
+        "NULLIF(BTRIM(ili.description), '')))"
+        "), selected_product_revenue AS ("
+        "SELECT product_name, revenue FROM invoice_product_revenue "
+        "UNION ALL "
+        "SELECT MIN(BTRIM(s.product_name)) AS product_name, "
+        "SUM(s.total)::numeric AS revenue "
+        "FROM sales s "
+        "WHERE s.shopkeeper_id = :user_id"
+        + legacy_date_filter
+        + " AND NULLIF(BTRIM(s.product_name), '') IS NOT NULL "
+        "AND NOT EXISTS (SELECT 1 FROM invoice_product_revenue) "
+        "GROUP BY LOWER(BTRIM(s.product_name))"
+        ") "
+        "SELECT product_name, revenue FROM selected_product_revenue "
+        "WHERE NULLIF(BTRIM(product_name), '') IS NOT NULL "
+        "ORDER BY revenue DESC NULLS LAST, product_name ASC "
+        "LIMIT 1"
+    )
+
+    row = db.execute(text(sql), params).mappings().first()
+    scope_label = str(date_scope.get("label") or "not specified")
+    scope_text = {
+        "today": "today",
+        "yesterday": "yesterday",
+        "not specified": "in the available sales history",
+    }.get(scope_label, scope_label)
+
+    if not row or not str(row.get("product_name") or "").strip():
+        answer = (
+            f"I couldn't find a product with recorded sales revenue {scope_text}."
+        )
+        results = []
+    else:
+        product_name = str(row.get("product_name") or "").strip()
+        revenue = row.get("revenue") or 0
+        try:
+            revenue_text = f"₹{float(revenue):,.2f}"
+            revenue_value = float(revenue)
+        except (TypeError, ValueError):
+            revenue_text = str(revenue)
+            revenue_value = 0.0
+        answer = (
+            f"The product with the highest recorded sales revenue {scope_text} "
+            f"was {product_name}, with {revenue_text} in sales."
+        )
+        results = [{"product_name": product_name, "revenue": revenue_value}]
+
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_QUERY: top product revenue (invoice lines; fallback: legacy sales) " + sql,
+        "generated_model_response": answer,
+        "results": results,
+    }
+
+
 def _fast_sold_products_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
     """List products from completed invoice lines, falling back to legacy sales only when needed."""
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
@@ -2473,6 +2584,38 @@ async def ask_query(
     # FAISS + Groq round-trip that previously made simple questions feel stuck
     # on "loading".
     date_scope = _resolve_explicit_date_scope(query)
+
+    # Ranked revenue questions must run before generic product listing and
+    # generic total-sales matching, otherwise "highest revenue product" can
+    # incorrectly return the overall shop sales total.
+    top_product_result = _fast_top_product_revenue_query(query, db, user_id, date_scope)
+    if top_product_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_TOP_PRODUCT_REVENUE "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=original_query,
+            answer=top_product_result["answer"],
+            result_count=len(top_product_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": top_product_result["answer"],
+            "message": top_product_result["answer"],
+            "generated_sql": top_product_result["generated_sql"],
+            "generated_model_response": top_product_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": top_product_result["generated_sql"],
+            "row_count": len(top_product_result["results"]),
+            "results": top_product_result["results"],
+            "has_more": False,
+        }
 
     # Product-list questions are answered directly from invoice lines. This is
     # the canonical source for completed sales and avoids unnecessary RAG/SQL LLM
