@@ -755,13 +755,13 @@ def _fast_profit_query(query: str, db: Session, user_id: int, date_scope: dict |
     limited to totals; dimensional/gross-profit questions continue to the
     schema-grounded query path instead of guessing a cost formula.
     """
-    normalized = re.sub(r"\\s+", " ", (query or "").lower()).strip()
-    if not re.search(r"\\b(net profit|profits?|profit and loss|p&l)\\b", normalized):
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    if not re.search(r"\b(net profit|profits?|profit and loss|p&l)\b", normalized):
         return None
     if re.search(
-        r"\\b(gross|margin|by|per|each|every|product|products|item|items|"
+        r"\b(gross|margin|by|per|each|every|product|products|item|items|"
         r"customer|customers|worker|workers|employee|employees|branch|branches|"
-        r"category|categories|compare|comparison|trend|forecast|breakdown)\\b",
+        r"category|categories|compare|comparison|trend|forecast|breakdown)\b",
         normalized,
     ):
         return None
@@ -825,11 +825,11 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
     this workflow does not persist a formula for attendance-based salary cuts.
     It therefore reports facts and explicitly avoids guessing a reduced amount.
     """
-    normalized = re.sub(r"\\s+", " ", (query or "").lower()).strip()
-    has_worker = bool(re.search(r"\\b(worker|workers|employee|employees|staff|labou?rers?)\\b", normalized))
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    has_worker = bool(re.search(r"\b(worker|workers|employee|employees|staff|labou?rers?)\b", normalized))
     has_pay_intent = bool(re.search(
-        r"\\b(pay|paying|paid|salary|salaries|wage|wages|payroll|deduct|deduction|"
-        r"full amount|less amount|amount to pay|payment)\\b",
+        r"\b(pay|paying|paid|salary|salaries|wage|wages|payroll|deduct|deduction|"
+        r"full amount|less amount|amount to pay|payment)\b",
         normalized,
     ))
     if not (has_worker and has_pay_intent):
@@ -906,7 +906,7 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
         period_start = date_scope["start_date"]
         period_end = date_scope["end_date"]
         period_label = str(date_scope.get("label") or f"{period_start.isoformat()} to {period_end.isoformat()}")
-    elif re.search(r"\\b(last month|previous month)\\b", normalized):
+    elif re.search(r"\b(last month|previous month)\b", normalized):
         period_end = today.replace(day=1) - timedelta(days=1)
         period_start = period_end.replace(day=1)
         period_label = "last month"
