@@ -1322,7 +1322,7 @@ def _voice_billing_is_english_text(value: str) -> bool:
 
 
 def _voice_billing_product_has_evidence(transcript: str, product: Product) -> bool:
-    """Require independent lexical evidence before a line can reduce catalog stock."""
+    """Require all meaningful spoken product terms to fit before stock-backed matching."""
     normalized_transcript = _voice_billing_normalize(transcript)
     normalized_name = _voice_billing_normalize(str(product.product_name or ""))
     normalized_sku = _voice_billing_normalize(str(product.sku or ""))
@@ -1330,29 +1330,32 @@ def _voice_billing_product_has_evidence(transcript: str, product: Product) -> bo
         return True
     if normalized_sku and normalized_sku in normalized_transcript:
         return True
+
     stop_tokens = {
         "a", "an", "the", "please", "add", "want", "need", "give", "me", "for", "at",
         "price", "cost", "rupee", "rupees", "rs", "inr", "only", "total", "each", "per",
-        "kg", "kgs", "kilo", "kilos", "kilogram", "g", "gm", "gram", "grams", "ml",
-        "l", "ltr", "litre", "liter", "packet", "packets", "pack", "piece", "pieces",
+        "unit", "sell", "sale", "sold", "bill", "of", "to", "is", "and", "then", "product",
+        "kg", "kgs", "kilo", "kilos", "kilogram", "kilograms", "g", "gm", "gram", "grams", "ml",
+        "l", "ltr", "litre", "liter", "liters", "packet", "packets", "pack", "piece", "pieces",
         "pcs", "bottle", "bottles", "one", "two", "three", "four", "five", "six",
         "seven", "eight", "nine", "ten", "ek", "do", "teen", "char", "panch",
-        "rendu", "moodu", "nalugu", "aidu", "aaru", "edu", "padi",
     }
     query_tokens = {
-        token for token in _voice_billing_expanded_tokens(transcript)
+        token for token in normalized_transcript.split()
         if token not in stop_tokens and not token.isdigit()
     }
-    product_tokens = {
-        token for token in _voice_billing_expanded_tokens(str(product.product_name or ""))
-        if token not in stop_tokens and not token.isdigit()
-    }
-    if query_tokens.intersection(product_tokens):
+    product_tokens = set(normalized_name.split())
+    # Generic product terms (e.g. "rice") are allowed, but extra spoken
+    # descriptors (e.g. "black" in "black rice") must also exist in the catalog name.
+    if query_tokens and query_tokens.issubset(product_tokens):
         return True
-    return bool(normalized_name and difflib.SequenceMatcher(
-        None, normalized_name, normalized_transcript
-    ).ratio() >= 0.55)
 
+    compact_query = " ".join(query_tokens)
+    return bool(
+        compact_query
+        and normalized_name
+        and difflib.SequenceMatcher(None, compact_query, normalized_name).ratio() >= 0.72
+    )
 
 async def _voice_billing_translate_search_query(
     transcript: str,
