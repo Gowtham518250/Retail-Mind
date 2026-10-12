@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Form
 import difflib
 import json
 import os
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
 from sqlalchemy.exc import IntegrityError
