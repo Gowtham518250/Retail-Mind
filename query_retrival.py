@@ -28,7 +28,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-12-grounded-business-intents-v4"
+QUERY_ENGINE_VERSION = "2026-10-12-multilingual-schema-repair-v5"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -77,44 +77,46 @@ _SESSION = ort.InferenceSession(
 )
 
 def _repair_known_schema_aliases(sql: str) -> str:
-    """Repair narrowly-scoped column aliases that are known from the catalog.
+    """Repair only schema aliases that are unambiguously known from our catalog.
 
-    Text-to-SQL models sometimes normalize a field such as customers.customer_name
-    to the generic customers.name. Do not perform global replacements because
-    other tables may legitimately have a column named "name".
+    Invoices are scoped by user_id and dated by invoice_date. shopkeeper_id
+    belongs to legacy sales rows, not invoices. Repair is restricted to table
+    references proven by FROM/JOIN syntax; unrelated tables retain their columns.
     """
-    customer_aliases = set()
+    reserved_alias_words = {
+        "WHERE", "JOIN", "LEFT", "RIGHT", "FULL", "INNER", "OUTER", "CROSS",
+        "ON", "GROUP", "ORDER", "LIMIT", "OFFSET", "UNION", "SET", "RETURNING",
+        "HAVING", "WINDOW", "FETCH", "FOR", "USING",
+    }
 
-    # Capture aliases used specifically for the customers table:
-    #   FROM customers c
-    #   FROM customers AS c
-    #   JOIN customers c
-    #   JOIN customers AS c
-    customer_table_pattern = re.compile(
-        r"\b(?:FROM|JOIN)\s+(?:public\.)?customers"
-        r"(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?"
-        r"(?=\s|\.|,|\)|$)",
-        re.IGNORECASE,
-    )
-
-    for match in customer_table_pattern.finditer(sql):
-        alias = match.group(1)
-        if alias:
-            customer_aliases.add(alias)
+    def aliases_for(table_name: str) -> set[str]:
+        pattern = re.compile(
+            rf"\b(?:FROM|JOIN)\s+(?:public\.)?{re.escape(table_name)}"
+            r"(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?"
+            r"(?=\s|\.|,|\)|$)",
+            re.IGNORECASE,
+        )
+        aliases = set()
+        for match in pattern.finditer(sql):
+            alias = match.group(1)
+            if alias and alias.upper() not in reserved_alias_words and alias.casefold() != table_name.casefold():
+                aliases.add(alias)
+        return aliases
 
     repaired_sql = sql
+    changes = []
 
-    # Direct table reference: customers.name -> customers.customer_name.
-    repaired_sql, direct_count = re.subn(
-        r"\b(?:public\.)?customers\.name\b",
-        lambda m: m.group(0).rsplit(".", 1)[0] + ".customer_name",
+    # Customer display name is customer_name, not name.
+    customer_aliases = aliases_for("customers")
+    repaired_sql, count = re.subn(
+        r"\b((?:public\.)?customers)\.name\b",
+        lambda match: match.group(1) + ".customer_name",
         repaired_sql,
         flags=re.IGNORECASE,
     )
-
-    # Aliased reference: c.name -> c.customer_name, but ONLY when c was
-    # explicitly bound to the customers table in this query.
-    alias_count = 0
+    if count:
+        changes.append(f"customers.name -> customer_name ({count})")
+    customer_alias_count = 0
     for alias in customer_aliases:
         repaired_sql, count = re.subn(
             rf"\b{re.escape(alias)}\.name\b",
@@ -122,14 +124,73 @@ def _repair_known_schema_aliases(sql: str) -> str:
             repaired_sql,
             flags=re.IGNORECASE,
         )
-        alias_count += count
+        customer_alias_count += count
+    if customer_alias_count:
+        changes.append(f"customer alias name -> customer_name ({customer_alias_count})")
 
-    if direct_count or alias_count:
-        print(
-            "🛠️ SQL schema repair:",
-            f"customers.name -> customer_name ({direct_count + alias_count} replacement(s))",
+    invoice_aliases = aliases_for("invoices")
+    repaired_sql, direct_owner_count = re.subn(
+        r"\b((?:public\.)?invoices)\.shopkeeper_id\b",
+        lambda match: match.group(1) + ".user_id",
+        repaired_sql,
+        flags=re.IGNORECASE,
+    )
+    repaired_sql, direct_date_count = re.subn(
+        r"\b((?:public\.)?invoices)\.business_date\b",
+        lambda match: match.group(1) + ".invoice_date",
+        repaired_sql,
+        flags=re.IGNORECASE,
+    )
+    alias_owner_count = 0
+    alias_date_count = 0
+    for alias in invoice_aliases:
+        repaired_sql, count = re.subn(
+            rf"\b{re.escape(alias)}\.shopkeeper_id\b",
+            f"{alias}.user_id",
+            repaired_sql,
+            flags=re.IGNORECASE,
         )
+        alias_owner_count += count
+        repaired_sql, count = re.subn(
+            rf"\b{re.escape(alias)}\.business_date\b",
+            f"{alias}.invoice_date",
+            repaired_sql,
+            flags=re.IGNORECASE,
+        )
+        alias_date_count += count
 
+    if direct_owner_count or alias_owner_count:
+        changes.append(f"invoices.shopkeeper_id -> user_id ({direct_owner_count + alias_owner_count})")
+    if direct_date_count or alias_date_count:
+        changes.append(f"invoices.business_date -> invoice_date ({direct_date_count + alias_date_count})")
+
+    # Unqualified fields are repaired only when invoices is the sole relation.
+    # Never rewrite shopkeeper_id in a query that references legacy sales.
+    relations = re.findall(
+        r"\b(?:FROM|JOIN)\s+(?:public\.)?([A-Za-z_][A-Za-z0-9_]*)",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    if len(relations) == 1 and relations[0].casefold() == "invoices":
+        repaired_sql, owner_count = re.subn(
+            r"(?<![.\w:])shopkeeper_id\b",
+            "user_id",
+            repaired_sql,
+            flags=re.IGNORECASE,
+        )
+        repaired_sql, date_count = re.subn(
+            r"(?<![.\w:])business_date\b",
+            "invoice_date",
+            repaired_sql,
+            flags=re.IGNORECASE,
+        )
+        if owner_count:
+            changes.append(f"unqualified invoices.shopkeeper_id -> user_id ({owner_count})")
+        if date_count:
+            changes.append(f"unqualified invoices.business_date -> invoice_date ({date_count})")
+
+    if changes:
+        print("SQL schema repair: " + "; ".join(changes))
     return repaired_sql
 
 
