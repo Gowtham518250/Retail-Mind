@@ -500,3 +500,39 @@ def test_failed_sql_repair_requires_read_only_tenant_scoped_sql(monkeypatch):
     )
     assert rejected is None
 
+def test_low_confidence_translated_question_stops_before_sql_generation(monkeypatch):
+    import query_retrival
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        query_retrival,
+        "_translate_query_and_classify",
+        lambda query, language_code: {
+            "english_query": "A vague translation",
+            "classification": {
+                "intent": "general",
+                "metric": "other",
+                "confidence": 0.42,
+                "source": "high_reasoning_translation_verifier",
+            },
+        },
+    )
+
+    def unexpected_schema_search(_query):
+        raise AssertionError("SQL/RAG must not run while translation confidence is low")
+
+    monkeypatch.setattr(query_retrival, "_cached_schema_search", unexpected_schema_search)
+
+    try:
+        query_retrival.ask_query(
+            query="ప్రశ్న స్పష్టంగా అర్థం కాలేదు",
+            language_code="te",
+            db=object(),
+            user_id=7,
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 422
+        assert "no shop data was queried" in exc.detail.lower()
+    else:
+        raise AssertionError("Low-confidence translated questions must request clarification")
+
