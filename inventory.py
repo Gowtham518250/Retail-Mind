@@ -899,11 +899,9 @@ async def parse_voice_billing(
         f"Shop catalog candidates (JSON): {json.dumps(catalog, ensure_ascii=False)}"
     )
 
-    model = (
-        os.getenv("GROQ_VOICE_BILLING_MODEL")
-        or os.getenv("GROQ_MODEL")
-        or "qwen/qwen3.8-27b"
-    )
+    # Keep voice-billing model selection isolated from the general AI-query model.
+    # This avoids an unrelated/deprecated GROQ_MODEL setting breaking billing extraction.
+    model = (os.getenv("GROQ_VOICE_BILLING_MODEL") or "qwen/qwen3.8-27b").strip()
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, connect=8.0)) as client:
             response = await client.post(
