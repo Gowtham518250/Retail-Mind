@@ -540,3 +540,171 @@ def test_low_confidence_translated_question_stops_before_sql_generation(monkeypa
     else:
         raise AssertionError("Low-confidence translated questions must request clarification")
 
+
+
+def test_translation_confidence_is_separate_from_intent_classification(monkeypatch):
+    from types import SimpleNamespace
+    import json
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    answers = [
+        {
+            "english_query": "Could you tell me about worker Ganesh's pay?",
+            "intent": "general",
+            "metric": "other",
+            "confidence": 0.40,
+            "translation_confidence": 0.91,
+        },
+        {
+            "english_query": "My worker Ganesh is asking for salary. How much should I pay based on his attendance?",
+            "intent": "general",
+            "metric": "attendance",
+            "confidence": 0.58,
+            "translation_confidence": 0.96,
+        },
+    ]
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(answers[len(calls) - 1])))]
+        )
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))),
+    )
+
+    result = query_retrival._translate_query_and_classify(
+        "నా వర్కర్ గణేష్ జీతం అడుగుతున్నాడు. అటెండెన్స్ ప్రకారం ఎంత జీతం ఇవ్వాలి?",
+        "te",
+    )
+
+    assert len(calls) == 2
+    assert "worker Ganesh" in result["english_query"]
+    assert result["classification"]["confidence"] == 0.58
+    assert result["classification"]["translation_confidence"] == 0.96
+    assert result["classification"]["source"] == "high_reasoning_translation_verifier"
+
+
+def test_low_classification_confidence_but_clear_translation_reaches_worker_fast_path(monkeypatch):
+    import asyncio
+    import query_retrival
+
+    monkeypatch.setattr(
+        query_retrival,
+        "_translate_query_and_classify",
+        lambda query, language_code: {
+            "english_query": "My worker Ganesh is asking for salary. How much should I pay based on his attendance this month?",
+            "classification": {
+                "intent": "general",
+                "metric": "attendance",
+                "confidence": 0.45,
+                "translation_confidence": 0.96,
+                "source": "high_reasoning_translation_verifier",
+            },
+        },
+    )
+    monkeypatch.setattr(query_retrival, "_fast_profit_query", lambda *args: None)
+    monkeypatch.setattr(
+        query_retrival,
+        "_fast_worker_payroll_query",
+        lambda query, db, user_id, date_scope: {
+            "answer": "Ganesh configured salary and attendance summary.",
+            "generated_sql": "",
+            "generated_model_response": "Ganesh configured salary and attendance summary.",
+            "results": [{"worker_name": "Ganesh"}],
+        },
+    )
+    monkeypatch.setattr(query_retrival, "_persist_query_history", lambda **kwargs: None)
+    monkeypatch.setattr(
+        query_retrival,
+        "_fast_overpayment_query",
+        lambda *args: (_ for _ in ()).throw(AssertionError("Payroll should return before overpayment lookup")),
+    )
+
+    response = asyncio.run(query_retrival.ask_query(
+        query="నా వర్కర్ గణేష్ జీతం అడుగుతున్నాడు. అటెండెన్స్ ప్రకారం ఎంత జీతం ఇవ్వాలి?",
+        language_code="te",
+        db=object(),
+        user_id=7,
+    ))
+
+    assert response["answer"] == "Ganesh configured salary and attendance summary."
+    assert response["translated_query"].startswith("My worker Ganesh")
+
+
+def test_overpayment_lookup_returns_customer_invoice_and_excess_amount():
+    from datetime import date
+    from query_retrival import _fast_overpayment_query
+
+    calls = {}
+
+    class FakeMappings:
+        def all(self):
+            return [{
+                "invoice_id": 15,
+                "invoice_number": "INV-15",
+                "customer_name": "Asha Rao",
+                "invoice_date": date(2026, 10, 1),
+                "invoice_total": 100.0,
+                "invoice_paid_amount": 125.0,
+                "payment_ledger_total": 125.0,
+                "recorded_paid_amount": 125.0,
+                "overpayment_amount": 25.0,
+            }]
+
+    class FakeResult:
+        def mappings(self):
+            return FakeMappings()
+
+    class FakeDb:
+        def execute(self, sql, params):
+            calls["sql"] = str(sql)
+            calls["params"] = params
+            return FakeResult()
+
+    result = _fast_overpayment_query(
+        "Can you share details of customers who had issues with overpayment?",
+        FakeDb(),
+        7,
+        {"kind": "unspecified", "start_date": None, "end_date": None},
+    )
+
+    assert result is not None
+    assert "Asha Rao" in result["answer"]
+    assert "INV-15" in result["answer"]
+    assert "₹25.00" in result["answer"]
+    assert "i.user_id = :user_id" in calls["sql"]
+    assert calls["params"]["user_id"] == 7
+    assert result["results"][0]["overpayment_amount"] == 25.0
+
+
+def test_overpayment_lookup_explains_when_no_recorded_excess_exists():
+    from query_retrival import _fast_overpayment_query
+
+    class FakeMappings:
+        def all(self):
+            return []
+
+    class FakeResult:
+        def mappings(self):
+            return FakeMappings()
+
+    class FakeDb:
+        def execute(self, sql, params):
+            return FakeResult()
+
+    result = _fast_overpayment_query(
+        "Show customers with overpayments",
+        FakeDb(),
+        7,
+    )
+
+    assert result is not None
+    assert result["results"] == []
+    assert "couldn't find any invoices" in result["answer"].lower()
+    assert "unrecorded disputes" in result["answer"].lower()
