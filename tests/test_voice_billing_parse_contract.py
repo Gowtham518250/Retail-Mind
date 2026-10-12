@@ -11,12 +11,13 @@ def _product(product_id: int, name: str, sku: str = ""):
     return SimpleNamespace(id=product_id, product_name=name, sku=sku)
 
 
-def test_voice_billing_parse_endpoint_is_registered():
-    assert any(
-        getattr(route, "path", "") == "/api/inventory/voice-billing/parse"
-        and "POST" in getattr(route, "methods", set())
+def test_voice_billing_parse_endpoints_are_registered():
+    paths = {
+        (getattr(route, "path", ""), frozenset(getattr(route, "methods", set())))
         for route in router.routes
-    )
+    }
+    assert ("/api/inventory/voice-billing/parse", frozenset({"POST"})) in paths
+    assert ("/api/inventory/voice-billing/parse-audio", frozenset({"POST"})) in paths
 
 
 def test_voice_billing_normalization_preserves_indian_script_and_numbers():
@@ -222,3 +223,73 @@ def test_groq_cannot_inject_product_id_not_in_shop_catalog(monkeypatch):
     assert result["success"] is False
     assert result["needs_clarification"] is True
     assert "confidently identify" in result["clarification_question"].lower()
+
+
+def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monkeypatch):
+    import asyncio
+    import io
+    import inventory as inventory_module
+    from fastapi import UploadFile
+    from starlette.datastructures import Headers
+
+    monkeypatch.setenv("GROQ_API_KEY", "unit-test-key")
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"text": "2 kg rice 50", "language": "english"}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            captured["timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, headers, data, files):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["data"] = data
+            captured["files"] = files
+            return FakeResponse()
+
+    async def fake_parse(request, *, user_id, db):
+        captured["transcript"] = request.transcript
+        captured["language_code"] = request.language_code
+        captured["user_id"] = user_id
+        return {"success": True, "items": [], "needs_clarification": False}
+
+    monkeypatch.setattr(inventory_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
+
+    audio = UploadFile(
+        filename="voice-billing.wav",
+        file=io.BytesIO(b"RIFF-fake-test-audio"),
+        headers=Headers({"content-type": "audio/wav"}),
+    )
+    result = asyncio.run(
+        inventory_module.parse_voice_billing_audio(
+            audio=audio,
+            language_code="auto",
+            user_id=7,
+            db=object(),
+        )
+    )
+
+    assert captured["url"].endswith("/audio/transcriptions")
+    assert captured["data"]["model"] == "whisper-large-v3"
+    assert captured["headers"]["Authorization"] == "Bearer unit-test-key"
+    assert captured["transcript"] == "2 kg rice 50"
+    assert captured["language_code"] == "auto"
+    assert captured["user_id"] == 7
+    assert result["transcription_provider"] == "Groq"
+    assert result["transcription_model"] == "whisper-large-v3"
+    assert result["detected_language"] == "english"
