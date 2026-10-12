@@ -6,7 +6,7 @@ import difflib
 import asyncio
 import math
 import time
-from urllib.parse import quote_plus
+from urllib.parse import urlencode
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -1807,11 +1807,6 @@ async def ask_query_product_discovery(
             address = str(place.get("address") or "").strip()
             if not title:
                 continue
-            maps_url = "https://www.google.com/maps/search/?" + quote_plus(
-                "api=1&query=" + f"{title} {address}"
-            )
-            # Build a conventional Google Maps URL with correctly encoded query.
-            from urllib.parse import urlencode
             maps_url = "https://www.google.com/maps/search/?" + urlencode({
                 "api": "1",
                 "query": f"{title} {address}".strip(),
