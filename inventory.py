@@ -6,6 +6,7 @@ Low stock alerts, inventory analytics
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile
 import difflib
+import unicodedata
 import json
 import os
 import logging
@@ -752,9 +753,17 @@ _VOICE_BILLING_ALIASES = {
 
 
 def _voice_billing_normalize(value: str) -> str:
+    """Normalize punctuation/spacing without stripping combining marks in Indian scripts."""
     value = (value or "").casefold()
-    value = re.sub(r"[^\w\s]", " ", value, flags=re.UNICODE)
-    return re.sub(r"\s+", " ", value).strip()
+    # Python's Unicode regex \\w excludes several combining marks used by Telugu,
+    # Hindi and other Indic scripts. Retain all Unicode letters, marks and numbers.
+    normalized = "".join(
+        char
+        if char.isspace() or unicodedata.category(char)[0] in {"L", "M", "N"}
+        else " "
+        for char in value
+    )
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def _voice_billing_expanded_tokens(value: str) -> set[str]:
