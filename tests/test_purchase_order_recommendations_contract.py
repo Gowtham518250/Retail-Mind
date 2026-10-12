@@ -46,12 +46,12 @@ def test_critical_stock_suggestion_uses_configured_threshold():
 
 def test_low_stock_suggestion_uses_shop_product_settings():
     suggestion = _make_reorder_suggestion(
-        _product(current_stock=10, min_stock=8, reorder_level=20, max_stock=50)
+        _product(current_stock=12, min_stock=8, reorder_level=20, max_stock=50)
     )
 
     assert suggestion["urgency"] == "REORDER"
     assert suggestion["target_stock"] == 40
-    assert suggestion["suggested_reorder_qty"] == 30
+    assert suggestion["suggested_reorder_qty"] == 28
 
 
 def test_online_price_lookup_sorts_real_provider_offers(monkeypatch):
