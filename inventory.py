@@ -721,8 +721,8 @@ _VOICE_BILLING_ALIASES = {
 
 def _voice_billing_normalize(value: str) -> str:
     value = (value or "").casefold()
-    value = re.sub(r"[^\\w\\s]", " ", value, flags=re.UNICODE)
-    return re.sub(r"\\s+", " ", value).strip()
+    value = re.sub(r"[^\w\s]", " ", value, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def _voice_billing_expanded_tokens(value: str) -> set[str]:
@@ -895,8 +895,8 @@ async def parse_voice_billing(
 
     try:
         # Be tolerant of provider wrappers that add JSON code fences, but require a JSON object.
-        cleaned = re.sub(r"^\\s*```(?:json)?\\s*|\\s*```\\s*$", "", content, flags=re.IGNORECASE)
-        match = re.search(r"\\{.*\\}", cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", content, flags=re.IGNORECASE)
+        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
         parsed = json.loads(match.group(0) if match else cleaned)
         raw_items = parsed.get("items", [])
         if not isinstance(raw_items, list):
