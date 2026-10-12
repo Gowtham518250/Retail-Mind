@@ -2453,6 +2453,11 @@ async def ask_query(
     - CUSTOMER SCHEMA SAFETY: the customers table uses customer_name for the customer name.
       There is NO customers.name column. When the customers table is aliased as c, use c.customer_name.
       Verify every customers column against the supplied catalog before returning SQL.
+    - INVOICE SCHEMA SAFETY: the invoices table is scoped by user_id and uses invoice_date for its business date.
+      invoices has total_amount, paid_amount, invoice_date, status, and user_id. It does NOT have shopkeeper_id or business_date.
+      For invoices, always use invoices.user_id = :user_id and invoices.invoice_date = :business_date for today,
+      or the documented invoice_date filter for another period. Never borrow sales.shopkeeper_id or sales.sale_date
+      for invoices. Use shopkeeper_id and sale_date only when querying the legacy sales table.
 
     Retrieved complete table information:
 
@@ -2483,19 +2488,28 @@ async def ask_query(
     print(
         "ASKQUERY PATH=RAG_SQL "
         f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=1 "
+        f"sql_model={os.getenv('GROQ_SQL_MODEL') or os.getenv('GROQ_MODEL') or 'openai/gpt-oss-120b'} "
         f"total_chat_calls_expected={int(translation_used) + 1}"
     )
     try:
+        sql_model = (
+            os.getenv("GROQ_SQL_MODEL")
+            or os.getenv("GROQ_MODEL")
+            or "openai/gpt-oss-120b"
+        )
+        sql_model_options = {}
+        if sql_model in {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"}:
+            sql_model_options["reasoning_effort"] = "high"
         completion = client.chat.completions.create(
-            model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
+            model=sql_model,
             messages=[{"role": "user", "content": formatted_prompt}],
             temperature=0.1,
-            # Keep generation below the Groq on-demand OTPM limit while still
-            # leaving enough room for a compact SQL response.
-            max_tokens=700,
+            # Allow a high-reasoning model enough completion budget for SQL.
+            max_tokens=3000,
             top_p=0.9,
             stream=True,
             stop=None,
+            **sql_model_options,
         )
 
         generated_parts = []
