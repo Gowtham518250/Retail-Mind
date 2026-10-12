@@ -1638,6 +1638,13 @@ def _clean_product_discovery_query(query: str) -> str:
     """Strip shopping intent words; retain the product name, brand and pack size."""
     value = re.sub(r"\s+", " ", (query or "").strip())
     value = re.sub(
+        r"^(?:what\s+is\s+(?:the\s+)?price\s+of|price\s+of|how\s+much\s+is|"
+        r"compare\s+(?:the\s+)?prices?\s+(?:for|of))\s+",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    )
+    value = re.sub(
         r"^(?:please\s+)?(?:i\s+need|i\s+want|i'?d\s+like|i\s+am\s+looking\s+for|"
         r"i'm\s+looking\s+for|looking\s+for|want\s+to\s+buy|need\s+to\s+buy|"
         r"where\s+can\s+i\s+(?:buy|get|find)|find\s+me|search\s+for|get\s+me|"
@@ -1695,7 +1702,15 @@ async def ask_query_product_discovery(
         raise HTTPException(status_code=422, detail="Search radius must be between 1 and 25 km.")
 
     english_query = original_query
-    if language_code != "en" or any(not char.isascii() for char in original_query):
+    english_shopping_phrase = re.search(
+        r"(?i)\\b(?:i\\s+need|i\\s+want|want\\s+to\\s+buy|need\\s+to\\s+buy|"
+        r"looking\\s+for|find\\s+me|search\\s+for|where\\s+can\\s+i\\s+(?:buy|get)|"
+        r"buy|purchase|price\\s+of|compare\\s+prices?|near\\s+me|around\\s+me)\\b",
+        original_query,
+    )
+    if any(not char.isascii() for char in original_query) or (
+        language_code != "en" and english_shopping_phrase is None
+    ):
         translated = _translate_query_and_classify(original_query, language_code)
         english_query = str(translated.get("english_query") or "").strip()
     product_query = _clean_product_discovery_query(english_query)
