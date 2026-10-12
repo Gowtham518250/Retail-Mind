@@ -80,6 +80,24 @@ def test_native_script_hindi_sugar_shortlists_catalog_product():
     assert candidates[0].id == expected.id
 
 
+def test_native_script_chicken_biryani_shortlists_english_catalog_item():
+    products = [
+        _product(index, f"Unrelated household item {index}", f"SKU-{index}")
+        for index in range(1, 110)
+    ]
+    expected = _product(999, "Chicken Biryani", "FOOD-01")
+    products.append(expected)
+
+    candidates = _voice_billing_catalog_candidates(
+        "చికెన్ బిర్యానీ 60 రూపాయలు",
+        products,
+        limit=80,
+    )
+
+    assert candidates
+    assert candidates[0].id == expected.id
+
+
 def test_small_catalog_is_not_artificially_trimmed():
     products = [
         _product(1, "Rice", "RICE"),
