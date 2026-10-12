@@ -94,3 +94,131 @@ def test_large_catalog_does_not_return_random_candidates_for_unknown_product():
         for index in range(1, 110)
     ]
     assert _voice_billing_catalog_candidates("dragonfruit 17", products, limit=80) == []
+
+
+def _run_voice_billing_endpoint(monkeypatch, model_items, *, transcript="2 kg rice 50"):
+    import asyncio
+    import json
+    import inventory as inventory_module
+
+    monkeypatch.setenv("GROQ_API_KEY", "unit-test-key")
+    product = SimpleNamespace(
+        id=42,
+        product_name="Sona Masoori Rice",
+        sku="RICE-01",
+        category="Grains",
+        unit_price=50,
+        current_stock=20,
+        user_id=7,
+        is_active=True,
+    )
+
+    class FakeQuery:
+        def __init__(self):
+            self.filters = []
+
+        def filter(self, *criteria):
+            self.filters.extend(criteria)
+            return self
+
+        def order_by(self, *criteria):
+            return self
+
+        def all(self):
+            return [product]
+
+    class FakeDb:
+        def __init__(self):
+            self.query_obj = FakeQuery()
+
+        def query(self, model):
+            assert model is inventory_module.Product
+            return self.query_obj
+
+    api_capture = {}
+    response_content = json.dumps({
+        "items": model_items,
+        "needs_clarification": False,
+        "clarification_question": "",
+    })
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": response_content}}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            api_capture["timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, headers, json):
+            api_capture["url"] = url
+            api_capture["headers"] = headers
+            api_capture["request"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(inventory_module.httpx, "AsyncClient", FakeAsyncClient)
+    db = FakeDb()
+    result = asyncio.run(inventory_module.parse_voice_billing(
+        inventory_module.VoiceBillingParseRequest(
+            transcript=transcript,
+            language_code="en-IN",
+        ),
+        user_id=7,
+        db=db,
+    ))
+    return result, api_capture, db
+
+
+def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
+    result, api_capture, db = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 42,
+            "quantity": 2,
+            "spoken_price_amount": 50,
+            "spoken_price_kind": "unit",
+            "confidence": 0.98,
+        }],
+    )
+
+    assert result["success"] is True
+    assert len(result["items"]) == 1
+    assert result["items"][0]["product_id"] == 42
+    assert result["items"][0]["product_name"] == "Sona Masoori Rice"
+    assert result["items"][0]["quantity"] == 2.0
+    assert result["items"][0]["unit_price"] == 50.0
+    assert result["items"][0]["price_source"] == "spoken_unit"
+    assert api_capture["request"]["response_format"] == {"type": "json_object"}
+    assert api_capture["headers"]["Authorization"] == "Bearer unit-test-key"
+    # The endpoint's SQLAlchemy query must scope inventory to the authenticated account.
+    assert db.query_obj.filters
+    assert any("user_id" in str(clause) for clause in db.query_obj.filters)
+
+
+def test_groq_cannot_inject_product_id_not_in_shop_catalog(monkeypatch):
+    result, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 999999,
+            "quantity": 2,
+            "spoken_price_amount": 50,
+            "spoken_price_kind": "unit",
+            "confidence": 0.99,
+        }],
+    )
+
+    assert result["items"] == []
+    assert result["success"] is False
+    assert result["needs_clarification"] is True
+    assert "confidently identify" in result["clarification_question"].lower()
