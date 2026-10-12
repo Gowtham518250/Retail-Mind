@@ -2207,6 +2207,16 @@ async def ask_query(
     else:
         print("ASKQUERY STAGE=question_translation_classification skipped reason=english_ascii llm_calls=0")
 
+    # Do not run SQL for a question whose non-English meaning remained uncertain
+    # after the high-reasoning verification pass. Ask for a clearer utterance
+    # instead of producing a plausible but potentially incorrect business number.
+    if translation_used and float((query_classification or {}).get("confidence") or 0.0) < 0.80:
+        print("ASKQUERY outcome=clarification_required reason=low_translation_confidence sql_generation_llm_calls=0")
+        raise HTTPException(
+            status_code=422,
+            detail="I couldn't confidently understand that question. Please rephrase it or ask a shorter question; no shop data was queried.",
+        )
+
     # Fast path for the most common dashboard KPI questions. This avoids the
     # FAISS + Groq round-trip that previously made simple questions feel stuck
     # on "loading".
