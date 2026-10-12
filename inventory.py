@@ -1341,8 +1341,8 @@ async def _voice_billing_translate_search_query(
             content = str(
                 (((provider_payload.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
             ).strip()
-        cleaned = re.sub(r"^\\s*```(?:json)?\\s*|\\s*```\\s*$", "", content, flags=re.IGNORECASE)
-        match = re.search(r"\\{.*\\}", cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", content, flags=re.IGNORECASE)
+        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
         parsed = json.loads(match.group(0) if match else cleaned)
         translated = str(parsed.get("english_search_text") or "").strip()
         return translated[:320]
