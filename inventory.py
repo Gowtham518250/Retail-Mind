@@ -957,8 +957,10 @@ async def parse_voice_billing(
         kind = str(raw.get("spoken_price_kind") or "none").strip().lower()
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
             kind = "ambiguous"
-        unit_price = Decimal(str(product.unit_price or 0))
+        catalog_price = Decimal(str(product.unit_price or 0))
+        unit_price = catalog_price
         price_source = "catalog"
+        price_warning = None
         spoken_amount = raw.get("spoken_price_amount")
 
         if kind == "ambiguous":
@@ -975,6 +977,14 @@ async def parse_voice_billing(
                 else:
                     unit_price = (amount / quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     price_source = "spoken_line_total"
+                    price_warning = "Spoken line total converted to a per-unit price; review rounding before saving."
+
+                if catalog_price > 0:
+                    relative_change = abs(unit_price - catalog_price) / catalog_price
+                    if relative_change > Decimal("0.25"):
+                        price_warning = (
+                            "Spoken price differs from the catalog price; verify it before saving."
+                        )
             except (TypeError, ValueError, ArithmeticError):
                 unresolved.append(f"{product.product_name}: price unclear")
                 continue
@@ -983,6 +993,7 @@ async def parse_voice_billing(
             unresolved.append(f"{product.product_name}: price missing")
             continue
 
+        available_stock = Decimal(str(product.current_stock or 0))
         output_items.append({
             "product_id": int(product.id),
             "product_name": str(product.product_name),
@@ -990,8 +1001,10 @@ async def parse_voice_billing(
             "quantity": float(quantity),
             "unit_price": float(unit_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
             "price_source": price_source,
-            "catalog_unit_price": float(product.unit_price or 0),
-            "available_stock": float(product.current_stock or 0),
+            "catalog_unit_price": float(catalog_price),
+            "available_stock": float(available_stock),
+            "stock_warning": quantity > available_stock,
+            "price_warning": price_warning,
             "confidence": confidence,
         })
 
