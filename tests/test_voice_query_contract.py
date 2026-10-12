@@ -77,6 +77,7 @@ def test_translate_query_uses_existing_llm_and_returns_english(monkeypatch):
     assert translated == "How much were sales yesterday?"
     assert calls["stream"] is False
     assert calls["temperature"] == 0.0
+    assert "reasoning_effort" not in calls
     assert calls["messages"][1]["content"].startswith("Source language: Telugu")
 
 
@@ -311,6 +312,7 @@ def test_combined_query_translation_and_classification_uses_one_chat_call(monkey
     assert result["classification"]["confidence"] == 0.98
     assert len(calls) == 1
     assert calls[0]["stream"] is False
+    assert "reasoning_effort" not in calls[0]
     assert "classify" in calls[0]["messages"][0]["content"].lower()
 
 
