@@ -1039,7 +1039,12 @@ async def parse_voice_billing(
 
     needs_clarification = bool(parsed.get("needs_clarification")) or bool(unresolved)
     clarification = str(parsed.get("clarification_question") or "").strip()
-    if unresolved and not clarification:
+    if not output_items and unresolved and not clarification:
+        clarification = (
+            "I couldn't confidently identify a catalog product for this request. "
+            "Please say the exact product name or select it manually."
+        )
+    elif unresolved and not clarification:
         clarification = (
             "I added the confidently matched products. Please review the missing/unclear item(s): "
             + ", ".join(unresolved[:4])
