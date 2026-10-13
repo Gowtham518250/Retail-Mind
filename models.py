@@ -1051,6 +1051,9 @@ class ShopProfile(Base):
     website = Column(String(200))
     gst_number = Column(String(50))
     logo_url = Column(String(500))
+    # Store image bytes in the database so logos survive container restarts/redeploys.
+    logo_base64 = Column(Text)
+    logo_content_type = Column(String(100))
     
     # Geographic Location (BUG-B12)
     latitude = Column(Float, index=True, nullable=True)
