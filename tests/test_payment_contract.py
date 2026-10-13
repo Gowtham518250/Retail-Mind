@@ -112,3 +112,15 @@ def test_canonical_payment_writer_suppresses_duplicate_delivery_trigger_record()
     source = inspect.getsource(_apply_payment_write)
     assert "retail_mind.payment_write_invoice_id" in source
     assert "set_config" in source
+    # Use a raw connection for the transaction-local flag so the guard is set
+    # before the ORM flush can fire the PostgreSQL trigger.
+    assert "db.connection().execute" in source
+
+
+def test_manual_create_route_normalizes_payment_from_amount_instead_of_schema_default():
+    import inspect
+    from invoices_billing import create_invoice
+
+    source = inspect.getsource(create_invoice)
+    assert "_normalize_new_invoice_payment_state(invoice)" in source
+    assert "paid_amount cannot exceed total_amount" in source
