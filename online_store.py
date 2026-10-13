@@ -19,6 +19,7 @@ import re
 from urllib.parse import quote
 from typing import Optional, List, Literal
 from datetime import datetime, timezone, timedelta, date
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -83,6 +84,11 @@ from audit_logging import AuditAction, AuditService
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
 
+def _add_stock_quantity(current_stock, quantity) -> Decimal:
+    """Add stock quantities using Decimal because Numeric columns load as Decimal."""
+    return Decimal(str(current_stock or 0)) + Decimal(str(quantity or 0))
+
+
 def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
     """Restore reserved stock and return mutations for durable change events."""
     items = json.loads(order.items_json or "[]")
@@ -90,18 +96,23 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
 
     for item in items:
         product_id = item.get("product_id")
-        quantity = float(item.get("quantity", 0) or 0)
-        if not product_id or quantity <= 0:
+        # PostgreSQL Numeric values are Decimal. Keep quantities in Decimal
+        # arithmetic so rejecting an order cannot crash on Decimal + float.
+        quantity = Decimal(str(item.get("quantity", 0) or 0))
+        if not product_id or quantity <= Decimal("0"):
             continue
         product = db.query(Product).with_for_update().filter(
             Product.id == int(product_id),
             Product.user_id == shop_id,
         ).first()
         if product:
-            product.current_stock = (product.current_stock or 0) + quantity
+            product.current_stock = _add_stock_quantity(
+                product.current_stock,
+                quantity,
+            )
             restored_inventory.append({
                 "product_id": int(product.id),
-                "quantity": quantity,
+                "quantity": float(quantity),
                 "new_stock": float(product.current_stock),
             })
 
