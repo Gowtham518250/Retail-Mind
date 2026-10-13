@@ -475,10 +475,69 @@ vectorstore = FAISS.load_local(
     allow_dangerous_deserialization=True,
 )
 
+def _select_distinct_schema_tables(scored_documents, max_tables: int = 8):
+    """Keep the best-ranked chunk for each distinct table.
+
+    FAISS indexes overlapping schema chunks, so raw top-k results can contain
+    several chunks from one table and crowd out tables needed for a multi-table
+    business question. Scores from similarity_search_with_score are distances;
+    lower values rank first. This changes only schema selection, not tenant data.
+    """
+    ranked = []
+    for position, pair in enumerate(scored_documents or []):
+        try:
+            document, score = pair
+        except (TypeError, ValueError):
+            continue
+        try:
+            distance = float(score)
+        except (TypeError, ValueError):
+            distance = float(position)
+        ranked.append((distance, position, document))
+
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    selected = []
+    seen_tables = set()
+    limit = max(1, int(max_tables))
+
+    for _distance, _position, document in ranked:
+        metadata = getattr(document, "metadata", {}) or {}
+        table_name = str(metadata.get("table") or "").strip()
+        if not table_name:
+            source = str(metadata.get("source") or "").replace("\\", "/")
+            table_name = Path(source).stem if source else ""
+        if not table_name:
+            # Catalog-built documents should have table/source metadata. Keep a
+            # stable content fallback so unrelated chunks are not collapsed.
+            table_name = str(getattr(document, "page_content", "") or "")[:100]
+        key = table_name.casefold()
+        if not key or key in seen_tables:
+            continue
+        seen_tables.add(key)
+        selected.append(document)
+        if len(selected) >= limit:
+            break
+
+    return tuple(selected)
+
+
 @lru_cache(maxsize=128)
 def _cached_schema_search(normalized_query: str):
-    """Cache schema-only FAISS results per worker; no tenant data is cached."""
-    return tuple(vectorstore.similarity_search(normalized_query, k=6))
+    """Cache diverse schema-only results per worker; no tenant data is cached."""
+    # Fetch a wider candidate set, then choose one best chunk per distinct
+    # table. Full catalog expansion below supplies the complete table schema.
+    candidates = vectorstore.similarity_search_with_score(normalized_query, k=32)
+    selected = _select_distinct_schema_tables(candidates, max_tables=8)
+    table_names = [
+        str((getattr(document, "metadata", {}) or {}).get("table") or "unknown")
+        for document in selected
+    ]
+    print(
+        "ASKQUERY STAGE=schema_retrieval "
+        f"candidate_chunks={len(candidates)} distinct_tables={len(selected)} "
+        f"tables={','.join(table_names)}"
+    )
+    return selected
 
 
 # Complete table catalog generated alongside the FAISS index. This avoids
@@ -1527,12 +1586,34 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
     this workflow does not persist a formula for attendance-based salary cuts.
     It therefore reports facts and explicitly avoids guessing a reduced amount.
     """
+def _is_recorded_worker_payment_query(query: str) -> bool:
+    """Identify questions needing payment-ledger records rather than salary guidance."""
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
-    has_worker = bool(re.search(r"\b(worker|workers|employee|employees|staff|labou?rers?)\b", normalized))
-    # Payment-history questions need actual payment records and must not be
-    # answered from attendance alone.
-    if re.search(r"\b(how much did i pay|already paid|payment history|pay history|salary paid|paid salary)\b", normalized):
+    patterns = (
+        # Past-tense payment amounts/history, including variants missed by the
+        # older exact phrase "how much did I pay".
+        r"\b(?:how much|what amount|total amount)\s+(?:have|has|had|did|do|does|was|were)\s+(?:i|we|you|they|he|she|the shop|the owner)\s+(?:already\s+)?(?:paid|pay|transferred|sent)\b",
+        r"\b(?:have|has|had|did|do|does)\s+(?:i|we|you|they|he|she|the shop|the owner)\s+(?:already\s+)?(?:paid|pay|transferred|sent)\b",
+        r"\b(?:payment|payments|salary|salaries|wage|wages|pay)\s+(?:history|records?|transactions?|details?|ledger)\b",
+        r"\b(?:history|records?|transactions?|ledger|details?)\s+(?:of|for)\s+(?:the\s+)?(?:payment|payments|salary|wages?|pay)\b",
+        r"\b(?:payment|payments)\s+(?:made|sent|transferred|received)\s+(?:to|for|by)\b",
+        r"\b(?:amount|money|salary|wages?)\s+(?:already\s+)?paid\s+(?:to|for|by)\b",
+        r"\b(?:last|latest|recent|previous)\s+(?:salary\s+)?(?:payment|salary|wage|transfer)\b",
+        r"\b(?:transaction|transactions)\b.{0,60}\b(?:worker|workers|employee|employees|staff|labou?rers?)\b",
+        r"\b(?:show|list|view|check|find)\b.{0,60}\b(?:payment|payments|transaction|transactions)\b.{0,60}\b(?:worker|workers|employee|employees|staff|labou?rers?)\b",
+        r"\bhow much\b.{0,60}\b(?:paid|transferred|sent)\b.{0,40}\b(?:worker|employee|staff|labou?rers?)\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    # This handler reads Worker + Attendance, not payment-ledger rows. Send
+    # recorded-payment/history questions to the ledger/RAG path instead of
+    # presenting configured salary as though it were the amount actually paid.
+    if _is_recorded_worker_payment_query(normalized):
         return None
+
+    has_worker = bool(re.search(r"\b(worker|workers|employee|employees|staff|labou?rers?)\b", normalized))
     has_pay_intent = bool(re.search(
         r"\b(pay|paying|salary|salaries|wage|wages|payroll|deduct|deduction|"
         r"full amount|less amount|amount to pay|payment)\b",
