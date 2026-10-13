@@ -115,3 +115,41 @@ def test_fast_sales_kpi_uses_the_resolved_rolling_range_for_both_sources(monkeyp
         "start_date": date(2026, 9, 12),
         "end_date": date(2026, 10, 12),
     }
+
+
+def test_implicit_sales_question_uses_deterministic_kpi_and_clear_answer(monkeypatch):
+    import query_retrival
+
+    today = date(2026, 10, 13)
+    yesterday = date(2026, 10, 12)
+    monkeypatch.setattr(
+        query_retrival,
+        "_business_dates",
+        lambda: (today, yesterday),
+    )
+
+    question = "What were my sales yesterday?"
+    scope = query_retrival._resolve_explicit_date_scope(question)
+    plan = query_retrival._make_deterministic_query_plan(question)
+
+    assert plan["intent"] == "aggregate"
+    assert plan["metric"] == "sales_amount"
+    assert plan["confidence"] >= 0.90
+    assert query_retrival._can_use_fast_business_query(question, scope)
+
+    db = _FakeDb({"total_sales_amount": 12345.6})
+    result = query_retrival._fast_business_query(
+        question,
+        db,
+        user_id=7,
+        date_scope=scope,
+    )
+
+    assert result["answer"] == "Your total sales amount yesterday is ₹12,345.60."
+    assert result["results"] == [{"total_sales_amount": 12345.6}]
+    assert "FROM invoices i" in db.sql
+    assert "i.invoice_date = :previous_business_date" in db.sql
+    assert "FROM sales s" in db.sql
+    assert "s.sale_date = :previous_business_date" in db.sql
+    assert db.params == {"user_id": 7, "previous_business_date": yesterday}
+    assert result["generated_sql"].strip().upper().startswith("SELECT")
