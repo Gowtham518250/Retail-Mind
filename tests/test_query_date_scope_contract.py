@@ -153,3 +153,95 @@ def test_implicit_sales_question_uses_deterministic_kpi_and_clear_answer(monkeyp
     assert "s.sale_date = :previous_business_date" in db.sql
     assert db.params == {"user_id": 7, "previous_business_date": yesterday}
     assert result["generated_sql"].strip().upper().startswith("SELECT")
+
+
+
+def test_sql_reviewer_corrects_legacy_sales_query_and_preserves_yesterday_scope(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    question = "What were my sales yesterday?"
+    original_sql = (
+        "SELECT SUM(total) AS sales_amount FROM sales "
+        "WHERE shopkeeper_id = :user_id AND sale_date = :previous_business_date"
+    )
+    corrected_sql = (
+        "SELECT COALESCE(SUM(i.total_amount), 0)::numeric AS total_sales_amount "
+        "FROM invoices i WHERE i.user_id = :user_id "
+        "AND i.invoice_date = :previous_business_date "
+        "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+    )
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+            "approved": True,
+            "sql": corrected_sql,
+            "issue": "Canonical source and status filters corrected.",
+        })))])
+
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))),
+    )
+    result = query_retrival._review_generated_sql_with_groq(
+        question=question,
+        generated_sql=original_sql,
+        schema_context="invoices: user_id, invoice_date, total_amount, status",
+        query_plan={"intent": "aggregate", "metric": "sales_amount", "confidence": 0.95},
+        date_scope={
+            "kind": "exact",
+            "label": "yesterday",
+            "start_date": date(2026, 10, 12),
+            "end_date": date(2026, 10, 12),
+        },
+    )
+
+    assert result == corrected_sql
+    assert len(calls) == 1
+    assert "invoices i" in result
+    assert "i.user_id = :user_id" in result
+    assert "i.invoice_date = :previous_business_date" in result
+    assert "CANCELLED" in result
+
+
+def test_sql_reviewer_rejects_query_that_drops_requested_date(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    no_date_sql = (
+        "SELECT SUM(i.total_amount) AS total_sales_amount FROM invoices i "
+        "WHERE i.user_id = :user_id"
+    )
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kwargs: SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+                "approved": True,
+                "sql": no_date_sql,
+                "issue": "none",
+            })))]
+        )))),
+    )
+
+    result = query_retrival._review_generated_sql_with_groq(
+        question="What were my sales yesterday?",
+        generated_sql=no_date_sql,
+        schema_context="invoices: user_id, invoice_date, total_amount, status",
+        query_plan={"intent": "aggregate", "metric": "sales_amount", "confidence": 0.95},
+        date_scope={
+            "kind": "exact",
+            "label": "yesterday",
+            "start_date": date(2026, 10, 12),
+            "end_date": date(2026, 10, 12),
+        },
+    )
+
+    assert result is None
