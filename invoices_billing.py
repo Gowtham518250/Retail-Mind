@@ -71,6 +71,7 @@ class InvoiceSyncCreate(BaseModel):
     paid_amount: float = Field(0, ge=0)
     tax: float = Field(0, ge=0)
     payment_status: str = "PAID"
+    payment_method: Optional[str] = Field(default=None, max_length=50)
     line_items: Optional[List[InvoiceLineItemCreate]] = None
     invoice_date: Optional[str] = None
     sale_timestamp: Optional[str] = None
@@ -106,11 +107,16 @@ class InvoiceResponse(BaseModel):
     invoice_number: str
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
+    subtotal: float = 0
+    tax: float = 0
     total_amount: float
     paid_amount: float
     status: str
     payment_status: str
+    payment_method: Optional[str] = None
+    source: Optional[str] = None
     invoice_date: date
+    due_date: Optional[date] = None
     created_at: datetime
     line_items: List[InvoiceLineItemResponse] = []
 
@@ -140,6 +146,38 @@ def _payment_status_for(invoice: Invoice) -> PaymentStatus:
     if paid > Decimal("0.01"):
         return PaymentStatus.PARTIAL
     return PaymentStatus.UNPAID
+
+
+def _normalize_invoice_payment_method(value: Optional[str], default: str = "CASH") -> str:
+    """Normalize client labels to the canonical invoice payment-method values."""
+    raw = str(value or "").strip().upper().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "COD": "CASH",
+        "CASH_ON_DELIVERY": "CASH",
+        "UPI": "ONLINE",
+        "DIGITAL": "ONLINE",
+        "NET_BANKING": "ONLINE",
+        "NETBANKING": "ONLINE",
+        "BANK_TRANSFER": "TRANSFER",
+        "CHEQUE": "CHEQUE",
+        "CHECK": "CHEQUE",
+    }
+    normalized = aliases.get(raw, raw)
+    allowed = {"CASH", "CARD", "TRANSFER", "CHEQUE", "ONLINE"}
+    return normalized if normalized in allowed else default
+
+
+def _normalize_new_invoice_payment_state(invoice: Invoice) -> PaymentStatus:
+    """Payment status must match recorded money, not a client-side default label."""
+    state = _payment_status_for(invoice)
+    invoice.payment_status = state
+    if state == PaymentStatus.PAID:
+        invoice.status = InvoiceStatus.PAID
+    elif state == PaymentStatus.PARTIAL:
+        invoice.status = InvoiceStatus.PARTIAL
+    else:
+        invoice.status = InvoiceStatus.SENT
+    return state
 
 
 def _calculate_sale_loss(*, purchase_price, quantity, net_sale_amount) -> Decimal:
@@ -765,6 +803,7 @@ def sync_offline_invoice(
             paid_amount=data.paid_amount,
             status="SENT",
             payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
+            payment_method=_normalize_invoice_payment_method(data.payment_method),
             source="OFFLINE_SYNC",
             notes=sanitize_input(
                 (
@@ -1080,6 +1119,14 @@ def create_invoice(
     shop_id = resolve_shop_id(current_user)
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
 
+    requested_paid = Decimal(str(data.paid_amount or 0))
+    requested_total = Decimal(str(data.total_amount or 0))
+    if requested_paid > requested_total + Decimal("0.01"):
+        raise HTTPException(
+            status_code=400,
+            detail="paid_amount cannot exceed total_amount when creating an invoice.",
+        )
+
     existing = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         Invoice.invoice_number == invoice_number
@@ -1246,7 +1293,8 @@ def create_invoice(
         total_amount=data.total_amount,
         paid_amount=data.paid_amount,
         status="SENT",
-        payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
+        payment_status=PaymentStatus.UNPAID,
+        payment_method=_normalize_invoice_payment_method(data.payment_method),
         source="MANUAL_ENTRY",
         notes=sanitize_input(
             (
@@ -1260,6 +1308,9 @@ def create_invoice(
             "notes",
         ),
     )
+    # /create is used for manually created bills. Ignore legacy client defaults
+    # such as payment_status=PAID when no money was recorded in paid_amount.
+    _normalize_new_invoice_payment_state(invoice)
     db.add(invoice)
     db.flush()
     sale_loss_total = Decimal("0.00")
