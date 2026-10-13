@@ -198,19 +198,19 @@ def _repair_known_schema_aliases(sql: str) -> str:
 
 def _is_safe_read_only_tenant_select(sql: str) -> bool:
     """Fail closed unless SQL is one tenant-scoped, read-only SELECT statement."""
-    candidate = re.sub(r";\\s*$", "", str(sql or "").strip())
+    candidate = re.sub(r";\s*$", "", str(sql or "").strip())
     return bool(
         candidate
-        and re.match(r"^(?:SELECT|WITH)\\b", candidate, re.IGNORECASE)
-        and re.search(r"\\bSELECT\\b", candidate, re.IGNORECASE)
+        and re.match(r"^(?:SELECT|WITH)\b", candidate, re.IGNORECASE)
+        and re.search(r"\bSELECT\b", candidate, re.IGNORECASE)
         and ";" not in candidate
-        and not re.search(r"\\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\\b", candidate, re.IGNORECASE)
-        and not re.search(r"\\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export|pg_read_file|pg_write_file|nextval|setval|pg_advisory_lock)\\s*\\(", candidate, re.IGNORECASE)
-        and not re.search(r"\\bFOR\\s+(?:UPDATE|SHARE)\\b", candidate, re.IGNORECASE)
+        and not re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\b", candidate, re.IGNORECASE)
+        and not re.search(r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export|pg_read_file|pg_write_file|nextval|setval|pg_advisory_lock)\s*\(", candidate, re.IGNORECASE)
+        and not re.search(r"\bFOR\s+(?:UPDATE|SHARE)\b", candidate, re.IGNORECASE)
         and "--" not in candidate
         and "/*" not in candidate
         and "*/" not in candidate
-        and re.search(r":user_id\\b", candidate, re.IGNORECASE)
+        and re.search(r":user_id\b", candidate, re.IGNORECASE)
     )
 
 
@@ -230,9 +230,9 @@ def _sql_preserves_resolved_date_scope(sql: str, date_scope: dict | None) -> boo
 
     if kind == "exact":
         if label == "today":
-            return bool(re.search(r":business_date\\b", candidate, re.IGNORECASE) or (start_text and start_text in candidate))
+            return bool(re.search(r":business_date\b", candidate, re.IGNORECASE) or (start_text and start_text in candidate))
         if label == "yesterday":
-            return bool(re.search(r":previous_business_date\\b", candidate, re.IGNORECASE) or (start_text and start_text in candidate))
+            return bool(re.search(r":previous_business_date\b", candidate, re.IGNORECASE) or (start_text and start_text in candidate))
         return bool(start_text and start_text in candidate)
 
     if kind == "range":
@@ -309,14 +309,14 @@ def _review_generated_sql_with_groq(
         if not candidate:
             print("ASKQUERY SQL_REVIEW outcome=rejected reason=empty_sql")
             return None
-        candidate = re.sub(r";\\s*$", "", candidate)
+        candidate = re.sub(r";\s*$", "", candidate)
         candidate = _repair_known_schema_aliases(candidate)
-        candidate = re.sub(r":shop_id\\b", ":user_id", candidate, flags=re.IGNORECASE)
+        candidate = re.sub(r":shop_id\b", ":user_id", candidate, flags=re.IGNORECASE)
 
         approved_raw = parsed.get("approved")
         approved = approved_raw is True or str(approved_raw).strip().lower() in {"true", "yes"}
-        same_sql = re.sub(r"\\s+", " ", candidate).strip().rstrip(";").casefold() == re.sub(
-            r"\\s+", " ", str(generated_sql or "")
+        same_sql = re.sub(r"\s+", " ", candidate).strip().rstrip(";").casefold() == re.sub(
+            r"\s+", " ", str(generated_sql or "")
         ).strip().rstrip(";").casefold()
 
         if not _is_safe_read_only_tenant_select(candidate):
@@ -3593,8 +3593,8 @@ async def ask_query(
             detail="I couldn't verify this query against the shop schema and requested date range, so I did not run it. Please rephrase the question with the metric and period.",
         )
 
-    same_reviewed_sql = re.sub(r"\\s+", " ", reviewed_sql).strip().rstrip(";").casefold() == re.sub(
-        r"\\s+", " ", sql
+    same_reviewed_sql = re.sub(r"\s+", " ", reviewed_sql).strip().rstrip(";").casefold() == re.sub(
+        r"\s+", " ", sql
     ).strip().rstrip(";").casefold()
     sql = reviewed_sql
     generated_text += (
