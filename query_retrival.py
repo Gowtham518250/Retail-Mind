@@ -1581,15 +1581,6 @@ def _fast_profit_query(query: str, db: Session, user_id: int, date_scope: dict |
 
 def _is_recorded_worker_payment_query(query: str) -> bool:
     """Identify questions needing payment-ledger records rather than salary guidance."""
-
-
-def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
-    """Return verified worker salary/attendance facts without inventing deductions.
-
-    Retail Mind stores a configured worker salary and attendance records, but
-    this workflow does not persist a formula for attendance-based salary cuts.
-    It therefore reports facts and explicitly avoids guessing a reduced amount.
-    """
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
     patterns = (
         # Past-tense payment amounts/history, including variants missed by the
@@ -1608,6 +1599,13 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
     return any(re.search(pattern, normalized) for pattern in patterns)
 
 
+def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
+    """Return verified worker salary/attendance facts without inventing deductions.
+
+    Retail Mind stores a configured worker salary and attendance records, but
+    this workflow does not persist a formula for attendance-based salary cuts.
+    It therefore reports facts and explicitly avoids guessing a reduced amount.
+    """
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
     # This handler reads Worker + Attendance, not payment-ledger rows. Send
     # recorded-payment/history questions to the ledger/RAG path instead of
