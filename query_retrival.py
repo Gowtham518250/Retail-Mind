@@ -1591,6 +1591,7 @@ def _is_recorded_worker_payment_query(query: str) -> bool:
         r"\b(?:history|records?|transactions?|ledger|details?)\s+(?:of|for)\s+(?:the\s+)?(?:payment|payments|salary|wages?|pay)\b",
         r"\b(?:payment|payments)\s+(?:made|sent|transferred|received)\s+(?:to|for|by)\b",
         r"\b(?:amount|money|salary|wages?)\s+(?:already\s+)?paid\s+(?:to|for|by)\b",
+        r"\b(?:how much\s+)?(?:salary|salaries|wages?|pay)\s+(?:(?:has|have|had|was|were|is|are)\s+(?:been\s+)?|will\s+be\s+)?(?:already\s+)?(?:paid|transferred|sent)\s+(?:to|for|by)\b",
         r"\b(?:last|latest|recent|previous)\s+(?:salary\s+)?(?:payment|salary|wage|transfer)\b",
         r"\b(?:transaction|transactions)\b.{0,60}\b(?:worker|workers|employee|employees|staff|labou?rers?)\b",
         r"\b(?:show|list|view|check|find)\b.{0,60}\b(?:payment|payments|transaction|transactions)\b.{0,60}\b(?:worker|workers|employee|employees|staff|labou?rers?)\b",
