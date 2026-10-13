@@ -16,7 +16,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
-from sqlalchemy import or_, and_, desc, func, cast, Integer
+from sqlalchemy import or_, and_, desc, func, cast, Integer, text
 from sqlalchemy.orm import Session, joinedload
 from decimal import Decimal, ROUND_HALF_UP
 import logging

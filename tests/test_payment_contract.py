@@ -124,3 +124,15 @@ def test_manual_create_route_normalizes_payment_from_amount_instead_of_schema_de
     source = inspect.getsource(create_invoice)
     assert "_normalize_new_invoice_payment_state(invoice)" in source
     assert "paid_amount cannot exceed total_amount" in source
+
+
+def test_sqlalchemy_text_is_available_for_payment_transaction_guard():
+    import invoices_billing
+    from sqlalchemy.sql.elements import TextClause
+
+    statement = invoices_billing.text(
+        "SELECT set_config('retail_mind.payment_write_invoice_id', :invoice_id, true)"
+    )
+
+    assert isinstance(statement, TextClause)
+
