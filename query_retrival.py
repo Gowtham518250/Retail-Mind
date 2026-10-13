@@ -1585,7 +1585,7 @@ def _is_recorded_worker_payment_query(query: str) -> bool:
     patterns = (
         # Past-tense payment amounts/history, including variants missed by the
         # older exact phrase "how much did I pay".
-        r"\b(?:how much|what amount|total amount)\s+(?:have|has|had|did|do|does|was|were)\s+(?:i|we|you|they|he|she|the shop|the owner)\s+(?:already\s+)?(?:paid|pay|transferred|sent)\b",
+        r"\b(?:how much|what amount|total amount)\s+(?:have|has|had|did|do|does|was|were)\s+(?:i|we|you|they|he|she|the shop|the owner)\s+(?:already\s+)?(?:paid|pay|transfer(?:red)?|sent)\b",
         r"\b(?:have|has|had|did|do|does)\s+(?:i|we|you|they|he|she|the shop|the owner)\s+(?:already\s+)?(?:paid|pay|transferred|sent)\b",
         r"\b(?:payment|payments|salary|salaries|wage|wages|pay)\s+(?:history|records?|transactions?|details?|ledger)\b",
         r"\b(?:history|records?|transactions?|ledger|details?)\s+(?:of|for)\s+(?:the\s+)?(?:payment|payments|salary|wages?|pay)\b",
