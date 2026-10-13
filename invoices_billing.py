@@ -9,6 +9,7 @@ Covers:
 """
 
 from typing import Optional, List
+import re
 from datetime import datetime, date, timedelta, timezone
 import uuid
 
@@ -25,7 +26,7 @@ from db import get_db
 from models import (
     Invoice, InvoiceLineItem, Product, Customer, FlashSale,
     UniversalTransaction, StockMovement, ShopExpense, Payment, PaymentMethod,
-    PaymentStatus, InvoiceStatus
+    PaymentStatus, InvoiceStatus, OnlineOrder
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 from realtime import publish_realtime_event
@@ -933,6 +934,7 @@ def sync_offline_invoice(
             "total_amount": float(invoice.total_amount),
             "paid_amount": float(invoice.paid_amount),
             "payment_status": invoice.payment_status,
+            "payment_method": invoice.payment_method,
             "source": invoice.source,
         }]
 
@@ -978,6 +980,8 @@ def sync_offline_invoice(
             "tax": float(invoice.tax),
             "status": invoice.status,
             "payment_status": invoice.payment_status,
+            "payment_method": invoice.payment_method,
+            "source": invoice.source,
             "invoice_date": str(invoice.invoice_date),
             "due_date": str(invoice.due_date) if invoice.due_date else None,
             "created_at": invoice.created_at.isoformat(),
@@ -1056,7 +1060,37 @@ def get_invoices(
         query = query.filter(Invoice.payment_status == payment_status.upper())
     if source:
         query = query.filter(Invoice.source == source.upper())
-    return query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
+    invoices = query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
+
+    # Earlier versions omitted payment method/source from invoice responses and
+    # left online-order invoices without a persisted method. Resolve legacy rows
+    # in one query so Flutter can classify them into the right Cash/Online tab.
+    legacy_order_ids = {}
+    for invoice in invoices:
+        if not invoice.payment_method and str(invoice.source or "").upper() == "ONLINE_ORDER":
+            match = re.search(r"Online Order #([0-9]+)", invoice.notes or "")
+            if match:
+                legacy_order_ids[invoice.id] = int(match.group(1))
+
+    legacy_orders = {}
+    if legacy_order_ids:
+        orders = db.query(OnlineOrder).filter(
+            OnlineOrder.shop_id == shop_id,
+            OnlineOrder.id.in_(set(legacy_order_ids.values())),
+        ).all()
+        legacy_orders = {order.id: order for order in orders}
+
+    for invoice in invoices:
+        if invoice.payment_method:
+            continue
+        if str(invoice.source or "").upper() == "ONLINE_ORDER":
+            order = legacy_orders.get(legacy_order_ids.get(invoice.id))
+            method = str(getattr(order, "payment_method", "COD") or "COD").upper()
+            invoice.payment_method = "ONLINE" if method in {"UPI", "ONLINE"} else "CASH"
+        else:
+            invoice.payment_method = "CASH"
+
+    return invoices
 
 
 @router.get("/next-bill-number")
@@ -1449,6 +1483,7 @@ def create_invoice(
                     if hasattr(invoice.payment_status, "value")
                     else str(invoice.payment_status)
                 ),
+                "payment_method": invoice.payment_method,
                 "source": "MANUAL_ENTRY",
             })
         ]
@@ -1480,6 +1515,8 @@ def create_invoice(
         "tax": float(invoice.tax),
         "status": invoice.status,
         "payment_status": invoice.payment_status,
+        "payment_method": invoice.payment_method,
+        "source": invoice.source,
         "invoice_date": str(invoice.invoice_date),
         "due_date": str(invoice.due_date) if invoice.due_date else None,
         "created_at": invoice.created_at.isoformat(),
