@@ -4,7 +4,7 @@ import pytest
 
 from query_retrival import (
     _fast_worker_payroll_query,
-    _is_recorded_worker_payment_query,
+    _is_explicit_worker_salary_guidance_query,
     _select_distinct_schema_tables,
 )
 
@@ -23,10 +23,14 @@ class _DatabaseMustNotBeUsed:
         "What amount did I transfer to staff last week?",
         "Show payment records for workers",
         "How much salary was already paid to Ganesh?",
+        "Ganesh's salary payment record from last week",
+        "What is Ganesh's salary?",
+        "Show me Ganesh's attendance",
+        "Which staff member worked the most hours last month?",
     ],
 )
-def test_payment_history_is_not_misrouted_to_worker_payroll(question):
-    assert _is_recorded_worker_payment_query(question)
+def test_unrecognized_or_historical_worker_questions_fall_through_to_general_sql(question):
+    assert not _is_explicit_worker_salary_guidance_query(question)
     assert _fast_worker_payroll_query(question, _DatabaseMustNotBeUsed(), 10) is None
 
 
@@ -36,10 +40,13 @@ def test_payment_history_is_not_misrouted_to_worker_payroll(question):
         "My worker Ganesh is asking for salary. How much should I pay based on attendance?",
         "What salary should I pay Ganesh for this month?",
         "How much should I pay my employee according to attendance?",
+        "Calculate the amount to pay based on the attendance",
+        "What is the configured worker salary for Ganesh?",
     ],
 )
-def test_salary_guidance_is_not_mistaken_for_payment_history(question):
-    assert not _is_recorded_worker_payment_query(question)
+def test_only_explicit_salary_guidance_uses_worker_payroll_shortcut(question):
+    assert _is_explicit_worker_salary_guidance_query(question)
+
 
 
 def _document(table, chunk):

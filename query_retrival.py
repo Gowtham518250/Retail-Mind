@@ -28,7 +28,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-13-multilingual-query-confidence-v8"
+QUERY_ENGINE_VERSION = "2026-10-13-retrieval-first-routing-v9"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -1579,25 +1579,37 @@ def _fast_profit_query(query: str, db: Session, user_id: int, date_scope: dict |
     }
 
 
-def _is_recorded_worker_payment_query(query: str) -> bool:
-    """Identify questions needing payment-ledger records rather than salary guidance."""
+def _is_explicit_worker_salary_guidance_query(query: str) -> bool:
+    """Opt into the payroll shortcut only for an explicit salary-guidance intent.
+
+    Unknown, ambiguous, and historical-payment questions must fall through to the
+    schema-grounded SQL path. This is intentionally a positive allowlist rather
+    than a growing list of payment-history phrases to block.
+    """
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
-    patterns = (
-        # Past-tense payment amounts/history, including variants missed by the
-        # older exact phrase "how much did I pay".
-        r"\b(?:how much|what amount|total amount)\s+(?:have|has|had|did|do|does|was|were)\s+(?:i|we|you|they|he|she|the shop|the owner)\s+(?:already\s+)?(?:paid|pay|transfer(?:red)?|sent)\b",
-        r"\b(?:have|has|had|did|do|does)\s+(?:i|we|you|they|he|she|the shop|the owner)\s+(?:already\s+)?(?:paid|pay|transferred|sent)\b",
-        r"\b(?:payment|payments|salary|salaries|wage|wages|pay)\s+(?:history|records?|transactions?|details?|ledger)\b",
-        r"\b(?:history|records?|transactions?|ledger|details?)\s+(?:of|for)\s+(?:the\s+)?(?:payment|payments|salary|wages?|pay)\b",
-        r"\b(?:payment|payments)\s+(?:made|sent|transferred|received)\s+(?:to|for|by)\b",
-        r"\b(?:amount|money|salary|wages?)\s+(?:already\s+)?paid\s+(?:to|for|by)\b",
-        r"\b(?:how much\s+)?(?:salary|salaries|wages?|pay)\s+(?:(?:has|have|had|was|were|is|are)\s+(?:been\s+)?|will\s+be\s+)?(?:already\s+)?(?:paid|transferred|sent)\s+(?:to|for|by)\b",
-        r"\b(?:last|latest|recent|previous)\s+(?:salary\s+)?(?:payment|salary|wage|transfer)\b",
-        r"\b(?:transaction|transactions)\b.{0,60}\b(?:worker|workers|employee|employees|staff|labou?rers?)\b",
-        r"\b(?:show|list|view|check|find)\b.{0,60}\b(?:payment|payments|transaction|transactions)\b.{0,60}\b(?:worker|workers|employee|employees|staff|labou?rers?)\b",
-        r"\bhow much\b.{0,60}\b(?:paid|transferred|sent)\b.{0,40}\b(?:worker|employee|staff|labou?rers?)\b",
+
+    asks_pay_decision = bool(
+        re.search(
+            r"\b(?:should|ought to|need to|have to|must|shall)\s+"
+            r"(?:i|we|the shop|the owner)\s+(?:pay|give)\b",
+            normalized,
+        )
+        or re.search(
+            r"\b(?:i|we)\s+(?:should|need to|have to|must)\s+(?:pay|give)\b",
+            normalized,
+        )
     )
-    return any(re.search(pattern, normalized) for pattern in patterns)
+    asks_amount_from_attendance = bool(
+        re.search(r"\b(?:how much|what amount|calculate|estimate|work out|determine)\b", normalized)
+        and re.search(
+            r"\b(?:based on|according to|considering|given)\s+(?:the\s+)?attendance\b",
+            normalized,
+        )
+    )
+    asks_configured_salary = bool(
+        re.search(r"\b(?:configured|fixed|base)\s+(?:worker\s+)?salary\b", normalized)
+    )
+    return asks_pay_decision or asks_amount_from_attendance or asks_configured_salary
 
 
 def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
@@ -1608,10 +1620,15 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
     It therefore reports facts and explicitly avoids guessing a reduced amount.
     """
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
-    # This handler reads Worker + Attendance, not payment-ledger rows. Send
-    # recorded-payment/history questions to the ledger/RAG path instead of
-    # presenting configured salary as though it were the amount actually paid.
-    if _is_recorded_worker_payment_query(normalized):
+    # This handler is a specialist shortcut, not the default route for every
+    # question that mentions a worker and money. Only intercept clear salary
+    # guidance; all other wording falls through to schema retrieval + SQL over
+    # this authenticated shop's records.
+    if not _is_explicit_worker_salary_guidance_query(normalized):
+        print(
+            "ASKQUERY ROUTING worker_payroll=skip "
+            "reason=not_explicit_salary_guidance next=general_schema_sql"
+        )
         return None
 
     has_worker = bool(re.search(r"\b(worker|workers|employee|employees|staff|labou?rers?)\b", normalized))
