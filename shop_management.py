@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 import json
+import base64
+import os
 from datetime import datetime
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from db import get_db
 from models import User, ShopProfile, ShopSettings
@@ -85,6 +87,7 @@ def _profile_payload(profile):
         "upi_ids": _safe_json_list(profile.upi_ids),
         "shop_categories": _safe_json_list(profile.shop_categories),
         "logo_url": profile.logo_url,
+        "logo_version": int(getattr(profile, "logo_version", 0) or 0),
         "color_primary": profile.color_primary,
         "color_secondary": profile.color_secondary,
         "is_online_store_enabled": bool(profile.is_online_store_enabled),
@@ -371,7 +374,7 @@ def create_shop_profile(data: dict, user_id: int = Depends(check_current_user), 
 
 
 @router.get("/profile")
-def get_profile(user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+def get_profile(request: Request, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Return the authenticated owner's canonical shop profile.
 
     The Bearer token is the only source of identity. Any query-string
@@ -381,6 +384,11 @@ def get_profile(user_id: int = Depends(check_current_user), db: Session = Depend
         profile = ShopService.get_shop_profile(db, user_id)
         settings = ShopService.get_shop_settings(db, profile.id)
         payload = _profile_payload(profile)
+        if getattr(profile, "logo_base64", None):
+            payload["logo_url"] = (
+                f"{str(request.base_url).rstrip('/')}/api/shop/logo/"
+                f"{profile.shop_id}?v={int(getattr(profile, 'logo_version', 0) or 0)}"
+            )
         return {
             "status": "success",
             "shop_id": profile.shop_id,
@@ -395,7 +403,7 @@ def get_profile(user_id: int = Depends(check_current_user), db: Session = Depend
 
 
 @router.put("/profile")
-def update_profile(data: dict, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
+def update_profile(data: dict, request: Request, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Upsert the authenticated owner's profile and return the persisted row."""
     try:
         # Never trust a client supplied user_id. Identity comes from the JWT.
@@ -407,6 +415,11 @@ def update_profile(data: dict, user_id: int = Depends(check_current_user), db: S
         profile = ShopService.update_shop_profile(db, user_id, data)
         settings = ShopService.get_shop_settings(db, profile.id)
         payload = _profile_payload(profile)
+        if getattr(profile, "logo_base64", None):
+            payload["logo_url"] = (
+                f"{str(request.base_url).rstrip('/')}/api/shop/logo/"
+                f"{profile.shop_id}?v={int(getattr(profile, 'logo_version', 0) or 0)}"
+            )
 
         return {
             "status": "success",
@@ -459,98 +472,125 @@ def update_settings(data: dict, user_id: int = Depends(check_current_user), db: 
 
 
 @router.post("/upload-logo")
-def upload_logo(file: UploadFile = File(...), user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Upload shop logo"""
-    
+def upload_logo(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Persist the shop logo in PostgreSQL, not the ephemeral container filesystem."""
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+    max_size_bytes = 5 * 1024 * 1024
+
     try:
-        import os
-        import uuid
-        
-        # Validate file type — only allow images
-        ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-        ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-        MAX_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
-        
-        if file.content_type not in ALLOWED_TYPES:
-            raise HTTPException(status_code=400, detail=f"Invalid file type '{file.content_type}'. Only JPEG/PNG/WebP/GIF allowed.")
-        
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image type. Only JPEG, PNG, WebP, and GIF are allowed.",
+            )
+
         ext = os.path.splitext(file.filename or "")[1].lower()
-        if ext not in ALLOWED_EXTS:
-            raise HTTPException(status_code=400, detail=f"Invalid file extension '{ext}'.")
-        
-        # Read content and enforce size limit
-        content = file.file.read()
-        if len(content) > MAX_SIZE_BYTES:
-            raise HTTPException(status_code=413, detail="Logo file too large. Maximum allowed size is 5 MB.")
-        
-        # Generate unique filename (sanitised — no user-controlled path components)
-        filename = f"{user_id}_{uuid.uuid4()}{ext}"
-        upload_dir = "static/logos"
-        
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, filename)
-        
-        # Save file
-        with open(file_path, "wb") as f:
-            f.write(content)
-        
-        # Update the canonical profile record with both the stored file path
-        # and the public API URL used by customer storefronts.
+        if ext not in allowed_exts:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image extension. Please upload a JPEG, PNG, WebP, or GIF.",
+            )
+
+        content = file.file.read(max_size_bytes + 1)
+        if not content:
+            raise HTTPException(status_code=400, detail="The uploaded logo is empty.")
+        if len(content) > max_size_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail="Logo file too large. Maximum allowed size is 5 MB.",
+            )
+
+        # Basic signature checks prevent arbitrary content with an image MIME type.
+        signatures = {
+            "image/png": content.startswith(b"\x89PNG\r\n\x1a\n"),
+            "image/jpeg": content.startswith(b"\xff\xd8\xff"),
+            "image/gif": content.startswith((b"GIF87a", b"GIF89a")),
+            "image/webp": len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP",
+        }
+        if not signatures.get(file.content_type, False):
+            raise HTTPException(status_code=400, detail="The uploaded file content does not match its image type.")
+
         profile = ShopService.get_shop_profile(db, user_id)
-        profile.logo_file_path = file_path
-        profile.logo_url = f"/static/logos/{filename}"
-        if profile.logo_version is None:
-            profile.logo_version = 0
-        profile.logo_version += 1
+        profile.logo_base64 = base64.b64encode(content).decode("ascii")
+        profile.logo_content_type = file.content_type
+        # New logos no longer depend on Render's ephemeral filesystem.
+        profile.logo_file_path = None
+        profile.logo_version = int(getattr(profile, "logo_version", 0) or 0) + 1
+        profile.logo_url = f"/api/shop/logo/{profile.shop_id}?v={profile.logo_version}"
+        profile.updated_at = datetime.utcnow()
+
         try:
             db.commit()
+            db.refresh(profile)
         except Exception as e:
             db.rollback()
-            # Remove the uploaded file if DB update fails
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            raise HTTPException(status_code=500, detail=f"Failed to update logo: {str(e)}")
-        
+            raise HTTPException(status_code=500, detail="Failed to save shop logo in the database.") from e
+
+        logo_url = (
+            f"{str(request.base_url).rstrip('/')}/api/shop/logo/"
+            f"{profile.shop_id}?v={profile.logo_version}"
+        )
         return {
             "status": "success",
-            "logo_path": file_path,
-            "logo_url": profile.logo_url,
-            "url": profile.logo_url,
+            "logo_url": logo_url,
+            "url": logo_url,
             "shop_id": profile.shop_id,
             "profile_id": profile.id,
             "logo_version": profile.logo_version,
+            "message": "Shop logo saved successfully.",
         }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Logo upload failed: {type(e).__name__}") from e
+    finally:
+        try:
+            file.file.close()
+        except Exception:
+            pass
 
 
-@router.get("/logo/{shop_id}")
+@router.get("/logo/{shop_id}", name="get_public_shop_logo")
 def get_public_shop_logo(shop_id: int, db: Session = Depends(get_db)):
-    """Return the current public logo for a shop storefront."""
-    try:
-        profile = (
-            db.query(ShopProfile)
-            .filter(ShopProfile.shop_id == shop_id)
-            .first()
+    """Serve the latest stored logo, including legacy files where still present."""
+    profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Shop logo not found.")
+
+    raw_logo = getattr(profile, "logo_base64", None)
+    if raw_logo:
+        try:
+            image_bytes = base64.b64decode(raw_logo, validate=True)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Stored shop logo is invalid.")
+        media_type = getattr(profile, "logo_content_type", None) or "image/png"
+        return Response(
+            content=image_bytes,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "public, max-age=300",
+                "X-Content-Type-Options": "nosniff",
+            },
         )
-        if not profile or not profile.logo_file_path:
-            raise HTTPException(status_code=404, detail="Shop logo not found")
 
-        import os
-        if not os.path.isfile(profile.logo_file_path):
-            raise HTTPException(status_code=404, detail="Shop logo file not found")
-
+    # Backward compatibility for logos uploaded by older versions. New uploads
+    # never rely on this local path because the container filesystem is ephemeral.
+    legacy_path = getattr(profile, "logo_file_path", None)
+    if legacy_path and os.path.isfile(legacy_path):
         return FileResponse(
-            profile.logo_file_path,
-            media_type="image/*",
-            filename=os.path.basename(profile.logo_file_path),
+            legacy_path,
+            media_type=getattr(profile, "logo_content_type", None) or "image/png",
+            filename=os.path.basename(legacy_path),
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+
+    raise HTTPException(status_code=404, detail="Shop logo not found.")
 
 
 @router.get("/business-hours")
