@@ -430,13 +430,13 @@ def _apply_payment_write(
         # second Payment row; this writer already inserts the idempotent ledger row.
         postgres_payment_guard = db.get_bind().dialect.name == "postgresql"
         if postgres_payment_guard:
-            db.execute(
+            db.connection().execute(
                 text("SELECT set_config('retail_mind.payment_write_invoice_id', :invoice_id, true)"),
                 {"invoice_id": str(invoice.id)},
             )
         db.flush()
         if postgres_payment_guard:
-            db.execute(
+            db.connection().execute(
                 text("SELECT set_config('retail_mind.payment_write_invoice_id', '', true)")
             )
         payment_status = (
