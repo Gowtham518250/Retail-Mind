@@ -321,6 +321,11 @@ def _ensure_online_delivery_payment_trigger():
                 IF NEW.source = 'ONLINE_ORDER'
                    AND NEW.status = 'PAID'
                    AND COALESCE(OLD.status::text, '') <> 'PAID'
+                   AND COALESCE(
+                       current_setting('retail_mind.payment_write_invoice_id', true),
+                       ''
+                   ) <> NEW.id::text
+                   AND COALESCE(NEW.paid_amount, 0) > 0
                    AND NOT EXISTS (
                        SELECT 1
                        FROM payments
