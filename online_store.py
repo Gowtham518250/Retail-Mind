@@ -2585,6 +2585,10 @@ def update_order_status(
             paid_amount=float(order.total_amount) if order_already_paid else 0,
             status="PAID" if order_already_paid else "SENT",
             payment_status="PAID" if order_already_paid else "UNPAID",
+            payment_method=(
+                "ONLINE" if (order.payment_method or "COD").upper() in {"UPI", "ONLINE"}
+                else "CASH"
+            ),
             source="ONLINE_ORDER",
             notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}"
         )
@@ -2774,6 +2778,10 @@ def update_order_status(
                     paid_amount=0,
                     status="SENT",
                     payment_status="UNPAID",
+                    payment_method=(
+                        "ONLINE" if (order.payment_method or "COD").upper() in {"UPI", "ONLINE"}
+                        else "CASH"
+                    ),
                     source="ONLINE_ORDER",
                     notes=f"Online Order #{order.id} | Delivery: {order.delivery_address}",
                 )
@@ -2789,6 +2797,14 @@ def update_order_status(
                         unit_price=item.get("unit_price", 0),
                         line_total=item.get("line_total", 0),
                     ))
+
+        # Keep legacy invoices visible in the correct payment tab. Invoice.payment_method
+        # is a display/filter value, while OnlineOrder.payment_method is the order choice.
+        if not linked_invoice.payment_method:
+            linked_invoice.payment_method = (
+                "ONLINE" if (order.payment_method or "COD").upper() in {"UPI", "ONLINE"}
+                else "CASH"
+            )
 
         # 3) Delivery closes fulfilment, but payment is written through the
         # canonical invoice payment service. A delivery OTP is not a UPI receipt.
