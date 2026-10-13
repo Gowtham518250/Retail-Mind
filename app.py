@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 import os
 import time
 import logging
+from datetime import datetime, timezone
 from performance_middleware import setup_performance_middleware
 
 # ========================
@@ -185,6 +186,8 @@ try:
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS website VARCHAR(200)",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50)",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_base64 TEXT",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_content_type VARCHAR(100)",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS latitude FLOAT",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS longitude FLOAT",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS address TEXT",
@@ -490,6 +493,11 @@ async def root(request: Request):
             "No data leakage across shops",
         ]
     }
+
+@api.get("/api/time", tags=["System"])
+async def api_time():
+    """Return UTC server time for client clock-drift checks."""
+    return {"timestamp": datetime.now(timezone.utc).isoformat()}
 
 @api.get("/health", tags=["System"])
 async def health_check():
