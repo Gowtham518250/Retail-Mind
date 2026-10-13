@@ -28,7 +28,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-12-multilingual-query-confidence-v7"
+QUERY_ENGINE_VERSION = "2026-10-13-multilingual-query-confidence-v8"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -407,6 +407,10 @@ def _make_deterministic_query_plan(query: str) -> dict:
         r"\b(total|sum|how much|amount|value|revenue|turnover|how many|"
         r"number of|count|units|quantities|quantity)\b",
         normalized,
+    ) or re.search(
+        r"\bwhat\s+(?:were|are|was|is)\s+(?:my|our|the)\s+(?:total\s+)?"
+        r"(?:sales|revenue|turnover)\b",
+        normalized,
     )
     wants_sales = bool(re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized))
     wants_expenses = bool(re.search(r"\b(expense|expenses|spent|spending)\b", normalized))
@@ -719,22 +723,20 @@ def _fast_business_query(
             "results": [{"total_units_sold": value}],
         }
 
-    row = db.execute(
-        text(
-            "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.total ELSE sales_rows.total END AS total_sales_amount "
-            "FROM (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(i.total_amount),0)::numeric AS total "
-            "FROM invoices i "
-            f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
-            "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(s.total),0)::numeric AS total "
-            f"FROM sales s WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
-        ),
-        params,
-    ).mappings().one()
+    sql = (
+        "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.total ELSE sales_rows.total END AS total_sales_amount "
+        "FROM (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(i.total_amount),0)::numeric AS total "
+        "FROM invoices i "
+        f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
+        "CROSS JOIN (SELECT COUNT(*)::bigint AS cnt, COALESCE(SUM(s.total),0)::numeric AS total "
+        f"FROM sales s WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
+    )
+    row = db.execute(text(sql), params).mappings().one()
     value = float(row["total_sales_amount"] or 0)
     answer = f"Your total sales amount {display_range} is ₹{value:,.2f}."
     return {
         "answer": answer,
-        "generated_sql": "DIRECT_KPI: invoice/sales revenue",
+        "generated_sql": sql,
         "generated_model_response": answer,
         "results": [{"total_sales_amount": value}],
     }
@@ -3407,7 +3409,10 @@ async def ask_query(
                 "FROM invoice_rows CROSS JOIN sales_rows"
             )
             generated_text = "TABLE: invoices (fallback: sales)\n\nSQL:\n" + sql
-        elif re.search(r"\b(total|amount|revenue|turnover)\b", normalized_query):
+        elif (
+            re.search(r"\b(total|amount|revenue|turnover)\b", normalized_query)
+            or query_plan.get("metric") == "sales_amount"
+        ):
             sql = (
                 "WITH invoice_rows AS ("
                 "SELECT COUNT(*)::bigint AS cnt, "
@@ -3523,7 +3528,7 @@ async def ask_query(
                 if key in keys:
                     actual = next(k for k in first if str(k).lower() == key)
                     return f"The answer is {first[actual]}."
-            for key in ("total_sales_amount", "total_revenue", "total_amount", "total", "khata_balance"):
+            for key in ("total_sales_amount", "sales_amount", "total_revenue", "total_amount", "total", "khata_balance"):
                 if key in keys:
                     actual = next(k for k in first if str(k).lower() == key)
                     return f"The total is {_money(first[actual])}."
