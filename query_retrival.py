@@ -3598,9 +3598,9 @@ async def ask_query(
     ).strip().rstrip(";").casefold()
     sql = reviewed_sql
     generated_text += (
-        "\\n\\nIndependent SQL review: "
+        "\n\nIndependent SQL review: "
         + ("approved the generated query." if same_reviewed_sql else "corrected the generated query.")
-        + "\\nReviewed SQL:\\n" + sql
+        + "\nReviewed SQL:\n" + sql
     )
 
     print("ASKQUERY STAGE=sql_generation outcome=complete")
