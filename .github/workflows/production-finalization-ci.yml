@@ -73,6 +73,7 @@ jobs:
           pytest -q tests/test_payment_contract.py
           pytest -q tests/test_product_image_contract.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
+          pytest -q tests/test_query_retrieval_optimization.py
 
   customer-web:
     runs-on: ubuntu-latest
