@@ -136,24 +136,42 @@ export default function MarketplaceShell() {
           <div className={styles.heroPaint + ' ' + styles.heroPaintGold} />
           <div className={styles.heroPaint + ' ' + styles.heroPaintMint} />
           <div className={styles.heroProductWall}>
-            {(products.filter((product) => product.image_url).slice(0, 6)).length ? (
-              <>
-                {[0, 1].map((row) => (
-                  <div key={row} className={styles.heroProductRow} data-product-row={row}>
-                    {products.filter((product) => product.image_url).slice(row * 3, row * 3 + 3).map((product, index) => (
-                      <Link
-                        key={String(product.product_id) + '-' + String(product.shop_id)}
-                        href={'/shop/' + product.shop_id + '/product/' + product.product_id}
-                        className={styles.heroProductBottle}
-                        tabIndex={-1}
-                      >
-                        <img src={product.image_url} alt="" loading="lazy" />
-                        <span>{product.product_name}</span>
-                      </Link>
-                    ))}
-                  </div>
-                ))}
-              </>
+            {products.filter((product) => product.image_url).length ? (
+              [0, 1].map((row) => (
+                <div key={row} className={styles.heroProductRow} data-product-row={row}>
+                  {products.filter((product) => product.image_url).slice(row * 3, row * 3 + 3).map((product) => (
+                    <div
+                      key={String(product.product_id) + '-' + String(product.shop_id)}
+                      className={styles.heroProductBottle}
+                    >
+                      <img src={product.image_url} alt="" loading="lazy" />
+                      <span>{product.product_name}</span>
+                    </div>
+                  ))}
+                </div>
+              ))
+            ) : shops.length ? (
+              [0, 1].map((row) => (
+                <div key={row} className={styles.heroProductRow + ' ' + styles.heroShopRow} data-product-row={row}>
+                  {shops.slice(row * 3, row * 3 + 3).map((shop) => (
+                    <div key={shop.shop_id} className={styles.heroShopTile}>
+                      <div className={styles.heroShopArtwork}>
+                        {shop.logo_url ? (
+                          <img
+                            src={shop.logo_url.startsWith('http') ? shop.logo_url : API_BASE + shop.logo_url}
+                            alt=""
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Store size={38} strokeWidth={1.5} />
+                        )}
+                      </div>
+                      <span>{shop.shop_name}</span>
+                      <small>{shop.city || shop.shop_type || 'LOCAL STORE'}</small>
+                    </div>
+                  ))}
+                </div>
+              ))
             ) : (
               <ThreeDRetailScene />
             )}

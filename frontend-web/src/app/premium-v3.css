@@ -1090,3 +1090,75 @@ body{background-image:radial-gradient(circle at 82% -4%,rgba(240,180,63,.12),tra
   .location-button{transition:none}
   .location-button:hover:not(:disabled){transform:none}
 }
+
+
+/* Market-crate product styling inspired by the Pulp Fresh showcase. */
+.store-product-card{
+  position:relative;
+  border-radius:4px!important;
+  border-color:#d9cbb0!important;
+  background:#fffaf0!important;
+  box-shadow:6px 7px 0 rgba(153,104,60,.08),0 15px 30px rgba(18,63,52,.035)!important;
+  transition:transform .42s cubic-bezier(.22,1,.36,1),box-shadow .42s ease,border-color .28s ease!important;
+}
+.store-product-card:hover{
+  transform:translateY(-7px) rotate(-.18deg);
+  border-color:#b88b5a!important;
+  box-shadow:10px 13px 0 rgba(153,104,60,.10),0 24px 38px rgba(18,63,52,.09)!important;
+}
+.store-product-media{
+  position:relative;
+  min-height:220px;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 50% 48%,rgba(240,180,63,.16),transparent 38%),
+    linear-gradient(145deg,#f3e8d2,#e6eee5)!important;
+}
+.store-product-media::after{
+  content:"";
+  position:absolute;inset:12px;
+  border:1px dashed rgba(153,104,60,.22);
+  pointer-events:none;
+}
+.store-product-image{
+  transition:transform .8s cubic-bezier(.22,1,.36,1),filter .8s ease!important;
+  filter:drop-shadow(0 14px 12px rgba(54,49,34,.10));
+}
+.store-product-card:hover .store-product-image{transform:translateY(-5px) scale(1.055);filter:drop-shadow(0 22px 17px rgba(54,49,34,.18))}
+.store-product-placeholder{color:#7b9c88!important;background:transparent!important}
+.store-product-body{padding:19px 18px 17px!important}
+.store-category-pill{
+  border-radius:3px!important;text-transform:uppercase;letter-spacing:.12em;font-size:8px!important;
+  background:#efe2c8!important;color:#654b2f!important;
+}
+.store-rating-pill{border-radius:3px!important}
+.store-product-title{
+  font-family:var(--font-display),Impact,sans-serif;
+  font-size:clamp(20px,1.8vw,27px)!important;
+  line-height:.97!important;letter-spacing:-.03em!important;text-transform:uppercase;
+}
+.store-product-desc{font-size:11px!important;line-height:1.6!important}
+.store-price{
+  display:inline-block;padding:5px 8px;background:#0f5b47;color:#fff9ec!important;
+  font-family:var(--font-display),Impact,sans-serif;font-size:25px!important;line-height:1;
+  box-shadow:3px 3px 0 #c9925a;
+}
+.store-original-price{font-size:10px!important}
+.store-card-actions{gap:8px!important}
+.store-cart-btn,.store-link-btn{
+  border-radius:3px!important;font-size:9px!important;letter-spacing:.1em;text-transform:uppercase;font-weight:900!important;
+}
+.store-cart-btn{background:#0f5b47!important;box-shadow:0 5px 0 #083b2c!important}
+.store-cart-btn:hover{transform:translateY(-2px);background:#0a3328!important}
+.store-link-btn{background:#fffaf0!important;border-color:#d9cbb0!important;color:#0f5b47!important}
+.store-link-btn:hover{background:#efe2c8!important}
+@media(max-width:600px){
+  .store-product-media{min-height:170px}
+  .store-product-body{padding:15px 13px 14px!important}
+  .store-product-title{font-size:20px!important}
+  .store-price{font-size:22px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .store-product-card,.store-product-image,.store-cart-btn{transition:none!important}
+  .store-product-card:hover,.store-cart-btn:hover{transform:none}
+}
