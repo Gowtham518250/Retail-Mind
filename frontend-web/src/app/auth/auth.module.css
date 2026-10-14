@@ -30,3 +30,114 @@
 .errorBanner { border-radius: 12px !important; }
 .successBanner { border-radius: 12px !important; background: #e5efdf !important; color: #245b42 !important; }
 @media (max-width: 600px) { .authCard { border-radius: 20px !important; padding: 24px !important; } }
+
+
+/* A welcoming split-screen sign-in experience instead of an isolated floating card */
+.authMain {
+  min-height:100svh !important;
+  padding:clamp(18px,3.2vw,44px) clamp(16px,4vw,64px) !important;
+  background:
+    radial-gradient(ellipse at 3% 8%,rgba(243,202,79,.28),transparent 25%),
+    radial-gradient(ellipse at 96% 85%,rgba(232,84,30,.13),transparent 25%),
+    #fbf6ec !important;
+}
+.orb1 { background:rgba(232,84,30,.23) !important; filter:blur(50px) !important; }
+.orb2 { background:rgba(123,188,142,.28) !important; filter:blur(50px) !important; }
+.orb3 { background:rgba(243,202,79,.13) !important; filter:blur(54px) !important; }
+.authCenter {
+  position:relative !important;
+  width:min(100%,1120px) !important;
+  max-width:1120px !important;
+  min-height:min(660px,calc(100svh - 64px));
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  gap:clamp(20px,4vw,54px) !important;
+}
+.authCenter::before {
+  content:"GOOD SHOPS.\\A GOOD FINDS.\\A GOOD NEIGHBOURS.";
+  position:absolute; inset:0 480px 0 0;
+  display:flex; align-items:center; white-space:pre-line;
+  padding:clamp(24px,4.5vw,62px);
+  box-sizing:border-box;
+  border-radius:21px;
+  color:#fff9ef;
+  font-family:var(--font-display) !important;
+  font-size:clamp(61px,7.4vw,106px);
+  font-weight:900; line-height:.78; letter-spacing:-.025em;
+  background:
+    radial-gradient(circle at 82% 17%,rgba(232,84,30,.48),transparent 25%),
+    radial-gradient(circle at 10% 100%,rgba(243,202,79,.22),transparent 28%),
+    linear-gradient(135deg,#202b23,#31513c 68%,#3d5a40);
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:0 25px 60px rgba(36,40,28,.16);
+  animation:authPromoEnter .7s cubic-bezier(.2,.75,.25,1) both;
+}
+.authCenter::after {
+  content:"FIND YOUR EVERYDAY FAVOURITES\\A LOCAL COMMERCE, MADE SIMPLE";
+  position:absolute; left:clamp(24px,4.5vw,62px); bottom:clamp(30px,5vw,64px);
+  white-space:pre-line; color:rgba(255,249,239,.68);
+  font-family:var(--font-body); font-size:11px; line-height:1.8;
+  font-weight:800; letter-spacing:.12em;
+  pointer-events:none;
+}
+.authCard {
+  z-index:2; flex:0 0 min(100%,440px); width:min(100%,440px);
+  padding:clamp(28px,3.5vw,43px) !important;
+  border-radius:19px !important; border:1px solid rgba(217,203,176,.8) !important;
+  background:#fffdf7 !important;
+  box-shadow:0 24px 58px rgba(36,40,28,.15) !important;
+  animation:authCardEnter .75s .06s cubic-bezier(.2,.75,.25,1) both;
+}
+.authCard::before { height:5px !important; background:linear-gradient(90deg,#e8541e,#f3ca4f,#8cc9a2) !important; }
+.logoArea { margin-bottom:25px !important; }
+.logoIcon { background:linear-gradient(145deg,#243d2c,#3d6948) !important; color:#f3ca4f !important; border-radius:11px !important; }
+.logoText { font-family:var(--font-display) !important; font-size:27px !important; letter-spacing:-.025em; }
+.authTitle { font-family:var(--font-display) !important; font-weight:900 !important; font-size:clamp(35px,3.6vw,44px) !important; line-height:.92 !important; letter-spacing:-.02em !important; }
+.authSubtitle { color:#766b5e !important; font-size:13px !important; }
+.label { color:#5c6658 !important; letter-spacing:.11em !important; }
+.inputWrap { border-radius:9px !important; }
+.input { border-radius:9px !important; background:#fcfaf3 !important; border-color:#dfd4be !important; }
+.input:focus { border-color:#e8541e !important; box-shadow:0 0 0 3px rgba(232,84,30,.12) !important; }
+.submitBtn {
+  position:relative; overflow:hidden; border-radius:9px !important; height:52px !important;
+  background:linear-gradient(110deg,#e8541e,#f17432) !important;
+  box-shadow:0 10px 21px rgba(232,84,30,.20) !important;
+}
+.submitBtn::after {
+  content:""; position:absolute; inset:-10% auto -10% -45%; width:32%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
+  transform:skewX(-18deg); animation:authButtonShine 5.2s ease-in-out infinite;
+}
+.submitBtn:hover:not(:disabled) { background:linear-gradient(110deg,#d84717,#e8541e) !important; transform:translateY(-2px) !important; box-shadow:0 14px 25px rgba(232,84,30,.28) !important; }
+.link { color:#c44418 !important; }
+.link:hover { color:#9e3010 !important; }
+.switchText { color:#766b5e !important; }
+.errorBanner { border-radius:9px !important; }
+.successBanner { border-radius:9px !important; }
+@keyframes authPromoEnter {
+  from { opacity:0; transform:translateX(-18px) scale(.985); }
+  to { opacity:1; transform:translateX(0) scale(1); }
+}
+@keyframes authCardEnter {
+  from { opacity:0; transform:translateY(18px) scale(.99); }
+  to { opacity:1; transform:translateY(0) scale(1); }
+}
+@keyframes authButtonShine {
+  0% { transform:translateX(-150%) skewX(-18deg); }
+  55%,100% { transform:translateX(230%) skewX(-18deg); }
+}
+@media(max-width:860px) {
+  .authMain { padding:20px 15px !important; }
+  .authCenter { min-height:0; max-width:480px !important; justify-content:center !important; }
+  .authCenter::before, .authCenter::after { display:none !important; }
+  .authCard { flex:1 1 auto; width:100%; }
+}
+@media(max-width:480px) {
+  .authMain { min-height:100svh !important; padding:15px 12px !important; }
+  .authCard { padding:26px 21px !important; border-radius:15px !important; }
+  .logoArea { margin-bottom:20px !important; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .authCenter::before,.authCard,.submitBtn::after { animation:none !important; }
+}
