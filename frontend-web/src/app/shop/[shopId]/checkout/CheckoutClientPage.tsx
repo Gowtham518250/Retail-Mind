@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, MapPin, Home, Banknote, Phone, ClipboardList,
+  ArrowLeft, MapPin, LocateFixed, Home, Banknote, Phone, ClipboardList, ArrowRight,
   ShieldCheck, Loader2, AlertCircle, ShoppingBag, UserRound, LockKeyhole,
 } from 'lucide-react';
 import { useCart } from '../../../../context/CartContext';
@@ -45,6 +45,7 @@ export default function CheckoutClientPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState('');
   const [locationError, setLocationError] = useState('');
+  const [locationMessage, setLocationMessage] = useState('');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [onlineSetupFee, setOnlineSetupFee] = useState(0);
@@ -154,6 +155,7 @@ export default function CheckoutClientPage() {
       return;
     }
     setLocationError('');
+    setLocationMessage('');
     setIsDetectingLocation(true);
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
@@ -171,15 +173,20 @@ export default function CheckoutClientPage() {
             city: address.city || address.town || address.village || address.county || '',
             pincode: address.postcode || '',
           }));
+          setLocationMessage('Location added. Please check the address, city and PIN code before ordering.');
         } catch {
           setLocationError('Unable to resolve your location. Please enter it manually.');
         } finally {
           setIsDetectingLocation(false);
         }
       },
-      () => {
+      (positionError) => {
         setIsDetectingLocation(false);
-        setLocationError('Unable to detect location. Please enter it manually.');
+        setLocationError(
+          positionError.code === 1
+            ? 'Location access is blocked. Allow it in your browser settings, or enter your address manually.'
+            : 'Could not detect your location. Please enter your address manually.'
+        );
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
     );
@@ -338,7 +345,27 @@ export default function CheckoutClientPage() {
         <ArrowLeft size={16} /> Back to shop
       </button>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="checkout-grid">
+      <motion.section
+        className="checkout-intro"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+      >
+        <div className="checkout-intro-copy">
+          <span className="checkout-intro-kicker">YOUR ORDER · ALMOST HOME</span>
+          <h1>Let’s get it to you.</h1>
+          <p>A quick check of your delivery details, then we’ll take it from here.</p>
+        </div>
+        <div className="checkout-steps" aria-label="Checkout progress">
+          <div className="checkout-step is-current"><span>01</span><strong>Delivery</strong></div>
+          <i />
+          <div className="checkout-step"><span>02</span><strong>Contact</strong></div>
+          <i />
+          <div className="checkout-step"><span>03</span><strong>Confirm</strong></div>
+        </div>
+      </motion.section>
+
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.08, ease: 'easeOut' }} className="checkout-grid">
         <div className="checkout-main">
           <section className="checkout-card">
             <h2 className="checkout-card-title"><MapPin size={18} /> Delivery details</h2>
@@ -355,12 +382,26 @@ export default function CheckoutClientPage() {
               <label><Home size={14} /> Address</label>
               <div className="location-row">
                 <textarea value={form.address} onChange={setField('address')} placeholder="House / flat no, street, area" rows={2} />
-                <button type="button" className="location-button" onClick={detectLocation} disabled={isDetectingLocation}>
-                  {isDetectingLocation ? 'Detecting…' : 'Detect location'}
+                <button
+                  type="button"
+                  className={`location-button ${isDetectingLocation ? 'is-detecting' : ''}`}
+                  onClick={detectLocation}
+                  disabled={isDetectingLocation}
+                  aria-live="polite"
+                >
+                  <span className="location-button-icon">
+                    {isDetectingLocation ? <Loader2 size={19} className="location-spinner" /> : <LocateFixed size={19} />}
+                  </span>
+                  <span className="location-button-copy">
+                    <strong>{isDetectingLocation ? 'Finding your location…' : 'Use my current location'}</strong>
+                    <small>{isDetectingLocation ? 'Waiting for your browser location permission' : 'Auto-fill your address, city and PIN code'}</small>
+                  </span>
+                  {!isDetectingLocation && <ArrowRight size={18} className="location-button-arrow" />}
                 </button>
               </div>
               {errors.address && <span className="field-error">{errors.address}</span>}
-              {locationError && <span className="field-error">{locationError}</span>}
+              {locationError && <span className="field-error location-error-message" role="alert">{locationError}</span>}
+              {locationMessage && <span className="location-success-message" role="status">{locationMessage}</span>}
             </div>
             <div className="checkout-field-row">
               <div className="checkout-field">

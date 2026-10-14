@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, Lock, Phone, ShoppingBag, ArrowRight, User, Mail, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, Lock, Phone, ShoppingBag, ArrowRight, User, Mail, CheckCircle, Store, Leaf, Zap, Truck, Sparkles } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import styles from './auth.module.css';
 
@@ -272,6 +272,41 @@ export default function AuthPage() {
       <div className={styles.orb3} />
 
       <div className={styles.authCenter}>
+        <aside className={styles.promoPanel} aria-label="Retail Mind local shopping">
+          <div className={styles.promoAmbientOne} />
+          <div className={styles.promoAmbientTwo} />
+          <div className={styles.promoBrand}>
+            <span className={styles.promoBrandIcon}><ShoppingBag size={21} /></span>
+            <span>Retail <b>Mind</b></span>
+          </div>
+          <div className={styles.promoEyebrow}><span /> LOCAL COMMERCE, REIMAGINED</div>
+          <div className={styles.promoCopy}>
+            <h2>GOOD SHOPS.<span>GREAT FINDS.</span><em>RIGHT NEARBY.</em></h2>
+            <p>Discover local stores, fresh products and everyday essentials — all in one beautifully connected neighbourhood.</p>
+          </div>
+          <div className={styles.promoStoreIllustration} aria-hidden="true">
+            <div className={styles.promoOrbitOne} />
+            <div className={styles.promoOrbitTwo} />
+            <div className={styles.promoStoreShadow} />
+            <div className={styles.promoStoreBody}>
+              <div className={styles.promoStoreRoof} />
+              <div className={styles.promoStoreSign}><ShoppingBag size={13} /> RETAIL MIND</div>
+              <div className={styles.promoStoreAwning} />
+              <div className={styles.promoStoreGlass} />
+              <div className={styles.promoStoreDoor} />
+              <div className={styles.promoStoreCounter} />
+            </div>
+            <div className={styles.promoFloatingDelivery}><Truck size={16} /><span><b>Fast delivery</b><small>From shops near you</small></span></div>
+            <div className={styles.promoFloatingFresh}><Leaf size={16} /><span><b>Fresh & local</b><small>Everyday favourites</small></span></div>
+            <div className={styles.promoProduceBox}><span>FRESH</span><b>24/7</b></div>
+          </div>
+          <div className={styles.promoBenefits}>
+            <div><Store size={17} /><span><b>Local shops</b><small>Trusted near you</small></span></div>
+            <div><Leaf size={17} /><span><b>Fresh finds</b><small>Everyday essentials</small></span></div>
+            <div><Zap size={17} /><span><b>Easy ordering</b><small>Simple and secure</small></span></div>
+          </div>
+          <div className={styles.promoFooter}><Sparkles size={13} /> GOOD PEOPLE BUILD GREAT NEIGHBOURHOODS</div>
+        </aside>
         <motion.div
           initial={{ opacity: 0, y: 32 }}
           animate={{ opacity: 1, y: 0 }}
@@ -287,7 +322,7 @@ export default function AuthPage() {
             <div className={styles.logoIcon}>
               <ShoppingBag size={22} />
             </div>
-            <span className={styles.logoText}>RetailShop</span>
+            <span className={styles.logoText}>Retail Mind</span>
           </motion.div>
 
           <AnimatePresence mode="wait">

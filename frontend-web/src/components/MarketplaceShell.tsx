@@ -118,7 +118,10 @@ export default function MarketplaceShell() {
           <div className={styles.heroEyebrow}><span className={styles.statusDot} /> RETAIL MIND · LOCAL COMMERCE, REIMAGINED</div>
           <div className={styles.heroCopy}>
             <div className={styles.heroKicker}>YOUR NEIGHBOURHOOD, NOW ONLINE</div>
-            <h1>Shop local.<span>Think smarter.</span><em>Move faster.</em></h1>
+            <h1>
+              <span className={styles.heroLineOne}>Shop local.</span>
+              <span className={styles.heroLineTwo}>Think smarter. <em className={styles.heroAccent}>Move faster.</em></span>
+            </h1>
             <p>Discover online-enabled shops, compare products across stores, and use AI to find the right value — all from one beautifully connected marketplace.</p>
           </div>
 
@@ -148,6 +151,19 @@ export default function MarketplaceShell() {
 
         <ThreeDRetailScene />
       </section>
+
+      <div className={styles.marketMarquee} aria-hidden="true">
+        <div className={styles.marketMarqueeTrack}>
+          {[0, 1].map((copy) => (
+            <div className={styles.marketMarqueeGroup} key={copy}>
+              <span>GOOD THINGS GROW LOCALLY</span><b>✳</b>
+              <span>BETTER FINDS, CLOSER TO HOME</span><b>✳</b>
+              <span>YOUR NEIGHBOURHOOD MARKET</span><b>✳</b>
+              <span>SHOP CLOSE. LIVE WELL.</span><b>✳</b>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <section className={styles.featureRail}>
         <button className={styles.featureRailItem} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
