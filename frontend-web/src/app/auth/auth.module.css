@@ -55,7 +55,7 @@
   gap:clamp(20px,4vw,54px) !important;
 }
 .authCenter::before {
-  content:"GOOD SHOPS.\A GOOD FINDS.\A GOOD NEIGHBOURS.";
+  content:"GOOD SHOPS.\A GREAT FINDS.\A RIGHT NEARBY.";
   position:absolute; inset:0 480px 0 0;
   display:flex; align-items:center; white-space:pre-line;
   padding:clamp(24px,4.5vw,62px);
@@ -63,8 +63,10 @@
   border-radius:21px;
   color:#fff9ef;
   font-family:var(--font-display) !important;
-  font-size:clamp(61px,7.4vw,106px);
-  font-weight:900; line-height:.78; letter-spacing:-.025em;
+  max-width:100%;
+  font-size:clamp(48px,5.2vw,72px);
+  font-weight:900; line-height:.84; letter-spacing:-.015em;
+  overflow-wrap:normal; word-break:normal; text-wrap:balance;
   background:
     radial-gradient(circle at 82% 17%,rgba(232,84,30,.48),transparent 25%),
     radial-gradient(circle at 10% 100%,rgba(243,202,79,.22),transparent 28%),
@@ -75,7 +77,7 @@
 }
 .authCenter::after {
   content:"FIND YOUR EVERYDAY FAVOURITES\A LOCAL COMMERCE, MADE SIMPLE";
-  position:absolute; left:clamp(24px,4.5vw,62px); bottom:clamp(30px,5vw,64px);
+  position:absolute; left:clamp(24px,4.5vw,62px); bottom:clamp(28px,4.5vw,58px);
   white-space:pre-line; color:rgba(255,249,239,.68);
   font-family:var(--font-body); font-size:11px; line-height:1.8;
   font-weight:800; letter-spacing:.12em;
@@ -140,4 +142,31 @@
 }
 @media(prefers-reduced-motion:reduce) {
   .authCenter::before,.authCard,.submitBtn::after { animation:none !important; }
+}
+
+
+/* Final account form sizing: promotional copy stays inside its panel on common laptop widths */
+.authCenter::before {
+  inset:0 470px 0 0;
+  padding:clamp(24px,4vw,52px) !important;
+  font-size:clamp(46px,5vw,69px) !important;
+  line-height:.88 !important;
+}
+.authCenter::after {
+  left:clamp(24px,4vw,52px) !important;
+  bottom:clamp(24px,4vw,52px) !important;
+  font-size:10px !important;
+}
+.authCard {
+  flex-basis:min(100%,420px) !important;
+  width:min(100%,420px) !important;
+  padding:clamp(25px,3vw,36px) !important;
+}
+.authTitle { font-size:clamp(31px,3.2vw,40px) !important; }
+.input { height:46px !important; }
+.submitBtn { height:48px !important; }
+@media(max-width:860px) {
+  .authCenter::before,.authCenter::after { display:none !important; }
+  .authCenter { width:min(100%,440px) !important; }
+  .authCard { width:100% !important; flex-basis:100% !important; }
 }
