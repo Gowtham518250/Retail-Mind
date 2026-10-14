@@ -2,32 +2,48 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { API_BASE } from '../lib/api';
 import type { ShopProduct, ShopResponse } from '../lib/types';
 import ProductCard from './ProductCard';
+import styles from './Storefront.module.css';
+
+const HeroScene3D = dynamic(() => import('./HeroScene3D'), { ssr: false });
+const EASE = [0.2, 0.75, 0.25, 1] as const;
 
 interface StorefrontShellProps {
   shopId: number;
 }
 
-function StorefrontFallbackIcon() {
-  return <Store size={34} />;
-}
-
 function StarRating({ value }: { value: number }) {
   return (
-    <span className="shop-profile-stars" aria-label={(value || 0) + ' out of 5'}>
+    <span className={styles.stars} aria-label={(value || 0) + ' out of 5'}>
       {Array.from({ length: 5 }, (_, index) => (
-        <Star
-          key={index}
-          size={13}
-          fill={index < Math.round(value) ? 'currentColor' : 'none'}
-        />
+        <Star key={index} size={14} fill={index < Math.round(value) ? 'currentColor' : 'none'} />
       ))}
     </span>
+  );
+}
+
+function Words({ text, base = 0 }: { text: string; base?: number }) {
+  return (
+    <>
+      {text.split(' ').map((word, i) => (
+        <span key={i + word}><span className={styles.wordMask}>
+          <motion.span
+            className={styles.word}
+            initial={{ y: '115%', rotate: 4 }}
+            animate={{ y: 0, rotate: 0 }}
+            transition={{ duration: 0.8, delay: base + i * 0.08, ease: EASE }}
+          >
+            {word}
+          </motion.span>
+        </span>{' '}</span>
+      ))}
+    </>
   );
 }
 
@@ -106,196 +122,145 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
     window.setTimeout(() => setJustAddedId(null), 1200);
   };
 
+  const logo = shop?.shop_logo_url ? (shop.shop_logo_url.startsWith('http') ? shop.shop_logo_url : API_BASE + shop.shop_logo_url) : '';
+  const rating = Number(shop?.rating || 0);
+
   return (
-    <div className="store-shell">
-      <div className="container">
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="shop-hero-card"
-        >
-          <div className="shop-hero-copy">
-            <div className="shop-profile-identity">
-              <div className="shop-profile-avatar">
-                {shop?.shop_logo_url ? (
-                  <img
-                    src={
-                      shop.shop_logo_url.startsWith('http')
-                        ? shop.shop_logo_url
-                        : API_BASE + shop.shop_logo_url
-                    }
-                    alt={shop.shop_name + ' profile'}
-                  />
-                ) : (
-                  <StorefrontFallbackIcon />
-                )}
-              </div>
-              <div>
-                <div className="shop-profile-type">{shop?.shop_type || 'LOCAL STOREFRONT'} · ONLINE</div>
-                <div className="shop-profile-rating">
-                  <StarRating value={Number(shop?.rating || 0)} />
-                  <strong>{Number(shop?.rating || 0) > 0 ? Number(shop?.rating).toFixed(1) : 'New'}</strong>
-                  <span>{Number(shop?.rating_count || 0)} verified reviews</span>
-                </div>
+    <div className={styles.page}>
+      {/* ───────── shop hero ───────── */}
+      <section className={styles.hero}>
+        <div className={styles.heroBg} aria-hidden="true" />
+        <div className={styles.grain} aria-hidden="true" />
+
+        <div className={styles.heroCopy}>
+          <motion.div className={styles.identity} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
+            <div className={styles.avatar}>
+              {logo ? <img src={logo} alt={(shop?.shop_name || 'Shop') + ' profile'} /> : <Store size={32} strokeWidth={1.6} />}
+            </div>
+            <div>
+              <div className={styles.type}><span className={styles.pulse} /> {shop?.shop_type || 'Local storefront'} · Online</div>
+              <div className={styles.ratingRow}>
+                <StarRating value={rating} />
+                <b>{rating > 0 ? rating.toFixed(1) : 'New'}</b>
+                <span>{Number(shop?.rating_count || 0)} verified reviews</span>
               </div>
             </div>
+          </motion.div>
 
-            <div className="hero-pill">Trusted local storefront</div>
-            <div className="shop-share-note">Browse freely · Sign in only when you checkout</div>
-            <h1>{shop?.shop_name || 'Retail Mind Storefront'}</h1>
-            <p>
-              {shop?.shop_tagline || shop?.shop_description || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
-            </p>
+          <h1 className={styles.title}><Words text={shop?.shop_name || 'Retail Mind Storefront'} base={0.1} /></h1>
 
-            <div className="hero-meta-row">
-              {shop?.shop_phone && (
-                <div className="hero-meta-pill">
-                  <Phone size={16} /> {shop.shop_phone}
-                </div>
-              )}
-              {(shop?.shop_city || shop?.shop_address) && (
-                <div className="hero-meta-pill">
-                  <MapPin size={16} /> {shop.shop_city || shop.shop_address}
-                </div>
-              )}
-              {shop?.shop_website && (
-                <div className="hero-meta-pill">
-                  <Globe size={16} /> {shop.shop_website}
-                </div>
-              )}
-            </div>
+          <motion.p className={styles.tagline} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5, ease: EASE }}>
+            {shop?.shop_tagline || shop?.shop_description || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
+          </motion.p>
 
-            <div className="shop-stats-grid">
-              <div className="shop-stat-card">
-                <PackageCheck size={18} />
-                <span>{products.length} products</span>
-              </div>
-              <div className="shop-stat-card">
-                <ShieldCheck size={18} />
-                <span>Secure checkout</span>
-              </div>
-              <div className="shop-stat-card">
-                <Sparkles size={18} />
-                <span>{shop?.offer_delivery === false ? 'Store pickup' : 'Fast dispatch'}</span>
-              </div>
-              <div className="shop-stat-card">
-                <span className="online-fee-icon">₹</span>
-                <span>
-                  {Number(shop?.delivery_fee || 0) > 0
-                    ? `Delivery ₹${Number(shop?.delivery_fee || 0).toFixed(2)}`
-                    : 'Free delivery'}
-                </span>
-              </div>
-              <div className="shop-stat-card">
-                <span className="online-fee-icon">₹</span>
-                <span>
-                  {Number(shop?.min_order || 0) > 0
-                    ? `Min order ₹${Number(shop?.min_order || 0).toFixed(0)}`
-                    : 'No minimum order'}
-                </span>
-              </div>
-              <div className="shop-stat-card online-fee-stat">
-                <span className="online-fee-icon">₹</span>
-                <span>Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
+          <motion.div className={styles.metaRow} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.65 }}>
+            {shop?.shop_phone && <span><Phone size={15} /> {shop.shop_phone}</span>}
+            {(shop?.shop_city || shop?.shop_address) && <span><MapPin size={15} /> {shop.shop_city || shop.shop_address}</span>}
+            {shop?.shop_website && <span><Globe size={15} /> {shop.shop_website}</span>}
+          </motion.div>
 
-          <div className="shop-hero-panel">
-            <div className="hero-panel-card">
-              <h2>Live offers</h2>
-              <p>Handpicked today’s best picks from this shop.</p>
-              <div className="panel-bullets">
-                <div><span>•</span> Fresh arrivals</div>
-                <div><span>•</span> Express delivery</div>
-                <div><span>•</span> Simple reordering</div>
-                {shop?.shop_categories && (
-                  <div><span>•</span> {shop.shop_categories}</div>
-                )}
-              </div>
-              <div className="shop-hero-actions">
-                <Link href="#products" className="hero-cta">
-                  Shop now <ArrowRight size={16} />
-                </Link>
-                <Link href="/orders" className="shop-secondary-cta">
-                  My orders
-                </Link>
-              </div>
-            </div>
-          </div>
-        </motion.section>
+          <motion.div className={styles.stats} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.75, duration: 0.6, ease: EASE }}>
+            <span><PackageCheck size={17} /> {products.length} products</span>
+            <span><ShieldCheck size={17} /> Secure checkout</span>
+            <span><Sparkles size={17} /> Fast dispatch</span>
+            {(shop?.online_setup_fee || 0) > 0 && <span><b className={styles.rupee}>₹</b> Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>}
+          </motion.div>
 
-        <section className="store-toolbar" aria-label="Store controls">
-          <label className="store-search-box">
-            <Search size={18} />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by product, category or keyword"
-            />
-          </label>
-
-          <div className="store-filter-row">
-            <div className="store-filter-group">
-              <SlidersHorizontal size={16} />
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as any)}>
-                <option value="featured">Featured</option>
-                <option value="price-low">Price: Low to High</option>
-                <option value="price-high">Price: High to Low</option>
-                <option value="discount">Best discount</option>
-              </select>
-            </div>
-          </div>
-        </section>
-
-        <div className="store-category-row">
-          {categories.map((category) => (
-            <button
-              key={category}
-              className={`store-category-pill ${activeCategory === category ? 'active' : ''}`}
-              onClick={() => setActiveCategory(category)}
-            >
-              {category}
-            </button>
-          ))}
+          <motion.div className={styles.ctas} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, duration: 0.6, ease: EASE }}>
+            <Link href="#products" className={styles.ctaMain}>Shop now <ArrowRight size={18} /></Link>
+            <Link href="/orders" className={styles.ctaGhost}>My orders</Link>
+          </motion.div>
+          <p className={styles.note}>Browse freely · Sign in only when you checkout</p>
         </div>
 
-        <section id="products" className="store-product-section">
-          <div className="section-heading">
-            <div>
-              <p className="section-eyebrow">Curated for you</p>
-              <h2>Popular picks</h2>
-            </div>
-            <div className="section-badge">{filteredProducts.length} items</div>
+        <div className={styles.stage}>
+          <div className={styles.stageGlow} aria-hidden="true" />
+          <HeroScene3D lite className={styles.canvas} />
+          <motion.div className={styles.floatChip} animate={{ y: [0, -9, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
+            <span className={styles.floatIcon}><PackageCheck size={16} /></span>
+            <span><b>{loading ? 'Loading shelves…' : `${products.length} products`}</b><small>Ready to order</small></span>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ───────── sticky controls ───────── */}
+      <div className={styles.toolbarWrap}>
+        <section className={styles.toolbar} aria-label="Store controls">
+          <label className={styles.searchBox}>
+            <Search size={18} />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product, category or keyword" />
+            <AnimatePresence>
+              {search && (
+                <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={styles.clear} onClick={() => setSearch('')} aria-label="Clear search" type="button">
+                  <X size={14} />
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </label>
+
+          <div className={styles.sort}>
+            <SlidersHorizontal size={16} />
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as any)} aria-label="Sort products">
+              <option value="featured">Featured</option>
+              <option value="price-low">Price: Low to High</option>
+              <option value="price-high">Price: High to Low</option>
+              <option value="discount">Best discount</option>
+            </select>
           </div>
 
-          {loading ? (
-            <div className="store-skeleton-grid">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="store-skeleton-card" />
-              ))}
-            </div>
-          ) : error ? (
-            <div className="store-empty-state">{error}</div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="store-empty-state">No products match your search yet. Try another keyword.</div>
-          ) : (
-            <div className="store-product-grid">
-              {filteredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  shopId={shopId}
-                  inCartCount={cartItems.find((item) => item.product.id === product.id)?.quantity || 0}
-                  justAdded={justAddedId === product.id}
-                  onAddToCart={handleAddToCart}
-                />
-              ))}
-            </div>
-          )}
+          <div className={styles.cats} role="tablist" aria-label="Categories">
+            {categories.map((category) => (
+              <button key={category} role="tab" aria-selected={activeCategory === category} className={`${styles.cat} ${activeCategory === category ? styles.catOn : ''}`} onClick={() => setActiveCategory(category)}>
+                {activeCategory === category && <motion.span layoutId="catPill" className={styles.catPill} transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+                <span className={styles.catLabel}>{category}</span>
+              </button>
+            ))}
+          </div>
         </section>
       </div>
+
+      {/* ───────── products ───────── */}
+      <section id="products" className={styles.products}>
+        <div className={styles.head}>
+          <div>
+            <p className={styles.kicker}>Curated for you</p>
+            <h2>Popular picks</h2>
+          </div>
+          <div className={styles.count}>{filteredProducts.length} items</div>
+        </div>
+
+        {loading ? (
+          <div className={styles.grid}>{Array.from({ length: 8 }).map((_, index) => <div key={index} className={styles.skeleton} />)}</div>
+        ) : error ? (
+          <div className={styles.empty}><strong>Couldn&apos;t open this shop</strong><p>{error}</p></div>
+        ) : filteredProducts.length === 0 ? (
+          <div className={styles.empty}><strong>Nothing matches yet</strong><p>No products match your search. Try another keyword.</p></div>
+        ) : (
+          <motion.div className={styles.grid} layout>
+            <AnimatePresence mode="popLayout" initial={false}>
+              {filteredProducts.map((product, index) => (
+                <motion.div
+                  key={product.id}
+                  layout
+                  initial={{ opacity: 0, y: 36, scale: 0.94 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.5, delay: Math.min(index, 10) * 0.04, ease: EASE }}
+                  className={styles.cell}
+                >
+                  <ProductCard
+                    product={product}
+                    shopId={shopId}
+                    inCartCount={cartItems.find((item) => item.product.id === product.id)?.quantity || 0}
+                    justAdded={justAddedId === product.id}
+                    onAddToCart={handleAddToCart}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </section>
     </div>
   );
 }
