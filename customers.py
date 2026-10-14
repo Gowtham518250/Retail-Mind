@@ -5,14 +5,29 @@ Customer CRUD, contact preferences, credit profiles
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, validator
 from datetime import datetime
 from typing import List, Optional
+import re
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Customer
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
+
+
+def _normalize_indian_mobile(value):
+    """Accept common Indian mobile formats and store one canonical 10-digit value."""
+    if value is None:
+        return None
+    digits = re.sub(r"\D", "", str(value))
+    if len(digits) == 14 and digits.startswith("0091"):
+        digits = digits[4:]
+    elif len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    return digits
 
 # ==================== PYDANTIC MODELS ====================
 
@@ -29,6 +44,10 @@ class CustomerCreate(BaseModel):
     payment_terms: Optional[str] = None
     contact_preference: str = "EMAIL"  # EMAIL, WHATSAPP, CALL, SMS
 
+    @validator("phone", pre=True, allow_reuse=True)
+    def normalize_phone(cls, value):
+        return _normalize_indian_mobile(value)
+
 class CustomerUpdate(BaseModel):
     customer_name: Optional[str] = None
     email: Optional[str] = None
@@ -41,6 +60,10 @@ class CustomerUpdate(BaseModel):
     credit_limit: Optional[float] = None
     payment_terms: Optional[str] = None
     contact_preference: Optional[str] = None
+
+    @validator("phone", pre=True, allow_reuse=True)
+    def normalize_phone(cls, value):
+        return _normalize_indian_mobile(value)
 
 class CustomerResponse(BaseModel):
     id: int
