@@ -22,6 +22,8 @@ from datetime import datetime, timezone, timedelta, date
 from decimal import Decimal
 from uuid import uuid4
 
+from datetime_utils import is_after_utc, is_before_utc
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -1330,9 +1332,9 @@ def place_order(
         now = datetime.now(timezone.utc)
         if not coupon:
             raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
-        if coupon.starts_at and coupon.starts_at > now:
+        if is_after_utc(coupon.starts_at, now):
             raise HTTPException(status_code=400, detail="Coupon is not active yet.")
-        if coupon.expires_at and coupon.expires_at < now:
+        if is_before_utc(coupon.expires_at, now):
             raise HTTPException(status_code=400, detail="Coupon has expired.")
         if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
             raise HTTPException(status_code=400, detail="Coupon usage limit reached.")
@@ -1607,9 +1609,9 @@ def place_guest_order(
         now = datetime.now(timezone.utc)
         if not coupon:
             raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
-        if coupon.starts_at and coupon.starts_at > now:
+        if is_after_utc(coupon.starts_at, now):
             raise HTTPException(status_code=400, detail="Coupon is not active yet.")
-        if coupon.expires_at and coupon.expires_at < now:
+        if is_before_utc(coupon.expires_at, now):
             raise HTTPException(status_code=400, detail="Coupon has expired.")
         if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
             raise HTTPException(status_code=400, detail="Coupon usage limit reached.")

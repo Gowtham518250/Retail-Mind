@@ -9,6 +9,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from datetime_utils import is_after_utc, is_before_utc
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, text
@@ -540,7 +542,7 @@ def list_coupons(user_id: int = Depends(check_current_user), db: Session = Depen
             "usage_limit": c.usage_limit,
             "used_count": c.used_count,
             "is_active": c.is_active,
-            "expired": bool(c.expires_at and c.expires_at < now),
+            "expired": is_before_utc(c.expires_at, now),
         }
         for c in coupons
     ]}
@@ -596,9 +598,9 @@ def validate_coupon(
     ).first()
     if not coupon:
         raise HTTPException(status_code=404, detail="Coupon not found or inactive.")
-    if coupon.starts_at and coupon.starts_at > now:
+    if is_after_utc(coupon.starts_at, now):
         raise HTTPException(status_code=400, detail="Coupon is not active yet.")
-    if coupon.expires_at and coupon.expires_at < now:
+    if is_before_utc(coupon.expires_at, now):
         raise HTTPException(status_code=400, detail="Coupon has expired.")
     if coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit:
         raise HTTPException(status_code=400, detail="Coupon usage limit reached.")
