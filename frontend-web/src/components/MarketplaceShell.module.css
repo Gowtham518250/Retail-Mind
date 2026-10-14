@@ -1793,3 +1793,88 @@
 @media(prefers-reduced-motion:reduce) {
   .heroContent,.sceneWrap { animation:none !important; }
 }
+
+
+/* --- Review correction: match the approved full-width compact dashboard --- */
+/* The previous pass styled the hero but left the page wrapper constrained, which
+   made the hero look disproportionately large and kept the discovery grid narrow. */
+.page {
+  width: min(100% - 36px, 1420px) !important;
+  max-width: 1420px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding: 10px 0 46px !important;
+  box-sizing: border-box !important;
+}
+.hero {
+  display: block !important;
+  position: relative !important;
+  width: 100% !important;
+  height: 430px !important;
+  min-height: 390px !important;
+  max-height: 460px !important;
+  padding: 24px clamp(24px, 3vw, 42px) !important;
+  overflow: hidden !important;
+  border-radius: 20px !important;
+}
+.heroContent {
+  position: relative !important;
+  width: 57% !important;
+  max-width: 700px !important;
+  min-width: 0 !important;
+  z-index: 5 !important;
+}
+.heroEyebrow { font-size: 9px !important; }
+.heroKicker { margin: 11px 0 8px !important; font-size: 9px !important; }
+.hero h1 {
+  font-size: clamp(42px, 4vw, 60px) !important;
+  line-height: .86 !important;
+  letter-spacing: -.03em !important;
+  margin: 0 !important;
+}
+.heroCopy p {
+  max-width: 560px !important;
+  margin-top: 10px !important;
+  font-size: 12px !important;
+  line-height: 1.48 !important;
+}
+.searchPanel { max-width: 660px !important; margin-top: 13px !important; min-height: 47px !important; }
+.modeRow { margin-top: 7px !important; }
+.mode, .modeActive, .modeAi { min-height: 28px !important; padding: 0 10px !important; }
+.heroTrustRow { margin-top: 11px !important; gap: 7px !important; }
+.heroTrustRow > span { padding: 7px 9px !important; }
+.sceneWrap {
+  position: absolute !important;
+  top: 0 !important; right: 0 !important; bottom: 0 !important; left: auto !important;
+  width: 44% !important; height: 100% !important; min-height: 0 !important;
+  padding: 0 !important; margin: 0 !important;
+}
+.scene { transform: scale(.70) !important; transform-origin: center center !important; }
+.featureRail { max-width: 1420px !important; margin: 12px auto 16px !important; }
+.discoveryBar, .resultsSection { max-width: 1420px !important; }
+@media(max-width: 1100px) {
+  .page { width: min(100% - 28px, 1420px) !important; }
+  .hero { height: 420px !important; min-height: 390px !important; }
+  .heroContent { width: 61% !important; }
+  .sceneWrap { width: 40% !important; }
+  .scene { transform: scale(.60) !important; }
+}
+@media(max-width: 820px) {
+  .page { width: min(100% - 24px, 1420px) !important; padding-top: 10px !important; }
+  .hero { height: auto !important; min-height: 0 !important; max-height: none !important; padding: 22px !important; }
+  .heroContent { width: 100% !important; max-width: none !important; }
+  .hero h1 { font-size: clamp(41px, 7vw, 58px) !important; }
+  .sceneWrap {
+    position: relative !important; inset: auto !important;
+    width: 100% !important; height: 270px !important; min-height: 270px !important;
+    margin: 6px auto -10px !important;
+  }
+  .scene { transform: scale(.60) !important; }
+}
+@media(max-width:560px) {
+  .page { width: calc(100% - 20px) !important; padding: 8px 0 32px !important; }
+  .hero { padding: 18px 15px 12px !important; border-radius: 16px !important; }
+  .hero h1 { font-size: clamp(37px, 10.5vw, 48px) !important; line-height: .91 !important; }
+  .sceneWrap { height: 230px !important; min-height: 230px !important; }
+  .scene { transform: scale(.48) !important; }
+}
