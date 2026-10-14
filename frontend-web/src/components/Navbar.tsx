@@ -1,16 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ShoppingBag, User, Package, LogIn, Sparkles, Trophy } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import styles from './Navbar.module.css';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { toggleCart, itemCount } = useCart();
   const [signedIn, setSignedIn] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const syncAuth = () => {
@@ -26,52 +29,69 @@ export default function Navbar() {
     };
   }, [pathname]);
 
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   if (pathname === '/auth') return null;
 
+  const links = [
+    { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles, show: true },
+    { href: '/smart-shop', label: 'Smart Hub', icon: Trophy, show: signedIn },
+    { href: '/orders', label: 'Orders', icon: Package, show: signedIn },
+    { href: '/profile', label: customerName ? customerName.split(' ')[0] : 'Account', icon: User, show: signedIn },
+    { href: '/auth', label: 'Sign in', icon: LogIn, show: !signedIn },
+  ].filter((l) => l.show);
+
   return (
-    <nav className="navbar">
-      <div className="container nav-content">
-        <div
-          className="nav-brand"
-          onClick={() => router.push('/')}
-          role="button"
-          aria-label="Go to home"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && router.push('/')}
-        >
-          <span className="nav-brand-icon"><ShoppingBag size={18} /></span>
-          Retail<span className="brand-accent">Mind</span>
-        </div>
+    <header className={styles.wrap}>
+      <motion.nav
+        className={`${styles.nav} ${scrolled ? styles.scrolled : ''}`}
+        initial={{ y: -40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 220, damping: 24 }}
+        aria-label="Primary"
+      >
+        <Link href="/" className={styles.brand} aria-label="Retail Mind home">
+          <span className={styles.logo}><ShoppingBag size={18} strokeWidth={2.4} /></span>
+          <span className={styles.word}>Retail<b>Mind</b></span>
+        </Link>
 
-        <div className="nav-actions">
-          <button className="nav-icon-btn ai-nav-btn" onClick={() => router.push('/ai-shopping')} aria-label="AI Shopping">
-            <Sparkles size={19} /><span className="nav-icon-label">AI Shop</span>
+        <div className={styles.actions}>
+          {links.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || pathname.startsWith(href + '/');
+            return (
+              <Link key={href} href={href} className={`${styles.link} ${active ? styles.active : ''}`} aria-label={label} aria-current={active ? 'page' : undefined}>
+                {active && <motion.span layoutId="navActive" className={styles.activePill} transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
+                <span className={styles.linkInner}><Icon size={18} /><span className={styles.label}>{label}</span></span>
+              </Link>
+            );
+          })}
+
+          <button className={styles.cart} onClick={toggleCart} aria-label={'Open cart, ' + itemCount + ' items'} id="navbar-cart-btn">
+            <ShoppingBag size={18} />
+            <span className={styles.cartLabel}>Cart</span>
+            <AnimatePresence mode="popLayout" initial={false}>
+              {itemCount > 0 && (
+                <motion.span
+                  key={itemCount}
+                  className={styles.badge}
+                  aria-live="polite"
+                  initial={{ scale: 0.3, y: 8, opacity: 0 }}
+                  animate={{ scale: 1, y: 0, opacity: 1 }}
+                  exit={{ scale: 0.3, y: -8, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 520, damping: 18 }}
+                >
+                  {itemCount}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </button>
-
-          {signedIn ? (
-            <>
-              <button className="nav-icon-btn" onClick={() => router.push('/smart-shop')} aria-label="Smart shopping hub">
-                <Trophy size={19} /><span className="nav-icon-label">Smart Hub</span>
-              </button>
-              <button className="nav-icon-btn" onClick={() => router.push('/orders')} aria-label="My orders">
-                <Package size={19} /><span className="nav-icon-label">Orders</span>
-              </button>
-              <button className="nav-icon-btn" onClick={() => router.push('/profile')} aria-label="Profile">
-                <User size={19} /><span className="nav-icon-label">{customerName ? customerName.split(' ')[0] : 'Account'}</span>
-              </button>
-            </>
-          ) : (
-            <button className="nav-icon-btn nav-signin-btn" onClick={() => router.push('/auth')} aria-label="Sign in">
-              <LogIn size={19} /><span className="nav-icon-label">Sign in</span>
-            </button>
-          )}
-
-          <button className="cart-toggle-btn" onClick={toggleCart} aria-label={'Open cart, ' + itemCount + ' items'} id="navbar-cart-btn">
-            <ShoppingBag size={18} /><span>Cart</span>
-            {itemCount > 0 && <span className="cart-badge" aria-live="polite">{itemCount}</span>}
-          </button>
         </div>
-      </div>
-    </nav>
+      </motion.nav>
+    </header>
   );
 }
