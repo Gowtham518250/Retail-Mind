@@ -264,13 +264,64 @@ export default function MarketplaceShell() {
         </section>
       ) : (
         <section className={styles.resultsSection}>
-          <div className={styles.sectionHeader}><div><div className={styles.sectionEyebrow}>DISCOVER</div><h2>Online shops worth exploring</h2></div><span className={styles.count}>{shops.length} shops</span></div>
+          <div className={styles.sectionHeader}>
+            <div>
+              <div className={styles.sectionEyebrow}><Sparkles size={12} /> LOCAL STOREFRONTS</div>
+              <h2>Find your next favourite shop</h2>
+              <p className={styles.shopSectionSubtitle}>Meet the neighbourhood stores bringing everyday essentials closer to you.</p>
+            </div>
+            <span className={styles.count}>{shops.length} {shops.length === 1 ? 'shop' : 'shops'}</span>
+          </div>
           <div className={styles.shopGrid}>
-            {shops.map((shop) => (
-              <Link key={shop.shop_id} href={'/shop/' + shop.shop_id} className={styles.shopCard}>
-                <div className={styles.shopIcon}><Store size={20} /></div>
-                <div className={styles.shopCardBody}><strong>{shop.shop_name}</strong><span>{shop.city || shop.address || 'Online shop'}</span><small><Star size={12} fill="currentColor" /> {shop.rating_count ? shop.rating : 'New'} · {shop.rating_count || 0} reviews</small></div>
-                <ArrowRight size={17} />
+            {shops.map((shop, index) => (
+              <Link
+                key={shop.shop_id}
+                href={'/shop/' + shop.shop_id}
+                className={styles.shopCard}
+                style={{ animationDelay: `${Math.min(index, 8) * 85}ms` }}
+              >
+                <div className={styles.shopVisual} aria-hidden="true">
+                  <div className={styles.shopVisualOrb + ' ' + styles.shopVisualOrbOne} />
+                  <div className={styles.shopVisualOrb + ' ' + styles.shopVisualOrbTwo} />
+                  <div className={styles.shopVisualRing} />
+                  <span className={styles.shopStatus}><i /> ONLINE STORE</span>
+                  {shop.logo_url ? (
+                    <div className={styles.shopLogoShowcase}>
+                      <img
+                        src={shop.logo_url.startsWith('http') ? shop.logo_url : API_BASE + shop.logo_url}
+                        alt=""
+                      />
+                    </div>
+                  ) : (
+                    <div className={styles.shopIllustration}>
+                      <div className={styles.shopStoreRoof} />
+                      <div className={styles.shopStoreFront}>
+                        <div className={styles.shopStoreSign}><Store size={12} /><span>LOCAL STORE</span></div>
+                        <div className={styles.shopStoreWindows}><span /><span /></div>
+                        <div className={styles.shopStoreDoor}><i /></div>
+                      </div>
+                    </div>
+                  )}
+                  <div className={styles.shopVisualSparkle}><Sparkles size={19} /></div>
+                  <span className={styles.shopVisualLabel}>DISCOVER NEAR YOU</span>
+                </div>
+                <div className={styles.shopCardBody}>
+                  <div className={styles.shopCardTopline}>
+                    <span>{shop.shop_type || 'NEIGHBOURHOOD STORE'}</span>
+                    <div><Star size={12} fill="currentColor" /> {shop.rating_count ? Number(shop.rating || 0).toFixed(1) : 'NEW'}</div>
+                  </div>
+                  <strong>{shop.shop_name}</strong>
+                  <span className={styles.shopCardLocation}><MapPin size={13} /> {shop.city || shop.address || 'Local delivery'}</span>
+                  <p>{shop.tagline || shop.description || 'A local favourite, ready when you are. Explore the shop and discover something useful.'}</p>
+                  <div className={styles.shopCardMeta}>
+                    <span>{shop.rating_count || 0} {Number(shop.rating_count || 0) === 1 ? 'review' : 'reviews'}</span>
+                    <span className={styles.shopCardAvailability}><i /> Online ordering</span>
+                  </div>
+                  <div className={styles.shopCardFooter}>
+                    <span>Explore storefront</span>
+                    <span className={styles.shopCardFooterArrow}><ArrowRight size={15} /></span>
+                  </div>
+                </div>
               </Link>
             ))}
           </div>
