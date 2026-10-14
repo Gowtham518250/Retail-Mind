@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Bot, Boxes, MapPin, Search, ShieldCheck, Sparkles, Star, Store, Truck, Zap } from 'lucide-react';
@@ -9,6 +9,7 @@ import { API_BASE } from '../lib/api';
 import ThreeDRetailScene from './ThreeDRetailScene';
 
 type ResultMode = 'all' | 'shops' | 'products';
+type FeaturedProduct = { product_id: number; product_name: string; shop_id: number; shop_name: string; price: number; image_url?: string | null; category?: string; description?: string; stock_available?: number };
 
 export default function MarketplaceShell() {
   const router = useRouter();
@@ -16,6 +17,8 @@ export default function MarketplaceShell() {
   const [mode, setMode] = useState<ResultMode>('all');
   const [shops, setShops] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<FeaturedProduct[]>([]);
+  const [activeProductCategory, setActiveProductCategory] = useState('All');
   const [aiMessage, setAiMessage] = useState('');
   const [aiResults, setAiResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +26,35 @@ export default function MarketplaceShell() {
   const [error, setError] = useState('');
   const requestIdRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
+
+  const productCategories = useMemo(() => {
+    const values = featuredProducts
+      .map((product) => (product.category || '').trim())
+      .filter((category) => category.length > 0);
+    return ['All', ...Array.from(new Set(values)).slice(0, 6)];
+  }, [featuredProducts]);
+
+  const filteredFeaturedProducts = useMemo(() => {
+    if (activeProductCategory === 'All') return featuredProducts;
+    return featuredProducts.filter((product) => product.category === activeProductCategory);
+  }, [activeProductCategory, featuredProducts]);
+
+  const discoveryCategories = useMemo(() => {
+    const values: string[] = [];
+    shops.forEach((shop) => {
+      if (typeof shop.shop_type === 'string' && shop.shop_type.trim()) values.push(shop.shop_type.trim());
+      const listed = Array.isArray(shop.categories)
+        ? shop.categories
+        : typeof shop.categories === 'string'
+          ? shop.categories.split(',')
+          : [];
+      listed.forEach((item: unknown) => {
+        if (typeof item === 'string' && item.trim()) values.push(item.trim());
+      });
+    });
+    const cleaned = Array.from(new Set(values)).filter((value) => !/^(general|local store|online)$/i.test(value));
+    return (cleaned.length ? cleaned : ['Groceries', 'Bakery', 'Personal care']).slice(0, 5);
+  }, [shops]);
 
   const performSearch = async (requestedMode: ResultMode, requestedQuery: string, userInitiated = false) => {
     const value = requestedQuery.trim();
@@ -114,6 +146,52 @@ export default function MarketplaceShell() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    const visibleShops = shops.slice(0, 6);
+    if (!visibleShops.length) {
+      setFeaturedProducts([]);
+      return () => { cancelled = true; };
+    }
+    const loadFeaturedProducts = async () => {
+      const batches = await Promise.all(visibleShops.map(async (shop) => {
+        try {
+          const response = await fetch(API_BASE + '/store/shops/' + encodeURIComponent(String(shop.shop_id)) + '/products', { cache: 'no-store' });
+          if (!response.ok) return [];
+          const data = await response.json();
+          const list = Array.isArray(data.products) ? data.products : [];
+          return list.map((product: any) => ({
+            product_id: Number(product.id ?? product.product_id),
+            product_name: String(product.name ?? product.product_name ?? 'Product'),
+            shop_id: Number(shop.shop_id),
+            shop_name: String(data.shop_name ?? shop.shop_name ?? 'Local shop'),
+            price: Number(product.price ?? product.unit_price ?? 0),
+            image_url: typeof product.image_url === 'string' ? product.image_url : null,
+            category: String(product.category ?? '').trim(),
+            description: String(product.description ?? ''),
+            stock_available: Number(product.stock_available ?? product.current_stock ?? 0),
+          })).filter((product: FeaturedProduct) =>
+            Number.isFinite(product.product_id) && product.product_id > 0 && product.product_name !== 'Product'
+          );
+        } catch {
+          return [];
+        }
+      }));
+      if (!cancelled) {
+        const seen = new Set<string>();
+        const combined = batches.flat().filter((product) => {
+          const key = product.shop_id + ':' + product.product_id;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setFeaturedProducts(combined.slice(0, 16));
+      }
+    };
+    void loadFeaturedProducts();
+    return () => { cancelled = true; };
+  }, [shops]);
+
+  useEffect(() => {
     void performSearch('all', '');
     return () => {
       requestIdRef.current += 1;
@@ -122,6 +200,7 @@ export default function MarketplaceShell() {
   }, []);
 
   const preset = (value: string) => {
+    setActiveProductCategory('All');
     setQuery(value);
     setMode('products');
     void performSearch('products', value, true);
@@ -136,15 +215,16 @@ export default function MarketplaceShell() {
           <div className={styles.heroPaint + ' ' + styles.heroPaintGold} />
           <div className={styles.heroPaint + ' ' + styles.heroPaintMint} />
           <div className={styles.heroProductWall}>
-            {products.filter((product) => product.image_url).length ? (
+            {featuredProducts.length ? (
               [0, 1].map((row) => (
                 <div key={row} className={styles.heroProductRow} data-product-row={row}>
-                  {products.filter((product) => product.image_url).slice(row * 3, row * 3 + 3).map((product) => (
-                    <div
-                      key={String(product.product_id) + '-' + String(product.shop_id)}
-                      className={styles.heroProductBottle}
-                    >
-                      <img src={product.image_url} alt="" loading="lazy" />
+                  {featuredProducts.slice(row * 3, row * 3 + 3).map((product) => (
+                    <div key={product.shop_id + '-' + product.product_id} className={styles.heroProductBottle}>
+                      {product.image_url ? (
+                        <img src={product.image_url} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} />
+                      ) : (
+                        <div className={styles.heroProductPlaceholder}><Boxes size={30} strokeWidth={1.4} /></div>
+                      )}
                       <span>{product.product_name}</span>
                     </div>
                   ))}
@@ -226,6 +306,147 @@ export default function MarketplaceShell() {
               ))}
             </span>
           ))}
+        </div>
+      </section>
+
+      <div className={styles.crateSlat} aria-hidden="true" />
+
+      <section className={styles.categoryStage + ' ' + styles.revealSection} id="shop-by-mood" data-reveal-section>
+        <div className={styles.categoryStageHead}>
+          <div>
+            <span className={styles.sectionEyebrow}>01 / SHOP BY CATEGORY</span>
+            <h2>Find your kind<br />of <em>everyday.</em></h2>
+            <p>Real products and neighbourhood shops, gathered in one place. Choose a category to see what’s available.</p>
+          </div>
+          <div className={styles.categoryStageNote}>
+            <span>YOUR LOCAL MARKET</span>
+            <strong>Good finds.<br />Closer to home.</strong>
+            <small>Retail Mind · Local commerce</small>
+          </div>
+        </div>
+        <div className={styles.categoryStageChips}>
+          {discoveryCategories.map((category, index) => (
+            <button
+              type="button"
+              key={category}
+              className={styles.categoryStageChip}
+              data-tone={index % 4}
+              onClick={() => preset(category)}
+            >
+              <span>0{index + 1}</span><strong>{category}</strong><ArrowRight size={16} />
+            </button>
+          ))}
+          <button type="button" className={styles.categoryStageChip + ' ' + styles.categoryStageChipAi} onClick={() => router.push('/ai-shopping')}>
+            <span>✳</span><strong>Find with AI</strong><ArrowRight size={16} />
+          </button>
+        </div>
+      </section>
+
+      <section className={styles.crateSection + ' ' + styles.revealSection} id="build-your-list" data-reveal-section>
+        <div className={styles.crateSectionLabel}><span>02 / YOUR SHOPPING LIST</span><i /></div>
+        <div className={styles.crateSectionGrid}>
+          <div className={styles.crateSectionCopy}>
+            <span className={styles.sectionEyebrow}>PICK A STARTING POINT</span>
+            <h2>Build a basket<br />from <em>your</em> neighbourhood.</h2>
+            <p>Start with a kind of shop, browse real listings, then open a storefront to add the items you need.</p>
+            <button type="button" className={styles.cratePrimaryButton} onClick={() => { setQuery(''); setMode('shops'); void performSearch('shops', '', true); }}>
+              Explore all shops <ArrowRight size={16} />
+            </button>
+          </div>
+          <div className={styles.crateTiles}>
+            {discoveryCategories.slice(0, 4).map((category, index) => (
+              <button type="button" key={category} className={styles.crateTile} data-tone={index % 4} onClick={() => preset(category)}>
+                <span className={styles.crateTileNumber}>0{index + 1}</span>
+                <span className={styles.crateTileIcon}><Store size={20} /></span>
+                <strong>{category}</strong>
+                <small>Explore matching shops and products</small>
+                <ArrowRight size={16} className={styles.crateTileArrow} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.featuredProductStage + ' ' + styles.revealSection} id="local-finds" data-reveal-section>
+        <div className={styles.featuredProductHeader}>
+          <div>
+            <span className={styles.sectionEyebrow}>03 / FROM LOCAL SHELVES</span>
+            <h2>Worth a closer<br /><em>look.</em></h2>
+            <p>Product listings fetched from your real online-enabled shops.</p>
+          </div>
+          <div className={styles.featuredProductControls}>
+            {productCategories.map((category) => (
+              <button
+                key={category}
+                type="button"
+                className={activeProductCategory === category ? styles.featuredCategoryActive : styles.featuredCategory}
+                onClick={() => setActiveProductCategory(category)}
+              >{category}</button>
+            ))}
+          </div>
+        </div>
+        {filteredFeaturedProducts.length ? (
+          <div className={styles.featuredProductGrid}>
+            {filteredFeaturedProducts.slice(0, 8).map((product, index) => (
+              <Link
+                key={product.shop_id + '-' + product.product_id}
+                href={'/shop/' + product.shop_id + '/product/' + product.product_id}
+                className={styles.featuredProductCard}
+                style={{ animationDelay: (index * 70) + 'ms' }}
+              >
+                <div className={styles.featuredProductMedia} data-tone={index % 5}>
+                  {product.image_url ? (
+                    <img src={product.image_url} alt={product.product_name} loading="lazy" onError={(event) => { event.currentTarget.style.opacity = '0'; }} />
+                  ) : (
+                    <div className={styles.featuredProductPlaceholder}><Boxes size={46} strokeWidth={1.15} /><span>LOCAL PICK</span></div>
+                  )}
+                  <span className={styles.featuredProductIndex}>#{String(index + 1).padStart(2, '0')}</span>
+                </div>
+                <div className={styles.featuredProductBody}>
+                  <span className={styles.featuredProductShop}>{product.shop_name}</span>
+                  <strong>{product.product_name}</strong>
+                  <div className={styles.featuredProductFoot}><b>₹{Number(product.price || 0).toFixed(2)}</b><span>View item <ArrowRight size={13} /></span></div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.featuredProductEmpty}>
+            <span><Boxes size={25} /></span>
+            <strong>{loading ? 'Finding products from local shops…' : shops.length ? 'Open a shop to discover its products' : 'Your local market is loading'}</strong>
+            <p>Products will appear here when an online-enabled shop has items available in its storefront.</p>
+            {shops.length > 0 && <Link href={'/shop/' + shops[0].shop_id}>Browse {shops[0].shop_name} <ArrowRight size={14} /></Link>}
+          </div>
+        )}
+      </section>
+
+      <section className={styles.localLedger + ' ' + styles.revealSection} id="how-it-works" data-reveal-section>
+        <div className={styles.localLedgerIntro}>
+          <span className={styles.sectionEyebrow}>04 / HOW IT WORKS</span>
+          <h2>From nearby<br />to <em>at your door.</em></h2>
+          <p>A simple path from finding a shop to placing and tracking an order.</p>
+        </div>
+        <div className={styles.localLedgerRows}>
+          <div className={styles.localLedgerRow}><span>01</span><div><strong>Find a local shop</strong><small>Browse the shops that have enabled online ordering.</small></div><Store size={21} /></div>
+          <div className={styles.localLedgerRow}><span>02</span><div><strong>Compare what you need</strong><small>Check product details and prices across available listings.</small></div><Boxes size={21} /></div>
+          <div className={styles.localLedgerRow}><span>03</span><div><strong>Build your basket</strong><small>Add products from a storefront and review the checkout summary.</small></div><ArrowRight size={21} /></div>
+          <div className={styles.localLedgerRow}><span>04</span><div><strong>Keep track of your order</strong><small>Open the order centre to follow order history and available actions.</small></div><Truck size={21} /></div>
+        </div>
+      </section>
+
+      <section className={styles.chalkboardBenefits + ' ' + styles.revealSection} data-reveal-section>
+        <div className={styles.chalkboardFrame}>
+          <div className={styles.chalkboardHeading}>
+            <span>RETAIL MIND · LOCAL COMMERCE</span>
+            <h2>Small shops.<br /><em>Big convenience.</em></h2>
+            <p>Everything you need to discover, compare, and shop local—with tools to make the search simpler.</p>
+          </div>
+          <div className={styles.chalkboardBenefitsGrid}>
+            <div><span>01 / DISCOVER</span><strong>Your neighbourhood, online.</strong><small>Find local storefronts in one marketplace.</small></div>
+            <div><span>02 / COMPARE</span><strong>Know before you go.</strong><small>See listed products and prices before opening a shop.</small></div>
+            <div><span>03 / SHOP SMART</span><strong>Let AI help narrow it down.</strong><small>Describe what you need to get relevant product suggestions.</small></div>
+          </div>
+          <Link href="/ai-shopping" className={styles.chalkboardCta}>Find with Retail Mind AI <ArrowRight size={16} /></Link>
         </div>
       </section>
 
@@ -408,6 +629,15 @@ export default function MarketplaceShell() {
           {!shops.length && <div className={styles.emptyState}><div className={styles.emptyIcon}><Store size={22} /></div><strong>No online shops are showing right now</strong><p>Try refreshing or opening a shop link directly.</p></div>}
         </section>
       )}
+      <footer className={styles.marketFooter}>
+        <div className={styles.marketFooterBrand}><span className={styles.marketFooterStamp}>RM</span><strong>RETAIL MIND</strong><small>Good things, closer to home.</small></div>
+        <div className={styles.marketFooterLinks}>
+          <Link href="/ai-shopping">AI shopping</Link>
+          <Link href="/orders">Order centre</Link>
+          <button type="button" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Back to top ↑</button>
+        </div>
+        <p>Local shops. Real listings. Smarter everyday shopping.</p>
+      </footer>
     </main>
   );
 }
