@@ -289,7 +289,7 @@ export default function MarketplaceShell() {
           <div className={styles.heroEyebrow}><span className={styles.statusDot} /> RETAIL MIND · YOUR LOCAL MARKET</div>
           <div className={styles.heroCopy}>
             <div className={styles.heroKicker}>GOOD THINGS, CLOSER TO HOME</div>
-            <h1><span className={styles.heroLine}>Shop local.</span><span className={styles.heroLineAccent}>Find more.</span><em>Shop smarter.</em></h1>
+            <h1><span className={styles.heroLine}>Shop local.</span><span className={styles.heroLineAccent}>Think smarter.</span><em>Move faster.</em></h1>
             <p>Discover trusted neighbourhood shops, compare real products and prices, and let Retail Mind help you find the right things closer to home.</p>
           </div>
 
