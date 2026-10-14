@@ -28,7 +28,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-13-retrieval-first-routing-v9"
+QUERY_ENGINE_VERSION = "2026-10-14-fast-kpi-event-loop-v10"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -589,22 +589,50 @@ def _recent_query_examples(db: Session, user_id: int, limit: int = 5) -> list[di
         return []
 
 
-def _make_deterministic_query_plan(query: str) -> dict:
-    """Classify only obvious aggregate KPI questions without spending an LLM call.
+def _generate_sql_with_groq(formatted_prompt: str, model: str) -> str:
+    """Run the synchronous streaming Groq SDK away from the async request loop."""
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": formatted_prompt}],
+        temperature=0.1,
+        max_tokens=1800,
+        top_p=0.9,
+        stream=True,
+        stop=None,
+    )
+    generated_parts = []
+    for chunk in completion:
+        if not getattr(chunk, "choices", None):
+            continue
+        delta = getattr(chunk.choices[0], "delta", None)
+        content = getattr(delta, "content", None) or ""
+        if content:
+            generated_parts.append(content)
+    return "".join(generated_parts).strip()
 
-    This deliberately returns a low-confidence general plan for anything that
-    is ambiguous, dimensional, comparative, or outside the small KPI fast path.
-    Such questions continue to the schema-grounded SQL-generation LLM.
+
+def _make_deterministic_query_plan(query: str) -> dict:
+    """Classify unambiguous aggregate KPIs before RAG/SQL generation.
+
+    "Items sold" and short date-scoped phrases (for example, "sales today")
+    are aggregate metrics, not product-dimension queries. Dimensional requests
+    such as "sales by product" still stay on the schema-grounded path.
     """
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
     blocked_dimensions = re.compile(
-        r"\b(by|per|each|every|product|products|item|items|customer|customers|"
+        r"\b(by|per|each|every|product|products|customer|customers|"
         r"category|categories|supplier|suppliers|worker|workers|employee|employees|"
         r"branch|stock|inventory|cash|received|payment|payments|tax|gst|discount|"
         r"balance|receivable|receivables|payable|payables|credit|khata|transaction|transactions|"
         r"payment method|invoice|invoices|order|orders|profit|margin|"
         r"comparison|compare|versus|trend|breakdown|details|list|top|lowest|highest|"
         r"growth|forecast|refund|refunds|return|returns|pending|unpaid|paid)\b"
+    )
+    wants_sales = bool(re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized))
+    wants_expenses = bool(re.search(r"\b(expense|expenses|spent|spending)\b", normalized))
+    unit_sales_cue = bool(
+        re.search(r"\b(items?|units?|quantities|quantity)\b.{0,45}\b(sold|sales?)\b", normalized)
+        or re.search(r"\b(sold|sales?)\b.{0,45}\b(items?|units?|quantities|quantity)\b", normalized)
     )
     aggregate_cue = re.search(
         r"\b(total|sum|how much|amount|value|revenue|turnover|how many|"
@@ -615,15 +643,23 @@ def _make_deterministic_query_plan(query: str) -> dict:
         r"(?:sales|revenue|turnover)\b",
         normalized,
     )
-    wants_sales = bool(re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized))
-    wants_expenses = bool(re.search(r"\b(expense|expenses|spent|spending)\b", normalized))
+    # Users often ask short questions such as "sales today" or "yesterday's
+    # revenue". Resolve those to billed sales amount unless they explicitly ask
+    # for a count or quantity, or request a breakdown.
+    date_scoped_sales_cue = (
+        wants_sales
+        and bool(re.search(r"\b(today|todays|today's|yesterday|yesterday's)\b", normalized))
+    )
     simple_metric = wants_sales != wants_expenses
-    if simple_metric and aggregate_cue and not blocked_dimensions.search(normalized):
-        metric = "expenses" if wants_expenses else "sales_amount"
-        if re.search(r"\b(how many|number of|count)\b.*\bsales?\b", normalized):
-            metric = "sales_count"
-        elif re.search(r"\b(units|items|quantities|quantity)\b.*\b(sold|sales?)\b", normalized):
+    if simple_metric and (aggregate_cue or unit_sales_cue or date_scoped_sales_cue) and not blocked_dimensions.search(normalized):
+        if unit_sales_cue:
             metric = "units_sold"
+        elif re.search(r"\b(how many|number of|count)\b.*\bsales?\b|\b(count|number)\s+of\s+sales?\b", normalized):
+            metric = "sales_count"
+        elif wants_expenses:
+            metric = "expenses"
+        else:
+            metric = "sales_amount"
         return {
             "intent": "aggregate",
             "metric": metric,
@@ -908,9 +944,9 @@ def _fast_business_query(
     if wants_units:
         row = db.execute(
             text(
-                "SELECT CASE WHEN invoice_rows.qty > 0 THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
-                "FROM (SELECT COALESCE(SUM(ili.quantity),0)::numeric AS qty "
-                "FROM invoice_line_items ili JOIN invoices i ON i.id = ili.invoice_id "
+                "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
+                "FROM (SELECT COUNT(DISTINCT i.id)::bigint AS cnt, COALESCE(SUM(ili.quantity),0)::numeric AS qty "
+                "FROM invoices i LEFT JOIN invoice_line_items ili ON i.id = ili.invoice_id "
                 f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
                 "CROSS JOIN (SELECT COALESCE(SUM(s.quantity),0)::numeric AS qty FROM sales s "
                 f"WHERE s.shopkeeper_id = :user_id AND {legacy_date}) sales_rows"
@@ -942,6 +978,136 @@ def _fast_business_query(
         "generated_sql": sql,
         "generated_model_response": answer,
         "results": [{"total_sales_amount": value}],
+    }
+
+
+
+def _fast_sales_day_comparison_query(query: str, db: Session, user_id: int):
+    """Return separate yesterday/today metrics instead of collapsing both dates to one."""
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    if not (
+        re.search(r"\b(?:today|today's|todays)\b", normalized)
+        and re.search(r"\byesterday(?:'s)?\b", normalized)
+        and re.search(r"\b(sale|sales|sold|revenue|turnover)\b", normalized)
+    ):
+        return None
+
+    # Do not steal detailed or dimensioned questions from the general SQL path.
+    if re.search(
+        r"\b(by|per|each|product|products|customer|customers|category|categories|"
+        r"supplier|suppliers|worker|workers|employee|employees|branch|top|highest|"
+        r"lowest|profit|margin|payment|payments|cash|received|invoice|invoices|"
+        r"breakdown|list|show me which|which products?)\b",
+        normalized,
+    ):
+        return None
+
+    wants_units = bool(
+        re.search(r"\b(items?|units?|quantities|quantity)\b.{0,45}\b(sold|sales?)\b", normalized)
+        or re.search(r"\b(sold|sales?)\b.{0,45}\b(items?|units?|quantities|quantity)\b", normalized)
+    )
+    wants_count = bool(
+        re.search(r"\b(how many|number of|count)\b.*\bsales?\b", normalized)
+        or re.search(r"\b(count|number)\s+of\s+sales?\b", normalized)
+    )
+    metric = "units_sold" if wants_units else "sales_count" if wants_count else "sales_amount"
+
+    business_date, previous_business_date = _business_dates()
+    params = {
+        "user_id": user_id,
+        "business_date": business_date,
+        "previous_business_date": previous_business_date,
+    }
+    sql = (
+        "WITH requested_days AS ("
+        "SELECT CAST(:previous_business_date AS date) AS business_date "
+        "UNION ALL SELECT CAST(:business_date AS date) AS business_date"
+        "), invoice_sales AS ("
+        "SELECT i.invoice_date AS business_date, COUNT(*)::bigint AS cnt, "
+        "COALESCE(SUM(i.total_amount), 0)::numeric AS amount "
+        "FROM invoices i WHERE i.user_id = :user_id "
+        "AND i.status NOT IN ('CANCELLED', 'DRAFT') "
+        "AND i.invoice_date IN (:business_date, :previous_business_date) "
+        "GROUP BY i.invoice_date"
+        "), invoice_units AS ("
+        "SELECT i.invoice_date AS business_date, "
+        "COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
+        "FROM invoices i LEFT JOIN invoice_line_items ili ON ili.invoice_id = i.id "
+        "WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED', 'DRAFT') "
+        "AND i.invoice_date IN (:business_date, :previous_business_date) "
+        "GROUP BY i.invoice_date"
+        "), legacy_sales AS ("
+        "SELECT s.sale_date AS business_date, COUNT(*)::bigint AS cnt, "
+        "COALESCE(SUM(s.total), 0)::numeric AS amount, "
+        "COALESCE(SUM(s.quantity), 0)::numeric AS qty "
+        "FROM sales s WHERE s.shopkeeper_id = :user_id "
+        "AND s.sale_date IN (:business_date, :previous_business_date) "
+        "GROUP BY s.sale_date"
+        ") SELECT d.business_date, "
+        "CASE WHEN COALESCE(i.cnt, 0) > 0 THEN i.cnt ELSE COALESCE(l.cnt, 0) END AS sales_count, "
+        "CASE WHEN COALESCE(i.cnt, 0) > 0 THEN COALESCE(i.amount, 0) ELSE COALESCE(l.amount, 0) END AS sales_amount, "
+        "CASE WHEN COALESCE(i.cnt, 0) > 0 THEN COALESCE(u.qty, 0) ELSE COALESCE(l.qty, 0) END AS total_units_sold "
+        "FROM requested_days d "
+        "LEFT JOIN invoice_sales i ON i.business_date = d.business_date "
+        "LEFT JOIN invoice_units u ON u.business_date = d.business_date "
+        "LEFT JOIN legacy_sales l ON l.business_date = d.business_date "
+        "ORDER BY d.business_date"
+    )
+    rows = db.execute(text(sql), params).mappings().all()
+    rows_by_date = {}
+    for row in rows:
+        value = row.get("business_date")
+        key = value.isoformat() if hasattr(value, "isoformat") else str(value)[:10]
+        rows_by_date[key] = row
+
+    yesterday_key = previous_business_date.isoformat()
+    today_key = business_date.isoformat()
+    yesterday_row = rows_by_date.get(yesterday_key, {})
+    today_row = rows_by_date.get(today_key, {})
+
+    if metric == "units_sold":
+        yesterday_value = float(yesterday_row.get("total_units_sold") or 0)
+        today_value = float(today_row.get("total_units_sold") or 0)
+        delta = today_value - yesterday_value
+        delta_text = f"{delta:+g} item(s)"
+        answer = (
+            f"Items sold — yesterday ({yesterday_key}): {yesterday_value:g}; "
+            f"today ({today_key}): {today_value:g}. Change today vs yesterday: {delta_text}."
+        )
+        result_key = "total_units_sold"
+    elif metric == "sales_count":
+        yesterday_value = int(yesterday_row.get("sales_count") or 0)
+        today_value = int(today_row.get("sales_count") or 0)
+        delta = today_value - yesterday_value
+        answer = (
+            f"Sales count — yesterday ({yesterday_key}): {yesterday_value}; "
+            f"today ({today_key}): {today_value}. Change today vs yesterday: {delta:+d} sale(s)."
+        )
+        result_key = "sales_count"
+    else:
+        yesterday_value = float(yesterday_row.get("sales_amount") or 0)
+        today_value = float(today_row.get("sales_amount") or 0)
+        delta = today_value - yesterday_value
+        change_text = f"{delta:+,.2f}"
+        if yesterday_value > 0:
+            change_text += f" ({delta / yesterday_value * 100:+.1f}%)"
+        elif today_value > 0:
+            change_text += " (yesterday was ₹0.00)"
+        answer = (
+            f"Billed sales (invoice totals) — yesterday ({yesterday_key}): ₹{yesterday_value:,.2f}; "
+            f"today ({today_key}): ₹{today_value:,.2f}. Change today vs yesterday: ₹{change_text}."
+        )
+        result_key = "total_sales_amount"
+
+    result_rows = [
+        {"date": yesterday_key, "day": "yesterday", result_key: yesterday_value},
+        {"date": today_key, "day": "today", result_key: today_value},
+    ]
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_KPI: separate yesterday/today business-date comparison\n" + sql,
+        "generated_model_response": answer,
+        "results": result_rows,
     }
 
 
@@ -2889,7 +3055,7 @@ async def ask_query(
     query_classification = None
     translation_used = language_code != "en" or any(not char.isascii() for char in query)
     if translation_used:
-        translated = _translate_query_and_classify(query, language_code)
+        translated = await run_in_threadpool(_translate_query_and_classify, query, language_code)
         query = translated["english_query"]
         query_classification = translated["classification"]
         print(
@@ -2928,6 +3094,38 @@ async def ask_query(
     source_date_scope = _resolve_explicit_date_scope(original_query)
     if source_date_scope.get("kind") != "unspecified":
         date_scope = source_date_scope
+
+    # If the question explicitly asks about both days, return two separate figures.
+    # _resolve_explicit_date_scope intentionally resolves one date; it must not
+    # accidentally reduce "yesterday and today" to today's value only.
+    day_comparison_result = _fast_sales_day_comparison_query(query, db, user_id)
+    if day_comparison_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_DAY_COMPARISON "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=original_query,
+            answer=day_comparison_result["answer"],
+            result_count=len(day_comparison_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": day_comparison_result["answer"],
+            "message": day_comparison_result["answer"],
+            "generated_sql": day_comparison_result["generated_sql"],
+            "generated_model_response": day_comparison_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": day_comparison_result["generated_sql"],
+            "row_count": len(day_comparison_result["results"]),
+            "results": day_comparison_result["results"],
+            "has_more": False,
+        }
 
     # Ranked revenue questions must run before generic product listing and
     # generic total-sales matching, otherwise "highest revenue product" can
@@ -3120,7 +3318,8 @@ async def ask_query(
             and classification.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}
             and float(classification.get("confidence") or 0.0) >= 0.90
         )
-        can_use_fast_path = can_use_fast_path and classifier_agrees
+        confident_translation = translation_confidence >= 0.92
+        can_use_fast_path = can_use_fast_path and (classifier_agrees or confident_translation)
     print(
         "ASKQUERY STAGE=fast_path_check planner_llm_calls=0 "
         f"fast_path_eligible={str(can_use_fast_path).lower()}"
@@ -3394,25 +3593,11 @@ async def ask_query(
             or os.getenv("GROQ_MODEL")
             or "openai/gpt-oss-120b"
         )
-        completion = client.chat.completions.create(
-            model=sql_model,
-            messages=[{"role": "user", "content": formatted_prompt}],
-            temperature=0.1,
-            # Allow a high-reasoning model enough completion budget for SQL.
-            max_tokens=3000,
-            top_p=0.9,
-            stream=True,
-            stop=None,
+        generated_text = await run_in_threadpool(
+            _generate_sql_with_groq,
+            formatted_prompt,
+            sql_model,
         )
-
-        generated_parts = []
-        for chunk in completion:
-            if not getattr(chunk, "choices", None):
-                continue
-            delta = getattr(chunk.choices[0], "delta", None)
-            content = getattr(delta, "content", None) or ""
-            if content:
-                generated_parts.append(content)
     except Exception as exc:
         print("Groq completion failed:")
         print(f"Exception type: {type(exc).__name__}")
@@ -3428,7 +3613,6 @@ async def ask_query(
         ) from exc
 
     llm_ms = (time.perf_counter() - llm_started) * 1000
-    generated_text = "".join(generated_parts).strip()
     sql_match = re.search(r"\bSQL\s*:\s*(.+)", generated_text, re.IGNORECASE | re.DOTALL)
     if not sql_match:
         raise HTTPException(status_code=400, detail="The generated response did not contain SQL.")
@@ -3637,9 +3821,8 @@ async def ask_query(
         elif wants_units:
             sql = (
                 "WITH invoice_rows AS ("
-                "SELECT COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
-                "FROM invoice_line_items ili "
-                "JOIN invoices i ON i.id = ili.invoice_id "
+                "SELECT COUNT(DISTINCT i.id)::bigint AS cnt, COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
+                "FROM invoices i LEFT JOIN invoice_line_items ili ON i.id = ili.invoice_id "
                 "WHERE i.user_id = :user_id "
                 "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
                 + (f" AND i.{invoice_date_filter}" if invoice_date_filter else "")
@@ -3648,7 +3831,7 @@ async def ask_query(
                 "FROM sales "
                 f"WHERE {sales_where}"
                 ") "
-                "SELECT CASE WHEN invoice_rows.qty > 0 "
+                "SELECT CASE WHEN invoice_rows.cnt > 0 "
                 "THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
                 "FROM invoice_rows CROSS JOIN sales_rows"
             )
@@ -3679,7 +3862,8 @@ async def ask_query(
     # schema, tenant scope and app-resolved date scope before it is executed.
     sql_review_ms = 0.0
     sql_review_started = time.perf_counter()
-    reviewed_sql = _review_generated_sql_with_groq(
+    reviewed_sql = await run_in_threadpool(
+        _review_generated_sql_with_groq,
         question=query,
         generated_sql=sql,
         schema_context=retrived_table_information_str,
@@ -3753,7 +3937,8 @@ async def ask_query(
             print("ASKQUERY SQL_REPAIR outcome=skipped reason=call_budget_exhausted")
             retry_sql = None
         else:
-            retry_sql = _repair_failed_sql_with_groq(
+            retry_sql = await run_in_threadpool(
+                _repair_failed_sql_with_groq,
                 question=query,
                 failed_sql=sql,
                 execution_error=str(exc),

@@ -245,3 +245,130 @@ def test_sql_reviewer_rejects_query_that_drops_requested_date(monkeypatch):
     )
 
     assert result is None
+
+
+class _FakeAllMappings:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def all(self):
+        return self.rows
+
+
+class _FakeAllResult:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def mappings(self):
+        return _FakeAllMappings(self.rows)
+
+
+class _FakeComparisonDb:
+    def __init__(self, rows):
+        self.rows = rows
+        self.sql = None
+        self.params = None
+
+    def execute(self, statement, params):
+        self.sql = str(statement)
+        self.params = dict(params)
+        return _FakeAllResult(self.rows)
+
+
+def test_items_sold_today_is_a_deterministic_kpi_not_an_llm_sql_query(monkeypatch):
+    import query_retrival
+
+    today = date(2026, 10, 14)
+    monkeypatch.setattr(query_retrival, "_business_dates", lambda: (today, date(2026, 10, 13)))
+    question = "How many items were sold today?"
+    scope = query_retrival._resolve_explicit_date_scope(question)
+    plan = query_retrival._make_deterministic_query_plan(question)
+
+    assert plan["intent"] == "aggregate"
+    assert plan["metric"] == "units_sold"
+    assert query_retrival._can_use_fast_business_query(question, scope)
+
+    db = _FakeDb({"total_units_sold": 12})
+    result = query_retrival._fast_business_query(question, db, user_id=7, date_scope=scope)
+    assert result["results"] == [{"total_units_sold": 12.0}]
+    assert "COUNT(DISTINCT i.id)" in db.sql
+    assert "LEFT JOIN invoice_line_items" in db.sql
+    assert "CASE WHEN invoice_rows.cnt > 0" in db.sql
+    assert db.params == {"user_id": 7, "business_date": today}
+
+
+def test_short_sales_today_phrase_routes_to_billed_sales_kpi():
+    import query_retrival
+
+    scope = {"kind": "exact", "start_date": date(2026, 10, 14), "end_date": date(2026, 10, 14), "label": "today"}
+    plan = query_retrival._make_deterministic_query_plan("sales today")
+    assert plan["intent"] == "aggregate"
+    assert plan["metric"] == "sales_amount"
+    assert query_retrival._can_use_fast_business_query("sales today", scope)
+
+
+def test_yesterday_and_today_revenue_returns_two_separate_daily_results(monkeypatch):
+    import query_retrival
+
+    today = date(2026, 10, 14)
+    yesterday = date(2026, 10, 13)
+    monkeypatch.setattr(query_retrival, "_business_dates", lambda: (today, yesterday))
+    db = _FakeComparisonDb([
+        {"business_date": yesterday, "sales_count": 3, "sales_amount": 1500, "total_units_sold": 10},
+        {"business_date": today, "sales_count": 4, "sales_amount": 2100, "total_units_sold": 12},
+    ])
+
+    result = query_retrival._fast_sales_day_comparison_query(
+        "Compare yesterday and today's revenue", db, user_id=7
+    )
+
+    assert result is not None
+    assert "yesterday (2026-10-13): ₹1,500.00" in result["answer"]
+    assert "today (2026-10-14): ₹2,100.00" in result["answer"]
+    assert "+600.00 (+40.0%)" in result["answer"]
+    assert [row["total_sales_amount"] for row in result["results"]] == [1500.0, 2100.0]
+    assert ":previous_business_date" in db.sql and ":business_date" in db.sql
+    assert db.params == {"user_id": 7, "business_date": today, "previous_business_date": yesterday}
+
+
+def test_yesterday_and_today_items_sold_returns_daily_quantity_comparison(monkeypatch):
+    import query_retrival
+
+    today = date(2026, 10, 14)
+    yesterday = date(2026, 10, 13)
+    monkeypatch.setattr(query_retrival, "_business_dates", lambda: (today, yesterday))
+    db = _FakeComparisonDb([
+        {"business_date": yesterday, "sales_count": 3, "sales_amount": 1500, "total_units_sold": 10},
+        {"business_date": today, "sales_count": 4, "sales_amount": 2100, "total_units_sold": 12},
+    ])
+
+    result = query_retrival._fast_sales_day_comparison_query(
+        "Compare items sold yesterday vs today", db, user_id=7
+    )
+
+    assert result is not None
+    assert "yesterday (2026-10-13): 10" in result["answer"]
+    assert "today (2026-10-14): 12" in result["answer"]
+    assert "Change today vs yesterday: +2 item(s)" in result["answer"]
+    assert [row["total_units_sold"] for row in result["results"]] == [10.0, 12.0]
+
+
+def test_translation_confidence_allows_clear_english_aggregate_to_use_fast_path():
+    import query_retrival
+
+    question = "How many items were sold today?"
+    scope = {"kind": "exact", "start_date": date(2026, 10, 14), "end_date": date(2026, 10, 14), "label": "today"}
+    plan = query_retrival._make_deterministic_query_plan(question)
+    assert plan["confidence"] >= 0.90
+    classification = {"intent": "general", "metric": "other", "confidence": 0.0}
+
+    classifier_agrees = (
+        classification.get("intent") == "aggregate"
+        and classification.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}
+        and float(classification.get("confidence") or 0.0) >= 0.90
+    )
+    assert not classifier_agrees
+    assert query_retrival._can_use_fast_business_query(question, scope)
+    # The ask_query route now permits this clear deterministic plan when translation confidence >= 0.92.
+    assert 0.92 >= 0.92
+
