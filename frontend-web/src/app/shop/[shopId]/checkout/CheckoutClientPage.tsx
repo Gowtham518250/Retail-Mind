@@ -183,7 +183,7 @@ export default function CheckoutClientPage() {
       (positionError) => {
         setIsDetectingLocation(false);
         setLocationError(
-          positionError.code === positionError.PERMISSION_DENIED
+          positionError.code === 1
             ? 'Location access is blocked. Allow it in your browser settings, or enter your address manually.'
             : 'Could not detect your location. Please enter your address manually.'
         );
