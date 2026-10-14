@@ -20,6 +20,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
+from langchain_core.documents import Document
+from query_retrieval_optimization import canonical_schema_query, hybrid_rank_tables, build_bounded_schema_context
 from langchain_core.prompts import ChatPromptTemplate
 from groq import Groq
 from db import get_db
@@ -28,7 +30,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-14-fast-kpi-event-loop-v10"
+QUERY_ENGINE_VERSION = "2026-10-14-hybrid-schema-retrieval-v11"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -521,23 +523,56 @@ def _select_distinct_schema_tables(scored_documents, max_tables: int = 8):
     return tuple(selected)
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=256)
 def _cached_schema_search(normalized_query: str):
-    """Cache diverse schema-only results per worker; no tenant data is cached."""
-    # Fetch a wider candidate set, then choose one best chunk per distinct
-    # table. Full catalog expansion below supplies the complete table schema.
+    """Hybrid schema-only search cached by canonical query terms per worker."""
     candidates = vectorstore.similarity_search_with_score(normalized_query, k=32)
-    selected = _select_distinct_schema_tables(candidates, max_tables=8)
-    table_names = [
-        str((getattr(document, "metadata", {}) or {}).get("table") or "unknown")
-        for document in selected
-    ]
+    ordered = []
+    for position, pair in enumerate(candidates or []):
+        try:
+            document, score = pair
+            distance = float(score)
+        except (TypeError, ValueError):
+            try:
+                document = pair[0]
+            except (TypeError, IndexError):
+                continue
+            distance = float(position)
+        metadata = getattr(document, "metadata", {}) or {}
+        table = str(metadata.get("table") or "").strip()
+        if not table:
+            source = str(metadata.get("source") or "").replace("\\", "/")
+            table = Path(source).stem if source else ""
+        if table:
+            ordered.append((distance, position, table, document))
+    ordered.sort(key=lambda item: (item[0], item[1]))
+
+    vector_names, best_documents = [], {}
+    for _distance, _position, table, document in ordered:
+        if table.casefold() not in best_documents:
+            best_documents[table.casefold()] = document
+            vector_names.append(table)
+
+    catalog = full_table_catalog if isinstance(full_table_catalog, dict) else {}
+    ranked_tables = hybrid_rank_tables(normalized_query, catalog, vector_names, limit=8)
+    selected = []
+    for table in ranked_tables:
+        document = best_documents.get(table.casefold())
+        if document is None:
+            entry = catalog.get(table)
+            content = entry.get("content", "") if isinstance(entry, dict) else entry
+            content = str(content or "").strip()
+            if not content:
+                continue
+            source = entry.get("source", f"business_table_catalog/{table}.txt") if isinstance(entry, dict) else f"business_table_catalog/{table}.txt"
+            document = Document(page_content=content, metadata={"table": table, "source": source})
+        selected.append(document)
     print(
         "ASKQUERY STAGE=schema_retrieval "
-        f"candidate_chunks={len(candidates)} distinct_tables={len(selected)} "
-        f"tables={','.join(table_names)}"
+        f"vector_chunks={len(candidates or [])} vector_tables={len(vector_names)} "
+        f"hybrid_tables={len(selected)} tables={','.join(str((doc.metadata or {}).get('table') or 'unknown') for doc in selected)}"
     )
-    return selected
+    return tuple(selected)
 
 
 # Complete table catalog generated alongside the FAISS index. This avoids
@@ -590,25 +625,23 @@ def _recent_query_examples(db: Session, user_id: int, limit: int = 5) -> list[di
 
 
 def _generate_sql_with_groq(formatted_prompt: str, model: str) -> str:
-    """Run the synchronous streaming Groq SDK away from the async request loop."""
+    """Generate SQL with one non-streaming Groq completion.
+
+    The endpoint returns a complete result rather than incremental tokens, so
+    collecting streamed chunks adds overhead without user-visible benefit.
+    """
     completion = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": formatted_prompt}],
         temperature=0.1,
         max_tokens=1800,
         top_p=0.9,
-        stream=True,
-        stop=None,
+        stream=False,
     )
-    generated_parts = []
-    for chunk in completion:
-        if not getattr(chunk, "choices", None):
-            continue
-        delta = getattr(chunk.choices[0], "delta", None)
-        content = getattr(delta, "content", None) or ""
-        if content:
-            generated_parts.append(content)
-    return "".join(generated_parts).strip()
+    if not getattr(completion, "choices", None):
+        return ""
+    message = getattr(completion.choices[0], "message", None)
+    return str(getattr(message, "content", None) or "").strip()
 
 
 def _make_deterministic_query_plan(query: str) -> dict:
@@ -3393,15 +3426,9 @@ async def ask_query(
     print("QUERY:", query)
 
     retrieval_started = time.perf_counter()
-    answer = list(_cached_schema_search(re.sub(r"\s+", " ", query).strip().lower()))
+    answer = list(await run_in_threadpool(_cached_schema_search, canonical_schema_query(query)))
     retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
-    print("Relevant database information:")
-    for doc in answer:
-        print("-----")
-        print(doc.page_content)
-        print("Table:", doc.metadata.get("table"))
-        print("Source:", doc.metadata.get("source"))
     table_paths = []
     retrived_table_information = []
     retrieved_table_records = []
@@ -3516,9 +3543,6 @@ async def ask_query(
                 "content": content,
                 "retrieval": "faiss_chunk",
             })
-    print("Retrieved table information:")
-    for content in retrived_table_information:
-        print(content)
     prompt = ChatPromptTemplate.from_template(
     
     """You are a PostgreSQL Text-to-SQL generator for a retail management system.
@@ -3593,7 +3617,19 @@ async def ask_query(
     Do not provide any explanation outside this format.
     """ 
     )
-    retrived_table_information_str = "\n\n".join(retrived_table_information)
+    try:
+        schema_context_limit = max(1000, min(int(os.getenv("ASKQUERY_SCHEMA_CONTEXT_CHARS", "18000")), 28000))
+    except (TypeError, ValueError):
+        schema_context_limit = 18000
+    retrived_table_information_str = build_bounded_schema_context(
+        retrived_table_information,
+        max_chars=schema_context_limit,
+    )
+    print(
+        "ASKQUERY STAGE=schema_context "
+        f"tables={len(retrived_table_information)} schema_chars={len(retrived_table_information_str)} "
+        f"limit_chars={schema_context_limit}"
+    )
 
     planner_context = json.dumps({'plan': query_plan, 'date_scope': {'kind': date_scope.get('kind'), 'start_date': date_scope.get('start_date').isoformat() if date_scope.get('start_date') else None, 'end_date': date_scope.get('end_date').isoformat() if date_scope.get('end_date') else None, 'label': date_scope.get('label')}}, ensure_ascii=False)
     formatted_prompt = prompt.format(
@@ -3999,7 +4035,7 @@ async def ask_query(
 
     db_ms = (time.perf_counter() - db_started) * 1000
     total_ms = (time.perf_counter() - started) * 1000
-    print(f"ASKQUERY TIMING retrieval={retrieval_ms:.1f}ms sql_llm={llm_ms:.1f}ms sql_review={sql_review_ms:.1f}ms db={db_ms:.1f}ms total={total_ms:.1f}ms")
+    print(f"ASKQUERY TIMING retrieval={retrieval_ms:.1f}ms schema_chars={len(retrived_table_information_str)} sql_llm={llm_ms:.1f}ms sql_review={sql_review_ms:.1f}ms db={db_ms:.1f}ms total={total_ms:.1f}ms")
 
     encoded_rows = jsonable_encoder([dict(row) for row in rows])
 
