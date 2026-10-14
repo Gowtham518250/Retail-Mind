@@ -28,7 +28,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-14-fast-kpi-event-loop-v10"
+QUERY_ENGINE_VERSION = "2026-10-14-top-customers-monthly-invoices-v11"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -1990,6 +1990,334 @@ GROQ_API_KEY = (os.getenv("GROQ_API_KEY") or "").strip()
 client = Groq(api_key=GROQ_API_KEY or "unconfigured-groq-api-key")
 
 
+
+
+def _fast_top_customers_query(
+    query: str,
+    db: Session,
+    user_id: int,
+    date_scope: dict | None = None,
+):
+    """Rank a shop's customers by invoiced value or invoice count without an LLM."""
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    asks_customer = bool(re.search(r"\b(customers?|clients?|buyers?)\b", normalized))
+    asks_rank = bool(re.search(
+        r"\b(top|best|highest|most|biggest|largest|valuable|frequent|rank(?:ed|ing)?)\b",
+        normalized,
+    ))
+    if not asks_customer or not asks_rank:
+        return None
+
+    # Debt and credit questions have their own semantics/handler; do not
+    # reinterpret "highest outstanding customers" as highest sales revenue.
+    if re.search(
+        r"\b(khata|udhar|unpaid|overdue|outstanding|owe|owes|owed|receivable|receivables|"
+        r"customer dues|credit balance|balances?)\b",
+        normalized,
+    ):
+        return None
+
+    count_basis = bool(re.search(
+        r"\b(invoice count|number of invoices|most invoices|frequent(?:ly)?|"
+        r"purchase frequency|most purchases|most orders|invoice frequency)\b",
+        normalized,
+    )) and not bool(re.search(
+        r"\b(revenue|billed|billing value|invoice value|spend|spent|spending|amount|sales value)\b",
+        normalized,
+    ))
+    metric = "invoice_count" if count_basis else "total_billed"
+    rank_column = "invoice_count" if count_basis else "total_billed"
+
+    limit_match = re.search(r"\btop\s+(\d{1,2})\b", normalized)
+    row_limit = max(1, min(int(limit_match.group(1)), 25)) if limit_match else 10
+
+    scope = date_scope or _resolve_explicit_date_scope(query)
+    params = {"user_id": int(user_id), "row_limit": row_limit}
+    date_filter = ""
+    start_date = scope.get("start_date")
+    end_date = scope.get("end_date")
+    if scope.get("kind") in {"exact", "range"} and start_date is not None and end_date is not None:
+        date_filter = " AND i.invoice_date >= :scope_start AND i.invoice_date <= :scope_end"
+        params["scope_start"] = start_date
+        params["scope_end"] = end_date
+
+    sql = (
+        "WITH customer_totals AS ("
+        "SELECT "
+        "COALESCE('customer:' || c.id::text, "
+        "'snapshot:' || LOWER(NULLIF(BTRIM(i.customer_name), ''))) AS customer_key, "
+        "COALESCE(NULLIF(BTRIM(c.customer_name), ''), "
+        "NULLIF(BTRIM(i.customer_name), ''), 'Unknown customer') AS customer_name, "
+        "COUNT(*)::bigint AS invoice_count, "
+        "COALESCE(SUM(i.total_amount), 0)::numeric AS total_billed, "
+        "COALESCE(SUM(COALESCE(i.paid_amount, 0)), 0)::numeric AS total_paid "
+        "FROM invoices i "
+        "LEFT JOIN customers c ON c.id = i.customer_id AND c.user_id = i.user_id "
+        "WHERE i.user_id = :user_id "
+        "AND i.status NOT IN ('CANCELLED', 'DRAFT') "
+        "AND (c.id IS NOT NULL OR NULLIF(BTRIM(i.customer_name), '') IS NOT NULL)"
+        + date_filter +
+        " GROUP BY 1, 2"
+        ") "
+        "SELECT customer_name, invoice_count, total_billed, total_paid "
+        "FROM customer_totals "
+        f"ORDER BY {rank_column} DESC, total_billed DESC, customer_name ASC "
+        "LIMIT :row_limit"
+    )
+
+    raw_rows = db.execute(text(sql), params).mappings().all()
+    rows = []
+    for raw in raw_rows:
+        row = dict(raw)
+        row["invoice_count"] = int(row.get("invoice_count") or 0)
+        for key in ("total_billed", "total_paid"):
+            row[key] = float(row.get(key) or 0)
+        rows.append(row)
+
+    scope_label = str(scope.get("label") or "not specified")
+    scope_text = "" if scope_label in {"not specified", "all time"} else f" {scope_label}"
+    if not rows:
+        answer = f"No eligible customer invoices were found{scope_text}."
+    else:
+        basis_text = "invoice count" if count_basis else "billed invoice value"
+        lines = []
+        for index, row in enumerate(rows, start=1):
+            lines.append(
+                f"{index}. {row['customer_name']} — ₹{row['total_billed']:,.2f} billed "
+                f"across {row['invoice_count']} invoice(s)"
+            )
+        period_text = f" {scope_label}" if scope_label not in {"not specified", "all time"} else ""
+        answer = f"Top customers by {basis_text}{period_text}:\n" + "\n".join(lines)
+
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_QUERY: top customers by invoice value/count " + sql,
+        "generated_model_response": answer,
+        "results": rows,
+        "has_more": False,
+    }
+
+
+def _fast_invoice_report_query(
+    query: str,
+    db: Session,
+    user_id: int,
+    date_scope: dict | None = None,
+):
+    """Answer common invoice totals, monthly summaries, and invoice-list questions directly."""
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
+    asks_invoice = bool(re.search(r"\b(invoices?|bills?|billing)\b", normalized))
+    if not asks_invoice:
+        return None
+
+    # Leave debt/payment-status requests to the existing receivables handler,
+    # which has dedicated outstanding-balance and unpaid-invoice semantics.
+    if re.search(
+        r"\b(unpaid|not paid|overdue|outstanding|pending payment|pending dues|"
+        r"owe|owes|owed|receivable|receivables|khata|udhar|credit ledger|overpayment|overpaid)\b",
+        normalized,
+    ):
+        return None
+
+    scope = date_scope or _resolve_explicit_date_scope(query)
+    scope_kind = scope.get("kind", "unspecified")
+    start_date = scope.get("start_date")
+    end_date = scope.get("end_date")
+    has_date_range = (
+        scope_kind in {"exact", "range"}
+        and start_date is not None
+        and end_date is not None
+    )
+
+    monthly_breakdown = bool(re.search(
+        r"\b(month[- ]wise|month by month|by month|per month|each month|monthly "
+        r"(?:invoice|invoices|bill|bills|billing|summary|report|breakdown|trend|totals?))\b|"
+        r"\binvoices? per month\b|\binvoice count per month\b",
+        normalized,
+    ))
+    asks_count = bool(re.search(
+        r"\b(how many|count|number of|total number of)\b.{0,55}\b(invoices?|bills?)\b",
+        normalized,
+    ))
+    asks_amount = bool(re.search(
+        r"\b(how much|total billed|total invoice value|invoice total|total amount|"
+        r"sum of|sum|billed amount|billing amount|amount invoiced|value invoiced)\b",
+        normalized,
+    ))
+    asks_list = bool(re.search(
+        r"\b(show|list|display|details|detail|latest|recent|all|which|invoice number|"
+        r"invoice-wise|bill-wise)\b",
+        normalized,
+    ))
+
+    # A phrase such as "monthly invoices" is treated as a month-by-month
+    # summary; explicit "show/list invoices this month" remains an invoice list.
+    if monthly_breakdown:
+        params = {"user_id": int(user_id), "row_limit": 24}
+        date_filter = ""
+        if has_date_range:
+            date_filter = " AND i.invoice_date >= :scope_start AND i.invoice_date <= :scope_end"
+            params["scope_start"] = start_date
+            params["scope_end"] = end_date
+
+        sql = (
+            "SELECT DATE_TRUNC('month', i.invoice_date)::date AS invoice_month, "
+            "COUNT(*)::bigint AS invoice_count, "
+            "COALESCE(SUM(i.total_amount), 0)::numeric AS total_billed, "
+            "COALESCE(SUM(COALESCE(i.paid_amount, 0)), 0)::numeric AS total_paid, "
+            "COALESCE(SUM(GREATEST(COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0), 0)), 0)::numeric AS outstanding_amount "
+            "FROM invoices i "
+            "WHERE i.user_id = :user_id "
+            "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+            + date_filter +
+            " GROUP BY DATE_TRUNC('month', i.invoice_date)::date "
+            "ORDER BY invoice_month DESC LIMIT :row_limit"
+        )
+        raw_rows = db.execute(text(sql), params).mappings().all()
+        rows = []
+        for raw in raw_rows:
+            row = dict(raw)
+            month_value = row.get("invoice_month")
+            row["invoice_month"] = (
+                month_value.isoformat() if hasattr(month_value, "isoformat") else str(month_value or "")
+            )
+            row["invoice_count"] = int(row.get("invoice_count") or 0)
+            for key in ("total_billed", "total_paid", "outstanding_amount"):
+                row[key] = float(row.get(key) or 0)
+            rows.append(row)
+
+        if not rows:
+            answer = "No eligible invoices were found for the requested monthly summary."
+        else:
+            period_text = f" ({scope.get('label')})" if has_date_range else " (most recent 24 months)"
+            lines = [
+                f"{row['invoice_month'][:7]} — {row['invoice_count']} invoice(s), "
+                f"₹{row['total_billed']:,.2f} billed, ₹{row['total_paid']:,.2f} paid, "
+                f"₹{row['outstanding_amount']:,.2f} outstanding"
+                for row in rows
+            ]
+            answer = "Monthly invoice summary" + period_text + ":\n" + "\n".join(lines)
+
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_QUERY: monthly invoice summary " + sql,
+            "generated_model_response": answer,
+            "results": rows,
+            "has_more": False,
+        }
+
+    # Count/value questions with a date range use a single predictable aggregate.
+    # If no date range was stated, only run this path for an explicit count/value
+    # question, not for a bare word such as "invoices".
+    if asks_count or asks_amount:
+        params = {"user_id": int(user_id)}
+        date_filter = ""
+        if has_date_range:
+            date_filter = " AND i.invoice_date >= :scope_start AND i.invoice_date <= :scope_end"
+            params["scope_start"] = start_date
+            params["scope_end"] = end_date
+        sql = (
+            "SELECT COUNT(*)::bigint AS invoice_count, "
+            "COALESCE(SUM(i.total_amount), 0)::numeric AS total_billed, "
+            "COALESCE(SUM(COALESCE(i.paid_amount, 0)), 0)::numeric AS total_paid, "
+            "COALESCE(SUM(GREATEST(COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0), 0)), 0)::numeric AS outstanding_amount "
+            "FROM invoices i "
+            "WHERE i.user_id = :user_id "
+            "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+            + date_filter
+        )
+        raw = dict(db.execute(text(sql), params).mappings().one())
+        invoice_count = int(raw.get("invoice_count") or 0)
+        total_billed = float(raw.get("total_billed") or 0)
+        total_paid = float(raw.get("total_paid") or 0)
+        outstanding = float(raw.get("outstanding_amount") or 0)
+        label = str(scope.get("label") or "not specified")
+        period_text = "" if label == "not specified" else f" {label}"
+        if asks_count and not asks_amount:
+            answer = (
+                f"You have {invoice_count} eligible invoice(s){period_text}, "
+                f"totalling ₹{total_billed:,.2f} in billed value."
+            )
+        else:
+            answer = (
+                f"Invoice summary{period_text}: {invoice_count} invoice(s), "
+                f"₹{total_billed:,.2f} billed, ₹{total_paid:,.2f} paid, "
+                f"₹{outstanding:,.2f} outstanding."
+            )
+        row = {
+            "invoice_count": invoice_count,
+            "total_billed": total_billed,
+            "total_paid": total_paid,
+            "outstanding_amount": outstanding,
+        }
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_QUERY: invoice count/value summary " + sql,
+            "generated_model_response": answer,
+            "results": [row],
+            "has_more": False,
+        }
+
+    # An explicit list request (or a period-scoped invoice query) should return
+    # real invoice rows without asking Groq to invent a join or column.
+    if not (asks_list or has_date_range):
+        return None
+
+    params = {"user_id": int(user_id), "row_limit": 51}
+    date_filter = ""
+    if has_date_range:
+        date_filter = " AND i.invoice_date >= :scope_start AND i.invoice_date <= :scope_end"
+        params["scope_start"] = start_date
+        params["scope_end"] = end_date
+    sql = (
+        "SELECT i.id AS invoice_id, i.invoice_number, "
+        "COALESCE(NULLIF(BTRIM(i.customer_name), ''), NULLIF(BTRIM(c.customer_name), ''), 'Unknown customer') AS customer_name, "
+        "i.invoice_date, COALESCE(i.total_amount, 0)::numeric AS total_amount, "
+        "COALESCE(i.paid_amount, 0)::numeric AS paid_amount, "
+        "GREATEST(COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0), 0)::numeric AS outstanding_amount, "
+        "i.status, i.payment_status "
+        "FROM invoices i "
+        "LEFT JOIN customers c ON c.id = i.customer_id AND c.user_id = i.user_id "
+        "WHERE i.user_id = :user_id "
+        "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+        + date_filter +
+        " ORDER BY i.invoice_date DESC NULLS LAST, i.id DESC LIMIT :row_limit"
+    )
+    raw_rows = db.execute(text(sql), params).mappings().all()
+    has_more = len(raw_rows) > 50
+    rows = []
+    for raw in raw_rows[:50]:
+        row = dict(raw)
+        invoice_date = row.get("invoice_date")
+        row["invoice_date"] = (
+            invoice_date.isoformat() if hasattr(invoice_date, "isoformat") else str(invoice_date or "")
+        )
+        row["invoice_id"] = int(row.get("invoice_id") or 0)
+        for key in ("total_amount", "paid_amount", "outstanding_amount"):
+            row[key] = float(row.get(key) or 0)
+        rows.append(row)
+    scope_label = str(scope.get("label") or "not specified")
+    period_text = "" if scope_label == "not specified" else f" {scope_label}"
+    if not rows:
+        answer = f"No eligible invoices were found{period_text}."
+    else:
+        preview = [
+            f"{row['invoice_number'] or row['invoice_id']} — {row['customer_name']}, "
+            f"₹{row['total_amount']:,.2f} billed"
+            for row in rows[:5]
+        ]
+        answer = f"Found {len(rows)} invoice(s){period_text}: " + "; ".join(preview)
+        if has_more:
+            answer += "; more invoices are available, so narrow the date range to see fewer results."
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_QUERY: invoice list " + sql,
+        "generated_model_response": answer,
+        "results": jsonable_encoder(rows),
+        "has_more": has_more,
+    }
+
+
 @app.get("/askquery/history")
 def get_query_history(
     limit: int = 30,
@@ -3149,6 +3477,35 @@ async def ask_query(
             "has_more": False,
         }
 
+    top_customers_result = _fast_top_customers_query(query, db, user_id, date_scope)
+    if top_customers_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_TOP_CUSTOMERS "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=original_query,
+            answer=top_customers_result["answer"],
+            result_count=len(top_customers_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": top_customers_result["answer"],
+            "message": top_customers_result["answer"],
+            "generated_sql": top_customers_result["generated_sql"],
+            "generated_model_response": top_customers_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": top_customers_result["generated_sql"],
+            "row_count": len(top_customers_result["results"]),
+            "results": top_customers_result["results"],
+            "has_more": top_customers_result["has_more"],
+        }
+
     # Ranked revenue questions must run before generic product listing and
     # generic total-sales matching, otherwise "highest revenue product" can
     # incorrectly return the overall shop sales total.
@@ -3325,6 +3682,35 @@ async def ask_query(
             "row_count": len(receivables_result["results"]),
             "results": receivables_result["results"],
             "has_more": receivables_result.get("has_more", False),
+        }
+
+    invoice_report_result = _fast_invoice_report_query(query, db, user_id, date_scope)
+    if invoice_report_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_INVOICE_REPORT "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=original_query,
+            answer=invoice_report_result["answer"],
+            result_count=len(invoice_report_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": invoice_report_result["answer"],
+            "message": invoice_report_result["answer"],
+            "generated_sql": invoice_report_result["generated_sql"],
+            "generated_model_response": invoice_report_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": invoice_report_result["generated_sql"],
+            "row_count": len(invoice_report_result["results"]),
+            "results": invoice_report_result["results"],
+            "has_more": invoice_report_result["has_more"],
         }
 
     # Check only the reliable KPI rules first. Avoid even the deterministic
