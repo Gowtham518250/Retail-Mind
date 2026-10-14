@@ -26,6 +26,8 @@ services:
         value: brevo
       - key: BREVO_API_KEY
         sync: false
+      - key: SERPAPI_API_KEY
+        sync: false
       - key: REDIS_URL
         sync: false
       - key: REALTIME_REDIS_CHANNEL
