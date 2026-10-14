@@ -294,7 +294,8 @@ def _review_generated_sql_with_groq(
                 {"role": "user", "content": prompt},
             ],
             temperature=0.0,
-            max_tokens=2600,
+            # Leave output headroom under the observed 1,000-token/minute tier limit.
+            max_tokens=800,
             response_format={"type": "json_object"},
             stream=False,
         )
@@ -371,7 +372,7 @@ def _repair_failed_sql_with_groq(
                 {"role": "user", "content": prompt},
             ],
             temperature=0.0,
-            max_tokens=2400,
+            max_tokens=800,
             response_format={"type": "json_object"},
             stream=False,
         )
@@ -595,7 +596,8 @@ def _generate_sql_with_groq(formatted_prompt: str, model: str) -> str:
         model=model,
         messages=[{"role": "user", "content": formatted_prompt}],
         temperature=0.1,
-        max_tokens=1800,
+        # SQL is emitted as one compact statement; keep expected output below the observed OTPM cap.
+        max_tokens=800,
         top_p=0.9,
         stream=True,
         stop=None,
@@ -2468,7 +2470,7 @@ def _verify_uncertain_translation(
                 },
             ],
             temperature=0.0,
-            max_tokens=1200,
+            max_tokens=800,
             response_format={"type": "json_object"},
             stream=False,
         )
