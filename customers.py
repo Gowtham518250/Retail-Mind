@@ -34,7 +34,7 @@ def _normalize_indian_mobile(value):
 class CustomerCreate(BaseModel):
     customer_name: str
     email: Optional[EmailStr] = None
-    phone: str = Field(..., min_length=10, max_length=10, pattern=r"^\d{10}$")
+    phone: str = Field(..., min_length=10, max_length=10, pattern=r"^[6-9]\d{9}$")
     whatsapp_number: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
@@ -51,7 +51,7 @@ class CustomerCreate(BaseModel):
 class CustomerUpdate(BaseModel):
     customer_name: Optional[str] = None
     email: Optional[str] = None
-    phone: Optional[str] = Field(None, min_length=10, max_length=10, pattern=r"^\d{10}$")
+    phone: Optional[str] = Field(None, min_length=10, max_length=10, pattern=r"^[6-9]\d{9}$")
     whatsapp_number: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
@@ -262,7 +262,7 @@ def set_contact_preference(
 
 @router.get("/search/by-phone")
 def search_by_phone(
-    phone: str = Query(..., min_length=10, max_length=10, pattern=r"^\d{10}$"),
+    phone: str = Query(..., min_length=10, max_length=10, pattern=r"^[6-9]\d{9}$"),
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
