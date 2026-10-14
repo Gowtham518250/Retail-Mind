@@ -273,6 +273,7 @@ export default function CheckoutClientPage() {
         customer_name: customer.name,
         phone: form.phone.trim(),
         delivery_address: combinedAddress,
+        order_notes: form.orderNotes.trim() || undefined,
         items: cartItems.map((item) => ({
           name: item.product.name,
           quantity: item.quantity,
