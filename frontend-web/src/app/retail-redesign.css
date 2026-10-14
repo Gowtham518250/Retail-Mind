@@ -305,3 +305,44 @@ hr { border-color: var(--rm-line); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+
+/* Product detail and customer review pages */
+.product-page { background: var(--rm-paper) !important; color: var(--rm-ink) !important; padding: 18px 0 52px !important; }
+.product-page .container { max-width: 1240px !important; }
+.product-back { display: inline-flex !important; align-items: center; gap: 8px; margin: 0 0 14px !important; padding: 9px 14px !important; border: 1px solid var(--rm-line) !important; border-radius: 999px !important; background: var(--rm-paper-2) !important; color: var(--rm-green) !important; font-size: 12px !important; font-weight: 800 !important; }
+.product-back:hover { background: var(--rm-green-light) !important; transform: translateX(-2px); }
+.product-detail { overflow: hidden !important; border: 1px solid var(--rm-line) !important; border-radius: 26px !important; background: var(--rm-paper-2) !important; box-shadow: var(--rm-shadow) !important; }
+.product-visual { min-height: 410px !important; background: linear-gradient(135deg,#e6edda 0%,#f8eadb 60%,#f7d9c8 100%) !important; }
+.product-glow { background: radial-gradient(circle,rgba(216,237,145,.82),rgba(241,106,69,.13) 54%,transparent 70%) !important; }
+.product-orbit { border-color: rgba(36,91,66,.16) !important; }
+.product-orbit span { background: var(--rm-orange) !important; box-shadow: 0 0 0 5px rgba(241,106,69,.12) !important; }
+.product-image-frame { filter: drop-shadow(0 22px 21px rgba(31,50,35,.15)); }
+.product-floating-badge { border: 1px solid rgba(255,255,255,.75) !important; background: rgba(255,253,247,.9) !important; color: var(--rm-green) !important; border-radius: 999px !important; box-shadow: 0 8px 20px rgba(31,50,35,.08) !important; }
+.product-copy { padding: clamp(22px,4vw,46px) !important; }
+.product-copy h1 { color: var(--rm-ink) !important; font-size: clamp(36px,4.5vw,58px) !important; line-height: .98 !important; letter-spacing: -.055em !important; }
+.product-copy > p { color: var(--rm-muted) !important; line-height: 1.65 !important; }
+.product-price-row { margin-top: 22px !important; }
+.product-main-price { color: var(--rm-green-deep) !important; font-size: clamp(29px,3.5vw,40px) !important; font-weight: 900 !important; letter-spacing: -.06em !important; }
+.product-save-pill { background: var(--rm-orange-light) !important; color: #b84e2d !important; border-radius: 999px !important; }
+.product-benefits > div { border: 1px solid var(--rm-line) !important; background: #f8f6ed !important; border-radius: 12px !important; color: var(--rm-ink-soft) !important; }
+.product-benefits svg { color: var(--rm-green) !important; }
+.product-availability { color: var(--rm-muted) !important; }
+.product-availability .available { color: var(--rm-green) !important; }
+.product-availability .unavailable { color: #c35132 !important; }
+.product-reviews-panel { margin-top: 18px !important; padding: clamp(20px,3vw,30px) !important; border: 1px solid var(--rm-line) !important; border-radius: 23px !important; background: var(--rm-paper-2) !important; box-shadow: var(--rm-shadow) !important; }
+.product-reviews-head h2 { margin: 10px 0 5px !important; color: var(--rm-ink) !important; font-size: clamp(28px,3.5vw,40px) !important; letter-spacing: -.045em !important; }
+.product-reviews-head p { color: var(--rm-muted) !important; }
+.product-reviews-summary { border-radius: 16px !important; background: var(--rm-green-light) !important; color: var(--rm-green-deep) !important; }
+.product-review-empty { border: 1px dashed #d7dccb !important; border-radius: 15px !important; background: #f8f6ed !important; color: var(--rm-muted) !important; }
+.product-review-card { border: 1px solid var(--rm-line) !important; border-radius: 16px !important; background: #fffefb !important; color: var(--rm-ink) !important; }
+.product-review-top span { color: var(--rm-muted) !important; }
+.product-review-stars { color: #dba43b !important; }
+@media (max-width: 720px) {
+  .product-page { padding: 10px 0 32px !important; }
+  .product-detail { border-radius: 20px !important; }
+  .product-visual { min-height: 290px !important; }
+  .product-copy { padding: 22px !important; }
+  .product-copy h1 { font-size: 38px !important; }
+  .product-reviews-panel { border-radius: 18px !important; }
+}
