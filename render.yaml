@@ -12,8 +12,11 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
+      # Short-lived access token; the refresh token keeps an active login for 7 days.
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 10080
+        value: 30
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 7
       - key: REFRESH_TOKEN_EXPIRE_DAYS
         value: 7
       - key: SENDER_EMAIL

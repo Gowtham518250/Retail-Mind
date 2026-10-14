@@ -41,3 +41,26 @@ def test_product_image_column_has_an_idempotent_production_repair():
     assert 'ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT' in app_source
     assert 'ADD COLUMN IF NOT EXISTS image_url TEXT' in migration_source
     assert 'DROP COLUMN IF EXISTS image_url' in migration_source
+
+
+def test_customer_create_accepts_slash_and_non_slash_paths_without_redirect():
+    from customers import router as customer_router
+
+    create_paths = {
+        route.path
+        for route in customer_router.routes
+        if "POST" in (getattr(route, "methods", None) or set())
+    }
+    assert "/api/customers" in create_paths
+    assert "/api/customers/" in create_paths
+
+
+def test_token_lifetimes_keep_short_access_and_seven_day_refresh():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    render_source = (root / "render.yaml").read_text(encoding="utf-8")
+    security_source = (root / "security.py").read_text(encoding="utf-8")
+    assert "key: ACCESS_TOKEN_EXPIRE_MINUTES\n        value: 30" in render_source
+    assert "key: REFRESH_TOKEN_EXPIRE_DAYS\n        value: 7" in render_source
+    assert "ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv(\"ACCESS_TOKEN_EXPIRE_MINUTES\", 30))" in security_source

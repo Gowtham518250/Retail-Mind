@@ -62,6 +62,9 @@ class CustomerResponse(BaseModel):
 
 # ==================== CRUD OPERATIONS ====================
 
+# Accept both URL forms so older clients posting to /api/customers do not
+# receive a 307 redirect for a write request.
+@router.post("", response_model=CustomerResponse)
 @router.post("/", response_model=CustomerResponse)
 def create_customer(
     customer: CustomerCreate,
