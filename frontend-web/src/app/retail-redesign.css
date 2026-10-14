@@ -22,6 +22,34 @@
   --rm-ease: cubic-bezier(.2, .75, .25, 1);
   --font-display: 'Fraunces', 'Outfit', Georgia, serif;
   --font-body: 'DM Sans', 'Inter', sans-serif;
+  /* Legacy variables used by inline styles and older pages */
+  --text-primary: var(--rm-ink);
+  --text-secondary: var(--rm-muted);
+  --text-muted: #879183;
+  --bg: var(--rm-paper);
+  --bg-surface: var(--rm-paper-2);
+  --bg-elevated: #f1efe3;
+  --card-bg: var(--rm-paper-2);
+  --border: var(--rm-line);
+  --border-hover: #c5d8bb;
+  --indigo: var(--rm-green);
+  --indigo-dark: var(--rm-green-deep);
+  --cyan: var(--rm-lime);
+  --emerald: var(--rm-green);
+  --amber: #dba43b;
+  --rose: var(--rm-orange);
+  --fk-blue: var(--rm-green);
+  --fk-blue-dark: var(--rm-green-deep);
+  --fk-blue-light: var(--rm-lime);
+  --fk-yellow: #dba43b;
+  --fk-red: var(--rm-orange);
+  --fk-green: var(--rm-green);
+  --success: var(--rm-green);
+  --shadow-sm: 0 2px 8px rgba(31,50,35,.05);
+  --shadow-md: 0 8px 22px rgba(31,50,35,.08);
+  --shadow-lg: 0 16px 42px rgba(31,50,35,.12);
+  --shadow-glow: 0 0 22px rgba(36,91,66,.15);
+  --shadow-hover: 0 14px 30px rgba(31,50,35,.11);
 }
 html { scroll-behavior: smooth; scroll-padding-top: 84px; }
 body {
@@ -345,4 +373,34 @@ hr { border-color: var(--rm-line); }
   .product-copy { padding: 22px !important; }
   .product-copy h1 { font-size: 38px !important; }
   .product-reviews-panel { border-radius: 18px !important; }
+}
+
+
+/* Account profile: neutralize legacy inline glass/dark styling so it belongs to the light storefront */
+.container:has(> div[style*="backdrop-filter"]) {
+  padding-top: 26px !important; padding-bottom: 32px !important;
+}
+.container > div[style*="backdrop-filter"] {
+  padding: clamp(22px,4vw,38px) !important; color: var(--rm-ink) !important;
+  background: var(--rm-paper-2) !important; border: 1px solid var(--rm-line) !important;
+  border-radius: 25px !important; box-shadow: var(--rm-shadow) !important;
+  backdrop-filter: none !important;
+}
+.container > div[style*="backdrop-filter"] > div:first-child {
+  background: linear-gradient(140deg,var(--rm-green),var(--rm-green-deep)) !important;
+  box-shadow: 0 10px 22px rgba(36,91,66,.2) !important;
+}
+.container > div[style*="backdrop-filter"] h1 { color: var(--rm-ink) !important; font-family: var(--font-display) !important; letter-spacing: -.045em; }
+.container > div[style*="backdrop-filter"] p { color: var(--rm-muted) !important; }
+.container > div[style*="backdrop-filter"] button {
+  min-height: 52px; border-radius: 14px !important; font-family: var(--font-body) !important;
+}
+.container > div[style*="backdrop-filter"] button[style*="linear-gradient"] {
+  background: var(--rm-green-light) !important; border-color: #d3e3cc !important; color: var(--rm-green-deep) !important;
+}
+.container > div[style*="backdrop-filter"] button[style*="rgba(255, 255, 255"] {
+  background: #f8f6ed !important; border-color: var(--rm-line) !important; color: var(--rm-ink) !important;
+}
+.container > div[style*="backdrop-filter"] button[style*="rgba(255, 68, 68"] {
+  background: var(--rm-orange-light) !important; border-color: #f4d5c6 !important; color: #b84e2d !important;
 }
