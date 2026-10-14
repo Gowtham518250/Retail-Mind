@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft, MapPin, Home, Banknote,
   ShieldCheck, Loader2, AlertCircle, ShoppingBag, UserRound, LockKeyhole,
+  LocateFixed, CheckCircle2, Sparkles,
 } from 'lucide-react';
 import { useCart } from '../../../../context/CartContext';
 import { API_BASE } from '../../../../lib/api';
@@ -43,6 +44,7 @@ export default function CheckoutClientPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState('');
   const [locationError, setLocationError] = useState('');
+  const [locationSuccess, setLocationSuccess] = useState('');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [onlineSetupFee, setOnlineSetupFee] = useState(0);
@@ -153,6 +155,9 @@ export default function CheckoutClientPage() {
   ) => {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
+    if (key === 'address' || key === 'city' || key === 'pincode') {
+      setLocationSuccess('');
+    }
   };
 
   const detectLocation = () => {
@@ -161,6 +166,7 @@ export default function CheckoutClientPage() {
       return;
     }
     setLocationError('');
+    setLocationSuccess('');
     setIsDetectingLocation(true);
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
@@ -171,13 +177,21 @@ export default function CheckoutClientPage() {
           if (!res.ok) throw new Error('reverse geocoding failed');
           const data = await res.json();
           const address = data.address || {};
+          const detectedAddress = [address.house_number, address.road, address.neighbourhood || address.suburb]
+            .filter(Boolean).join(' ').trim();
+          const detectedCity = address.city || address.town || address.village || address.county || '';
+          const detectedPincode = address.postcode || '';
           setForm((prev) => ({
             ...prev,
-            address: [address.house_number, address.road, address.neighbourhood || address.suburb]
-              .filter(Boolean).join(' ').trim(),
-            city: address.city || address.town || address.village || address.county || '',
-            pincode: address.postcode || '',
+            address: detectedAddress || prev.address,
+            city: detectedCity || prev.city,
+            pincode: detectedPincode || prev.pincode,
           }));
+          if (detectedAddress || detectedCity || detectedPincode) {
+            setLocationSuccess('Location found. Check your house number and delivery details before ordering.');
+          } else {
+            setLocationError('We found your coordinates but could not read the address. Please enter it manually.');
+          }
         } catch {
           setLocationError('Unable to resolve your location. Please enter it manually.');
         } finally {
@@ -377,13 +391,25 @@ export default function CheckoutClientPage() {
               <span className="checkout-account-badge">Signed in</span>
             </div>
             <div className="checkout-field">
-              <label><Home size={14} /> Address</label>
+              <label><Home size={14} /> Delivery address</label>
               <div className="location-row">
                 <textarea value={form.address} onChange={setField('address')} placeholder="House / flat no, street, area" rows={2} />
                 <button type="button" className="location-button" onClick={detectLocation} disabled={isDetectingLocation}>
-                  {isDetectingLocation ? 'Detecting…' : 'Detect location'}
+                  <span className="location-button-icon">
+                    {isDetectingLocation
+                      ? <Loader2 size={17} className="spin" />
+                      : locationSuccess
+                        ? <CheckCircle2 size={17} />
+                        : <LocateFixed size={17} />}
+                  </span>
+                  <span className="location-button-copy">
+                    <strong>{isDetectingLocation ? 'Finding your address…' : locationSuccess ? 'Update detected address' : 'Use my current location'}</strong>
+                    <small>{isDetectingLocation ? 'Waiting for your device location' : 'Fill city and pincode automatically'}</small>
+                  </span>
+                  {!isDetectingLocation && <span className="location-button-tag">GPS</span>}
                 </button>
               </div>
+              {locationSuccess && <span className="location-success"><CheckCircle2 size={14} /> {locationSuccess}</span>}
               {errors.address && <span className="field-error">{errors.address}</span>}
               {locationError && <span className="field-error">{locationError}</span>}
             </div>
@@ -453,6 +479,7 @@ export default function CheckoutClientPage() {
             <div className="checkout-trust">Minimum online order: ₹{minOrder.toFixed(2)}</div>
           )}
           <div className="checkout-coupon">
+            <div className="checkout-coupon-heading"><span className="checkout-coupon-icon"><Sparkles size={15} /></span><span><strong>Have a shop coupon?</strong><small>Enter a code shared by this shopkeeper to unlock your discount.</small></span></div>
             <div className="checkout-coupon-row">
               <input
                 value={couponCode}
