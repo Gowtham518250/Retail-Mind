@@ -290,6 +290,19 @@ class AttendanceRecord(BaseModel):
     status: str  # PRESENT, ABSENT, LEAVE, HALF_DAY
     notes: Optional[str] = None
 
+
+class AttendanceSessionSync(BaseModel):
+    """Idempotent snapshot sync for one locally recorded worker session."""
+    worker_id: int
+    attendance_date: str
+    session_index: int = Field(ge=0, le=1)
+    check_in_time: Optional[datetime] = None
+    check_out_time: Optional[datetime] = None
+    working_hours: Optional[float] = Field(default=None, ge=0)
+    status: str = "PRESENT"
+    operation_id: Optional[str] = None
+
+
 class LeaveRequestCreate(BaseModel):
     employee_id: int
     leave_type: str  # VACATION, SICK, PERSONAL
@@ -547,6 +560,203 @@ def employee_check_out(
         "check_out_time": attendance.check_out_time,
         "working_hours": attendance.working_hours,
         "can_check_in_next_session": True
+    }
+
+
+@router.post("/sync-session")
+def sync_worker_attendance_session(
+    record: AttendanceSessionSync,
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(check_current_user),
+):
+    """Persist an offline session snapshot without replacing its original timestamps.
+
+    The mobile app owns local-first check-in/out timestamps. The legacy check-in
+    endpoints timestamp a request when it reaches the server, which would turn an
+    offline event into attendance for the wrong date/time. This endpoint is
+    tenant-scoped, idempotent by operation_id, and updates the existing daily row.
+    """
+    worker = db.query(Worker).filter(
+        Worker.id == record.worker_id,
+        Worker.shopkeeper_id == current_user_id,
+    ).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found for this shop")
+
+    try:
+        attendance_date = date.fromisoformat(record.attendance_date)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="attendance_date must be YYYY-MM-DD") from exc
+
+    session_key, session_label, session_window = (
+        ATTENDANCE_SESSIONS[record.session_index][0],
+        ATTENDANCE_SESSIONS[record.session_index][3],
+        ATTENDANCE_SESSIONS[record.session_index][4],
+    )
+
+    def local_aware(value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=ATTENDANCE_TZ)
+        return value.astimezone(ATTENDANCE_TZ)
+
+    def stored_naive(value: Optional[datetime]) -> Optional[datetime]:
+        value = local_aware(value)
+        return value.replace(tzinfo=None) if value is not None else None
+
+    attendance = db.query(Attendance).filter(
+        Attendance.employee_id == worker.shopkeeper_id,
+        Attendance.worker_id == worker.id,
+        Attendance.attendance_date == attendance_date,
+    ).first()
+    if attendance is None:
+        attendance = Attendance(
+            employee_id=worker.shopkeeper_id,
+            worker_id=worker.id,
+            attendance_date=attendance_date,
+            status="PRESENT",
+            working_hours=0.0,
+        )
+        db.add(attendance)
+
+    meta = _session_meta(attendance)
+    session_map = meta.setdefault(SESSION_META_KEY, {})
+    previous = session_map.get(session_key)
+    if not isinstance(previous, dict):
+        previous = {}
+
+    seen_operations = meta.setdefault("_retail_mind_synced_operations", [])
+    operation_id = (record.operation_id or "").strip()
+    if operation_id and operation_id in seen_operations:
+        sessions_out, total_hours = _session_breakdown(attendance)
+        return {
+            "synced": True,
+            "duplicate": True,
+            "worker_id": worker.id,
+            "attendance_date": attendance_date.isoformat(),
+            "session_key": session_key,
+            "total_working_hours": round(total_hours, 2),
+        }
+
+    check_in = local_aware(record.check_in_time)
+    if check_in is None:
+        old_time = previous.get("check_in_time")
+        if old_time:
+            try:
+                check_in = local_aware(datetime.fromisoformat(str(old_time).replace("Z", "+00:00")))
+            except (TypeError, ValueError):
+                check_in = None
+    if check_in is None:
+        raise HTTPException(
+            status_code=422,
+            detail="The offline attendance session has no check-in timestamp; refresh attendance and retry.",
+        )
+
+    incoming_check_out = local_aware(record.check_out_time)
+    old_check_out = None
+    if previous.get("check_out_time"):
+        try:
+            old_check_out = local_aware(datetime.fromisoformat(str(previous["check_out_time"]).replace("Z", "+00:00")))
+        except (TypeError, ValueError):
+            old_check_out = None
+    # A retry of an older check-in must not erase a checkout already synced.
+    check_out = incoming_check_out or old_check_out
+    if check_out is not None and check_out < check_in:
+        raise HTTPException(status_code=422, detail="Checkout time cannot be before check-in time.")
+
+    if record.working_hours is not None:
+        session_hours = float(record.working_hours)
+    elif check_out is not None:
+        session_hours = max(0.0, (check_out - check_in).total_seconds() / 3600.0)
+    else:
+        session_hours = float(previous.get("working_hours") or 0.0)
+
+    incoming = {
+        "label": session_label,
+        "window": session_window,
+        "check_in_time": check_in.isoformat(),
+        "check_out_time": check_out.isoformat() if check_out else None,
+        "working_hours": round(session_hours, 6),
+    }
+    session_changed = any(previous.get(key) != incoming.get(key) for key in incoming)
+    session_map[session_key] = incoming
+
+    if check_out is None:
+        session_map["active_session"] = session_key
+    elif session_map.get("active_session") == session_key:
+        session_map.pop("active_session", None)
+
+    if operation_id:
+        seen_operations.append(operation_id)
+        # Keep the notes field bounded over long-lived worker records.
+        meta["_retail_mind_synced_operations"] = seen_operations[-100:]
+
+    _save_session_meta(attendance, meta)
+    status = str(record.status or "PRESENT").strip().upper().replace("-", "_")
+    if status not in {"PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE"}:
+        status = "PRESENT"
+    attendance.status = status
+
+    # Keep legacy scalar fields aligned with the active session, or else with
+    # the most recently started session. All-session payroll reads session meta.
+    active_key = session_map.get("active_session")
+    display_key = active_key if active_key in session_map else None
+    if display_key is None:
+        session_candidates = [
+            (key, value) for key, value in session_map.items()
+            if key in {entry[0] for entry in ATTENDANCE_SESSIONS} and isinstance(value, dict)
+        ]
+        if session_candidates:
+            display_key = max(session_candidates, key=lambda item: str(item[1].get("check_in_time") or ""))[0]
+    display_session = session_map.get(display_key, incoming) if display_key else incoming
+    try:
+        display_in = local_aware(datetime.fromisoformat(str(display_session.get("check_in_time")).replace("Z", "+00:00")))
+    except (TypeError, ValueError):
+        display_in = check_in
+    try:
+        display_out_raw = display_session.get("check_out_time")
+        display_out = local_aware(datetime.fromisoformat(str(display_out_raw).replace("Z", "+00:00"))) if display_out_raw else None
+    except (TypeError, ValueError):
+        display_out = check_out
+    attendance.check_in_time = stored_naive(display_in)
+    attendance.check_out_time = stored_naive(display_out)
+    attendance.working_hours = float(display_session.get("working_hours") or 0.0)
+
+    sync_event = None
+    try:
+        if session_changed:
+            db.flush()
+            sync_event = append_sync_event(db, {
+                "event_id": str(uuid.uuid4()),
+                "type": "attendance.changed",
+                "shop_id": int(worker.shopkeeper_id),
+                "attendance_id": int(attendance.id),
+                "employee_id": int(worker.shopkeeper_id),
+                "worker_id": int(worker.id),
+                "attendance_date": attendance_date.isoformat(),
+                "check_in_time": _serialize_attendance_time(attendance.check_in_time),
+                "check_out_time": _serialize_attendance_time(attendance.check_out_time),
+                "status": str(attendance.status),
+                "change": "offline_session_sync",
+                "session_key": session_key,
+            })
+        db.commit()
+        db.refresh(attendance)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to synchronize worker attendance session.") from exc
+
+    if sync_event is not None:
+        publish_realtime_event(sync_event)
+    _sessions, total_hours = _session_breakdown(attendance)
+    return {
+        "synced": True,
+        "duplicate": False,
+        "worker_id": worker.id,
+        "attendance_date": attendance_date.isoformat(),
+        "session_key": session_key,
+        "total_working_hours": round(total_hours, 2),
     }
 
 # ==================== ATTENDANCE RECORDS ====================
