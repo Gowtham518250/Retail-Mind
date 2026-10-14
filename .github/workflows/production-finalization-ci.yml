@@ -62,6 +62,7 @@ jobs:
           pytest -q tests/test_ai_query_history_contract.py
           pytest -q tests/test_query_retrieval_quality.py
           pytest -q tests/test_query_date_scope_contract.py
+          pytest -q tests/test_top_customers_monthly_invoices.py
           pytest -q tests/test_customer_otp_password_reset.py
           pytest -q tests/test_growth_suite.py
           pytest -q tests/test_voice_query_contract.py
