@@ -530,8 +530,8 @@ h1, h2, h3, h4, h5, h6 {
   52%, 100% { transform: translateX(220%) skewX(-18deg); }
 }
 @keyframes rm-location-pulse-v2 {
-  0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,.2); opacity: .5; }
-  50% { box-shadow: 0 0 0 8px rgba(255,255,255,0); opacity: 1; }
+  0%,100% { box-shadow: 0 10px 24px rgba(232,84,30,.22), 0 0 0 0 rgba(232,84,30,.16); }
+  50% { box-shadow: 0 12px 26px rgba(232,84,30,.30), 0 0 0 7px rgba(232,84,30,0); }
 }
 @keyframes rm-location-spin-v2 { to { transform: rotate(360deg); } }
 @keyframes rm-marquee-v2 { to { transform: translateX(-50%); } }
