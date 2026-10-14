@@ -16,6 +16,7 @@ import logging
 
 from db import get_db
 from realtime import publish_realtime_event
+from durable_sync import append_sync_event
 from models import Product, StockMovement, Invoice, InvoiceLineItem
 from security import get_current_user as check_current_user
 from audit_logging import AuditAction, AuditService
@@ -146,6 +147,16 @@ def deduct_stock_with_idempotency(
                 user_id=user_id
             )
         
+        sync_event = append_sync_event(db, {
+            "event_id": str(uuid4()),
+            "type": "inventory.changed",
+            "shop_id": user_id,
+            "product_id": product.id,
+            "reference_id": request.reference_id,
+            "reason": request.reason,
+            "quantity": float(request.quantity),
+            "new_stock": float(product.current_stock),
+        })
         db.commit()
         db.refresh(product)
 
@@ -171,16 +182,7 @@ def deduct_stock_with_idempotency(
                 audit_error,
             )
 
-        publish_realtime_event({
-            "event_id": str(uuid4()),
-            "type": "inventory.changed",
-            "shop_id": user_id,
-            "product_id": product.id,
-            "reference_id": request.reference_id,
-            "reason": request.reason,
-            "quantity": float(request.quantity),
-            "new_stock": float(product.current_stock),
-        })
+        publish_realtime_event(sync_event)
         
         logger.info(f"Stock deducted: Product {product.id}, Qty: {request.quantity}, New Stock: {product.current_stock}")
         
@@ -295,6 +297,14 @@ def deduct_stock_batch(
                     "error": str(e)
                 })
         
+        sync_event = None
+        if inventory_changes:
+            sync_event = append_sync_event(db, {
+                "event_id": str(uuid4()),
+                "type": "inventory.changed",
+                "shop_id": user_id,
+                "changes": inventory_changes,
+            })
         db.commit()
 
         for change in inventory_changes:
@@ -318,13 +328,8 @@ def deduct_stock_batch(
                     audit_error,
                 )
 
-        if inventory_changes:
-            publish_realtime_event({
-                "event_id": __import__("uuid").uuid4().__str__(),
-                "type": "inventory.changed",
-                "shop_id": user_id,
-                "changes": inventory_changes,
-            })
+        if sync_event is not None:
+            publish_realtime_event(sync_event)
         
         return {
             "success": len(failed_items) == 0,

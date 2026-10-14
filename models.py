@@ -3,7 +3,7 @@ Enhanced Database Models for Hybrid Search RAG
 Includes: Inventory, Attendance, Invoices, Payments, Customers, Notifications, Stock Management
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Text, Numeric, Date, Enum, UniqueConstraint, Index, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, date
@@ -1072,6 +1072,15 @@ class ShopProfile(Base):
     upi_ids = Column(Text)  # JSON string
     shop_categories = Column(Text)  # JSON string
     is_online_store_enabled = Column(Boolean, default=False)
+    # Online-store configuration. These values are shop-level source of truth,
+    # not device-local preferences.
+    online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    online_min_order = Column(Numeric(10, 2), nullable=False, default=0)
+    online_delivery_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    online_offer_delivery = Column(Boolean, nullable=False, default=True)
+    online_offer_pickup = Column(Boolean, nullable=False, default=True)
+    online_accept_cod = Column(Boolean, nullable=False, default=True)
+    online_accept_online = Column(Boolean, nullable=False, default=False)
     # Marketplace reputation is maintained from verified customer order reviews.
     rating_score = Column(Float, nullable=False, default=0.0)
     rating_count = Column(Integer, nullable=False, default=0)
@@ -1375,3 +1384,53 @@ class FlashSale(Base):
     is_active = Column(Boolean, default=True)
 
 # ==================== END OF MODELS ====================
+
+
+# ==================== DURABLE SYNC CHANGE LOG ====================
+
+class SyncClock(Base):
+    """Per-shop transactionally ordered cursor allocator."""
+    __tablename__ = "sync_clocks"
+
+    shop_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, nullable=False, default=0, server_default="0")
+
+
+class SyncEvent(Base):
+    """Durable event log used to recover notifications missed by Redis/WebSocket."""
+    __tablename__ = "sync_events"
+
+    shop_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, primary_key=True, nullable=False)
+    event_id = Column(String(36), nullable=False, unique=True)
+    event_type = Column(String(80), nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_sync_events_shop_type_seq", "shop_id", "event_type", "seq"),
+    )
+
+
+class CustomerSyncClock(Base):
+    """Per-customer sequence allocator for authenticated order-history recovery."""
+    __tablename__ = "customer_sync_clocks"
+
+    customer_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, nullable=False, default=0, server_default="0")
+
+
+class CustomerSyncEvent(Base):
+    """Customer-visible durable order events; sequence is ordered per customer."""
+    __tablename__ = "customer_sync_events"
+
+    customer_id = Column(Integer, primary_key=True, nullable=False)
+    seq = Column(BigInteger, primary_key=True, nullable=False)
+    event_id = Column(String(36), nullable=False, unique=True)
+    event_type = Column(String(80), nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_customer_sync_events_customer_type_seq", "customer_id", "event_type", "seq"),
+    )

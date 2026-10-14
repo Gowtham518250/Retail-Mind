@@ -177,14 +177,28 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
               </div>
               <div className="shop-stat-card">
                 <Sparkles size={18} />
-                <span>Fast dispatch</span>
+                <span>{shop?.offer_delivery === false ? 'Store pickup' : 'Fast dispatch'}</span>
               </div>
-              {(shop?.online_setup_fee || 0) > 0 && (
-                <div className="shop-stat-card online-fee-stat">
-                  <span className="online-fee-icon">₹</span>
-                  <span>Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>
-                </div>
-              )}
+              <div className="shop-stat-card">
+                <span className="online-fee-icon">₹</span>
+                <span>
+                  {Number(shop?.delivery_fee || 0) > 0
+                    ? `Delivery ₹${Number(shop?.delivery_fee || 0).toFixed(2)}`
+                    : 'Free delivery'}
+                </span>
+              </div>
+              <div className="shop-stat-card">
+                <span className="online-fee-icon">₹</span>
+                <span>
+                  {Number(shop?.min_order || 0) > 0
+                    ? `Min order ₹${Number(shop?.min_order || 0).toFixed(0)}`
+                    : 'No minimum order'}
+                </span>
+              </div>
+              <div className="shop-stat-card online-fee-stat">
+                <span className="online-fee-icon">₹</span>
+                <span>Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>
+              </div>
             </div>
           </div>
 

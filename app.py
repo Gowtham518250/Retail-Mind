@@ -106,6 +106,7 @@ from security_hardening import router as security_hardening_router
 from observability_service import router as observability_router
 from operations_routes import router as operations_router
 from realtime import router as realtime_router
+from durable_sync import router as durable_sync_router
 
 # DB initialization
 from db import engine, get_db
@@ -128,6 +129,21 @@ api = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# ========================
+# ATTENDANCE AUTO-CHECKOUT LIFECYCLE
+# Start reconciliation for every supported ASGI launch command (including
+# `uvicorn app:api`), not only when production_boot.py is executed directly.
+# ========================
+@api.on_event("startup")
+def _start_attendance_auto_checkout_on_startup():
+    try:
+        from production_boot import _ensure_shift_table, _start_attendance_auto_checkout
+        _ensure_shift_table()
+        _start_attendance_auto_checkout()
+        logger.info("Attendance auto-checkout scheduler initialized")
+    except Exception:
+        logger.exception("Attendance auto-checkout scheduler failed to initialize")
 
 # ========================
 # DB INIT ON STARTUP
@@ -185,8 +201,14 @@ try:
         # Marketplace ratings — added after older production databases were initialized.
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_score FLOAT NOT NULL DEFAULT 0",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_count INTEGER NOT NULL DEFAULT 0",
-        # Online-only setup fee — charged once per online order, never modifies POS pricing.
+        # Online-only store configuration — source of truth for owner/customer flows.
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_min_order NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_delivery BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_pickup BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_cod BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_online BOOLEAN NOT NULL DEFAULT FALSE",
 
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS pan_number VARCHAR(50)",
         "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS registration_number VARCHAR(100)",
@@ -388,8 +410,10 @@ api.include_router(gst_and_giftcards_router)      # /gift-cards, /gst/*
 # Legacy extended features
 api.include_router(new_features_router, tags=["Legacy Features"])
 
-# Debug routes (diagnostic helpers)
-api.include_router(debug_router)
+# Debug routes are disabled in production by default. Enable explicitly with
+# ENABLE_DEBUG_ROUTES=true for controlled diagnostics.
+if os.getenv("ENABLE_DEBUG_ROUTES", "false").strip().lower() == "true":
+    api.include_router(debug_router)
 api.include_router(query_router, tags=["Query Retrieval"])
 
 # Advanced System Features
@@ -399,6 +423,7 @@ api.include_router(security_hardening_router, tags=["Security Hardening"])
 api.include_router(observability_router, tags=["Observability"])
 api.include_router(operations_router, prefix="/api", tags=["Operations"])
 api.include_router(realtime_router)
+api.include_router(durable_sync_router)
 
 # 🚀 PERFORMANCE: Setup performance monitoring middleware
 setup_performance_middleware(api)

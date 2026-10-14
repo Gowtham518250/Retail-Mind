@@ -29,6 +29,7 @@ from models import (
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 from realtime import publish_realtime_event
+from durable_sync import append_sync_event
 from audit_logging import AuditAction, AuditService
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
@@ -301,6 +302,43 @@ def _apply_payment_write(
     )
 
     try:
+        db.flush()
+        payment_status = (
+            invoice.payment_status.value
+            if hasattr(invoice.payment_status, "value")
+            else str(invoice.payment_status)
+        )
+        invoice_status = (
+            invoice.status.value
+            if hasattr(invoice.status, "value")
+            else str(invoice.status)
+        )
+        payment_events = [
+            append_sync_event(db, {
+                "event_id": str(uuid.uuid4()),
+                "type": "payment.updated",
+                "shop_id": shop_id,
+                "invoice_id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "amount": float(delta),
+                "paid_amount": float(invoice.paid_amount or 0),
+                "payment_status": payment_status,
+                "payment_id": payment.id,
+                "reference_id": (data.reference_id or "").strip() or None,
+                "source": data.source,
+            }),
+            append_sync_event(db, {
+                "event_id": str(uuid.uuid4()),
+                "type": "invoice.updated",
+                "shop_id": shop_id,
+                "invoice_id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "paid_amount": float(invoice.paid_amount or 0),
+                "payment_status": payment_status,
+                "status": invoice_status,
+                "source": data.source,
+            }),
+        ]
         db.commit()
         db.refresh(invoice)
         db.refresh(payment)
@@ -388,38 +426,8 @@ def _apply_payment_write(
             audit_error,
         )
 
-    event_id = str(uuid.uuid4())
-    payment_status = (
-        invoice.payment_status.value
-        if hasattr(invoice.payment_status, "value")
-        else str(invoice.payment_status)
-    )
-
-    publish_realtime_event({
-        "event_id": event_id,
-        "type": "payment.updated",
-        "shop_id": shop_id,
-        "invoice_id": invoice.id,
-        "invoice_number": invoice.invoice_number,
-        "amount": float(delta),
-        "paid_amount": float(invoice.paid_amount or 0),
-        "payment_status": payment_status,
-        "payment_id": payment.id,
-        "reference_id": (data.reference_id or "").strip() or None,
-        "source": data.source,
-    })
-
-    publish_realtime_event({
-        "event_id": str(uuid.uuid4()),
-        "type": "invoice.updated",
-        "shop_id": shop_id,
-        "invoice_id": invoice.id,
-        "invoice_number": invoice.invoice_number,
-        "paid_amount": float(invoice.paid_amount or 0),
-        "payment_status": payment_status,
-        "status": invoice.status.value if hasattr(invoice.status, "value") else str(invoice.status),
-        "source": data.source,
-    })
+    for event in payment_events:
+        publish_realtime_event(event)
 
     return {
         "success": True,
@@ -723,24 +731,35 @@ def sync_offline_invoice(
 
             if product:
                 current_stock = product.current_stock or Decimal("0")
-                if current_stock < item.quantity:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Insufficient stock for product "
-                            f"'{item.product_name}'. Available: "
-                            f"{current_stock}, Required: {item.quantity}"
-                        ),
-                    )
-                product.current_stock = max(
-                    Decimal("0"),
-                    current_stock - item.quantity,
-                )
+                # Offline invoices must never be lost just because the
+                # server's stock is stale or was already decremented locally.
+                # The invoice/sale is the source of truth for the completed sale.
+                # Clamp inventory at zero rather than rejecting the financial
+                # transaction. This makes offline sync idempotent from the
+                # business perspective while still preventing negative stock.
+                available_stock = max(Decimal("0"), current_stock)
+                shortage = max(Decimal("0"), item.quantity - available_stock)
+                deducted = min(item.quantity, available_stock)
+                product.current_stock = available_stock - deducted
+
                 inventory_changes.append({
                     "product_id": product.id,
                     "quantity": float(item.quantity),
+                    "deducted_quantity": float(deducted),
+                    "shortage_quantity": float(shortage),
                     "new_stock": float(product.current_stock),
+                    "forced_sale": bool(shortage > 0),
                 })
+                if shortage > 0:
+                    logger.warning(
+                        "FORCED OFFLINE SALE: product=%s available=%s requested=%s shortage=%s invoice=%s",
+                        item.product_name,
+                        available_stock,
+                        item.quantity,
+                        shortage,
+                        invoice_number,
+                    )
+
                 mov = StockMovement(
                     product_id=product.id,
                     movement_type="OUT",
@@ -748,7 +767,7 @@ def sync_offline_invoice(
                     reason=(
                         "Flash Sale Sale"
                         if prepared["discount_amount"] > 0
-                        else "Sales Sync"
+                        else ("Offline Sale - Stock Shortage" if shortage > 0 else "Sales Sync")
                     ),
                     reference_id=invoice_number,
                 )
@@ -765,9 +784,9 @@ def sync_offline_invoice(
         )
         db.add(tx)
 
-        db.commit()
-
-        publish_realtime_event({
+        # Persist recovery events in the same transaction as the invoice,
+        # payments, stock movements, and universal transaction records.
+        realtime_events = [{
             "event_id": str(uuid.uuid4()),
             "type": "invoice.created",
             "shop_id": shop_id,
@@ -778,10 +797,10 @@ def sync_offline_invoice(
             "paid_amount": float(invoice.paid_amount),
             "payment_status": invoice.payment_status,
             "source": invoice.source,
-        })
+        }]
 
         if data.paid_amount > 0:
-            publish_realtime_event({
+            realtime_events.append({
                 "event_id": str(uuid.uuid4()),
                 "type": "payment.updated",
                 "shop_id": shop_id,
@@ -794,7 +813,7 @@ def sync_offline_invoice(
             })
 
         if inventory_changes:
-            publish_realtime_event({
+            realtime_events.append({
                 "event_id": str(uuid.uuid4()),
                 "type": "inventory.changed",
                 "shop_id": shop_id,
@@ -802,6 +821,14 @@ def sync_offline_invoice(
                 "reference_id": invoice_number,
                 "changes": inventory_changes,
             })
+
+        durable_events = [append_sync_event(db, event) for event in realtime_events]
+        db.commit()
+
+        # Redis/WebSocket is a fast notification path only. The durable event
+        # remains available to clients even if this publish fails.
+        for event in durable_events:
+            publish_realtime_event(event)
 
         line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
         payload = {
@@ -870,14 +897,21 @@ def get_invoices(
     status: Optional[str] = None,
     payment_status: Optional[str] = None,
     source: Optional[str] = None,
-    skip: int = Query(0),
-    limit: int = Query(100),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
     """Get all invoices for the shop"""
     shop_id = resolve_shop_id(current_user)
-    query = db.query(Invoice).options(joinedload(Invoice.line_items)).filter(Invoice.user_id == shop_id)
+    # Keep invoice list responses bounded. The dashboard only needs a recent
+    # page; fetching the full invoice history repeatedly makes serialization
+    # and joined line-items increasingly expensive.
+    query = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.line_items))
+        .filter(Invoice.user_id == shop_id)
+    )
     if status:
         query = query.filter(Invoice.status == status.upper())
     if payment_status:
@@ -1238,11 +1272,40 @@ def create_invoice(
     db.add(tx)
 
     try:
+        db.flush()
+        invoice_events = [
+            append_sync_event(db, {
+                "event_id": str(uuid.uuid4()),
+                "type": "invoice.created",
+                "shop_id": shop_id,
+                "invoice_id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "total_amount": float(invoice.total_amount),
+                "paid_amount": float(invoice.paid_amount or 0),
+                "payment_status": (
+                    invoice.payment_status.value
+                    if hasattr(invoice.payment_status, "value")
+                    else str(invoice.payment_status)
+                ),
+                "source": "MANUAL_ENTRY",
+            })
+        ]
+        if prepared_line_items:
+            invoice_events.append(append_sync_event(db, {
+                "event_id": str(uuid.uuid4()),
+                "type": "inventory.changed",
+                "shop_id": shop_id,
+                "reference_type": "MANUAL_INVOICE",
+                "reference_id": invoice.invoice_number,
+            }))
         db.commit()
         db.refresh(invoice)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create invoice: {str(e)}")
+
+    for event in invoice_events:
+        publish_realtime_event(event)
 
     line_items_out = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice.id).all()
     payload = {
@@ -1468,12 +1531,30 @@ def update_invoice(
         invoice.notes = data.notes
     
     try:
+        update_event = append_sync_event(db, {
+            "event_id": str(uuid.uuid4()),
+            "type": "invoice.updated",
+            "shop_id": shop_id,
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "total_amount": float(invoice.total_amount or 0),
+            "paid_amount": float(invoice.paid_amount or 0),
+            "payment_status": (
+                invoice.payment_status.value
+                if hasattr(invoice.payment_status, "value")
+                else str(invoice.payment_status)
+            ),
+            "status": invoice.status.value if hasattr(invoice.status, "value") else str(invoice.status),
+            "source": invoice.source,
+            "change": "invoice_updated",
+        })
         db.commit()
         db.refresh(invoice)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update invoice: {str(e)}")
     
+    publish_realtime_event(update_event)
     line_items = db.query(InvoiceLineItem).filter(InvoiceLineItem.invoice_id == invoice_id).all()
     
     return {
@@ -1514,10 +1595,19 @@ def delete_invoice(
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    deleted_event = {
+        "event_id": str(uuid.uuid4()),
+        "type": "invoice.deleted",
+        "shop_id": shop_id,
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+    }
     db.delete(invoice)
     try:
+        append_sync_event(db, deleted_event)
         db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete invoice: {str(e)}")
+    publish_realtime_event(deleted_event)
     return {"message": "Invoice deleted securely."}

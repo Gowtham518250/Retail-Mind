@@ -169,11 +169,137 @@ export default function OrderSuccessClientPage() {
 
   useEffect(() => {
     if (!order) return;
-    refreshStatus();
-    const interval = setInterval(refreshStatus, 10000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order]);
+
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let reconnectDelayMs = 1000;
+
+    const scheduleReconnect = () => {
+      if (stopped || reconnectTimer !== null) return;
+      const delay = reconnectDelayMs;
+      reconnectDelayMs = Math.min(reconnectDelayMs * 2, 30000);
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        void connectRealtime();
+      }, delay);
+    };
+
+    const connectRealtime = async () => {
+      if (stopped) return;
+
+      try {
+        const token = localStorage.getItem('customerToken');
+        if (!token) {
+          stopped = true;
+          router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/order-success?orderId=${order.order_id}`)}`);
+          return;
+        }
+
+        const ticketResponse = await fetch(
+          API_BASE + '/api/ws/token?shop_id=' + encodeURIComponent(String(shopId)),
+          {
+            headers: { Authorization: 'Bearer ' + token },
+            cache: 'no-store',
+          },
+        );
+
+        if (!ticketResponse.ok) {
+          if (ticketResponse.status === 401 || ticketResponse.status === 403) {
+            stopped = true;
+            localStorage.removeItem('customerToken');
+            router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/order-success?orderId=${order.order_id}`)}`);
+            return;
+          }
+          throw new Error('Realtime ticket request failed');
+        }
+
+        const ticketData = await ticketResponse.json();
+        const wsBase = API_BASE
+          .replace(/^https:/, 'wss:')
+          .replace(/^http:/, 'ws:');
+
+        const wsUrl =
+          wsBase +
+          '/api/ws/live/' +
+          encodeURIComponent(ticketData.user_id) +
+          '/' +
+          encodeURIComponent(ticketData.shop_id) +
+          '?ticket=' +
+          encodeURIComponent(ticketData.token);
+
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          reconnectDelayMs = 1000;
+        };
+
+        socket.onmessage = (message) => {
+          try {
+            const event = JSON.parse(message.data);
+            if (
+              event?.type === 'order.status_changed' &&
+              Number(event.order_id) === Number(order.order_id)
+            ) {
+              const nextStatus = String(event.status || 'PENDING').toUpperCase();
+              setLiveStatus(nextStatus);
+              setOrder((current) =>
+                current
+                  ? {
+                      ...current,
+                      status: nextStatus,
+                      total_amount: Number(event.total_amount ?? current.total_amount),
+                      delivery_address:
+                        event.delivery_address || current.delivery_address,
+                      items: Array.isArray(event.items)
+                        ? event.items.map((item: any) => ({
+                            name:
+                              item.product_name ||
+                              item.name ||
+                              `Product #${item.product_id}`,
+                            quantity: Number(item.quantity || 0),
+                            price: Number(item.unit_price ?? item.price ?? 0),
+                          }))
+                        : current.items,
+                    }
+                  : current,
+              );
+              setTrackingError('');
+            }
+          } catch {
+            // Manual refresh remains available if an event cannot be parsed.
+          }
+        };
+
+        socket.onerror = () => {
+          // Reconnect through onclose without starting REST polling.
+        };
+
+        socket.onclose = () => {
+          socket = null;
+          scheduleReconnect();
+        };
+      } catch {
+        scheduleReconnect();
+      }
+    };
+
+    void connectRealtime();
+
+    return () => {
+      stopped = true;
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+      }
+      if (socket) {
+        try {
+          socket.close();
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    };
+  }, [order, router, shopId]);
 
   const activeStageIndex = Math.max(0, STAGES.findIndex((s) => s.key === (liveStatus || 'PENDING')));
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -122,6 +122,22 @@ const STATUS_META: Record<
 
 const TERMINAL_STATUSES = ['DELIVERED', 'REJECTED', 'CANCELLED', 'RETURNED'];
 const REVERSIBLE_STATUSES = ['PENDING', 'ACCEPTED'];
+
+function getCustomerSyncCursorKey(token: string): string | null {
+  try {
+    // The JWT subject is used only to namespace local cursor storage. The API
+    // still authenticates and authorizes every change-feed request.
+    const encodedPayload = token.split('.')[1];
+    if (!encodedPayload) return null;
+    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const claims = JSON.parse(window.atob(padded));
+    const subject = String(claims?.sub || '').trim();
+    return subject ? 'retailmind.customer-order-sync.v1.' + subject : null;
+  } catch {
+    return null;
+  }
+}
 
 function statusIndex(status: string) {
   return STATUS_STEPS.indexOf(status as (typeof STATUS_STEPS)[number]);
@@ -247,15 +263,20 @@ export default function MyOrdersPage() {
   const [reviewComment, setReviewComment] = useState('');
   const [deliveryByOrder, setDeliveryByOrder] = useState<Record<number, any>>({});
   const [deliveryLoadingId, setDeliveryLoadingId] = useState<number | null>(null);
+  const customerCursorKeyRef = useRef<string | null>(null);
+  const customerFeedSupportedRef = useRef<boolean | null>(null);
+  const customerFeedProbeAfterRef = useRef(0);
+  const customerFeedPollInProgressRef = useRef(false);
+  const seenRealtimeEventIdsRef = useRef<Set<string>>(new Set());
   const router = useRouter();
 
   const fetchOrders = useCallback(
-    async (silent = false) => {
+    async (silent = false): Promise<boolean> => {
       const token = localStorage.getItem('customerToken');
 
       if (!token) {
         router.push('/auth');
-        return;
+        return false;
       }
 
       if (silent) setRefreshing(true);
@@ -270,7 +291,7 @@ export default function MyOrdersPage() {
           if (response.status === 401 || response.status === 403) {
             localStorage.removeItem('customerToken');
             router.push('/auth');
-            return;
+            return false;
           }
           throw new Error('Unable to load your orders right now.');
         }
@@ -279,8 +300,10 @@ export default function MyOrdersPage() {
         setOrders(Array.isArray(data.orders) ? data.orders : []);
         setError('');
         setLastUpdated(new Date());
+        return true;
       } catch (err: any) {
         setError(err?.message || 'Unable to refresh orders right now.');
+        return false;
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -290,12 +313,195 @@ export default function MyOrdersPage() {
   );
 
   useEffect(() => {
-    void fetchOrders();
-
     let stopped = false;
     let socket: WebSocket | null = null;
     let reconnectTimer: number | null = null;
     let reconnectDelayMs = 1000;
+
+    const markRealtimeEventSeen = (eventId: unknown) => {
+      const id = String(eventId || '').trim();
+      if (!id) return;
+      const seen = seenRealtimeEventIdsRef.current;
+      seen.add(id);
+      if (seen.size > 500) {
+        const oldest = seen.values().next().value;
+        if (oldest) seen.delete(oldest);
+      }
+    };
+
+    const initializeCustomerCursor = async (
+      token: string,
+      forceBaseline = false,
+    ): Promise<boolean> => {
+      const cursorKey = getCustomerSyncCursorKey(token);
+      if (!cursorKey) return false;
+      customerCursorKeyRef.current = cursorKey;
+
+      const saved = localStorage.getItem(cursorKey);
+      const savedCursor = saved === null ? Number.NaN : Number(saved);
+      const savedIsValid =
+        Number.isSafeInteger(savedCursor) && savedCursor >= 0;
+      if (!forceBaseline && savedIsValid) {
+        customerFeedSupportedRef.current = true;
+        return true;
+      }
+
+      if (Date.now() < customerFeedProbeAfterRef.current) return false;
+
+      try {
+        const response = await fetch(
+          API_BASE + '/api/sync/my-changes?after=0&limit=1',
+          {
+            headers: { Authorization: 'Bearer ' + token },
+            cache: 'no-store',
+          },
+        );
+
+        if (response.status === 404) {
+          // Older Render deployments can serve this frontend before the new
+          // backend is active. Back off and retain the five-minute REST safety net.
+          customerFeedSupportedRef.current = false;
+          customerFeedProbeAfterRef.current = Date.now() + 5 * 60 * 1000;
+          return false;
+        }
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('customerToken');
+          router.push('/auth');
+          return false;
+        }
+        if (!response.ok) {
+          customerFeedProbeAfterRef.current = Date.now() + 60 * 1000;
+          return false;
+        }
+
+        const data = await response.json();
+        const highWatermark = Number(data?.high_watermark ?? 0);
+        if (!Number.isSafeInteger(highWatermark) || highWatermark < 0) {
+          throw new Error('Invalid customer sync baseline.');
+        }
+
+        if (forceBaseline || !savedIsValid) {
+          // Establish a high-water mark before the initial order snapshot.
+          // The catch-up immediately after fetchOrders covers writes that land
+          // while the snapshot is being read.
+          localStorage.setItem(cursorKey, String(highWatermark));
+        }
+        customerFeedSupportedRef.current = true;
+        customerFeedProbeAfterRef.current = 0;
+        return true;
+      } catch {
+        customerFeedProbeAfterRef.current = Date.now() + 60 * 1000;
+        return false;
+      }
+    };
+
+    const pollCustomerChanges = async (): Promise<void> => {
+      if (stopped || customerFeedPollInProgressRef.current) return;
+      customerFeedPollInProgressRef.current = true;
+
+      try {
+        const token = localStorage.getItem('customerToken');
+        if (!token) {
+          router.push('/auth');
+          return;
+        }
+
+        if (customerFeedSupportedRef.current !== true) {
+          const initialized = await initializeCustomerCursor(token);
+          if (!initialized) return;
+        }
+
+        const cursorKey = customerCursorKeyRef.current;
+        if (!cursorKey) return;
+
+        let cursor = Number(localStorage.getItem(cursorKey) ?? 0);
+        if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
+        let nextCursor = cursor;
+        let hasMore = true;
+        let pageCount = 0;
+        let requiresOrderRefresh = false;
+
+        // Keep each wake-up bounded for mobile connections and low-memory tabs.
+        while (hasMore && pageCount < 3) {
+          const response = await fetch(
+            API_BASE +
+              '/api/sync/my-changes?after=' +
+              cursor +
+              '&limit=250',
+            {
+              headers: { Authorization: 'Bearer ' + token },
+              cache: 'no-store',
+            },
+          );
+
+          if (response.status === 404) {
+            customerFeedSupportedRef.current = false;
+            customerFeedProbeAfterRef.current = Date.now() + 5 * 60 * 1000;
+            return;
+          }
+          if (response.status === 409) {
+            localStorage.removeItem(cursorKey);
+            const rebased = await initializeCustomerCursor(token, true);
+            if (rebased) {
+              // Reconcile the full order snapshot after a cursor reset. Any
+              // event committed while reading that snapshot stays above the
+              // new baseline and will be picked up by the next poll.
+              await fetchOrders(true);
+            }
+            return;
+          }
+          if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem('customerToken');
+            router.push('/auth');
+            return;
+          }
+          if (!response.ok) {
+            throw new Error('Customer change feed returned ' + response.status);
+          }
+
+          const data = await response.json();
+          const events = Array.isArray(data?.events) ? data.events : [];
+          for (const event of events) {
+            const type = String(event?.type || '');
+            const eventId = String(event?.event_id || '');
+            const alreadyAppliedByRealtime =
+              eventId !== '' && seenRealtimeEventIdsRef.current.has(eventId);
+            if (
+              !alreadyAppliedByRealtime &&
+              (type === 'order.created' || type === 'order.status_changed')
+            ) {
+              requiresOrderRefresh = true;
+            }
+          }
+
+          const candidateCursor = Number(data?.next_cursor);
+          if (!Number.isSafeInteger(candidateCursor) || candidateCursor < cursor) {
+            throw new Error('Invalid customer sync cursor.');
+          }
+          nextCursor = candidateCursor;
+          cursor = candidateCursor;
+          hasMore = data?.has_more === true;
+          pageCount += 1;
+        }
+
+        // A failed snapshot must never advance the cursor. The same durable
+        // events are retried on the next wake-up instead of being skipped.
+        if (requiresOrderRefresh) {
+          const refreshed = await fetchOrders(true);
+          if (!refreshed) return;
+        }
+
+        localStorage.setItem(cursorKey, String(nextCursor));
+        customerFeedSupportedRef.current = true;
+      } catch {
+        // Keep the existing cursor. A later poll retries the same durable page.
+        if (customerFeedSupportedRef.current !== true) {
+          customerFeedProbeAfterRef.current = Date.now() + 60 * 1000;
+        }
+      } finally {
+        customerFeedPollInProgressRef.current = false;
+      }
+    };
 
     const scheduleReconnect = () => {
       if (stopped || reconnectTimer !== null) return;
@@ -358,11 +564,14 @@ export default function MyOrdersPage() {
           if (stopped) return;
           reconnectDelayMs = 1000;
           setLiveConnected(true);
+          // Recover any event that was committed while the socket was down.
+          void pollCustomerChanges();
         };
 
-        socket.onmessage = (message) => {
+        socket.onmessage = async (message) => {
           try {
             const event = JSON.parse(message.data);
+            const eventId = String(event?.event_id || '');
 
             if (event?.type === 'order.status_changed') {
               const orderId = Number(event.order_id);
@@ -384,8 +593,10 @@ export default function MyOrdersPage() {
               );
               setError('');
               setLastUpdated(new Date());
+              markRealtimeEventSeen(eventId);
             } else if (event?.type === 'order.created') {
-              void fetchOrders(true);
+              const refreshed = await fetchOrders(true);
+              if (refreshed) markRealtimeEventSeen(eventId);
             }
           } catch {
             // REST reconciliation remains authoritative.
@@ -407,17 +618,49 @@ export default function MyOrdersPage() {
       }
     };
 
-    void connectRealtime();
+    const bootstrap = async () => {
+      const token = localStorage.getItem('customerToken');
+      if (!token) {
+        router.push('/auth');
+        return;
+      }
 
-    const interval = window.setInterval(() => {
+      // Establish the baseline before fetching the snapshot; changes that land
+      // during the snapshot remain above the cursor and will be caught up next.
+      await initializeCustomerCursor(token);
+      await fetchOrders();
+      if (customerFeedSupportedRef.current === true) {
+        await pollCustomerChanges();
+      }
+      void connectRealtime();
+    };
+
+    void bootstrap();
+
+    const feedInterval = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
-        void fetchOrders(true);
+        void pollCustomerChanges();
       }
     }, 30000);
 
+    // The five-minute full snapshot is the conservative fallback for an
+    // unavailable endpoint or any write path that has not yet emitted an event.
+    const safetyInterval = window.setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      const token = localStorage.getItem('customerToken');
+      if (token && customerFeedSupportedRef.current !== true) {
+        await initializeCustomerCursor(token);
+      }
+      void fetchOrders(true);
+    }, 5 * 60 * 1000);
+
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        void fetchOrders(true);
+        if (customerFeedSupportedRef.current === true) {
+          void pollCustomerChanges();
+        } else {
+          void fetchOrders(true);
+        }
       }
     };
 
@@ -439,7 +682,8 @@ export default function MyOrdersPage() {
         }
       }
 
-      window.clearInterval(interval);
+      window.clearInterval(feedInterval);
+      window.clearInterval(safetyInterval);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [fetchOrders, router]);
