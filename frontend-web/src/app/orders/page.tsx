@@ -65,6 +65,17 @@ interface Order {
   return_request?: ReturnRequest | null;
 }
 
+function readOrderDeliveryDetails(value: string) {
+  const raw = String(value || '');
+  const phone = raw.match(/(?:^|\s\|\s)Contact phone:\s*(\d{10})/i)?.[1] || '';
+  const orderNotes = raw.match(/(?:^|\s\|\s)Order notes:\s*([\s\S]*)$/i)?.[1]?.trim() || '';
+  const address = raw
+    .replace(/\s*\|\s*Contact phone:\s*\d{10}/i, '')
+    .replace(/\s*\|\s*Order notes:[\s\S]*$/i, '')
+    .trim();
+  return { address, phone, orderNotes };
+}
+
 const STATUS_STEPS = ['PENDING', 'ACCEPTED', 'DISPATCHED', 'DELIVERED'] as const;
 
 const STATUS_META: Record<
@@ -869,6 +880,7 @@ export default function MyOrdersPage() {
             <div className="orders-fk-list">
               {visibleOrders.map((order, orderIndex) => {
                 const meta = STATUS_META[order.status] || STATUS_META.PENDING;
+                const deliveryDetails = readOrderDeliveryDetails(order.delivery_address);
                 const returnActive = activeReturnRequest(order);
                 const effectiveStatus =
                   returnActive && order.status === 'DELIVERED'
@@ -967,7 +979,7 @@ export default function MyOrdersPage() {
                     <div className="orders-fk-card-actions">
                       <div className="orders-fk-delivery">
                         <MapPin size={16} />
-                        <span>{order.delivery_address}</span>
+                        <span>{deliveryDetails.address || order.delivery_address}</span>
                       </div>
                       <div className="orders-fk-details-actions">
                         {(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status)) && (
@@ -1027,8 +1039,18 @@ export default function MyOrdersPage() {
                         <div className="orders-fk-details-grid">
                           <div>
                             <span>Delivery address</span>
-                            <strong>{order.delivery_address}</strong>
+                            <strong>{deliveryDetails.address || order.delivery_address}</strong>
                           </div>
+                          <div>
+                            <span>Contact phone</span>
+                            <strong>{deliveryDetails.phone || 'Not provided for this order'}</strong>
+                          </div>
+                          {deliveryDetails.orderNotes && (
+                            <div>
+                              <span>Order instructions</span>
+                              <strong>{deliveryDetails.orderNotes}</strong>
+                            </div>
+                          )}
                           <div>
                             <span>Current status</span>
                             <strong>

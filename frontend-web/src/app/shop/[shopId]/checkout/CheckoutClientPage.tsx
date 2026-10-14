@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, MapPin, Home, Banknote,
+  ArrowLeft, MapPin, Home, Banknote, Phone, ClipboardList,
   ShieldCheck, Loader2, AlertCircle, ShoppingBag, UserRound, LockKeyhole,
 } from 'lucide-react';
 import { useCart } from '../../../../context/CartContext';
@@ -16,6 +16,8 @@ interface FormState {
   pincode: string;
   address: string;
   landmark: string;
+  phone: string;
+  orderNotes: string;
 }
 
 interface CustomerProfile {
@@ -28,7 +30,7 @@ interface CustomerProfile {
 }
 
 const initialForm: FormState = {
-  city: '', pincode: '', address: '', landmark: '',
+  city: '', pincode: '', address: '', landmark: '', phone: '', orderNotes: '',
 };
 
 export default function CheckoutClientPage() {
@@ -91,6 +93,7 @@ export default function CheckoutClientPage() {
           ...prev,
           city: profile.city || '',
           address: profile.address || '',
+          phone: profile.phone || '',
         }));
       } catch (error: any) {
         if (!cancelled) {
@@ -122,11 +125,21 @@ export default function CheckoutClientPage() {
     };
   }, [router, shopId]);
 
-  const combinedAddress = useMemo(() => (
+  const shippingAddress = useMemo(() => (
     [form.address, form.landmark ? `Landmark: ${form.landmark}` : '', form.city, form.pincode]
       .filter(Boolean)
       .join(', ')
   ), [form.address, form.landmark, form.city, form.pincode]);
+
+  // Existing API persists delivery_address on the order, so order-specific
+  // contact details remain attached to the order without a database migration.
+  const combinedAddress = useMemo(() => (
+    [
+      shippingAddress,
+      form.phone.trim() ? `Contact phone: ${form.phone.trim()}` : '',
+      form.orderNotes.trim() ? `Order notes: ${form.orderNotes.trim()}` : '',
+    ].filter(Boolean).join(' | ')
+  ), [shippingAddress, form.phone, form.orderNotes]);
 
   const setField = (key: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -177,6 +190,7 @@ export default function CheckoutClientPage() {
     if (!form.city.trim()) next.city = 'City is required';
     if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
     if (form.address.trim().length < 5) next.address = 'Enter your full address';
+    if (!/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10-digit mobile number';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -257,8 +271,9 @@ export default function CheckoutClientPage() {
         status: data.status || 'PENDING',
         payment_method: 'COD',
         customer_name: customer.name,
-        phone: customer.phone || '',
+        phone: form.phone.trim(),
         delivery_address: combinedAddress,
+        order_notes: form.orderNotes.trim() || undefined,
         items: cartItems.map((item) => ({
           name: item.product.name,
           quantity: item.quantity,
@@ -362,6 +377,36 @@ export default function CheckoutClientPage() {
             <div className="checkout-field">
               <label>Landmark <span className="field-optional">(optional)</span></label>
               <input value={form.landmark} onChange={setField('landmark')} placeholder="Nearby landmark" />
+            </div>
+          </section>
+
+          <section className="checkout-card checkout-contact-card">
+            <h2 className="checkout-card-title"><Phone size={18} /> Contact details for this order</h2>
+            <p className="checkout-section-description">Confirm how the shop can reach you about this delivery. Your number and note will be saved with this order.</p>
+            <div className="checkout-field">
+              <label><Phone size={14} /> Mobile number <span className="field-optional">(required)</span></label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={setField('phone')}
+                placeholder="10-digit mobile number"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                maxLength={10}
+                aria-invalid={Boolean(errors.phone)}
+              />
+              {errors.phone && <span className="field-error">{errors.phone}</span>}
+            </div>
+            <div className="checkout-field">
+              <label><ClipboardList size={14} /> Order details / delivery instructions <span className="field-optional">(optional)</span></label>
+              <textarea
+                value={form.orderNotes}
+                onChange={setField('orderNotes')}
+                placeholder="For example: call before arriving, leave with the security guard, or add a note for the shop."
+                rows={3}
+                maxLength={300}
+              />
+              <div className="checkout-notes-meta">{form.orderNotes.length}/300 characters</div>
             </div>
           </section>
 

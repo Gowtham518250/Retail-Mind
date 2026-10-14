@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import './globals.css';
 import './storefront-polish.css';
 import './premium-v3.css';
+import './retail-redesign.css';
 import Navbar from '../components/Navbar';
 import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
