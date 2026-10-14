@@ -49,7 +49,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^025_online_order_payment_state')"
+          count="$(printf '%s\n' "$heads" | grep -c '^026_product_image_url')"
           test "$count" -eq 1
           head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
@@ -71,6 +71,7 @@ jobs:
           pytest -q tests/test_purchase_order_recommendations_contract.py
           pytest -q tests/test_order_idempotency_contract.py
           pytest -q tests/test_payment_contract.py
+          pytest -q tests/test_product_image_contract.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
 
   customer-web:

@@ -331,6 +331,7 @@ class Product(Base):
     product_name = Column(String(100), nullable=False)
     sku = Column(String(50), nullable=False, index=True)
     description = Column(Text)
+    image_url = Column(Text, nullable=True)
     current_stock = Column(Numeric(12, 3), default=0)
     min_stock = Column(Integer, default=10)  # Alert when below this
     max_stock = Column(Integer, default=100)

@@ -890,6 +890,7 @@ def marketplace_search(
                 "product_id": product.id,
                 "product_name": product.product_name,
                 "category": product.category,
+                "image_url": product.image_url,
                 "price": float(product.unit_price),
                 "stock_available": int(product.current_stock or 0),
                 "shop_id": shop.shop_id,
@@ -1183,6 +1184,7 @@ def browse_shop_products(
                 "flash_sale_active": discount > 0,
                 "stock_available": p.current_stock if p.current_stock is not None else 999,
                 "description": p.description,
+                "image_url": p.image_url,
             })(p, get_active_discount(db, shop_id_int, p.category))
             for p in products
         ],

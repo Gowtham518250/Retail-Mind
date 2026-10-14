@@ -19,7 +19,7 @@ from PIL import Image, ImageOps
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
 from sqlalchemy.exc import IntegrityError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -50,6 +50,105 @@ def _queue_inventory_change(db: Session, shop_id: int, change: str, **details):
 
 _BARCODE_LOOKUP_CACHE: dict[str, tuple[float, dict]] = {}
 _BARCODE_CACHE_TTL_SECONDS = 6 * 60 * 60
+
+_PRODUCT_IMAGE_SUGGESTION_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_PRODUCT_IMAGE_SUGGESTION_CACHE_TTL_SECONDS = 6 * 60 * 60
+_MAX_PRODUCT_IMAGE_VALUE_LENGTH = 120_000
+
+
+def _normalize_product_image_url(value: Optional[str]) -> Optional[str]:
+    """Allow small compressed data URLs for offline-first photos or web URLs."""
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > _MAX_PRODUCT_IMAGE_VALUE_LENGTH:
+        raise ValueError("Product image is too large. Choose a smaller image.")
+    if cleaned.startswith("data:"):
+        if not re.fullmatch(
+            r"data:image/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\r\n]+",
+            cleaned,
+            flags=re.IGNORECASE,
+        ):
+            raise ValueError("Product photos must be JPEG, PNG, or WEBP base64 images.")
+        return cleaned
+    if not re.fullmatch(r"https?://[^\s]+", cleaned, flags=re.IGNORECASE):
+        raise ValueError("Image URL must start with http:// or https://.")
+    return cleaned
+
+
+@router.get("/product-image-suggestions")
+async def product_image_suggestions(
+    product_name: str = Query(..., min_length=2, max_length=100),
+    category: Optional[str] = Query(None, max_length=50),
+    user_id: int = Depends(check_current_user),
+):
+    """Return real product-image candidates; the owner chooses the matching one."""
+    clean_name = re.sub(r"\s+", " ", product_name).strip()
+    clean_category = re.sub(r"\s+", " ", category or "").strip()
+    if not clean_name:
+        raise HTTPException(status_code=422, detail="Enter a product name first.")
+    cache_key = (clean_name + "|" + clean_category).casefold()
+    cached = _PRODUCT_IMAGE_SUGGESTION_CACHE.get(cache_key)
+    if cached and time.time() - cached[0] < _PRODUCT_IMAGE_SUGGESTION_CACHE_TTL_SECONDS:
+        return {"images": cached[1], "cached": True}
+
+    api_key = (os.getenv("SERPAPI_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Online image search is not configured. Set SERPAPI_API_KEY on the backend.",
+        )
+
+    query = " ".join(part for part in (clean_name, clean_category, "product package image") if part)
+    try:
+        async with httpx.AsyncClient(timeout=9.0) as client:
+            response = await client.get(
+                "https://serpapi.com/search.json",
+                params={
+                    "engine": "google_images",
+                    "q": query,
+                    "gl": "in",
+                    "hl": "en",
+                    "api_key": api_key,
+                },
+                headers={"Accept": "application/json"},
+            )
+        if response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=503,
+                detail="Online image search credentials are invalid or not authorized.",
+            )
+        response.raise_for_status()
+        payload = response.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Product image lookup failed for query=%r (%s)", clean_name, type(exc).__name__
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Image search is temporarily unavailable. You can enter an image URL or continue without an image.",
+        ) from exc
+
+    images = []
+    seen_urls = set()
+    for item in payload.get("images_results") or []:
+        image_url = str(item.get("original") or item.get("thumbnail") or "").strip()
+        if not image_url.startswith("https://") or image_url in seen_urls:
+            continue
+        seen_urls.add(image_url)
+        images.append({
+            "image_url": image_url,
+            "title": str(item.get("title") or clean_name)[:180],
+            "source": str(item.get("source") or item.get("domain") or "")[:120],
+        })
+        if len(images) >= 8:
+            break
+    _PRODUCT_IMAGE_SUGGESTION_CACHE[cache_key] = (time.time(), images)
+    return {"images": images, "cached": False}
 
 # ==================== BARCODE PRODUCT LOOKUP ====================
 
@@ -709,6 +808,13 @@ class ProductCreate(BaseModel):
     unit_price: float = Field(..., ge=0)
     purchase_price: float = Field(0, ge=0)
     category: Optional[str] = None
+    image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
+
+    @field_validator("image_url")
+    @classmethod
+    def _validate_image_url(cls, value):
+        return _normalize_product_image_url(value)
+
 
 class ProductUpdate(BaseModel):
     product_name: Optional[str] = Field(None, min_length=2, max_length=100)
@@ -720,6 +826,13 @@ class ProductUpdate(BaseModel):
     unit_price: Optional[float] = Field(None, ge=0)
     purchase_price: Optional[float] = Field(None, ge=0)
     category: Optional[str] = None
+    image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
+
+    @field_validator("image_url")
+    @classmethod
+    def _validate_image_url(cls, value):
+        return _normalize_product_image_url(value)
+
 
 class StockMovementCreate(BaseModel):
     product_id: int
@@ -745,6 +858,13 @@ class ProductResponse(BaseModel):
     unit_price: float
     purchase_price: float = 0
     category: Optional[str]
+    image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
+
+    @field_validator("image_url")
+    @classmethod
+    def _validate_image_url(cls, value):
+        return _normalize_product_image_url(value)
+
 
     class Config:
         from_attributes = True
@@ -778,6 +898,8 @@ def create_product(
         existing.unit_price = product.unit_price
         existing.purchase_price = product.purchase_price
         existing.category = product.category
+        if product.image_url is not None:
+            existing.image_url = product.image_url
         existing.is_active = True
         try:
             sync_event = _queue_inventory_change(
@@ -819,6 +941,8 @@ def create_product(
             raced.unit_price = product.unit_price
             raced.purchase_price = product.purchase_price
             raced.category = product.category
+            if product.image_url is not None:
+                raced.image_url = product.image_url
             raced.is_active = True
             db.flush()
             sync_event = _queue_inventory_change(
