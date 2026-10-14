@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, Lock, Phone, ShoppingBag, ArrowRight, User, Mail, CheckCircle, Store, Leaf, Zap, Users, Truck, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Lock, Phone, ShoppingBag, ArrowRight, User, Mail, CheckCircle, Store, Leaf, Zap, Truck, Sparkles } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import styles from './auth.module.css';
 
