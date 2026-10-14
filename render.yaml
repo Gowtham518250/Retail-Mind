@@ -4,7 +4,7 @@ services:
     env: python
     buildCommand: "pip install -r requirements.txt && python build_faiss_index.py"
     # Keep production startup on the compatibility bootstrap; schema changes are applied by guarded migrations/bootstrap patches.
-    startCommand: "python production_boot.py"
+    startCommand: "alembic upgrade head && python production_boot.py"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
