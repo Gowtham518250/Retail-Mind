@@ -27,17 +27,36 @@ export default function MarketplaceShell() {
   const requestIdRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
 
+  const showcaseProducts = useMemo<FeaturedProduct[]>(() => {
+    // When the customer searches specifically for products, showcase those actual
+    // results. Otherwise use the cross-shop featured product feed.
+    const source: any[] = mode === 'products' && query.trim() && products.length
+      ? products
+      : featuredProducts;
+    return source.map((product: any) => ({
+      product_id: Number(product.product_id ?? product.id),
+      product_name: String(product.product_name ?? product.name ?? 'Product'),
+      shop_id: Number(product.shop_id),
+      shop_name: String(product.shop_name ?? 'Local shop'),
+      price: Number(product.price ?? product.unit_price ?? 0),
+      image_url: typeof product.image_url === 'string' ? product.image_url : null,
+      category: String(product.category ?? '').trim(),
+      description: String(product.description ?? ''),
+      stock_available: Number(product.stock_available ?? product.current_stock ?? 0),
+    })).filter((product) => Number.isFinite(product.product_id) && product.product_id > 0);
+  }, [mode, query, products, featuredProducts]);
+
   const productCategories = useMemo(() => {
-    const values = featuredProducts
+    const values = showcaseProducts
       .map((product) => (product.category || '').trim())
       .filter((category) => category.length > 0);
     return ['All', ...Array.from(new Set(values)).slice(0, 6)];
-  }, [featuredProducts]);
+  }, [showcaseProducts]);
 
   const filteredFeaturedProducts = useMemo(() => {
-    if (activeProductCategory === 'All') return featuredProducts;
-    return featuredProducts.filter((product) => product.category === activeProductCategory);
-  }, [activeProductCategory, featuredProducts]);
+    if (activeProductCategory === 'All') return showcaseProducts;
+    return showcaseProducts.filter((product) => product.category === activeProductCategory);
+  }, [activeProductCategory, showcaseProducts]);
 
   const discoveryCategories = useMemo(() => {
     const values: string[] = [];
@@ -215,10 +234,10 @@ export default function MarketplaceShell() {
           <div className={styles.heroPaint + ' ' + styles.heroPaintGold} />
           <div className={styles.heroPaint + ' ' + styles.heroPaintMint} />
           <div className={styles.heroProductWall}>
-            {featuredProducts.length ? (
+            {showcaseProducts.length ? (
               [0, 1].map((row) => (
                 <div key={row} className={styles.heroProductRow} data-product-row={row}>
-                  {featuredProducts.slice(row * 3, row * 3 + 3).map((product) => (
+                  {showcaseProducts.slice(row * 3, row * 3 + 3).map((product) => (
                     <div key={product.shop_id + '-' + product.product_id} className={styles.heroProductBottle}>
                       {product.image_url ? (
                         <img src={product.image_url} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} />
@@ -447,43 +466,6 @@ export default function MarketplaceShell() {
             <div><span>03 / SHOP SMART</span><strong>Let AI help narrow it down.</strong><small>Describe what you need to get relevant product suggestions.</small></div>
           </div>
           <Link href="/ai-shopping" className={styles.chalkboardCta}>Find with Retail Mind AI <ArrowRight size={16} /></Link>
-        </div>
-      </section>
-
-      <section className={styles.featureRail + " " + styles.revealSection} data-reveal-section>
-        <button className={styles.featureRailItem} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
-          <span className={styles.featureIcon}><Store size={18} /></span>
-          <div><strong>Local storefronts</strong><small>Meet verified shops near you</small></div>
-          <ArrowRight size={15} />
-        </button>
-        <button className={styles.featureRailItem} onClick={() => { setMode('products'); void performSearch('products', '', true); }}>
-          <span className={styles.featureIcon}><Boxes size={18} /></span>
-          <div><strong>Compare products</strong><small>See prices across stores</small></div>
-          <ArrowRight size={15} />
-        </button>
-        <button className={styles.featureRailItem} onClick={() => router.push('/ai-shopping')}>
-          <span className={styles.featureIcon}><Sparkles size={18} /></span>
-          <div><strong>AI shopping</strong><small>Describe what you need</small></div>
-          <ArrowRight size={15} />
-        </button>
-        <Link href="/orders" className={styles.featureRailItem}>
-          <span className={styles.featureIcon}><Truck size={18} /></span>
-          <div><strong>Order centre</strong><small>Returns, reviews & history</small></div>
-          <ArrowRight size={15} />
-        </Link>
-      </section>
-
-      <section className={styles.discoveryBar + " " + styles.revealSection} data-reveal-section>
-        <div className={styles.discoveryCopy}>
-          <div className={styles.sectionEyebrow}>QUICK DISCOVERY</div>
-          <h2>Jump into a shopping mood.</h2>
-          <p>Pick a category, or let Retail Mind turn a sentence into a shortlist.</p>
-        </div>
-        <div className={styles.presetRow}>
-          <button onClick={() => preset('Groceries')}><span>01</span><b>Groceries</b><small>Everyday essentials</small></button>
-          <button onClick={() => preset('Bakery')}><span>02</span><b>Bakery</b><small>Freshly baked</small></button>
-          <button onClick={() => preset('Personal care')}><span>03</span><b>Personal care</b><small>Beauty & wellness</small></button>
-          <button className={styles.presetAi} onClick={() => router.push('/ai-shopping')}><Sparkles size={14} /><b>Find with AI</b><small>Ask naturally</small></button>
         </div>
       </section>
 
