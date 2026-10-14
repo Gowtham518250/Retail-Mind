@@ -457,3 +457,21 @@ hr { border-color: var(--rm-line); }
   .checkout-card, .checkout-summary { padding: 17px !important; border-radius: 17px !important; }
   .checkout-card-title { font-size: 19px !important; }
 }
+
+
+.orders-fk-details-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  gap: 12px !important;
+}
+.orders-fk-details-grid > div {
+  min-width: 0; border-radius: 12px !important; background: #f8f6ed !important;
+  border: 1px solid var(--rm-line) !important; padding: 12px !important;
+}
+.orders-fk-details-grid > div > span {
+  display: block; color: var(--rm-muted) !important; font-size: 10px !important; font-weight: 800 !important;
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.orders-fk-details-grid > div > strong {
+  display: block; margin-top: 6px; color: var(--rm-ink) !important; font-size: 12px !important;
+  line-height: 1.5; overflow-wrap: anywhere;
+}
