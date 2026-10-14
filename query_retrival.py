@@ -966,8 +966,8 @@ def _fast_business_query(
     if wants_units:
         row = db.execute(
             text(
-                "SELECT CASE WHEN invoice_rows.cnt > 0 THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
-                "FROM (SELECT COUNT(DISTINCT i.id)::bigint AS cnt, COALESCE(SUM(ili.quantity),0)::numeric AS qty "
+                "SELECT CASE WHEN invoice_rows.line_count > 0 THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
+                "FROM (SELECT COUNT(ili.id)::bigint AS line_count, COALESCE(SUM(ili.quantity),0)::numeric AS qty "
                 "FROM invoices i LEFT JOIN invoice_line_items ili ON i.id = ili.invoice_id "
                 f"WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED','DRAFT') AND {invoice_date}) invoice_rows "
                 "CROSS JOIN (SELECT COALESCE(SUM(s.quantity),0)::numeric AS qty FROM sales s "
@@ -1068,7 +1068,7 @@ def _fast_sales_day_comparison_query(query: str, db: Session, user_id: int):
         ") SELECT d.business_date, "
         "CASE WHEN COALESCE(i.cnt, 0) > 0 THEN i.cnt ELSE COALESCE(l.cnt, 0) END AS sales_count, "
         "CASE WHEN COALESCE(i.cnt, 0) > 0 THEN COALESCE(i.amount, 0) ELSE COALESCE(l.amount, 0) END AS sales_amount, "
-        "CASE WHEN COALESCE(i.cnt, 0) > 0 THEN COALESCE(u.qty, 0) ELSE COALESCE(l.qty, 0) END AS total_units_sold "
+        "CASE WHEN COALESCE(u.line_count, 0) > 0 THEN COALESCE(u.qty, 0) ELSE COALESCE(l.qty, 0) END AS total_units_sold "
         "FROM requested_days d "
         "LEFT JOIN invoice_sales i ON i.business_date = d.business_date "
         "LEFT JOIN invoice_units u ON u.business_date = d.business_date "
@@ -3841,7 +3841,7 @@ async def ask_query(
         elif wants_units:
             sql = (
                 "WITH invoice_rows AS ("
-                "SELECT COUNT(DISTINCT i.id)::bigint AS cnt, COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
+                "SELECT COUNT(ili.id)::bigint AS line_count, COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
                 "FROM invoices i LEFT JOIN invoice_line_items ili ON i.id = ili.invoice_id "
                 "WHERE i.user_id = :user_id "
                 "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
@@ -3851,7 +3851,7 @@ async def ask_query(
                 "FROM sales "
                 f"WHERE {sales_where}"
                 ") "
-                "SELECT CASE WHEN invoice_rows.cnt > 0 "
+                "SELECT CASE WHEN invoice_rows.line_count > 0 "
                 "THEN invoice_rows.qty ELSE sales_rows.qty END AS total_units_sold "
                 "FROM invoice_rows CROSS JOIN sales_rows"
             )

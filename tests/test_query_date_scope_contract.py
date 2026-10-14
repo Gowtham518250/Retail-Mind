@@ -291,9 +291,9 @@ def test_items_sold_today_is_a_deterministic_kpi_not_an_llm_sql_query(monkeypatc
     db = _FakeDb({"total_units_sold": 12})
     result = query_retrival._fast_business_query(question, db, user_id=7, date_scope=scope)
     assert result["results"] == [{"total_units_sold": 12.0}]
-    assert "COUNT(DISTINCT i.id)" in db.sql
+    assert "COUNT(ili.id)" in db.sql
     assert "LEFT JOIN invoice_line_items" in db.sql
-    assert "CASE WHEN invoice_rows.cnt > 0" in db.sql
+    assert "CASE WHEN invoice_rows.line_count > 0" in db.sql
     assert db.params == {"user_id": 7, "business_date": today}
 
 
