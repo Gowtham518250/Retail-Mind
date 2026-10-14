@@ -3955,6 +3955,44 @@ async def ask_query(
         date_scope=date_scope,
     )
     sql_review_ms = (time.perf_counter() - sql_review_started) * 1000
+
+    # A reviewer may occasionally return an empty SQL field for a repairable
+    # query. For English/rule-planned requests, spend at most two additional
+    # bounded calls repairing and re-reviewing it. Do not exceed the four-call
+    # budget when translation or translation verification already used the LLM.
+    translation_used_verifier = bool(
+        translation_used
+        and (query_classification or {}).get("source") == "high_reasoning_translation_verifier"
+    )
+    calls_before_review = int(translation_used) + int(translation_used_verifier) + 1
+    if reviewed_sql is None and calls_before_review <= 1:
+        print("ASKQUERY SQL_REVIEW recovery=attempt reason=review_rejected")
+        retry_sql = await run_in_threadpool(
+            _repair_failed_sql_with_groq,
+            question=query,
+            failed_sql=sql,
+            execution_error="The independent SQL reviewer did not approve the query. Rebuild a single read-only, tenant-scoped query that answers the same question and preserves its resolved date range.",
+            schema_context=retrived_table_information_str,
+        )
+        if retry_sql and (
+            _is_safe_read_only_tenant_select(retry_sql)
+            and _sql_preserves_resolved_date_scope(retry_sql, date_scope)
+        ):
+            retry_review_started = time.perf_counter()
+            retry_review = await run_in_threadpool(
+                _review_generated_sql_with_groq,
+                question=query,
+                generated_sql=retry_sql,
+                schema_context=retrived_table_information_str,
+                query_plan=query_plan,
+                date_scope=date_scope,
+            )
+            sql_review_ms += (time.perf_counter() - retry_review_started) * 1000
+            if retry_review:
+                sql = retry_sql
+                reviewed_sql = retry_review
+                print("ASKQUERY SQL_REVIEW recovery=approved repair_llm_calls=1")
+
     if reviewed_sql is None:
         print("ASKQUERY outcome=blocked reason=sql_review_not_confident sql_execution_llm_calls=0")
         raise HTTPException(
