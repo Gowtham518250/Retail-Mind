@@ -10,6 +10,7 @@ from sqlalchemy import and_, or_
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime, timedelta
+from datetime_utils import is_before_utc
 from passlib.context import CryptContext
 from jose import jwt
 import secrets
@@ -231,7 +232,7 @@ def refresh_token(
             )
         
         # Check if token is expired
-        if refresh_token_record.expires_at < datetime.utcnow():
+        if is_before_utc(refresh_token_record.expires_at):
             refresh_token_record.is_valid = False
             db.commit()
             raise HTTPException(
