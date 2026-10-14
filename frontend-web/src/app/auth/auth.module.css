@@ -55,7 +55,7 @@
   gap:clamp(20px,4vw,54px) !important;
 }
 .authCenter::before {
-  content:"GOOD SHOPS.\\A GOOD FINDS.\\A GOOD NEIGHBOURS.";
+  content:"GOOD SHOPS.\A GOOD FINDS.\A GOOD NEIGHBOURS.";
   position:absolute; inset:0 480px 0 0;
   display:flex; align-items:center; white-space:pre-line;
   padding:clamp(24px,4.5vw,62px);
@@ -74,7 +74,7 @@
   animation:authPromoEnter .7s cubic-bezier(.2,.75,.25,1) both;
 }
 .authCenter::after {
-  content:"FIND YOUR EVERYDAY FAVOURITES\\A LOCAL COMMERCE, MADE SIMPLE";
+  content:"FIND YOUR EVERYDAY FAVOURITES\A LOCAL COMMERCE, MADE SIMPLE";
   position:absolute; left:clamp(24px,4.5vw,62px); bottom:clamp(30px,5vw,64px);
   white-space:pre-line; color:rgba(255,249,239,.68);
   font-family:var(--font-body); font-size:11px; line-height:1.8;
