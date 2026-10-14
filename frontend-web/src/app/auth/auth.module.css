@@ -9,3 +9,24 @@
 .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.28);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.link{font-size:12px;font-weight:800;color:#0f6b50}.link:hover{color:#0b4c3a;text-decoration:underline}.switchText{text-align:center;color:#718078;font-size:12.5px;margin-top:2px}
 .errorBanner,.successBanner{display:flex;align-items:flex-start;gap:8px;padding:12px 14px;border-radius:12px;font-size:12.5px;line-height:1.5}.errorBanner{background:#fff3f0;border:1px solid #f2c8bf;color:#a94534;border-left:3px solid #e36c55}.successBanner{background:#edf9f2;border:1px solid #c6e6d5;color:#1d7052;border-left:3px solid #4eaa82}
 @media(max-width:480px){.authCard{padding:30px 22px 24px;border-radius:23px}.authTitle{font-size:27px}}
+
+
+/* Editorial account surfaces */
+.authMain { background: radial-gradient(ellipse at 15% 0%, rgba(216,237,145,.34), transparent 30%), #f7f4e9 !important; color: #182820 !important; }
+.authCard { background: rgba(255,253,247,.96) !important; border: 1px solid #e5e0d1 !important; border-radius: 26px !important; box-shadow: 0 24px 70px rgba(31,50,35,.12) !important; }
+.logoIcon { background: #245b42 !important; color: #d8ed91 !important; border-radius: 15px !important; box-shadow: 0 8px 19px rgba(36,91,66,.17) !important; }
+.logoText { color: #182820 !important; }
+.authTitle { color: #182820 !important; font-family: var(--font-display) !important; letter-spacing: -.045em !important; }
+.authSubtitle { color: #68756a !important; }
+.label { color: #34473b !important; font-weight: 800 !important; }
+.inputWrap { border-radius: 13px !important; border-color: #e5e0d1 !important; background: #fffefb !important; }
+.inputWrap:focus-within { border-color: #245b42 !important; box-shadow: 0 0 0 3px rgba(36,91,66,.1) !important; }
+.input { color: #182820 !important; }
+.inputIcon { color: #73816e !important; }
+.submitBtn { border-radius: 999px !important; background: #245b42 !important; color: #fff !important; box-shadow: 0 8px 20px rgba(36,91,66,.16) !important; }
+.submitBtn:hover { background: #143b2c !important; transform: translateY(-2px); }
+.link { color: #245b42 !important; font-weight: 800 !important; }
+.switchText { color: #68756a !important; }
+.errorBanner { border-radius: 12px !important; }
+.successBanner { border-radius: 12px !important; background: #e5efdf !important; color: #245b42 !important; }
+@media (max-width: 600px) { .authCard { border-radius: 20px !important; padding: 24px !important; } }
