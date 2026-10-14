@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/khata", tags=["Khata & Pending Payments Engine"])
 
+# Drafts are not issued receivables; cancelled invoices must never collect debt.
+NON_RECEIVABLE_INVOICE_STATUSES = (InvoiceStatus.CANCELLED, InvoiceStatus.DRAFT)
+
 
 # ==================== SCHEMAS ====================
 
@@ -54,7 +57,7 @@ def get_khata_pending_summary(
         open_invoices = db.query(Invoice).filter(
             Invoice.user_id == user_id,
             Invoice.payment_status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]),
-            Invoice.status != InvoiceStatus.CANCELLED
+            Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES)
         ).all()
 
         total_outstanding = 0.0
@@ -69,7 +72,13 @@ def get_khata_pending_summary(
                 continue
 
             total_outstanding += balance
-            phone_key = inv.customer_phone or str(inv.customer_id or "unknown")
+            normalized_customer_name = " ".join((inv.customer_name or "").split()).casefold()
+            if (inv.customer_phone or "").strip():
+                phone_key = inv.customer_phone.strip()
+            elif inv.customer_id:
+                phone_key = f"id:{inv.customer_id}"
+            else:
+                phone_key = f"name:{normalized_customer_name or 'unknown'}"
             pending_customer_phones.add(phone_key)
 
             # Check due date
@@ -127,7 +136,7 @@ def get_pending_khata_customers(
         query = db.query(Invoice).filter(
             Invoice.user_id == user_id,
             Invoice.payment_status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]),
-            Invoice.status != InvoiceStatus.CANCELLED
+            Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES)
         )
 
         if search:
@@ -150,7 +159,7 @@ def get_pending_khata_customers(
 
             phone = (inv.customer_phone or "").strip()
             name = (inv.customer_name or "Walk-in Customer").strip()
-            key = phone if phone else f"name_{name}"
+            key = phone if phone else f"name_{' '.join(name.split()).casefold()}"
 
             if key not in customer_map:
                 customer_map[key] = {
@@ -291,7 +300,7 @@ def record_khata_payment(
                 .filter(
                     Invoice.id == payload.invoice_id,
                     Invoice.user_id == user_id,
-                    Invoice.status != InvoiceStatus.CANCELLED,
+                    Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES),
                 )
                 .with_for_update()
                 .all()
@@ -305,7 +314,7 @@ def record_khata_payment(
                     Invoice.payment_status.in_(
                         [PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]
                     ),
-                    Invoice.status != InvoiceStatus.CANCELLED,
+                    Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES),
                 )
                 .order_by(Invoice.invoice_date.asc(), Invoice.id.asc())
                 .with_for_update()
@@ -320,7 +329,7 @@ def record_khata_payment(
                     Invoice.payment_status.in_(
                         [PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]
                     ),
-                    Invoice.status != InvoiceStatus.CANCELLED,
+                    Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES),
                 )
                 .order_by(Invoice.invoice_date.asc(), Invoice.id.asc())
                 .with_for_update()
@@ -453,7 +462,7 @@ def update_khata_deadline(
         query = db.query(Invoice).filter(
             Invoice.user_id == user_id,
             Invoice.payment_status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]),
-            Invoice.status != InvoiceStatus.CANCELLED
+            Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES)
         )
 
         if payload.customer_phone:
