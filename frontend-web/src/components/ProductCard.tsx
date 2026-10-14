@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ShoppingCart, Sparkles, Package2 } from 'lucide-react';
 import type { ShopProduct } from '../lib/types';
@@ -20,6 +21,9 @@ export default function ProductCard({
   justAdded,
   onAddToCart,
 }: ProductCardProps) {
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const hasDisplayImage = Boolean(product.image_url) && failedImageUrl !== product.image_url;
+
   const discount = product.original_price && product.original_price > product.price
     ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
     : product.discount_pct || 0;
@@ -34,8 +38,14 @@ export default function ProductCard({
       className="store-product-card store-product-card-3d"
     >
       <div className="store-product-media">
-        {product.image_url ? (
-          <img src={product.image_url} alt={product.name} loading="lazy" className="store-product-image" />
+        {hasDisplayImage ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            loading="lazy"
+            className="store-product-image"
+            onError={() => setFailedImageUrl(product.image_url || null)}
+          />
         ) : (
           <div className="store-product-placeholder">
             <Package2 size={40} />

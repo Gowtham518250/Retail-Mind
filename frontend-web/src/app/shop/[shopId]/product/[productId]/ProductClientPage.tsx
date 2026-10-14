@@ -15,6 +15,7 @@ export default function ProductClientPage() {
   const productId = Number(params?.productId);
   const { addToCart } = useCart();
   const [product, setProduct] = useState<ShopProduct | null>(null);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [added, setAdded] = useState(false);
   const [reviews, setReviews] = useState<
@@ -80,7 +81,9 @@ export default function ProductClientPage() {
             <span /><span /><span />
           </motion.div>
           <motion.div className="product-image-frame" animate={{ y: [0, -6, 0], rotateZ: [-1, 1, -1] }} transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}>
-            {product.image_url ? <img src={product.image_url} alt={product.name} /> : <Package2 size={70} />}
+            {product.image_url && failedImageUrl !== product.image_url
+              ? <img src={product.image_url} alt={product.name} onError={() => setFailedImageUrl(product.image_url || null)} />
+              : <Package2 size={70} />}
           </motion.div>
           <div className="product-floating-badge"><CheckCircle2 size={15} /> Local stock</div>
         </div>
