@@ -331,6 +331,18 @@ def test_yesterday_and_today_revenue_returns_two_separate_daily_results(monkeypa
     assert db.params == {"user_id": 7, "business_date": today, "previous_business_date": yesterday}
 
 
+def test_day_comparison_does_not_turn_product_listing_into_an_aggregate():
+    import query_retrival
+
+    class _NoQueryDb:
+        def execute(self, *_args, **_kwargs):
+            raise AssertionError("A product-list question must not be answered with an aggregate.")
+
+    assert query_retrival._fast_sales_day_comparison_query(
+        "Which items sold yesterday and today?", _NoQueryDb(), user_id=7
+    ) is None
+
+
 def test_yesterday_and_today_items_sold_returns_daily_quantity_comparison(monkeypatch):
     import query_retrival
 

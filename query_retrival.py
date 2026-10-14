@@ -1021,7 +1021,7 @@ def _fast_sales_day_comparison_query(query: str, db: Session, user_id: int):
         r"lowest|profit|margin|payment|payments|cash|received|invoice|invoices|"
         r"breakdown|list|show me which|which products?)\b",
         normalized,
-    ):
+    ) or re.search(r"\bwhich\b.{0,40}\b(items?|products?|names?)\b", normalized):
         return None
 
     wants_units = bool(
