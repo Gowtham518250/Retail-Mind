@@ -30,7 +30,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-14-hybrid-schema-retrieval-v11"
+QUERY_ENGINE_VERSION = "2026-10-14-hybrid-schema-retrieval-v12"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -39,6 +39,23 @@ def _business_dates():
     """Return today and yesterday using the shop business timezone."""
     today = datetime.now(BUSINESS_TZ).date()
     return today, today - timedelta(days=1)
+
+
+def _bounded_groq_max_tokens(env_name: str, default: int) -> int:
+    """Keep individual Groq completions under the known 1,000-token output quota."""
+    try:
+        requested = int(os.getenv(env_name, str(default)))
+    except (TypeError, ValueError):
+        requested = default
+    return max(128, min(requested, 900))
+
+
+def _is_groq_rate_limit_error(exc: Exception) -> bool:
+    """Recognize Groq 429s even when SDK versions wrap them in another error type."""
+    status = getattr(exc, "status_code", None)
+    code = str(getattr(exc, "code", "") or "").lower()
+    message = str(exc).lower()
+    return status == 429 or type(exc).__name__ == "RateLimitError" or "rate_limit_exceeded" in code or "429 too many requests" in message or "output tokens per minute" in message
 
 # CPU-only embedding runtime for small Render instances.
 # Uses the same all-MiniLM-L6-v2 model family as the existing FAISS index,
@@ -296,7 +313,7 @@ def _review_generated_sql_with_groq(
                 {"role": "user", "content": prompt},
             ],
             temperature=0.0,
-            max_tokens=2600,
+            max_tokens=_bounded_groq_max_tokens("GROQ_SQL_REVIEW_MAX_TOKENS", 700),
             response_format={"type": "json_object"},
             stream=False,
         )
@@ -373,7 +390,7 @@ def _repair_failed_sql_with_groq(
                 {"role": "user", "content": prompt},
             ],
             temperature=0.0,
-            max_tokens=2400,
+            max_tokens=_bounded_groq_max_tokens("GROQ_SQL_REPAIR_MAX_TOKENS", 700),
             response_format={"type": "json_object"},
             stream=False,
         )
@@ -634,7 +651,7 @@ def _generate_sql_with_groq(formatted_prompt: str, model: str) -> str:
         model=model,
         messages=[{"role": "user", "content": formatted_prompt}],
         temperature=0.1,
-        max_tokens=1800,
+        max_tokens=_bounded_groq_max_tokens("GROQ_SQL_MAX_TOKENS", 800),
         top_p=0.9,
         stream=False,
     )
@@ -1819,6 +1836,15 @@ def _is_explicit_worker_salary_guidance_query(query: str) -> bool:
             r"\b(?:i|we)\s+(?:should|need to|have to|must)\s+(?:pay|give)\b",
             normalized,
         )
+        or re.search(
+            r"\bhow much\s+(?:should|do|does|did|can|will|would)\s+"
+            r"(?:i|we|the shop|the owner)\s+(?:need to\s+|have to\s+)?(?:pay|give)\b",
+            normalized,
+        )
+        or re.search(
+            r"\bhow much\s+(?:i|we)\s+(?:need to|have to|should|must)\s+(?:pay|give)\b",
+            normalized,
+        )
     )
     asks_amount_from_attendance = bool(
         re.search(r"\b(?:how much|what amount|calculate|estimate|work out|determine)\b", normalized)
@@ -1852,13 +1878,12 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
         )
         return None
 
-    has_worker = bool(re.search(r"\b(worker|workers|employee|employees|staff|labou?rers?)\b", normalized))
     has_pay_intent = bool(re.search(
-        r"\b(pay|paying|salary|salaries|wage|wages|payroll|deduct|deduction|"
+        r"\b(pay|paying|paid|salary|salaries|wage|wages|payroll|deduct|deduction|"
         r"full amount|less amount|amount to pay|payment)\b",
         normalized,
     ))
-    if not (has_worker and has_pay_intent):
+    if not has_pay_intent:
         return None
 
     workers = db.query(Worker).filter(Worker.shopkeeper_id == int(user_id)).all()
@@ -1945,6 +1970,7 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
         db.query(Attendance)
         .filter(
             Attendance.worker_id == worker.id,
+            Attendance.employee_id == worker.shopkeeper_id,
             Attendance.attendance_date >= period_start,
             Attendance.attendance_date <= period_end,
         )
@@ -1967,10 +1993,23 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
         total_working_hours += float(hours_by_record[index] or 0.0)
 
     salary = float(worker.salary or 0)
+    hourly_rate = salary / 200.0 if salary > 0 else 0.0
+    # Same baseline-hours formula as the Flutter attendance/payroll tabs.
+    # Missing server rows are unknown/pending sync, not evidence the worker
+    # should be paid zero.
+    payroll_estimate = (
+        round(total_working_hours * hourly_rate, 2)
+        if attendance_rows and salary > 0
+        else None
+    )
+
     if not attendance_rows:
         attendance_summary = (
-            f"No attendance records were found from {period_start.isoformat()} to {period_end.isoformat()}."
+            f"No server-synced attendance records were found from {period_start.isoformat()} "
+            f"to {period_end.isoformat()}. I cannot calculate a reliable amount yet. "
+            "If the Attendance screen shows hours, sync the pending attendance first."
         )
+        salary_text = f"The configured monthly salary is ₹{salary:,.2f}." if salary > 0 else "No positive salary amount is configured."
     else:
         attendance_summary = (
             f"From {period_start.isoformat()} to {period_end.isoformat()}, records show "
@@ -1978,18 +2017,22 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
             f"{counts['HALF_DAY']} half-days, {counts['LATE']} late records, and "
             f"{total_working_hours:.2f} recorded working hours."
         )
+        salary_text = (
+            f"The configured monthly salary is ₹{salary:,.2f}."
+            if salary > 0
+            else "No positive salary amount is configured for this worker."
+        )
 
-    if salary <= 0:
-        salary_text = "No positive salary amount is configured for this worker."
-    else:
-        salary_text = f"The configured salary is ₹{salary:,.2f} for the salary-payment workflow."
-
+    estimate_text = (
+        f"Using the same estimate formula as the Attendance screen (monthly salary ÷ 200 baseline hours × recorded hours), "
+        f"the estimated amount is ₹{payroll_estimate:,.2f}. "
+        if payroll_estimate is not None
+        else "The attendance-based estimate is unavailable until attendance records are synchronized and verified. "
+    )
     answer = (
-        f"{worker.name}: {salary_text} {attendance_summary} "
-        "Retail Mind's current salary-payment workflow records the configured salary for a selected month "
-        "and does not apply an attendance-based deduction formula. I can't safely recommend paying less from "
-        "attendance alone because no deduction rule is configured; follow the agreed employment policy and "
-        "confirm any deduction before payment. This lookup does not make a payment."
+        f"{worker.name}: {salary_text} {attendance_summary} {estimate_text}"
+        "This is an estimate based on the app's current calculation, not an executed payment. "
+        "Confirm your agreed payroll policy before making any adjustment."
     )
     results = [{
         "worker_id": worker.id,
@@ -2004,6 +2047,10 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
         "half_days": counts["HALF_DAY"],
         "late_records": counts["LATE"],
         "total_working_hours": round(total_working_hours, 2),
+        "hourly_rate": round(hourly_rate, 2),
+        "estimated_pay": payroll_estimate,
+        "attendance_sync_status": "synced" if attendance_rows else "missing_or_not_synced",
+        "calculation_basis": "configured_salary_divided_by_200_baseline_hours_times_recorded_hours",
     }]
     return {
         "answer": answer,
@@ -2173,7 +2220,7 @@ def _verify_uncertain_translation(
                 },
             ],
             temperature=0.0,
-            max_tokens=1200,
+            max_tokens=_bounded_groq_max_tokens("GROQ_TRANSLATION_VERIFY_MAX_TOKENS", 600),
             response_format={"type": "json_object"},
             stream=False,
         )
@@ -2291,7 +2338,7 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
         raw = str(raw or "").strip()
     except Exception as exc:
         print(f"LLM query translation/classification failed: {type(exc).__name__}: {exc}")
-        if type(exc).__name__ == "RateLimitError":
+        if _is_groq_rate_limit_error(exc):
             raise HTTPException(
                 status_code=429,
                 detail="The AI assistant is temporarily rate-limited. Please try again shortly.",
@@ -3087,9 +3134,6 @@ async def ask_query_product_discovery(
 
 
 @app.post("/askquery")
-
-
-@app.post("/askquery")
 async def ask_query(
     query: str = Form(...),
     language_code: str = Form("en"),
@@ -3410,8 +3454,26 @@ async def ask_query(
     # into unrelated questions. Follow-up context must be resolved explicitly, not
     # supplied as a bag of recent SQL-driving examples.
     query_plan = _make_deterministic_query_plan(query)
+    # Prefer the deterministic plan unless a high-confidence translation/classifier
+    # resolves a metric the rule planner cannot recognize (e.g. a customer list).
+    classified = query_classification or {}
+    classified_intent = str(classified.get("intent") or "").strip().lower()
+    classified_metric = str(classified.get("metric") or "").strip().lower()
+    try:
+        classified_confidence = float(classified.get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        classified_confidence = 0.0
+    if (
+        query_plan.get("intent") == "general"
+        and query_plan.get("metric") == "other"
+        and classified_intent in {"aggregate", "list", "comparison", "trend"}
+        and classified_metric in {"sales_amount", "sales_count", "units_sold", "expenses", "profit", "stock", "customers", "attendance", "payments"}
+        and classified_confidence >= 0.90
+    ):
+        query_plan = {**query_plan, "intent": classified_intent, "metric": classified_metric,
+                      "confidence": classified_confidence, "planner": "classifier_fallback"}
     print(
-        "ASKQUERY STAGE=query_planning planner=deterministic llm_calls=0 "
+        f"ASKQUERY STAGE=query_planning planner={query_plan.get('planner', 'deterministic')} llm_calls=0 "
         f"intent={query_plan.get('intent')} metric={query_plan.get('metric')}"
     )
 
@@ -3927,6 +3989,43 @@ async def ask_query(
         date_scope=date_scope,
     )
     sql_review_ms = (time.perf_counter() - sql_review_started) * 1000
+
+    # Retry only when a simple English query's reviewer fails; translation may
+    # already consume most of the per-query model-call budget. Repaired SQL is
+    # independently reviewed again and never executed on the basis of repair alone.
+    translation_used_verifier = bool(
+        translation_used
+        and (query_classification or {}).get("source") == "high_reasoning_translation_verifier"
+    )
+    calls_before_review = int(translation_used) + int(translation_used_verifier) + 1
+    if reviewed_sql is None and calls_before_review <= 1:
+        print("ASKQUERY SQL_REVIEW recovery=attempt reason=review_rejected")
+        retry_sql = await run_in_threadpool(
+            _repair_failed_sql_with_groq,
+            question=query,
+            failed_sql=sql,
+            execution_error="The independent SQL reviewer did not approve the query. Rebuild a single read-only, tenant-scoped query preserving the requested meaning and resolved date range.",
+            schema_context=retrived_table_information_str,
+        )
+        if retry_sql and (
+            _is_safe_read_only_tenant_select(retry_sql)
+            and _sql_preserves_resolved_date_scope(retry_sql, date_scope)
+        ):
+            retry_review_started = time.perf_counter()
+            retry_review = await run_in_threadpool(
+                _review_generated_sql_with_groq,
+                question=query,
+                generated_sql=retry_sql,
+                schema_context=retrived_table_information_str,
+                query_plan=query_plan,
+                date_scope=date_scope,
+            )
+            sql_review_ms += (time.perf_counter() - retry_review_started) * 1000
+            if retry_review:
+                sql = retry_sql
+                reviewed_sql = retry_review
+                print("ASKQUERY SQL_REVIEW recovery=approved repair_llm_calls=1")
+
     if reviewed_sql is None:
         print("ASKQUERY outcome=blocked reason=sql_review_not_confident sql_execution_llm_calls=0")
         raise HTTPException(
