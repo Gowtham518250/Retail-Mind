@@ -221,8 +221,9 @@ export default function MarketplaceShell() {
   const preset = (value: string) => {
     setActiveProductCategory('All');
     setQuery(value);
-    setMode('products');
-    void performSearch('products', value, true);
+    // These chips come from real shop categories/types, so search both shops and products.
+    setMode('all');
+    void performSearch('all', value, true);
   };
 
   return (
