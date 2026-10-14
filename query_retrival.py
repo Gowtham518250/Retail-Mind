@@ -1937,6 +1937,7 @@ def _fast_worker_payroll_query(query: str, db: Session, user_id: int, date_scope
         db.query(Attendance)
         .filter(
             Attendance.worker_id == worker.id,
+            Attendance.employee_id == worker.shopkeeper_id,
             Attendance.attendance_date >= period_start,
             Attendance.attendance_date <= period_end,
         )
