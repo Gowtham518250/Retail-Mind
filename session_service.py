@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from models import User, RefreshToken, SessionToken, OfflineDataQueue
 from datetime import datetime, timedelta
+from datetime_utils import is_before_utc
 import secrets
 import json
 import logging
@@ -124,7 +125,7 @@ class SessionService:
                     return {"error": "Invalid refresh token"}
                 
                 # Check if expired
-                if token_record.expires_at < datetime.utcnow():
+                if is_before_utc(token_record.expires_at):
                     token_record.is_valid = False
                     db.commit()
                     cleanup_token_lock(refresh_token)
