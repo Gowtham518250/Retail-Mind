@@ -10,9 +10,9 @@ import styles from './ProductCard.module.css';
 
 interface ProductCardProps {
   product: ShopProduct;
-  product: ShopProduct;
   shopId: number;
   inCartCount: number;
+  justAdded: boolean;
   onAddToCart: (product: ShopProduct) => void;
 }
 
