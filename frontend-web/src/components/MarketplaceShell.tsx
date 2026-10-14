@@ -96,6 +96,24 @@ export default function MarketplaceShell() {
   };
 
   useEffect(() => {
+    const sections = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal-section]'));
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduceMotion && 'IntersectionObserver' in window) {
+      sections.forEach((section) => section.classList.add(styles.revealPending));
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add(styles.revealVisible);
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -35px 0px' });
+      sections.forEach((section) => observer.observe(section));
+      return () => observer.disconnect();
+    }
+  }, []);
+
+  useEffect(() => {
     void performSearch('all', '');
     return () => {
       requestIdRef.current += 1;
@@ -111,15 +129,50 @@ export default function MarketplaceShell() {
 
   return (
     <main className={styles.page}>
-      <section className={styles.hero}>
+      <section className={styles.hero} data-retail-hero>
         <div className={styles.heroGridLines} />
         <div className={styles.heroGlow} />
+        <div className={styles.heroArtwork} aria-hidden="true">
+          <div className={styles.heroPaint + ' ' + styles.heroPaintGold} />
+          <div className={styles.heroPaint + ' ' + styles.heroPaintMint} />
+          <div className={styles.heroProductWall}>
+            {(products.filter((product) => product.image_url).slice(0, 6)).length ? (
+              <>
+                {[0, 1].map((row) => (
+                  <div key={row} className={styles.heroProductRow} data-product-row={row}>
+                    {products.filter((product) => product.image_url).slice(row * 3, row * 3 + 3).map((product, index) => (
+                      <Link
+                        key={String(product.product_id) + '-' + String(product.shop_id)}
+                        href={'/shop/' + product.shop_id + '/product/' + product.product_id}
+                        className={styles.heroProductBottle}
+                        tabIndex={-1}
+                      >
+                        <img src={product.image_url} alt="" loading="lazy" />
+                        <span>{product.product_name}</span>
+                      </Link>
+                    ))}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <ThreeDRetailScene />
+            )}
+          </div>
+          <div className={styles.heroOrbit} />
+          <div className={styles.heroChalkboard}>
+            <span>LOCAL MARKETPLACE</span>
+            <strong>Shop small.</strong>
+            <strong>Find more.</strong>
+            <small>Everyday value, nearby.</small>
+          </div>
+          <div className={styles.heroFloatingStamp}><Store size={14} /><span>LOCAL STORES<br /><b>LIVE ONLINE</b></span></div>
+        </div>
         <div className={styles.heroContent}>
-          <div className={styles.heroEyebrow}><span className={styles.statusDot} /> RETAIL MIND · LOCAL COMMERCE, REIMAGINED</div>
+          <div className={styles.heroEyebrow}><span className={styles.statusDot} /> RETAIL MIND · YOUR LOCAL MARKET</div>
           <div className={styles.heroCopy}>
-            <div className={styles.heroKicker}>YOUR NEIGHBOURHOOD, NOW ONLINE</div>
-            <h1>Shop local.<span>Think smarter.</span><em>Move faster.</em></h1>
-            <p>Discover online-enabled shops, compare products across stores, and use AI to find the right value — all from one beautifully connected marketplace.</p>
+            <div className={styles.heroKicker}>GOOD THINGS, CLOSER TO HOME</div>
+            <h1><span className={styles.heroLine}>Your neighbourhood.</span><span className={styles.heroLineAccent}>A whole new</span><em>way to shop.</em></h1>
+            <p>Discover trusted local shops, compare real prices, and find what you need with shopping that feels closer, smarter, and more human.</p>
           </div>
 
           <div className={styles.searchPanel}>
@@ -145,11 +198,20 @@ export default function MarketplaceShell() {
             <span><Zap size={14} /><b>Live availability</b><small>Stock-aware</small></span>
           </div>
         </div>
-
-        <ThreeDRetailScene />
+      </section>
+      <section className={styles.pressTicker} aria-label="Retail Mind marketplace benefits">
+        <div className={styles.pressTickerTrack}>
+          {Array.from({length: 2}).map((_, run) => (
+            <span className={styles.pressTickerRun} key={run}>
+              {['LOCAL SHOPS · REAL PRICES','DISCOVER SOMETHING NEARBY','SMARTER EVERYDAY SHOPPING','SHOP LOCAL, LIVE BETTER'].map((item, index) => (
+                <span className={styles.pressTickerItem} key={item + index}>{item}<b>✳</b></span>
+              ))}
+            </span>
+          ))}
+        </div>
       </section>
 
-      <section className={styles.featureRail}>
+      <section className={styles.featureRail + " " + styles.revealSection} data-reveal-section>
         <button className={styles.featureRailItem} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
           <span className={styles.featureIcon}><Store size={18} /></span>
           <div><strong>Local storefronts</strong><small>Meet verified shops near you</small></div>
@@ -172,7 +234,7 @@ export default function MarketplaceShell() {
         </Link>
       </section>
 
-      <section className={styles.discoveryBar}>
+      <section className={styles.discoveryBar + " " + styles.revealSection} data-reveal-section>
         <div className={styles.discoveryCopy}>
           <div className={styles.sectionEyebrow}>QUICK DISCOVERY</div>
           <h2>Jump into a shopping mood.</h2>
@@ -190,12 +252,12 @@ export default function MarketplaceShell() {
       {aiMessage && <section className={styles.aiBanner}><div className={styles.aiBannerIcon}><Sparkles size={17} /></div><div><strong>Retail Mind AI</strong><p>{aiMessage}</p></div></section>}
 
       {loading ? (
-        <section className={styles.resultsSection}>
+        <section className={styles.resultsSection + " " + styles.revealSection} data-reveal-section>
           <div className={styles.sectionHeader}><div><div className={styles.sectionEyebrow}>DISCOVER</div><h2>Loading nearby shops</h2></div></div>
           <div className={styles.shopGrid}>{Array.from({ length: 8 }).map((_, index) => <div className={styles.skeletonCard} key={index} />)}</div>
         </section>
       ) : aiResults.length ? (
-        <section className={styles.resultsSection}>
+        <section className={styles.resultsSection + " " + styles.revealSection} data-reveal-section>
           <div className={styles.sectionHeader}><div><div className={styles.sectionEyebrow}>AI CURATED</div><h2>Recommended for you</h2></div><span className={styles.count}>{aiResults.length} picks</span></div>
           <div className={styles.list}>
             {aiResults.map((item, index) => (
@@ -208,7 +270,7 @@ export default function MarketplaceShell() {
           </div>
         </section>
       ) : query.trim() ? (
-        <section className={styles.resultsSection}>
+        <section className={styles.resultsSection + " " + styles.revealSection} data-reveal-section>
           <div className={styles.sectionHeader}><div><div className={styles.sectionEyebrow}>RESULTS</div><h2>{mode === 'shops' ? 'Shops matching your search' : mode === 'products' ? 'Products matching your search' : 'Shops and products'}</h2></div></div>
 
           {mode !== 'products' && (
@@ -263,7 +325,7 @@ export default function MarketplaceShell() {
           {!shops.length && !products.length && <div className={styles.emptyState}><div className={styles.emptyIcon}><Search size={22} /></div><strong>No matches yet</strong><p>Try a broader shop, category or product keyword.</p></div>}
         </section>
       ) : (
-        <section className={styles.resultsSection}>
+        <section className={styles.resultsSection + " " + styles.revealSection} data-reveal-section>
           <div className={styles.sectionHeader}>
             <div>
               <div className={styles.sectionEyebrow}><Sparkles size={12} /> LOCAL STOREFRONTS</div>
