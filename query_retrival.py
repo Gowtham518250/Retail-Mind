@@ -699,6 +699,28 @@ def _can_use_fast_business_query(query: str, date_scope: dict) -> bool:
     return plan.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}
 
 
+def _can_use_translated_fast_business_query(
+    query: str,
+    date_scope: dict,
+    classification: dict | None,
+    translation_confidence: float,
+) -> bool:
+    """Allow a high-confidence translated question to use an exact deterministic KPI.
+
+    The translated English wording is matched against a narrow rule set. An
+    uncertain/ambiguous or dimensional query never qualifies for this shortcut.
+    """
+    if not _can_use_fast_business_query(query, date_scope):
+        return False
+    classification = classification if isinstance(classification, dict) else {}
+    classifier_agrees = (
+        classification.get("intent") == "aggregate"
+        and classification.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}
+        and float(classification.get("confidence") or 0.0) >= 0.90
+    )
+    return classifier_agrees or float(translation_confidence or 0.0) >= 0.80
+
+
 def _resolve_explicit_date_scope(query: str) -> dict:
     """Resolve exact and relative date ranges using the Asia/Kolkata business date.
 
@@ -3312,14 +3334,12 @@ async def ask_query(
     # For translated questions, require the combined classifier to agree with
     # the deterministic KPI intent before using the no-LLM path.
     if translation_used:
-        classification = query_classification or {}
-        classifier_agrees = (
-            classification.get("intent") == "aggregate"
-            and classification.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}
-            and float(classification.get("confidence") or 0.0) >= 0.90
+        can_use_fast_path = _can_use_translated_fast_business_query(
+            query,
+            date_scope,
+            query_classification,
+            translation_confidence,
         )
-        confident_translation = translation_confidence >= 0.92
-        can_use_fast_path = can_use_fast_path and (classifier_agrees or confident_translation)
     print(
         "ASKQUERY STAGE=fast_path_check planner_llm_calls=0 "
         f"fast_path_eligible={str(can_use_fast_path).lower()}"

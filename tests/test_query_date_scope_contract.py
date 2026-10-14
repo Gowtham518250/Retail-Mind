@@ -369,6 +369,13 @@ def test_translation_confidence_allows_clear_english_aggregate_to_use_fast_path(
     )
     assert not classifier_agrees
     assert query_retrival._can_use_fast_business_query(question, scope)
-    # The ask_query route now permits this clear deterministic plan when translation confidence >= 0.92.
-    assert 0.92 >= 0.92
+    assert query_retrival._can_use_translated_fast_business_query(
+        question, scope, classification, translation_confidence=0.80
+    )
+    assert not query_retrival._can_use_translated_fast_business_query(
+        question, scope, classification, translation_confidence=0.79
+    )
+    assert not query_retrival._can_use_translated_fast_business_query(
+        "Show today's sales by customer", scope, classification, translation_confidence=0.99
+    )
 
