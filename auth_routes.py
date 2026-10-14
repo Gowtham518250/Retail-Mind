@@ -112,6 +112,11 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     access_token = create_access_token(
         data={"sub": str(new_user.id), "role": new_user.user_type, "user_type": new_user.user_type}
     )
+    # Registration should establish the same durable session as login. Without
+    # a refresh token, a newly created account can be sent back to Login as soon
+    # as its short-lived access token expires (even if the app was only closed).
+    from security import create_refresh_token
+    refresh_token = create_refresh_token(new_user.id, new_user.user_type)
 
     registered_profile = (
         db.query(ShopProfile)
@@ -123,6 +128,7 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         "msg": "User registered successfully",
         "user_id": new_user.id,
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "role": new_user.user_type,
         "user_type": new_user.user_type,
