@@ -13,8 +13,9 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("products", sa.Column("image_url", sa.Text(), nullable=True))
+    # Idempotent because app.py also repairs this column on older production deployments.
+    op.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT")
 
 
 def downgrade():
-    op.drop_column("products", "image_url")
+    op.execute("ALTER TABLE products DROP COLUMN IF EXISTS image_url")

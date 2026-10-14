@@ -29,3 +29,15 @@ def test_customer_marketplace_can_find_shops_by_category_metadata():
     source = inspect.getsource(marketplace_search)
     assert "ShopProfile.shop_type.ilike(like)" in source
     assert "ShopProfile.shop_categories.ilike(like)" in source
+
+
+def test_product_image_column_has_an_idempotent_production_repair():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    app_source = (root / "app.py").read_text(encoding="utf-8")
+    migration_source = (root / "alembic" / "versions" / "026_product_image_url.py").read_text(encoding="utf-8")
+
+    assert 'ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT' in app_source
+    assert 'ADD COLUMN IF NOT EXISTS image_url TEXT' in migration_source
+    assert 'DROP COLUMN IF EXISTS image_url' in migration_source

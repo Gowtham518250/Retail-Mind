@@ -174,6 +174,8 @@ try:
         "CREATE INDEX IF NOT EXISTS ix_invoices_offline_id ON invoices(offline_id)",
         # products — purchase_price added later
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(10,2) DEFAULT 0",
+        # Product imagery — repair legacy production databases even when the Render service does not run Alembic.
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT",
         # customers — state/postal_code added later
         "ALTER TABLE customers ADD COLUMN IF NOT EXISTS state VARCHAR(50)",
         "ALTER TABLE customers ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)",
