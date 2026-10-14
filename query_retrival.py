@@ -1052,7 +1052,7 @@ def _fast_sales_day_comparison_query(query: str, db: Session, user_id: int):
         "AND i.invoice_date IN (:business_date, :previous_business_date) "
         "GROUP BY i.invoice_date"
         "), invoice_units AS ("
-        "SELECT i.invoice_date AS business_date, "
+        "SELECT i.invoice_date AS business_date, COUNT(ili.id)::bigint AS line_count, "
         "COALESCE(SUM(ili.quantity), 0)::numeric AS qty "
         "FROM invoices i LEFT JOIN invoice_line_items ili ON ili.invoice_id = i.id "
         "WHERE i.user_id = :user_id AND i.status NOT IN ('CANCELLED', 'DRAFT') "
