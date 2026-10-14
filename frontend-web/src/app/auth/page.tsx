@@ -287,7 +287,7 @@ export default function AuthPage() {
             <div className={styles.logoIcon}>
               <ShoppingBag size={22} />
             </div>
-            <span className={styles.logoText}>RetailShop</span>
+            <span className={styles.logoText}>Retail Mind</span>
           </motion.div>
 
           <AnimatePresence mode="wait">
