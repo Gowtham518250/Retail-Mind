@@ -10,7 +10,7 @@ cancelled documents are left unchanged. No payment-ledger entries are invented.
 from alembic import op
 
 revision = "030_regular_cash_paid_state"
-down_revision = "029_expense_idempotency"
+down_revision = ("029_expense_idempotency", "e7a9054db41d")
 branch_labels = None
 depends_on = None
 
