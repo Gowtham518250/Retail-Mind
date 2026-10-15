@@ -13,6 +13,7 @@ from retail_intelligence import (
     _expense_money,
     _expense_response,
     _normalize_payroll_month,
+    _normalize_optional_idempotency_key,
     list_expenses,
     pay_worker_salary,
 )
@@ -98,3 +99,10 @@ def test_salary_route_locks_worker_and_checks_stable_month_reference_before_writ
     assert "UniversalTransaction.reference_id == reference" in source
     assert 'idempotency_key=f"salary-worker-{worker_id}-{month}"' in source
     assert "already_paid" in source
+
+def test_optional_idempotency_key_rejects_whitespace_only_values():
+    assert _normalize_optional_idempotency_key(None) is None
+    assert _normalize_optional_idempotency_key("  expense-key-12  ") == "expense-key-12"
+    with pytest.raises(HTTPException) as exc:
+        _normalize_optional_idempotency_key("        ")
+    assert exc.value.status_code == 422
