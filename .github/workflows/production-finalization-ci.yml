@@ -49,7 +49,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^031_stock_movement_idempotency')"
+          count="$(printf '%s\n' "$heads" | grep -c '^032_restore_sales_journal_event_time')"
           test "$count" -eq 1
           head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
@@ -61,6 +61,7 @@ jobs:
           pytest -q tests/test_durable_sync.py
           pytest -q tests/test_ai_query_history_contract.py
           pytest -q tests/test_query_retrieval_quality.py
+          pytest -q tests/test_sales_analytics_regression.py
           pytest -q tests/test_query_date_scope_contract.py
           pytest -q tests/test_customer_otp_password_reset.py
           pytest -q tests/test_growth_suite.py
