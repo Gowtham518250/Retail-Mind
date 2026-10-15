@@ -49,7 +49,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^029_expense_idempotency')"
+          count="$(printf '%s\n' "$heads" | grep -c '^030_regular_cash_paid_state')"
           test "$count" -eq 1
           head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
