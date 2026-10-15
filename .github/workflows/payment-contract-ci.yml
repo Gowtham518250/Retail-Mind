@@ -28,4 +28,4 @@ jobs:
       - name: Run payment contract tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_payment_contract.py tests/test_realtime.py
+        run: pytest -q tests/test_payment_contract.py tests/test_realtime.py tests/test_invoice_sync_payment_state.py
