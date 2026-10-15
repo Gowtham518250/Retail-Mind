@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func, cast, Integer, text
 from sqlalchemy.orm import Session, joinedload
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import logging
 from sqlalchemy.exc import IntegrityError
 
