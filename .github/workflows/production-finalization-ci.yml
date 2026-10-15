@@ -44,12 +44,12 @@ jobs:
           pip install pytest
       - name: Compile production modules
         run: |
-          python -m py_compile             app.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py
+          python -m py_compile             app.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py retail_intelligence.py tools/ai_query_eval.py
       - name: Validate Alembic migration graph
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^027_purchase_order_receiving')"
+          count="$(printf '%s\n' "$heads" | grep -c '^028_bank_reconciliation_integrity')"
           test "$count" -eq 1
           head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
@@ -73,6 +73,8 @@ jobs:
           pytest -q tests/test_invoice_replay_guard.py
           pytest -q tests/test_purchase_order_receiving.py
           pytest -q tests/test_payment_contract.py
+          pytest -q tests/test_ai_query_eval.py
+          pytest -q tests/test_bank_reconciliation_contract.py
           pytest -q tests/test_product_image_contract.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
           pytest -q tests/test_query_retrieval_optimization.py
