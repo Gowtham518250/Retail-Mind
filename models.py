@@ -1209,16 +1209,29 @@ class PurchaseOrder(Base):
 # ==================== BANK RECONCILIATION & TRANSACTIONS ====================
 
 class BankReconciliation(Base):
-    """Daily checks to ensure UPI/Card collections hit the bank account"""
+    """Append-only daily record comparing expected UPI collections to bank deposits."""
     __tablename__ = "bank_reconciliations"
-    
+
     id = Column(Integer, primary_key=True)
-    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
-    recon_date = Column(Date, nullable=False)
-    expected_upi_amount = Column(Numeric(12, 2), default=0)
-    actual_bank_deposit = Column(Numeric(12, 2), default=0)
-    status = Column(Enum(BankReconciliationStatus, name="bank_reconciliation_status"), default=BankReconciliationStatus.PENDING)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    recon_date = Column(Date, nullable=False, index=True)
+    expected_upi_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    actual_bank_deposit = Column(Numeric(12, 2), default=0, nullable=False)
+    status = Column(Enum(BankReconciliationStatus, name="bank_reconciliation_status"), default=BankReconciliationStatus.PENDING, nullable=False)
     notes = Column(Text)
+    idempotency_key = Column(String(128), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_bank_reconciliation_shop_idempotency",
+            "shop_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
 class UniversalTransaction(Base):
     """Enterprise Tracker: Unified journal for ALL money in/out (Sales, Expense, Khata, PO)"""
