@@ -1,41 +1,47 @@
 """
-📦 PURCHASE ORDERS API — AI Shop Pro Enterprise Backend
-Covers:
-  - Create purchase orders to wholesalers
-  - Mark order as delivered (auto-adds stock to inventory)
-  - List all POs with status
-  - Cancel PO
-  - Auto-write to UniversalTransaction journal on delivery
-"""
+Purchase orders API.
 
+Purchase receipts update inventory only for quantities actually received.
+Order creation and receipt retries are idempotent, and stock movements commit
+atomically with the purchase-order lifecycle state.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from datetime import date, datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import get_db
-from models import PurchaseOrder, Product, StockMovement, UniversalTransaction
+from models import PurchaseOrder, PurchaseOrderStatus, Product, StockMovement, StockMovementType
 from security import owner_only, sanitize_input, resolve_shop_id
-import json
+from durable_sync import append_sync_event
 
 router = APIRouter(prefix="/purchase-orders", tags=["Purchase Orders"])
 
-# =====================
-# SCHEMAS
-# =====================
+
 class POItem(BaseModel):
     product_id: Optional[int] = None
-    product_name: Optional[str] = None       # make optional
-    quantity: int = Field(..., gt=0)
-    unit_cost: Optional[float] = Field(None, ge=0)   # keep original
-    unit_price: Optional[float] = Field(None, ge=0)
+    product_name: Optional[str] = None
+    quantity: Decimal = Field(..., gt=0)
+    unit_cost: Optional[Decimal] = Field(None, ge=0)
+    unit_price: Optional[Decimal] = Field(None, ge=0)
+
 
 class PurchaseOrderCreate(BaseModel):
     supplier_name: str = Field(..., min_length=2, max_length=100)
     expected_delivery: Optional[date] = None
     items: List[POItem] = Field(..., min_length=1)
     notes: Optional[str] = None
+    status: str = Field(default="ORDERED", max_length=32)
+    idempotency_key: Optional[str] = Field(default=None, min_length=8, max_length=128)
+
 
 class PurchaseOrderResponse(BaseModel):
     id: int
@@ -44,14 +50,89 @@ class PurchaseOrderResponse(BaseModel):
     total_cost: float
     expected_delivery: Optional[date]
     items_json: str
+    idempotency_key: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
 
-# =====================
-# ENDPOINTS
-# =====================
+
+class POReceiptItem(BaseModel):
+    item_index: int = Field(..., ge=0)
+    quantity: Decimal = Field(..., gt=0)
+
+
+class POReceiptRequest(BaseModel):
+    idempotency_key: str = Field(..., min_length=8, max_length=128)
+    items: List[POReceiptItem] = Field(..., min_length=1)
+
+
+def _status_value(status) -> str:
+    return str(getattr(status, "value", status) or "").strip().upper()
+
+
+def _money(value) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _normalized_po_items(items: List[POItem], db: Session, shop_id: int) -> list[dict]:
+    normalized: list[dict] = []
+    for item in items:
+        product = None
+        if item.product_id is not None:
+            product = db.query(Product).filter(
+                Product.id == item.product_id,
+                Product.user_id == shop_id,
+                Product.is_active.is_(True),
+            ).first()
+            if product is None:
+                raise HTTPException(status_code=422, detail=f"Product {item.product_id} does not belong to this shop or is inactive.")
+        name = str(item.product_name or (product.product_name if product else "")).strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Every purchase-order item needs a product name or a shop-owned product_id.")
+        unit_cost = item.unit_cost if item.unit_cost is not None else (item.unit_price or Decimal("0"))
+        normalized.append({
+            "product_id": product.id if product else None,
+            "product_name": sanitize_input(name, "product_name"),
+            "quantity": float(item.quantity),
+            "unit_cost": float(unit_cost),
+            "received_quantity": 0.0,
+        })
+    return normalized
+
+
+def _po_content_matches(existing: PurchaseOrder, supplier_name: str, expected_delivery, items: list[dict]) -> bool:
+    try:
+        if (existing.supplier_name or "").strip().casefold() != supplier_name.strip().casefold():
+            return False
+        if existing.expected_delivery != expected_delivery:
+            return False
+        existing_items = json.loads(existing.items_json or "[]")
+        def signature(rows):
+            return sorted((
+                int(row.get("product_id") or 0),
+                " ".join(str(row.get("product_name") or "").split()).casefold(),
+                Decimal(str(row.get("quantity") or 0)).quantize(Decimal("0.001")),
+                _money(row.get("unit_cost", row.get("unit_price", 0))),
+            ) for row in rows)
+        return signature(existing_items) == signature(items)
+    except (TypeError, ValueError, ArithmeticError, json.JSONDecodeError):
+        return False
+
+
+def _po_response(po: PurchaseOrder, *, duplicate: bool = False) -> dict:
+    return {
+        "id": po.id,
+        "supplier_name": po.supplier_name,
+        "status": _status_value(po.status),
+        "total_cost": float(po.total_cost or 0),
+        "expected_delivery": po.expected_delivery.isoformat() if po.expected_delivery else None,
+        "items_json": po.items_json,
+        "idempotency_key": po.idempotency_key,
+        "created_at": po.created_at.isoformat() if po.created_at else datetime.now(timezone.utc).isoformat(),
+        "duplicate": duplicate,
+    }
+
 
 @router.post("/", response_model=PurchaseOrderResponse)
 def create_purchase_order(
@@ -59,147 +140,314 @@ def create_purchase_order(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Create a new purchase order to a supplier"""
     shop_id = resolve_shop_id(current_user)
-    supplier_name = sanitize_input(data.supplier_name, "supplier_name")
+    supplier_name = sanitize_input(data.supplier_name, "supplier_name").strip()
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    requested_status = (data.status or "ORDERED").strip().upper()
+    if requested_status in {"PENDING", "SENT"}:
+        requested_status = "ORDERED"
+    if requested_status not in {"DRAFT", "ORDERED"}:
+        raise HTTPException(status_code=422, detail="New purchase orders must start as DRAFT or ORDERED.")
 
-    items_data = [item.model_dump() for item in data.items]
-    total_cost = sum(item["quantity"] * (item.get("unit_cost") or item.get("unit_price") or 0) for item in items_data)
+    items_data = _normalized_po_items(data.items, db, shop_id)
+    total_cost = _money(sum(
+        Decimal(str(item["quantity"])) * Decimal(str(item["unit_cost"]))
+        for item in items_data
+    ))
+
+    if idempotency_key:
+        existing = db.query(PurchaseOrder).filter(
+            PurchaseOrder.shop_id == shop_id,
+            PurchaseOrder.idempotency_key == idempotency_key,
+        ).first()
+        if existing:
+            if _po_content_matches(existing, supplier_name, data.expected_delivery, items_data):
+                return _po_response(existing, duplicate=True)
+            raise HTTPException(status_code=409, detail="Purchase-order idempotency key was reused with different content.")
 
     po = PurchaseOrder(
         shop_id=shop_id,
         supplier_name=supplier_name,
-        status="PENDING",
+        status=PurchaseOrderStatus.DRAFT if requested_status == "DRAFT" else PurchaseOrderStatus.ORDERED,
         total_cost=total_cost,
-        items_json=json.dumps(items_data),
+        items_json=json.dumps(items_data, separators=(",", ":")),
         expected_delivery=data.expected_delivery,
+        idempotency_key=idempotency_key,
     )
     db.add(po)
     try:
         db.commit()
         db.refresh(po)
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create purchase order: {str(e)}")
-    return po
+        if idempotency_key:
+            existing = db.query(PurchaseOrder).filter(
+                PurchaseOrder.shop_id == shop_id,
+                PurchaseOrder.idempotency_key == idempotency_key,
+            ).first()
+            if existing and _po_content_matches(existing, supplier_name, data.expected_delivery, items_data):
+                return _po_response(existing, duplicate=True)
+        raise HTTPException(status_code=409, detail="Purchase-order idempotency conflict.")
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create purchase order.") from exc
+    return _po_response(po)
 
 
 @router.get("/", response_model=List[PurchaseOrderResponse])
 def list_purchase_orders(
     status: Optional[str] = None,
-    skip: int = 0,
-    limit: int = Query(50, le=200),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """List all purchase orders for this shop"""
     shop_id = resolve_shop_id(current_user)
-    q = db.query(PurchaseOrder).filter(PurchaseOrder.shop_id == shop_id)
+    query = db.query(PurchaseOrder).filter(PurchaseOrder.shop_id == shop_id)
     if status:
-        q = q.filter(PurchaseOrder.status == status.upper())
-    orders = q.order_by(PurchaseOrder.created_at.desc()).offset(skip).limit(limit).all()
-    return orders
+        wanted = status.strip().upper()
+        aliases = {"PENDING": "ORDERED", "SENT": "ORDERED", "DELIVERED": "RECEIVED"}
+        wanted = aliases.get(wanted, wanted)
+        if wanted == "ORDERED":
+            query = query.filter(PurchaseOrder.status.in_([
+                PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.SENT, PurchaseOrderStatus.PENDING,
+            ]))
+        elif wanted == "RECEIVED":
+            query = query.filter(PurchaseOrder.status.in_([
+                PurchaseOrderStatus.RECEIVED, PurchaseOrderStatus.DELIVERED,
+            ]))
+        else:
+            query = query.filter(PurchaseOrder.status == wanted)
+    return query.order_by(PurchaseOrder.created_at.desc()).offset(skip).limit(limit).all()
 
 
-@router.post("/{po_id}/mark-delivered")
-def mark_po_delivered(
-    po_id: int,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(owner_only),
-):
-    """
-    Mark a PO as delivered.
-    This AUTOMATICALLY adds received stock quantities to inventory.
-    """
+@router.post("/{po_id}/mark-ordered")
+def mark_po_ordered(po_id: int, db: Session = Depends(get_db), current_user: dict = Depends(owner_only)):
     shop_id = resolve_shop_id(current_user)
     po = db.query(PurchaseOrder).filter(
-        PurchaseOrder.id == po_id,
-        PurchaseOrder.shop_id == shop_id,
-    ).first()
-
-    if not po:
+        PurchaseOrder.id == po_id, PurchaseOrder.shop_id == shop_id
+    ).with_for_update().first()
+    if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
-    if po.status == "DELIVERED":
-        raise HTTPException(status_code=409, detail="This PO is already marked as delivered.")
-    if po.status == "CANCELLED":
-        raise HTTPException(status_code=409, detail="Cannot deliver a cancelled PO.")
-
-    items = json.loads(po.items_json)
-    stock_updates = []
-
-    for item in items:
-        if item.get("product_id"):
-            product = db.query(Product).filter(
-                Product.id == item["product_id"],
-                Product.user_id == shop_id,
-            ).with_for_update().first()
-            if product:
-                product.current_stock = (product.current_stock or 0) + item["quantity"]
-                # Log stock movement
-                movement = StockMovement(
-                    product_id=product.id,
-                    movement_type="IN",
-                    quantity=item["quantity"],
-                    reason="Purchase Order Delivery",
-                    reference_id=f"PO-{po.id}",
-                )
-                db.add(movement)
-                stock_updates.append({
-                    "product_name": product.product_name,
-                    "qty_added": item["quantity"],
-                    "new_stock": product.current_stock,
-                })
-
-    po.status = "DELIVERED"
-
-    # Write to universal transaction journal
-    tx = UniversalTransaction(
-        shop_id=shop_id,
-        tx_type="EXPENSE",
-        category="PO_PAYMENT",
-        amount=float(po.total_cost),
-        reference_id=f"PO-{po.id}",
-        description=f"Purchase Order from {po.supplier_name}",
-    )
-    db.add(tx)
+    status = _status_value(po.status)
+    if status in {"ORDERED", "SENT", "PENDING", "PARTIALLY_RECEIVED"}:
+        return {"success": True, "status": status, "duplicate": True, "purchase_order_id": po.id}
+    if status != "DRAFT":
+        raise HTTPException(status_code=409, detail=f"Cannot mark a {status.lower()} purchase order as ordered.")
+    po.status = PurchaseOrderStatus.ORDERED
     try:
+        append_sync_event(db, {"shop_id": shop_id, "type": "purchase_order.changed", "payload": {"purchase_order_id": po.id, "status": "ORDERED"}})
         db.commit()
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update PO delivery: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update purchase-order status.") from exc
+    return {"success": True, "status": "ORDERED", "purchase_order_id": po.id}
+
+
+def _receive_po_items(db: Session, shop_id: int, po_id: int, idempotency_key: str, requested_items: list[dict]) -> dict:
+    po = db.query(PurchaseOrder).filter(
+        PurchaseOrder.id == po_id, PurchaseOrder.shop_id == shop_id
+    ).with_for_update().first()
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found.")
+
+    digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:28]
+    reference_prefix = f"PO-{po.id}-R-{digest}"
+    duplicate_movement = db.query(StockMovement.id).filter(
+        StockMovement.reference_id.like(reference_prefix + "-%")
+    ).first()
+    if duplicate_movement:
+        return {
+            "success": True, "duplicate": True, "purchase_order_id": po.id,
+            "status": _status_value(po.status), "items_json": po.items_json,
+            "stock_updates": [], "message": "This receipt was already applied; no additional stock was added.",
+        }
+
+    status = _status_value(po.status)
+    if status == "CANCELLED":
+        raise HTTPException(status_code=409, detail="Cannot receive a cancelled purchase order.")
+    if status == "DRAFT":
+        raise HTTPException(status_code=409, detail="Mark the purchase order as ordered before receiving stock.")
+    if status in {"RECEIVED", "DELIVERED"}:
+        raise HTTPException(status_code=409, detail="All ordered quantities have already been received.")
+
+    try:
+        items_data = json.loads(po.items_json or "[]")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=409, detail="Purchase-order item data is invalid; manual review is required.") from exc
+    if not isinstance(items_data, list) or not items_data:
+        raise HTTPException(status_code=409, detail="Purchase order has no item lines to receive.")
+
+    indexes = [int(entry["item_index"]) for entry in requested_items]
+    if len(indexes) != len(set(indexes)):
+        raise HTTPException(status_code=422, detail="A receipt cannot contain the same purchase-order line more than once.")
+
+    stock_updates = []
+    try:
+        for entry in requested_items:
+            item_index = int(entry["item_index"])
+            if item_index < 0 or item_index >= len(items_data):
+                raise HTTPException(status_code=422, detail=f"Invalid purchase-order item index: {item_index}.")
+            item = items_data[item_index]
+            ordered_qty = Decimal(str(item.get("quantity") or 0))
+            received_qty = Decimal(str(item.get("received_quantity") or 0))
+            receipt_qty = Decimal(str(entry["quantity"]))
+            if ordered_qty <= 0 or received_qty < 0:
+                raise HTTPException(status_code=409, detail="Purchase order contains an invalid quantity.")
+            remaining_qty = ordered_qty - received_qty
+            if receipt_qty <= 0 or receipt_qty > remaining_qty:
+                raise HTTPException(status_code=422, detail=f"Received quantity for line {item_index + 1} must be greater than 0 and no more than {remaining_qty}.")
+
+            product_id = item.get("product_id")
+            product = None
+            if product_id is not None:
+                product = db.query(Product).filter(
+                    Product.id == int(product_id), Product.user_id == shop_id,
+                    Product.is_active.is_(True),
+                ).with_for_update().first()
+            else:
+                product_name = str(item.get("product_name") or "").strip()
+                candidates = db.query(Product).filter(
+                    Product.user_id == shop_id,
+                    Product.product_name.ilike(product_name),
+                    Product.is_active.is_(True),
+                ).limit(2).all() if product_name else []
+                if len(candidates) == 1:
+                    product = candidates[0]
+                    item["product_id"] = product.id
+                elif len(candidates) > 1:
+                    raise HTTPException(status_code=409, detail=f"More than one inventory product matches '{product_name}'. Select the exact product before receiving.")
+            if product is None:
+                raise HTTPException(status_code=422, detail=f"Link purchase-order line {item_index + 1} to an active inventory product before receiving stock.")
+
+            old_stock = Decimal(str(product.current_stock or 0))
+            product.current_stock = old_stock + receipt_qty
+            item["received_quantity"] = float(received_qty + receipt_qty)
+            movement_ref = f"{reference_prefix}-{item_index}"
+            db.add(StockMovement(
+                product_id=product.id,
+                movement_type=StockMovementType.IN,
+                quantity=receipt_qty,
+                reason="Purchase Order Receipt",
+                reference_id=movement_ref,
+            ))
+            stock_updates.append({
+                "item_index": item_index,
+                "product_id": product.id,
+                "product_name": product.product_name,
+                "quantity_added": float(receipt_qty),
+                "new_stock": float(product.current_stock),
+                "remaining_quantity": float(ordered_qty - received_qty - receipt_qty),
+            })
+
+        all_received = all(
+            Decimal(str(item.get("received_quantity") or 0)) >= Decimal(str(item.get("quantity") or 0))
+            for item in items_data
+        )
+        any_received = any(Decimal(str(item.get("received_quantity") or 0)) > 0 for item in items_data)
+        if all_received:
+            po.status = PurchaseOrderStatus.RECEIVED
+        elif any_received:
+            po.status = PurchaseOrderStatus.PARTIALLY_RECEIVED
+        else:
+            po.status = PurchaseOrderStatus.ORDERED
+        po.items_json = json.dumps(items_data, separators=(",", ":"))
+
+        for update in stock_updates:
+            append_sync_event(db, {
+                "shop_id": shop_id,
+                "type": "inventory.changed",
+                "payload": {"product_id": update["product_id"], "current_stock": update["new_stock"], "reason": "PURCHASE_ORDER_RECEIPT", "purchase_order_id": po.id},
+            })
+        append_sync_event(db, {
+            "shop_id": shop_id,
+            "type": "purchase_order.changed",
+            "payload": {"purchase_order_id": po.id, "status": _status_value(po.status)},
+        })
+        # Receipt of goods is not proof of payment; a real supplier payment must be recorded separately.
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to record purchase receipt; stock changes were rolled back.") from exc
 
     return {
-        "message": f"PO #{po.id} marked as delivered. Stock updated.",
+        "success": True, "duplicate": False, "purchase_order_id": po.id,
+        "status": _status_value(po.status), "items_json": po.items_json,
         "stock_updates": stock_updates,
-        "total_cost": float(po.total_cost),
+        "message": "Received quantities were recorded atomically with inventory stock movements.",
     }
 
 
-@router.post("/{po_id}/cancel")
-def cancel_purchase_order(
+@router.post("/{po_id}/receive")
+def receive_purchase_order_items(
     po_id: int,
+    data: POReceiptRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Cancel a purchase order"""
+    return _receive_po_items(
+        db, resolve_shop_id(current_user), po_id, data.idempotency_key.strip(),
+        [item.model_dump() for item in data.items],
+    )
+
+
+@router.post("/{po_id}/mark-delivered")
+def mark_po_delivered(po_id: int, db: Session = Depends(get_db), current_user: dict = Depends(owner_only)):
+    """Backward-compatible full receipt alias. Safe to retry after a timeout."""
     shop_id = resolve_shop_id(current_user)
     po = db.query(PurchaseOrder).filter(
-        PurchaseOrder.id == po_id,
-        PurchaseOrder.shop_id == shop_id,
-    ).first()
-
-    if not po:
+        PurchaseOrder.id == po_id, PurchaseOrder.shop_id == shop_id
+    ).with_for_update().first()
+    if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
-    if po.status == "DELIVERED":
-        raise HTTPException(status_code=409, detail="Cannot cancel a delivered PO.")
-
-    po.status = "CANCELLED"
-    try:
+    status = _status_value(po.status)
+    if status in {"RECEIVED", "DELIVERED"}:
+        return {"success": True, "duplicate": True, "purchase_order_id": po.id, "status": "RECEIVED", "stock_updates": []}
+    if status == "CANCELLED":
+        raise HTTPException(status_code=409, detail="Cannot receive a cancelled purchase order.")
+    if status == "DRAFT":
+        raise HTTPException(status_code=409, detail="Mark the purchase order as ordered before receiving stock.")
+    items_data = json.loads(po.items_json or "[]")
+    remaining = []
+    for index, item in enumerate(items_data):
+        ordered_qty = Decimal(str(item.get("quantity") or 0))
+        received_qty = Decimal(str(item.get("received_quantity") or 0))
+        if ordered_qty > received_qty:
+            remaining.append({"item_index": index, "quantity": str(ordered_qty - received_qty)})
+    if not remaining:
+        po.status = PurchaseOrderStatus.RECEIVED
         db.commit()
-    except Exception as e:
+        return {"success": True, "duplicate": True, "purchase_order_id": po.id, "status": "RECEIVED", "stock_updates": []}
+    return _receive_po_items(db, shop_id, po_id, f"legacy-full-receipt-{po_id}", remaining)
+
+
+@router.post("/{po_id}/cancel")
+def cancel_purchase_order(po_id: int, db: Session = Depends(get_db), current_user: dict = Depends(owner_only)):
+    """Cancel the unreceived balance. Stock already received remains on hand."""
+    shop_id = resolve_shop_id(current_user)
+    po = db.query(PurchaseOrder).filter(
+        PurchaseOrder.id == po_id, PurchaseOrder.shop_id == shop_id
+    ).with_for_update().first()
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found.")
+    status = _status_value(po.status)
+    if status in {"RECEIVED", "DELIVERED"}:
+        raise HTTPException(status_code=409, detail="Cannot cancel a fully received purchase order.")
+    if status == "CANCELLED":
+        return {"success": True, "duplicate": True, "purchase_order_id": po.id, "status": "CANCELLED"}
+    po.status = PurchaseOrderStatus.CANCELLED
+    try:
+        append_sync_event(db, {"shop_id": shop_id, "type": "purchase_order.changed", "payload": {"purchase_order_id": po.id, "status": "CANCELLED"}})
+        db.commit()
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to cancel purchase order: {str(e)}")
-    return {"message": f"Purchase order #{po_id} has been cancelled."}
+        raise HTTPException(status_code=500, detail="Failed to cancel purchase order.") from exc
+    return {"success": True, "purchase_order_id": po.id, "status": "CANCELLED"}
+
+
 # =====================
 # SMART ONLINE REORDER RECOMMENDATIONS
 # =====================

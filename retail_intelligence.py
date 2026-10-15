@@ -11,12 +11,14 @@ Covers:
 """
 
 import json
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from datetime import date, datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, and_
 
 from db import get_db
@@ -33,10 +35,50 @@ router = APIRouter(tags=["Enterprise Intelligence"])
 # =====================================
 class ExpenseCreate(BaseModel):
     category: str = Field(..., min_length=2, max_length=50)
-    amount: float = Field(..., gt=0)
-    description: Optional[str] = None
+    amount: Decimal = Field(..., gt=0)
+    description: Optional[str] = Field(None, max_length=200)
     expense_date: date
-    payment_method: Optional[str] = "cash"
+    payment_method: Optional[str] = Field(default="cash", max_length=50)
+    # Optional for backwards compatibility. Clients should reuse this on retries.
+    idempotency_key: Optional[str] = Field(default=None, min_length=8, max_length=128)
+
+
+def _expense_money(value) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _expense_matches(
+    existing: ShopExpense,
+    data: ExpenseCreate,
+    category: str,
+    description: Optional[str],
+    payment_method: str,
+) -> bool:
+    """Only treat identical expense facts as an idempotent retry."""
+    try:
+        return (
+            (existing.category or "").strip().casefold() == category.casefold()
+            and _expense_money(existing.amount) == _expense_money(data.amount)
+            and existing.expense_date == data.expense_date
+            and (existing.description or None) == (description or None)
+            and (existing.payment_method or "cash").strip().casefold() == payment_method.casefold()
+        )
+    except (ArithmeticError, TypeError, ValueError):
+        return False
+
+
+def _expense_response(expense: ShopExpense, *, duplicate: bool = False) -> dict:
+    return {
+        "message": "Expense already recorded; canonical record returned." if duplicate else "Expense logged successfully.",
+        "expense_id": expense.id,
+        "amount": float(expense.amount or 0),
+        "category": expense.category,
+        "description": expense.description,
+        "expense_date": expense.expense_date.isoformat() if expense.expense_date else None,
+        "payment_method": expense.payment_method,
+        "duplicate": duplicate,
+    }
+
 
 @router.post("/expenses", tags=["Expense Tracker"])
 def add_expense(
@@ -44,37 +86,74 @@ def add_expense(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Log a shop expense (rent, salary, utilities, etc.)"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
-    category = sanitize_input(data.category, "category")
-    desc = sanitize_input(data.description or "", "description") or None
+    """Create an expense and its journal mirror as one retry-safe transaction."""
+    shop_id = current_user["user_id"]
+    category = sanitize_input(data.category, "category").strip()
+    desc = sanitize_input(data.description or "", "description").strip() or None
+    payment_method = sanitize_input(data.payment_method or "cash", "payment_method").strip() or "cash"
+    idempotency_key = (data.idempotency_key or "").strip() or None
+
+    if idempotency_key and len(idempotency_key) < 8:
+        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
+
+    if idempotency_key:
+        existing = db.query(ShopExpense).filter(
+            ShopExpense.shop_id == shop_id,
+            ShopExpense.idempotency_key == idempotency_key,
+        ).first()
+        if existing:
+            if _expense_matches(existing, data, category, desc, payment_method):
+                return _expense_response(existing, duplicate=True)
+            raise HTTPException(
+                status_code=409,
+                detail="Expense idempotency key was reused with different financial details.",
+            )
 
     expense = ShopExpense(
         shop_id=shop_id,
         category=category,
-        amount=data.amount,
+        amount=_expense_money(data.amount),
         description=desc,
         expense_date=data.expense_date,
-        payment_method=data.payment_method,
+        payment_method=payment_method,
+        idempotency_key=idempotency_key,
     )
     db.add(expense)
 
-    # Mirror to universal journal
+    # Keep the source expense and reporting journal in one DB transaction.
     tx = UniversalTransaction(
         shop_id=shop_id,
         tx_type="EXPENSE",
         category=category.upper(),
-        amount=data.amount,
+        amount=_expense_money(data.amount),
+        reference_id=(f"EXPENSE-{idempotency_key}" if idempotency_key else None),
         description=desc or f"{category} expense",
+        tx_date=datetime.combine(data.expense_date, datetime.min.time()),
     )
     db.add(tx)
     try:
         db.commit()
-    except Exception as e:
+        db.refresh(expense)
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to log expense: {str(e)}")
+        if idempotency_key:
+            existing = db.query(ShopExpense).filter(
+                ShopExpense.shop_id == shop_id,
+                ShopExpense.idempotency_key == idempotency_key,
+            ).first()
+            if existing and _expense_matches(existing, data, category, desc, payment_method):
+                return _expense_response(existing, duplicate=True)
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Expense idempotency key was reused with different financial details.",
+                )
+        raise HTTPException(status_code=409, detail="Expense write conflict; refresh records before retrying.")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to log expense.")
 
-    return {"message": "Expense logged successfully.", "amount": data.amount, "category": category}
+    return _expense_response(expense)
 
 
 @router.get("/expenses", tags=["Expense Tracker"])
@@ -82,26 +161,35 @@ def list_expenses(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     category: Optional[str] = None,
-    skip: int = 0,
-    limit: int = Query(100, le=500),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """List shop expenses with optional date/category filters"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    """List expenses and return totals/counts for the exact filtered set."""
+    shop_id = current_user["user_id"]
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+
     q = db.query(ShopExpense).filter(ShopExpense.shop_id == shop_id)
     if start_date:
         q = q.filter(ShopExpense.expense_date >= start_date)
     if end_date:
         q = q.filter(ShopExpense.expense_date <= end_date)
     if category:
-        q = q.filter(ShopExpense.category.ilike(f"%{category}%"))
+        safe_category = sanitize_input(category, "category").strip()
+        q = q.filter(ShopExpense.category.ilike(f"%{safe_category}%"))
 
-    expenses = q.order_by(ShopExpense.expense_date.desc()).offset(skip).limit(limit).all()
-    total = db.query(func.sum(ShopExpense.amount)).filter(ShopExpense.shop_id == shop_id).scalar() or 0
+    # Aggregate before pagination. Previously this total ignored date/category filters.
+    total = q.with_entities(func.sum(ShopExpense.amount)).scalar() or 0
+    count = q.count()
+    expenses = q.order_by(ShopExpense.expense_date.desc(), ShopExpense.id.desc()).offset(skip).limit(limit).all()
 
     return {
         "total_expenses": float(total),
+        "total_count": count,
+        "skip": skip,
+        "limit": limit,
         "expenses": [
             {
                 "id": e.id,
@@ -222,6 +310,20 @@ def update_worker(
     return {"message": "Worker updated.", "worker_id": worker_id}
 
 
+def _normalize_payroll_month(month: Optional[str]) -> str:
+    """Require an exact YYYY-MM payroll period."""
+    value = (month or "").strip()
+    if not value:
+        return date.today().strftime("%Y-%m")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m")
+        if parsed.strftime("%Y-%m") != value:
+            raise ValueError("Non-canonical payroll month")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="month must use the YYYY-MM format.")
+    return value
+
+
 @router.post("/workers/{worker_id}/pay-salary", tags=["Worker Management"])
 def pay_worker_salary(
     worker_id: int,
@@ -229,24 +331,39 @@ def pay_worker_salary(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Mark salary as paid for a specific month and record in expenses"""
-    if not month:
-        from datetime import datetime
-        month = datetime.now().strftime("%Y-%m")
-        
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
-    worker = db.query(Worker).filter(
+    """Record at most one salary expense per worker and payroll month."""
+    month = _normalize_payroll_month(month)
+    shop_id = current_user["user_id"]
+    # On PostgreSQL, locking the shop-owned worker serializes concurrent retries.
+    worker = db.query(Worker).with_for_update().filter(
         Worker.id == worker_id,
         Worker.shopkeeper_id == shop_id,
     ).first()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found.")
 
-    salary = float(worker.salary or 0)
+    salary = _expense_money(worker.salary or 0)
     if salary <= 0:
         raise HTTPException(status_code=400, detail="Worker has no salary configured.")
 
-    # Log as expense
+    reference = f"SALARY-W{worker_id}-{month}"
+    # Legacy salary writes already share this stable journal reference.
+    # Treat retries as success and never insert a second expense/journal row.
+    existing_tx = db.query(UniversalTransaction).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.category == "SALARY",
+        UniversalTransaction.reference_id == reference,
+    ).order_by(UniversalTransaction.id.asc()).first()
+    if existing_tx:
+        return {
+            "message": f"Salary for {worker.name} in {month} was already recorded; no duplicate was created.",
+            "amount": float(existing_tx.amount or 0),
+            "worker_name": worker.name,
+            "month": month,
+            "reference_id": reference,
+            "already_paid": True,
+        }
+
     expense = ShopExpense(
         shop_id=shop_id,
         category="salary",
@@ -254,29 +371,51 @@ def pay_worker_salary(
         description=f"Salary payment for {worker.name} - {month}",
         expense_date=date.today(),
         payment_method="bank_transfer",
+        idempotency_key=f"salary-worker-{worker_id}-{month}",
     )
     db.add(expense)
 
-    # Universal journal
+    # Source expense and journal mirror are committed together.
     tx = UniversalTransaction(
         shop_id=shop_id,
         tx_type="EXPENSE",
         category="SALARY",
         amount=salary,
-        reference_id=f"SALARY-W{worker_id}-{month}",
+        reference_id=reference,
         description=f"Salary: {worker.name} ({month})",
+        tx_date=datetime.combine(date.today(), datetime.min.time()),
     )
     db.add(tx)
     try:
         db.commit()
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to pay salary: {str(e)}")
+        existing_tx = db.query(UniversalTransaction).filter(
+            UniversalTransaction.shop_id == shop_id,
+            UniversalTransaction.category == "SALARY",
+            UniversalTransaction.reference_id == reference,
+        ).first()
+        if existing_tx:
+            return {
+                "message": f"Salary for {worker.name} in {month} was already recorded; no duplicate was created.",
+                "amount": float(existing_tx.amount or 0),
+                "worker_name": worker.name,
+                "month": month,
+                "reference_id": reference,
+                "already_paid": True,
+            }
+        raise HTTPException(status_code=409, detail="Salary write conflict; refresh the payroll record before retrying.")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to record salary payment.")
 
     return {
         "message": f"Salary of ₹{salary:.2f} paid to {worker.name} for {month}.",
-        "amount": salary,
+        "amount": float(salary),
         "worker_name": worker.name,
+        "month": month,
+        "reference_id": reference,
+        "already_paid": False,
     }
 
 
@@ -285,9 +424,56 @@ def pay_worker_salary(
 # =====================================
 class ReconCreate(BaseModel):
     recon_date: date
-    expected_upi_amount: float = Field(0, ge=0)
-    actual_bank_deposit: float = Field(0, ge=0)
-    notes: Optional[str] = None
+    expected_upi_amount: Decimal = Field(Decimal("0"), ge=0)
+    actual_bank_deposit: Decimal = Field(Decimal("0"), ge=0)
+    notes: Optional[str] = Field(None, max_length=2000)
+    # Client must reuse this value for a retry of the same submission.
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
+
+
+def _recon_money(value) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _reconciliation_matches(existing: BankReconciliation, data: ReconCreate, normalized_notes: Optional[str]) -> bool:
+    """Only acknowledge retries whose immutable reconciliation facts match."""
+    try:
+        return (
+            existing.recon_date == data.recon_date
+            and _recon_money(existing.expected_upi_amount) == _recon_money(data.expected_upi_amount)
+            and _recon_money(existing.actual_bank_deposit) == _recon_money(data.actual_bank_deposit)
+            and (existing.notes or None) == (normalized_notes or None)
+        )
+    except (ArithmeticError, TypeError, ValueError):
+        return False
+
+
+def _reconciliation_response(record: BankReconciliation, *, duplicate: bool = False) -> dict:
+    expected = _recon_money(record.expected_upi_amount)
+    actual = _recon_money(record.actual_bank_deposit)
+    difference = abs(expected - actual)
+    status = getattr(record.status, "value", record.status)
+    return {
+        "message": "Reconciliation already recorded; canonical record returned." if duplicate else "Reconciliation recorded.",
+        "reconciliation_id": record.id,
+        "date": record.recon_date.isoformat() if record.recon_date else None,
+        "expected_upi_amount": float(expected),
+        "actual_bank_deposit": float(actual),
+        # Keep old field names for consumers that display the history response.
+        "expected_upi": float(expected),
+        "actual_bank": float(actual),
+        "status": str(status),
+        "difference": float(difference),
+        "notes": record.notes,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "duplicate": duplicate,
+        "alert": (
+            f"Discrepancy of ₹{difference:.2f} detected!"
+            if str(status) == "DISCREPANCY"
+            else "Accounts balanced."
+        ),
+    }
+
 
 @router.post("/bank-recon", tags=["Bank Reconciliation"])
 def add_reconciliation(
@@ -295,34 +481,63 @@ def add_reconciliation(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Record daily UPI vs bank deposit reconciliation"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    """Append an auditable UPI-versus-bank comparison; retries are idempotent."""
+    shop_id = current_user["user_id"]
+    expected = _recon_money(data.expected_upi_amount)
+    actual = _recon_money(data.actual_bank_deposit)
+    difference = abs(expected - actual)
+    status = "MATCHED" if difference < Decimal("1.00") else "DISCREPANCY"
+    notes = sanitize_input(data.notes or "", "notes").strip() or None
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    if idempotency_key is not None and len(idempotency_key) < 8:
+        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
 
-    diff = abs(data.expected_upi_amount - data.actual_bank_deposit)
-    status = "MATCHED" if diff < 1.0 else "DISCREPANCY"
+    if idempotency_key:
+        existing = db.query(BankReconciliation).filter(
+            BankReconciliation.shop_id == shop_id,
+            BankReconciliation.idempotency_key == idempotency_key,
+        ).first()
+        if existing:
+            if _reconciliation_matches(existing, data, notes):
+                return _reconciliation_response(existing, duplicate=True)
+            raise HTTPException(
+                status_code=409,
+                detail="Reconciliation idempotency key was reused with different financial details.",
+            )
 
-    recon = BankReconciliation(
+    record = BankReconciliation(
         shop_id=shop_id,
         recon_date=data.recon_date,
-        expected_upi_amount=data.expected_upi_amount,
-        actual_bank_deposit=data.actual_bank_deposit,
+        expected_upi_amount=expected,
+        actual_bank_deposit=actual,
         status=status,
-        notes=data.notes,
+        notes=notes,
+        idempotency_key=idempotency_key,
     )
-    db.add(recon)
+    db.add(record)
     try:
         db.commit()
-    except Exception as e:
+        db.refresh(record)
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to record reconciliation: {str(e)}")
+        if idempotency_key:
+            existing = db.query(BankReconciliation).filter(
+                BankReconciliation.shop_id == shop_id,
+                BankReconciliation.idempotency_key == idempotency_key,
+            ).first()
+            if existing and _reconciliation_matches(existing, data, notes):
+                return _reconciliation_response(existing, duplicate=True)
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Reconciliation idempotency key was reused with different financial details.",
+                )
+        raise HTTPException(status_code=409, detail="Reconciliation write conflict; refresh history before retrying.")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to record reconciliation.")
 
-    return {
-        "message": "Reconciliation recorded.",
-        "status": status,
-        "difference": diff,
-        "date": data.recon_date,
-        "alert": f"⚠️ Discrepancy of ₹{diff:.2f} detected!" if status == "DISCREPANCY" else "✅ Accounts balanced!",
-    }
+    return _reconciliation_response(record)
 
 
 @router.get("/bank-recon", tags=["Bank Reconciliation"])
@@ -332,27 +547,38 @@ def list_reconciliations(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """View bank reconciliation history"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    """View append-only shop-scoped reconciliation history."""
+    shop_id = current_user["user_id"]
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+
     q = db.query(BankReconciliation).filter(BankReconciliation.shop_id == shop_id)
     if start_date:
         q = q.filter(BankReconciliation.recon_date >= start_date)
     if end_date:
         q = q.filter(BankReconciliation.recon_date <= end_date)
-    records = q.order_by(BankReconciliation.recon_date.desc()).all()
+    records = q.order_by(
+        BankReconciliation.recon_date.desc(),
+        BankReconciliation.created_at.desc(),
+        BankReconciliation.id.desc(),
+    ).all()
 
     return {
         "records": [
             {
-                "id": r.id,
-                "date": r.recon_date,
-                "expected_upi": float(r.expected_upi_amount),
-                "actual_bank": float(r.actual_bank_deposit),
-                "status": r.status,
-                "difference": abs(float(r.expected_upi_amount) - float(r.actual_bank_deposit)),
-                "notes": r.notes,
+                "id": record.id,
+                "reconciliation_id": record.id,
+                "date": record.recon_date.isoformat(),
+                "expected_upi": float(_recon_money(record.expected_upi_amount)),
+                "expected_upi_amount": float(_recon_money(record.expected_upi_amount)),
+                "actual_bank": float(_recon_money(record.actual_bank_deposit)),
+                "actual_bank_deposit": float(_recon_money(record.actual_bank_deposit)),
+                "status": str(getattr(record.status, "value", record.status)),
+                "difference": float(abs(_recon_money(record.expected_upi_amount) - _recon_money(record.actual_bank_deposit))),
+                "notes": record.notes,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
             }
-            for r in records
+            for record in records
         ]
     }
 

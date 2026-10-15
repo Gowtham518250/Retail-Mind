@@ -157,8 +157,12 @@ class WhatsappOrderStatus(str, enum.Enum):
 
 class PurchaseOrderStatus(str, enum.Enum):
     DRAFT = "DRAFT"
-    SENT = "SENT"
-    DELIVERED = "DELIVERED"
+    ORDERED = "ORDERED"
+    SENT = "SENT"  # Legacy alias for ORDERED
+    PENDING = "PENDING"  # Legacy client status; normalized on write
+    PARTIALLY_RECEIVED = "PARTIALLY_RECEIVED"
+    RECEIVED = "RECEIVED"
+    DELIVERED = "DELIVERED"  # Legacy alias for RECEIVED
     CANCELLED = "CANCELLED"
 
 class BankReconciliationStatus(str, enum.Enum):
@@ -1017,17 +1021,29 @@ class PasswordReset(Base):
 # ==================== EXPENSE TRACKING ====================
 
 class ShopExpense(Base):
-    """Track shop daily expenses (rent, staff, utilities, supplies)"""
+    """Track shop expenses with optional retry-safe write identity."""
     __tablename__ = "shop_expenses"
-    
+
     id = Column(Integer, primary_key=True)
-    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
-    category = Column(String(50), nullable=False)  # rent, utilities, salary, supplies, etc
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    category = Column(String(50), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     description = Column(String(200))
-    expense_date = Column(Date, nullable=False)
-    payment_method = Column(String(50))  # cash, bank_transfer, etc
+    expense_date = Column(Date, nullable=False, index=True)
+    payment_method = Column(String(50))
+    idempotency_key = Column(String(128), nullable=True)
     branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    __table_args__ = (
+        Index(
+            "uq_shop_expense_shop_idempotency",
+            "shop_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
 # ==================== ONLINE STORE & SHOP PROFILE ====================
 
@@ -1184,32 +1200,50 @@ class WhatsappOrder(Base):
 # ==================== PURCHASE ORDERS & INVENTORY ====================
 
 class PurchaseOrder(Base):
-    """Orders placed to wholesalers for restocking"""
+    """Orders placed to wholesalers for restocking."""
     __tablename__ = "purchase_orders"
-    
+
     id = Column(Integer, primary_key=True)
-    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
     supplier_name = Column(String(100), nullable=False)
     status = Column(Enum(PurchaseOrderStatus, name="purchase_order_status"), default=PurchaseOrderStatus.DRAFT)
     total_cost = Column(Numeric(12, 2), default=0)
     items_json = Column(Text, nullable=False)
+    idempotency_key = Column(String(128), nullable=True)
     expected_delivery = Column(Date)
     branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
+    __table_args__ = (
+        UniqueConstraint("shop_id", "idempotency_key", name="uq_purchase_order_shop_idempotency"),
+    )
+
 # ==================== BANK RECONCILIATION & TRANSACTIONS ====================
 
 class BankReconciliation(Base):
-    """Daily checks to ensure UPI/Card collections hit the bank account"""
+    """Append-only daily record comparing expected UPI collections to bank deposits."""
     __tablename__ = "bank_reconciliations"
-    
+
     id = Column(Integer, primary_key=True)
-    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
-    recon_date = Column(Date, nullable=False)
-    expected_upi_amount = Column(Numeric(12, 2), default=0)
-    actual_bank_deposit = Column(Numeric(12, 2), default=0)
-    status = Column(Enum(BankReconciliationStatus, name="bank_reconciliation_status"), default=BankReconciliationStatus.PENDING)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    recon_date = Column(Date, nullable=False, index=True)
+    expected_upi_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    actual_bank_deposit = Column(Numeric(12, 2), default=0, nullable=False)
+    status = Column(Enum(BankReconciliationStatus, name="bank_reconciliation_status"), default=BankReconciliationStatus.PENDING, nullable=False)
     notes = Column(Text)
+    idempotency_key = Column(String(128), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_bank_reconciliation_shop_idempotency",
+            "shop_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
 class UniversalTransaction(Base):
     """Enterprise Tracker: Unified journal for ALL money in/out (Sales, Expense, Khata, PO)"""
