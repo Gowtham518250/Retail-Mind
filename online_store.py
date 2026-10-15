@@ -429,7 +429,7 @@ def register_customer(
                 event_type="WELCOME"
             )
     except Exception as e:
-        logger.error(f"Failed to send welcome email to customer: {e}")
+        logger.warning("Failed to send welcome email (%s)", type(e).__name__)
 
     token = create_access_token({"sub": str(customer.id), "role": ROLE_CUSTOMER})
     return {
@@ -1392,7 +1392,7 @@ def place_order(
         db.commit()
         db.refresh(order)
     except Exception as e:
-        logger.error(f"Failed to save online order (shop_id={data.shop_id}, customer_id={customer_id}): {e}")
+        logger.error("Failed to save online order for shop_id=%s customer_id=%s (%s)", data.shop_id, customer_id, type(e).__name__)
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
@@ -1459,7 +1459,7 @@ def place_guest_order(
     _rl: None = Depends(check_rate_limit),
 ):
     """Place an online order as a guest (no auth required)"""
-    logger.info(f"Received guest order: shop_id={data.shop_id}, customer={data.customer_name}, phone={data.phone}, items_count={len(data.items)}")
+    logger.info("Received guest order: shop_id=%s items_count=%s", data.shop_id, len(data.items))
     
     # 1. Verify Firebase Phone Auth Token (if provided)
     if data.firebase_id_token:
@@ -1479,15 +1479,15 @@ def place_guest_order(
             # Firebase phone numbers include country code (e.g., +919876543210).
             # We check if the provided phone is a substring of the verified phone to allow local format (e.g., 9876543210)
             if data.phone not in phone_number:
-                logger.warning(f"Verified phone number does not match provided phone number: {data.phone} vs {phone_number}")
+                logger.warning("Verified phone number mismatch during guest checkout for shop_id=%s", data.shop_id)
                 
         except HTTPException:
             raise  # Re-raise — a rejected token must not silently fall through
         except Exception as e:
-            logger.error(f"Firebase token verification failed: {e}")
+            logger.warning("Firebase guest-order token verification failed for shop_id=%s (%s)", data.shop_id, type(e).__name__)
             logger.warning("Falling back to unverified phone number for guest order.")
     else:
-        logger.info(f"No Firebase token provided for guest checkout, proceeding with unverified phone {data.phone}")
+        logger.info("Guest checkout has no Firebase phone token: shop_id=%s", data.shop_id)
 
     idempotency_key = (data.idempotency_key or "").strip() or None
     if idempotency_key:
@@ -1690,7 +1690,7 @@ def place_guest_order(
             detail="This order may already have been submitted. Refresh your order history before retrying.",
         )
     except Exception as e:
-        logger.error(f"Failed to save guest order (shop_id={data.shop_id}, phone={data.phone}): {e}")
+        logger.error("Failed to save guest order for shop_id=%s (%s)", data.shop_id, type(e).__name__)
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place your order right now. Please try again later.")
     
