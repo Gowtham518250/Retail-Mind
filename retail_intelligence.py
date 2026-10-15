@@ -30,6 +30,10 @@ from security import owner_only, worker_or_owner, sanitize_input
 
 router = APIRouter(tags=["Enterprise Intelligence"])
 
+# P&L distinguishes revenue recognition from settlement/collection cash flows.
+_PNL_REVENUE_CATEGORIES = ("SALE", "KHATA_CREDIT")
+_PNL_COLLECTION_CATEGORIES = ("PAYMENT", "KHATA_REPAY")
+
 def _normalize_optional_idempotency_key(raw: Optional[str]) -> Optional[str]:
     if raw is None:
         return None
@@ -624,10 +628,22 @@ def get_profit_and_loss(
     start_dt = datetime.combine(start_date, datetime.min.time())
     end_dt = datetime.combine(end_date, datetime.max.time())
 
-    # Total income from universal journal
+    # Recognize sales/credit sales as revenue. Settlement rows such as PAYMENT
+    # and KHATA_REPAY are cash collections for revenue already recognized and
+    # must not be added to revenue a second time.
     income = db.query(func.sum(UniversalTransaction.amount)).filter(
         UniversalTransaction.shop_id == shop_id,
         UniversalTransaction.tx_type == "INCOME",
+        UniversalTransaction.category.in_(_PNL_REVENUE_CATEGORIES),
+        UniversalTransaction.tx_date >= start_dt,
+        UniversalTransaction.tx_date <= end_dt,
+    ).scalar() or 0
+
+    # Show settlement separately for cash-flow reconciliation, not profit.
+    collections = db.query(func.sum(UniversalTransaction.amount)).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.tx_type == "INCOME",
+        UniversalTransaction.category.in_(_PNL_COLLECTION_CATEGORIES),
         UniversalTransaction.tx_date >= start_dt,
         UniversalTransaction.tx_date <= end_dt,
     ).scalar() or 0
@@ -657,6 +673,8 @@ def get_profit_and_loss(
     return {
         "period": {"start": str(start_date), "end": str(end_date)},
         "total_income": float(income),
+        "total_revenue": float(income),
+        "total_collections": float(collections),
         "total_expenses": float(expenses),
         "net_profit": net_profit,
         "profit_margin_pct": round((net_profit / float(income) * 100) if income else 0, 2),
