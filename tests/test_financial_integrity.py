@@ -14,6 +14,7 @@ from retail_intelligence import (
     _expense_response,
     _normalize_payroll_month,
     _normalize_optional_idempotency_key,
+    _validate_date_range,
     list_expenses,
     pay_worker_salary,
 )
@@ -189,3 +190,11 @@ def test_expense_handler_rejects_reused_key_for_different_amount():
     assert exc.value.status_code == 409
     assert len(db.rows[ShopExpense]) == 1
     assert len(db.rows[UniversalTransaction]) == 1
+
+
+def test_financial_date_range_validation_rejects_reversed_ranges():
+    assert _validate_date_range(date(2026, 10, 1), date(2026, 10, 15)) is None
+    assert _validate_date_range(date(2026, 10, 15), None) is None
+    with pytest.raises(HTTPException) as exc:
+        _validate_date_range(date(2026, 10, 16), date(2026, 10, 15))
+    assert exc.value.status_code == 422
