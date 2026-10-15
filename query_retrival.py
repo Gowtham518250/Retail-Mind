@@ -1370,6 +1370,76 @@ def _fast_top_product_revenue_query(
     }
 
 
+def _fast_low_stock_query(query: str, db: Session, user_id: int):
+    """Return low-stock products with the same threshold semantics as /api/inventory/low-stock.
+
+    This is a deterministic, tenant-scoped lookup: low stock means current_stock
+    is less than or equal to that product's configured min_stock. It intentionally
+    does not ask an LLM to create or review SQL for this known business operation.
+    """
+    normalized = re.sub(r"\\s+", " ", (query or "").lower()).strip()
+    low_stock_intent = bool(re.search(
+        r"\\b(?:low[- ](?:in[- ])?stock|below\\s+(?:the\\s+)?(?:minimum|min)(?:\\s+stock|\\s+level)?|"
+        r"stock\\s+(?:is\\s+)?low|running\\s+low|reorder\\s+(?:list|alerts?))\\b",
+        normalized,
+    ))
+    if not low_stock_intent:
+        return None
+
+    sql = (
+        "SELECT p.id AS product_id, p.product_name, p.sku, "
+        "p.current_stock, p.min_stock, p.reorder_level "
+        "FROM products p "
+        "WHERE p.user_id = :user_id "
+        "AND p.current_stock <= p.min_stock "
+        "ORDER BY p.current_stock ASC, p.product_name ASC "
+        "LIMIT 100"
+    )
+    rows = db.execute(text(sql), {"user_id": user_id}).mappings().all()
+    results = []
+    for row in rows:
+        try:
+            current_stock = float(row.get("current_stock") or 0)
+        except (TypeError, ValueError):
+            current_stock = 0.0
+        try:
+            min_stock = float(row.get("min_stock") or 0)
+        except (TypeError, ValueError):
+            min_stock = 0.0
+        try:
+            reorder_level = float(row.get("reorder_level") or 0)
+        except (TypeError, ValueError):
+            reorder_level = 0.0
+        results.append({
+            "product_id": row.get("product_id"),
+            "product_name": str(row.get("product_name") or "Unnamed product"),
+            "sku": str(row.get("sku") or ""),
+            "current_stock": current_stock,
+            "min_stock": min_stock,
+            "reorder_level": reorder_level,
+        })
+
+    if not results:
+        answer = "No products are currently at or below their configured minimum stock level."
+    else:
+        details = []
+        for item in results:
+            sku_text = f", SKU {item['sku']}" if item["sku"] else ""
+            details.append(
+                f"{item['product_name']}{sku_text}: {item['current_stock']:g} in stock "
+                f"(minimum {item['min_stock']:g})"
+            )
+        suffix = " (showing up to 100 products)" if len(results) == 100 else ""
+        answer = f"Found {len(results)} low-stock product(s){suffix}: " + "; ".join(details) + "."
+
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_QUERY: low-stock products " + sql,
+        "generated_model_response": answer,
+        "results": results,
+    }
+
+
 def _fast_sold_products_query(query: str, db: Session, user_id: int, date_scope: dict | None = None):
     """List products from completed invoice lines, falling back to legacy sales only when needed."""
     normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
@@ -3375,6 +3445,35 @@ async def ask_query(
             "row_count": len(sold_products_result["results"]),
             "results": sold_products_result["results"],
             "has_more": False,
+        }
+
+    low_stock_result = _fast_low_stock_query(query, db, user_id)
+    if low_stock_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_LOW_STOCK "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=original_query,
+            answer=low_stock_result["answer"],
+            result_count=len(low_stock_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": low_stock_result["answer"],
+            "message": low_stock_result["answer"],
+            "generated_sql": low_stock_result["generated_sql"],
+            "generated_model_response": low_stock_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": low_stock_result["generated_sql"],
+            "row_count": len(low_stock_result["results"]),
+            "results": low_stock_result["results"],
+            "has_more": len(low_stock_result["results"]) >= 100,
         }
 
     # Financial totals and worker-pay questions use data-grounded deterministic
