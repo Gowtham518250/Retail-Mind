@@ -2369,6 +2369,7 @@ def get_owner_order_analytics(
         "totalPaidCount": total_paid_count,
         "rejectedCount": rejected_count,
         "cancelledCount": cancelled_count,
+        "available": True,
     }
 
 
