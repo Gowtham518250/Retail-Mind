@@ -1,7 +1,7 @@
 """Staging-only end-to-end integration tests for Retail Mind.
 
-These tests CREATE invoices. They skip unless a dedicated staging URL, test
-account, and explicit mutation opt-in are supplied. Production URLs are blocked.
+These tests CREATE invoices. They skip by default until a dedicated staging URL,
+test account, and explicit mutation opt-in are supplied. Production URLs blocked.
 """
 import os
 import time
@@ -17,27 +17,27 @@ TEST_EMAIL = os.environ.get("STAGING_TEST_EMAIL", "").strip()
 TEST_PASSWORD = os.environ.get("STAGING_TEST_PASSWORD", "")
 ALLOW_MUTATING_E2E = os.environ.get("ALLOW_MUTATING_STAGING_E2E") == "1"
 
-if not STAGING_BASE_URL:
-    pytest.skip(
-        "Set STAGING_BASE_URL to a dedicated staging deployment.",
-        allow_module_level=True,
-    )
+if STAGING_BASE_URL:
+    try:
+        BASE_URL = validate_staging_base_url(STAGING_BASE_URL)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+else:
+    # Test collection remains deterministic in ordinary CI; all tests are skipped
+    # below and this safe localhost value is never contacted.
+    BASE_URL = "http://127.0.0.1:8000"
 
-try:
-    BASE_URL = validate_staging_base_url(STAGING_BASE_URL)
-except ValueError as exc:
-    raise RuntimeError(str(exc)) from exc
-
-if not TEST_EMAIL or not TEST_PASSWORD:
-    pytest.skip(
-        "Set STAGING_TEST_EMAIL and STAGING_TEST_PASSWORD for the staging test account.",
-        allow_module_level=True,
-    )
-if not ALLOW_MUTATING_E2E:
-    pytest.skip(
-        "These tests create invoices. Set ALLOW_MUTATING_STAGING_E2E=1 only for a disposable staging shop.",
-        allow_module_level=True,
-    )
+STAGING_E2E_ENABLED = bool(
+    STAGING_BASE_URL and TEST_EMAIL and TEST_PASSWORD and ALLOW_MUTATING_E2E
+)
+pytestmark = pytest.mark.skipif(
+    not STAGING_E2E_ENABLED,
+    reason=(
+        "Set a dedicated STAGING_BASE_URL, STAGING_TEST_EMAIL, "
+        "STAGING_TEST_PASSWORD, and ALLOW_MUTATING_STAGING_E2E=1 "
+        "to run this invoice-writing suite."
+    ),
+)
 
 # =============================================
 # FIXTURE: Login and obtain JWT token
