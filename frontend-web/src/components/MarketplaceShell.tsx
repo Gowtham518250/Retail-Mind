@@ -75,7 +75,6 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
         <Link href={'/shop/' + shop.shop_id} className={styles.shopCard}>
           <div className={styles.shopVisual} style={{ background: `linear-gradient(135deg, ${from}, ${to})`, color: ink }}>
             <span className={styles.shopInitial} aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
-            <span className={styles.liveTag}><i /> Online</span>
             <div className={styles.shopTile}>
               {logo ? <img src={logo} alt={shop.shop_name + ' logo'} loading="lazy" /> : <Store size={34} strokeWidth={1.6} />}
             </div>
@@ -88,8 +87,8 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
               <b><Star size={12} fill="currentColor" /> {rated ? Number(shop.rating || 0).toFixed(1) : 'New'}</b>
             </div>
             <strong className={styles.shopName}>{shop.shop_name}</strong>
-            <span className={styles.shopLoc}><MapPin size={13} /> {shop.city || shop.address || 'Local delivery'}</span>
-            <p>{shop.tagline || shop.description || 'A local favourite, ready when you are.'}</p>
+            <span className={styles.shopLoc}><MapPin size={13} /> {shop.city || shop.address || 'Location not provided'}</span>
+            <p>{shop.tagline || shop.description || 'Explore this shop and view the product information it provides.'}</p>
             <div className={styles.shopFoot}>
               <span>{shop.rating_count || 0} {Number(shop.rating_count || 0) === 1 ? 'review' : 'reviews'}</span>
               <span className={styles.shopGo}>Visit <ArrowUpRight size={15} /></span>
@@ -493,12 +492,12 @@ export default function MarketplaceShell() {
                   Real Shops. Real Stock. <b>Direct to You.</b>
                 </h2>
                 <p className={styles.sellerPromoText}>
-                  Order directly from verified neighbourhood stores with zero markups. Enjoy live shelf updates, direct local dispatch, and transparent payment on delivery with Cash or UPI.
+                  Browse local shop listings, compare the product details they provide, and place orders only through checkout options the shop currently supports.
                 </p>
                 <div className={styles.sellerPromoPerks}>
-                  <span><ShieldCheck size={16} /> 100% Verified Stores</span>
-                  <span><Zap size={16} /> Real-time Stock Checked</span>
-                  <span><Truck size={16} /> Swift Local Delivery</span>
+                  <span><ShieldCheck size={16} /> Shop details from the marketplace</span>
+                  <span><Zap size={16} /> Stock status when provided</span>
+                  <span><Truck size={16} /> Backend order updates</span>
                 </div>
               </div>
               <button
