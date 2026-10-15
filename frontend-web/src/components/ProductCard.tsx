@@ -22,8 +22,9 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     : product.discount_pct || 0;
 
   const stock = product.stock_available;
-  const isOutOfStock = (stock ?? 0) <= 0;
-  const lowStock = !isOutOfStock && stock !== undefined && stock <= 5;
+  const stockUnconfirmed = stock === undefined || !Number.isFinite(Number(stock));
+  const isOutOfStock = !stockUnconfirmed && Number(stock) <= 0;
+  const lowStock = !isOutOfStock && !stockUnconfirmed && Number(stock) <= 5;
   const href = `/shop/${shopId}/product/${product.id}`;
 
   const handleAdd = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -60,6 +61,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
           <div className={styles.badges}>
             {discount > 0 && <span className={`${styles.badge} ${styles.sale}`}>{discount}% off</span>}
             {isOutOfStock && <span className={`${styles.badge} ${styles.out}`}>Sold out</span>}
+            {stockUnconfirmed && <span className={`${styles.badge} ${styles.out}`}>Stock unconfirmed</span>}
             {lowStock && <span className={`${styles.badge} ${styles.low}`}>Only {stock} left</span>}
           </div>
         </Link>
@@ -80,7 +82,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
             <motion.button
               className={`${styles.add} ${state === 'added' ? styles.added : ''}`}
               onClick={handleAdd}
-              disabled={isOutOfStock}
+              disabled={isOutOfStock || stockUnconfirmed}
               whileTap={{ scale: 0.94 }}
               aria-label={`Add ${product.name} to cart`}
             >
@@ -94,6 +96,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
                   transition={{ duration: 0.18 }}
                 >
                   {isOutOfStock ? 'Unavailable'
+                    : stockUnconfirmed ? 'Stock unconfirmed'
                     : state === 'added' ? <><Check size={16} strokeWidth={3} /> Added</>
                     : state === 'incart' ? <><Plus size={16} strokeWidth={3} /> In cart · {inCartCount}</>
                     : <><ShoppingBag size={16} /> Add</>}
