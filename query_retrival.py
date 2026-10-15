@@ -1377,10 +1377,10 @@ def _fast_low_stock_query(query: str, db: Session, user_id: int):
     is less than or equal to that product's configured min_stock. It intentionally
     does not ask an LLM to create or review SQL for this known business operation.
     """
-    normalized = re.sub(r"\\s+", " ", (query or "").lower()).strip()
+    normalized = re.sub(r"\s+", " ", (query or "").lower()).strip()
     low_stock_intent = bool(re.search(
-        r"\\b(?:low[- ](?:in[- ])?stock|below\\s+(?:the\\s+)?(?:minimum|min)(?:\\s+stock|\\s+level)?|"
-        r"stock\\s+(?:is\\s+)?low|running\\s+low|reorder\\s+(?:list|alerts?))\\b",
+        r"\b(?:low[- ](?:in[- ])?stock|below\s+(?:the\s+)?(?:minimum|min)(?:\s+stock|\s+level)?|"
+        r"stock\s+(?:is\s+)?low|running\s+low|reorder\s+(?:list|alerts?))\b",
         normalized,
     ))
     if not low_stock_intent:
