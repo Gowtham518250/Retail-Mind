@@ -47,23 +47,6 @@ if not ALLOW_MUTATING_E2E:
 
 BASE_URL = STAGING_BASE_URL
 import requests
-import time
-import uuid
-
-BASE_URL = "https://retail-mind-vkbp.onrender.com"
-
-# ──────────────────────────────────────────────────────────
-# IMPORTANT: Set TEST_EMAIL and TEST_PASSWORD to an actual
-# registered account on your production backend.
-# These can also be overridden with environment variables:
-#   set TEST_EMAIL=myshop@example.com
-#   set TEST_PASSWORD=mypassword
-#   python -m pytest tests/test_sync_resilience.py -v
-# ──────────────────────────────────────────────────────────
-import os
-TEST_EMAIL    = os.environ.get("TEST_EMAIL",    "testshop@retailmind.com")
-TEST_PASSWORD = os.environ.get("TEST_PASSWORD", "TestPassword123!")
-
 
 # =============================================
 # FIXTURE: Login and obtain JWT token
