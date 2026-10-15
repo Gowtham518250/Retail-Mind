@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useCart } from '../../../../context/CartContext';
 import { API_BASE } from '../../../../lib/api';
-import type { PlacedOrder } from '../../../../lib/types';
 
 interface FormState {
   city: string;
@@ -331,24 +330,6 @@ export default function CheckoutClientPage() {
         throw new Error(data.detail || data.message || 'Could not place your order. Please try again.');
       }
 
-      const placedOrder: PlacedOrder = {
-        order_id: data.order_id,
-        shop_name: data.shop_name,
-        total_amount: Number(data.total_amount ?? grandTotal),
-        status: data.status || 'PENDING',
-        payment_method: 'COD',
-        customer_name: customer.name,
-        phone: customer.phone || '',
-        delivery_address: combinedAddress,
-        items: cartItems.map((item) => ({
-          name: item.product.name,
-          quantity: item.quantity,
-          price: item.product.price,
-        })),
-        placed_at: new Date().toISOString(),
-      };
-
-      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
       sessionStorage.removeItem(checkoutSessionKey);
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
