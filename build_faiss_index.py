@@ -1,7 +1,6 @@
 import json
 import os
 from pathlib import Path
-import requests
 import numpy as np
 import onnxruntime as ort
 from huggingface_hub import hf_hub_download
@@ -20,36 +19,74 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 CATALOG_DIR = BASE_DIR / "business_table_catalog"
 CATALOG_DIR.mkdir(parents=True, exist_ok=True)
 
-# The production-fix branch lost the catalog files, so restore the canonical
-# catalog from the repository's main branch during the Render build.
-API = "https://api.github.com/repos/Gowtham518250/Retail-Mind/contents/business_table_catalog?ref=main"
-listing = requests.get(API, timeout=30)
-listing.raise_for_status()
-for item in listing.json():
-    if item.get("type") != "file" or not item["name"].endswith(".txt"):
-        continue
-    target = CATALOG_DIR / item["name"]
-    response = requests.get(item["download_url"], timeout=30)
-    response.raise_for_status()
-    target.write_text(response.text, encoding="utf-8")
 
-documents = []
-table_catalog = {}
-
-for path in sorted(CATALOG_DIR.glob("*.txt")):
-    content = path.read_text(encoding="utf-8").strip()
-    table_catalog[path.stem] = content
+def _append_document_chunks(documents, table_name, content, source):
+    """Add overlapping schema chunks for FAISS from a trusted local catalog entry."""
+    content = str(content or "").strip()
     start = 0
     while start < len(content):
         end = min(start + 700, len(content))
-        chunk = content[start:end]
         documents.append(Document(
-            page_content=chunk,
-            metadata={"table": path.stem, "source": f"business_table_catalog/{path.name}"},
+            page_content=content[start:end],
+            metadata={"table": table_name, "source": source},
         ))
         if end == len(content):
             break
         start = max(end - 200, start + 1)
+
+
+def _load_schema_catalog():
+    """Prefer checked-in .txt schemas, falling back to the checked-in JSON catalog.
+
+    Render builds from the production branch, which contains rag_table_catalog.json
+    and the generated FAISS files but does not contain business_table_catalog/*.txt.
+    Fetching that directory from GitHub's main branch was brittle and returned 404.
+    """
+    documents = []
+    table_catalog = {}
+    catalog_files = sorted(CATALOG_DIR.glob("*.txt"))
+
+    if catalog_files:
+        for catalog_file in catalog_files:
+            content = catalog_file.read_text(encoding="utf-8").strip()
+            if not content:
+                continue
+            table_name = catalog_file.stem
+            source = f"business_table_catalog/{catalog_file.name}"
+            table_catalog[table_name] = content
+            _append_document_chunks(documents, table_name, content, source)
+    else:
+        catalog_path = BASE_DIR / "rag_table_catalog.json"
+        if not catalog_path.is_file():
+            raise RuntimeError(
+                "No business schema files or rag_table_catalog.json found. "
+                "Commit the schema catalog before building the FAISS index."
+            )
+        with catalog_path.open("r", encoding="utf-8") as catalog_file:
+            stored_catalog = json.load(catalog_file)
+        if not isinstance(stored_catalog, dict) or not stored_catalog:
+            raise RuntimeError(f"Schema catalog is empty or invalid: {catalog_path}")
+
+        for table_name, entry in sorted(stored_catalog.items()):
+            if isinstance(entry, dict):
+                content = str(entry.get("content") or "").strip()
+                source = str(
+                    entry.get("source") or f"business_table_catalog/{table_name}.txt"
+                )
+            else:
+                content = str(entry or "").strip()
+                source = f"business_table_catalog/{table_name}.txt"
+            if not content:
+                continue
+            table_catalog[str(table_name)] = content
+            _append_document_chunks(documents, str(table_name), content, source)
+
+    if not documents or not table_catalog:
+        raise RuntimeError("No usable schema entries found to build the FAISS index.")
+    return documents, table_catalog
+
+
+documents, table_catalog = _load_schema_catalog()
 
 repo_id = "Xenova/all-MiniLM-L6-v2"
 tokenizer_path = hf_hub_download(repo_id=repo_id, filename="tokenizer.json", cache_dir=str(CACHE))
