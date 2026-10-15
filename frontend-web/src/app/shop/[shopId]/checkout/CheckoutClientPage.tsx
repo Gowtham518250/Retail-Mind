@@ -35,7 +35,7 @@ const initialForm: FormState = {
 export default function CheckoutClientPage() {
   const params = useParams();
   const router = useRouter();
-  const shopId = Number(params?.shopId || 8);
+  const shopId = Number(params?.shopId || 0);
   const { cartItems, cartTotal, clearCart } = useCart();
 
   const [form, setForm] = useState<FormState>(initialForm);
@@ -51,8 +51,9 @@ export default function CheckoutClientPage() {
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [minOrder, setMinOrder] = useState(0);
   const [offerDelivery, setOfferDelivery] = useState(true);
-  const [acceptCod, setAcceptCod] = useState(true);
+  const [acceptCod, setAcceptCod] = useState(false);
   const [acceptOnline, setAcceptOnline] = useState(false);
+  const [shopSettingsLoading, setShopSettingsLoading] = useState(true);
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
@@ -73,6 +74,12 @@ export default function CheckoutClientPage() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!Number.isSafeInteger(shopId) || shopId <= 0) {
+      setSubmitError('This shop link is invalid. Choose a shop from the marketplace.');
+      setAuthChecking(false);
+      router.replace('/');
+      return;
+    }
 
     const requireCustomer = async () => {
       const token = localStorage.getItem('customerToken');
@@ -126,18 +133,24 @@ export default function CheckoutClientPage() {
       cache: 'no-store',
     })
       .then(async (res) => {
-        if (!res.ok) return;
+        if (!res.ok) throw new Error('Shop settings request failed.');
         const data = await res.json();
         if (!cancelled) {
           setOnlineSetupFee(Math.max(0, Number(data.online_setup_fee || 0)));
           setDeliveryFee(Math.max(0, Number(data.delivery_fee || 0)));
           setMinOrder(Math.max(0, Number(data.min_order || 0)));
           setOfferDelivery(data.offer_delivery !== false);
-          setAcceptCod(data.accept_cod !== false);
+          setAcceptCod(data.accept_cod === true);
           setAcceptOnline(data.accept_online === true);
+          setShopSettingsLoading(false);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) {
+          setShopSettingsLoading(false);
+          setSubmitError('We could not verify this shop’s checkout settings. Reload this page before placing an order.');
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -208,8 +221,14 @@ export default function CheckoutClientPage() {
 
   const validate = () => {
     const next: Partial<Record<keyof FormState, string>> = {};
-    if (!acceptCod && !acceptOnline) {
-      setSubmitError('This shop has not enabled a payment method yet.');
+    if (shopSettingsLoading) {
+      setSubmitError('Please wait while we verify this shop’s checkout settings.');
+      return false;
+    }
+    if (!acceptCod) {
+      setSubmitError(acceptOnline
+        ? 'Online payment is not integrated yet. This shop cannot accept a website order until Cash on Delivery is enabled.'
+        : 'This shop has not enabled a supported checkout payment method.');
       return false;
     }
     if (minOrder > 0 && cartTotal < minOrder) {
@@ -256,7 +275,16 @@ export default function CheckoutClientPage() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!customer || !cartItems.length || !validate()) return;
+    if (!customer || !cartItems.length) return;
+    if (cartItems.some((item) => Number(item.product.shop_id) !== shopId)) {
+      setSubmitError('Your cart contains an item from another shop. Return to that shop and check out its cart separately.');
+      return;
+    }
+    if (cartItems.some((item) => item.product.stock_available !== undefined && Number(item.product.stock_available) <= 0)) {
+      setSubmitError('Your cart contains an out-of-stock item. Remove it before placing this order.');
+      return;
+    }
+    if (!validate()) return;
 
     const token = localStorage.getItem('customerToken');
     if (!token) {
@@ -306,7 +334,7 @@ export default function CheckoutClientPage() {
       const placedOrder: PlacedOrder = {
         order_id: data.order_id,
         shop_name: data.shop_name,
-        total_amount: Number(data.total_amount || grandTotal),
+        total_amount: Number(data.total_amount ?? grandTotal),
         status: data.status || 'PENDING',
         payment_method: 'COD',
         customer_name: customer.name,
@@ -447,8 +475,8 @@ export default function CheckoutClientPage() {
                 <div className="payment-option" aria-label="Online payment configured">
                   <ShieldCheck size={20} />
                   <div>
-                    <strong>Online payment configured</strong>
-                    <span>Payment processing requires a verified payment provider connection.</span>
+                    <strong>Online payment unavailable</strong>
+                    <span>Online checkout is not integrated in this storefront. Use Cash on Delivery when the shop supports it.</span>
                   </div>
                 </div>
               )}
