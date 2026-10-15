@@ -13,7 +13,7 @@ from datetime_utils import is_after_utc, is_before_utc
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, func, text
+from sqlalchemy import and_, desc, func, text
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -286,7 +286,9 @@ def growth_analytics(
     db: Session = Depends(get_db),
 ):
     branch = _owner_branch(db, user_id, branch_id)
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    # Model DateTime columns are stored as naive UTC in this application.
+    # Use the same convention for range predicates to avoid offset mismatches.
+    since = datetime.utcnow() - timedelta(days=days)
 
     invoice_q = db.query(
         func.coalesce(func.sum(Invoice.total_amount), 0),
@@ -325,21 +327,40 @@ def growth_analytics(
         online_q = online_q.filter(OnlineOrder.branch_id == branch.id)
     online_revenue, online_count = online_q.first() or (0, 0)
 
-    top_rows = (
+    # Anchor this query on invoice lines and keep Product optional. Manual sales
+    # can contain custom/unlinked items (product_id NULL or a deleted product);
+    # an inner join on Product silently dropped those real sales from the chart.
+    product_label = func.coalesce(
+        Product.product_name,
+        InvoiceLineItem.description,
+        "Unlinked product",
+    )
+    top_query = (
         db.query(
-            Product.id,
-            Product.product_name,
+            Product.id.label("product_id"),
+            product_label.label("product_name"),
             func.coalesce(func.sum(InvoiceLineItem.quantity), 0).label("qty"),
             func.coalesce(func.sum(InvoiceLineItem.line_total), 0).label("revenue"),
         )
-        .join(InvoiceLineItem, InvoiceLineItem.product_id == Product.id)
         .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+        .outerjoin(
+            Product,
+            and_(
+                Product.id == InvoiceLineItem.product_id,
+                Product.user_id == user_id,
+            ),
+        )
         .filter(
-            Product.user_id == user_id,
+            Invoice.user_id == user_id,
             Invoice.created_at >= since,
             Invoice.status != InvoiceStatus.CANCELLED,
         )
-        .group_by(Product.id, Product.product_name)
+    )
+    if branch:
+        top_query = top_query.filter(Invoice.branch_id == branch.id)
+    top_rows = (
+        top_query
+        .group_by(Product.id, product_label)
         .order_by(desc("revenue"))
         .limit(10)
         .all()
@@ -359,7 +380,7 @@ def growth_analytics(
         },
         "top_products": [
             {
-                "product_id": row.id,
+                "product_id": row.product_id,
                 "product_name": row.product_name,
                 "quantity": float(row.qty or 0),
                 "revenue": round(float(row.revenue or 0), 2),
