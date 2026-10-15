@@ -1453,6 +1453,26 @@ def place_order(
     }
 
 
+def _guest_phone_matches_verified(provided_phone: str, verified_phone: str) -> bool:
+    """Compare a guest-entered phone with a verified Firebase E.164 phone."""
+    provided = re.sub(r"\D", "", str(provided_phone or ""))
+    verified = re.sub(r"\D", "", str(verified_phone or ""))
+    if not provided or not verified:
+        return False
+    if provided == verified:
+        return True
+
+    # Accept India's common local 10-digit form only when the verified number
+    # is explicitly an Indian +91 number. Do not use substring matching.
+    local = provided[1:] if len(provided) == 11 and provided.startswith("0") else provided
+    return (
+        len(local) == 10
+        and verified.startswith("91")
+        and len(verified) == 12
+        and verified.endswith(local)
+    )
+
+
 @router.post("/guest-order")
 def place_guest_order(
     data: GuestOrder,
@@ -1462,31 +1482,48 @@ def place_guest_order(
     """Place an online order as a guest (no auth required)"""
     logger.info("Received guest order: shop_id=%s items_count=%s", data.shop_id, len(data.items))
     
-    # 1. Verify Firebase Phone Auth Token (if provided)
+    # If the client supplies a Firebase credential, it must be valid and
+    # belong to the submitted phone. Never fall back to an unverified identity
+    # after a token verification error.
     if data.firebase_id_token:
         try:
             import firebase_admin
             if not firebase_admin._apps:
-                raise HTTPException(status_code=503, detail="Firebase not configured. Please contact support.")
-                
+                raise HTTPException(
+                    status_code=503,
+                    detail="Phone verification is temporarily unavailable. Please retry later.",
+                )
+
             from firebase_admin import auth
             decoded_token = auth.verify_id_token(data.firebase_id_token)
-            phone_number = decoded_token.get('phone_number')
-            
-            if not phone_number:
-                raise HTTPException(status_code=400, detail="Invalid token: No phone number associated with this login.")
-                
-            # Ensure the verified phone matches the one provided (stripping non-digits for comparison if needed, or exact match)
-            # Firebase phone numbers include country code (e.g., +919876543210).
-            # We check if the provided phone is a substring of the verified phone to allow local format (e.g., 9876543210)
-            if data.phone not in phone_number:
-                logger.warning("Verified phone number mismatch during guest checkout for shop_id=%s", data.shop_id)
-                
         except HTTPException:
-            raise  # Re-raise — a rejected token must not silently fall through
-        except Exception as e:
-            logger.warning("Firebase guest-order token verification failed for shop_id=%s (%s)", data.shop_id, type(e).__name__)
-            logger.warning("Falling back to unverified phone number for guest order.")
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Guest-order phone token validation failed for shop_id=%s (%s)",
+                data.shop_id,
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="Phone verification token is invalid or expired. Please verify your phone and retry.",
+            ) from None
+
+        verified_phone = decoded_token.get("phone_number")
+        if not verified_phone:
+            raise HTTPException(
+                status_code=401,
+                detail="The verified account does not contain a phone number.",
+            )
+        if not _guest_phone_matches_verified(data.phone, verified_phone):
+            logger.warning(
+                "Verified phone mismatch during guest checkout for shop_id=%s",
+                data.shop_id,
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="The checkout phone number does not match the verified phone.",
+            )
     else:
         logger.info("Guest checkout has no Firebase phone token: shop_id=%s", data.shop_id)
 
