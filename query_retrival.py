@@ -18,6 +18,8 @@ import httpx
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from query_safety import validate_read_only_tenant_sql
+from query_answering import format_query_answer
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
@@ -216,21 +218,12 @@ def _repair_known_schema_aliases(sql: str) -> str:
 
 
 def _is_safe_read_only_tenant_select(sql: str) -> bool:
-    """Fail closed unless SQL is one tenant-scoped, read-only SELECT statement."""
-    candidate = re.sub(r";\s*$", "", str(sql or "").strip())
-    return bool(
-        candidate
-        and re.match(r"^(?:SELECT|WITH)\b", candidate, re.IGNORECASE)
-        and re.search(r"\bSELECT\b", candidate, re.IGNORECASE)
-        and ";" not in candidate
-        and not re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\b", candidate, re.IGNORECASE)
-        and not re.search(r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export|pg_read_file|pg_write_file|nextval|setval|pg_advisory_lock)\s*\(", candidate, re.IGNORECASE)
-        and not re.search(r"\bFOR\s+(?:UPDATE|SHARE)\b", candidate, re.IGNORECASE)
-        and "--" not in candidate
-        and "/*" not in candidate
-        and "*/" not in candidate
-        and re.search(r":user_id\b", candidate, re.IGNORECASE)
-    )
+    """Fail closed unless an AST proves this is a read-only, tenant-scoped query."""
+    catalog = full_table_catalog if isinstance(full_table_catalog, dict) else {}
+    is_valid, reason = validate_read_only_tenant_sql(sql, catalog)
+    if not is_valid:
+        print(f"ASKQUERY SQL_VALIDATION outcome=rejected reason={reason}")
+    return is_valid
 
 
 def _sql_preserves_resolved_date_scope(sql: str, date_scope: dict | None) -> bool:
@@ -2236,9 +2229,8 @@ def _verify_uncertain_translation(
         metric = str(parsed.get("metric") or "other").strip().lower()
         try:
             confidence = float(parsed.get("confidence", 0.0))
-            translation_confidence = float(
-                parsed.get("translation_confidence", parsed.get("confidence", 0.0))
-            )
+            # Intent confidence cannot prove dates, amounts, names or negation survived translation.
+            translation_confidence = float(parsed.get("translation_confidence", 0.0))
         except (TypeError, ValueError):
             confidence = 0.0
             translation_confidence = 0.0
@@ -2370,8 +2362,8 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
                 translation_confidence = float(payload.get("translation_confidence"))
                 translation_confidence_explicit = True
             else:
-                # Backward-compatible response from models that implement the old schema.
-                translation_confidence = confidence
+                # Old schemas do not prove translation fidelity; the verifier must do so.
+                translation_confidence = 0.0
         except (TypeError, ValueError):
             translation_confidence = 0.0
         if intent not in {"aggregate", "list", "comparison", "trend", "general"}:
@@ -2408,11 +2400,7 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
         intent = deterministic.get("intent", intent)
         metric = deterministic.get("metric", metric)
         confidence = float(deterministic.get("confidence", confidence))
-        # For legacy/plain-text providers there is no independent translation
-        # score. A well-formed deterministic English KPI still provides a safe
-        # compatibility confidence; never overwrite an explicit low score.
-        if not translation_confidence_explicit:
-            translation_confidence = max(translation_confidence, confidence)
+        # Deterministic intent recognition cannot prove source-language fidelity.
         source = "deterministic_fallback"
     else:
         source = "combined_translation_classification" if payload is not None else "deterministic_fallback"
@@ -2441,7 +2429,9 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
     needs_verification = (
         is_non_english
         and (
-            classification["confidence"] < 0.90
+            not translation_confidence_explicit
+            or payload is None
+            or classification["confidence"] < 0.90
             or classification["intent"] == "general"
             or classification["metric"] == "other"
             or (deterministic_confident and not classification_agrees)
@@ -4138,49 +4128,7 @@ async def ask_query(
 
     encoded_rows = jsonable_encoder([dict(row) for row in rows])
 
-    def _money(value):
-        try:
-            return f"₹{float(value):,.2f}"
-        except (TypeError, ValueError):
-            return str(value)
-
-    def _build_answer(result_rows):
-        if not result_rows:
-            return "No matching records were found for your question."
-
-        first = result_rows[0]
-        keys = {str(k).lower() for k in first.keys()}
-
-        # Common retail metric responses.
-        if len(result_rows) == 1:
-            for key in ("sales_count", "total_units_sold", "count", "invoice_count", "total_invoices"):
-                if key in keys:
-                    actual = next(k for k in first if str(k).lower() == key)
-                    return f"The answer is {first[actual]}."
-            for key in ("total_sales_amount", "sales_amount", "total_revenue", "total_amount", "total", "khata_balance"):
-                if key in keys:
-                    actual = next(k for k in first if str(k).lower() == key)
-                    return f"The total is {_money(first[actual])}."
-
-        if "customer_name" in keys and "khata_balance" in keys:
-            total = sum(float(row.get("khata_balance") or 0) for row in result_rows)
-            return (
-                f"{len(result_rows)} customer(s) have outstanding khata balances, "
-                f"totaling {_money(total)}."
-            )
-
-        if any(k in keys for k in ("product_name", "name")):
-            label_key = next((k for k in first if str(k).lower() in ("product_name", "name")), None)
-            value_key = next(
-                (k for k in first if str(k).lower() in ("revenue", "total", "total_amount", "amount", "quantity", "total_sales_amount")),
-                None,
-            )
-            if label_key and value_key:
-                return f"Found {len(result_rows)} result(s). The top result is {first[label_key]} with {first[value_key]}."
-
-        return f"Found {len(result_rows)} matching result(s)."
-
-    answer_text = _build_answer(encoded_rows)
+    answer_text = format_query_answer(encoded_rows, query_plan, sql)
 
     _persist_query_history(
         db=db,
