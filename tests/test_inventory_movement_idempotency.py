@@ -94,3 +94,14 @@ def test_batch_endpoint_persists_idempotency_and_scopes_every_product_to_shop():
     assert "except IntegrityError:" in source
     assert 'status_code=409' in source
     assert "background_tasks.add_task(" in source
+
+
+def test_stock_batch_rolls_back_new_deductions_if_any_item_fails():
+    from inventory_sync_service import deduct_stock_batch
+
+    source = getsource(deduct_stock_batch)
+    assert "if failed_items and inventory_changes:" in source
+    assert "db.rollback()" in source
+    assert 'result["success"] = False' in source
+    assert 'result["new_stock"] = (' in source
+    assert "inventory_changes.clear()" in source
