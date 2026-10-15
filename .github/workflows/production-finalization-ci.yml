@@ -85,6 +85,7 @@ jobs:
           pytest -q tests/test_query_answering.py
           pytest -q tests/test_worker_payroll_query_contract.py
           pytest -q tests/test_customer_phone_normalization.py
+          pytest -q tests/test_invoice_sync_payment_state.py
 
   customer-web:
     runs-on: ubuntu-latest
