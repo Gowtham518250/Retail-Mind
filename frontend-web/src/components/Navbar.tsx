@@ -13,17 +13,13 @@ export default function Navbar() {
   const { toggleCart, itemCount } = useCart();
   const [signedIn, setSignedIn] = useState(false);
   const [customerName, setCustomerName] = useState('');
-  const [isSeller, setIsSeller] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const syncAuth = () => {
       const custToken = localStorage.getItem('customerToken');
-      const merchToken = localStorage.getItem('merchantToken');
-      const hasAuth = Boolean(custToken || merchToken);
-      setSignedIn(hasAuth);
+      setSignedIn(Boolean(custToken));
       setCustomerName(localStorage.getItem('customerName') || '');
-      setIsSeller(localStorage.getItem('userRole') === 'OWNER' || Boolean(localStorage.getItem('shopId')));
     };
     syncAuth();
     window.addEventListener('storage', syncAuth);
@@ -53,8 +49,8 @@ export default function Navbar() {
 
   const mobileNavItems = [
     { href: '/', label: 'Home', icon: Home },
+    { href: '/#shops', label: 'Shops', icon: Store },
     { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles },
-    { href: isSeller ? '/profile' : '/sell', label: isSeller ? 'Store' : 'Sell', icon: Store },
     { href: signedIn ? '/orders' : '/auth', label: 'Orders', icon: Package },
     { href: signedIn ? '/profile' : '/auth', label: 'Account', icon: User },
   ];
@@ -67,7 +63,7 @@ export default function Navbar() {
           initial={{ y: -40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 220, damping: 24 }}
-          aria-label="Primary"
+          aria-label="Customer Primary Navigation"
         >
           <Link href="/" className={styles.brand} aria-label="Retail Mind home">
             <span className={styles.logo}><ShoppingBag size={18} strokeWidth={2.4} /></span>
@@ -75,19 +71,9 @@ export default function Navbar() {
           </Link>
 
           <div className={styles.actions}>
-            {/* Desktop Sell Button */}
-            <Link
-              href={isSeller ? '/profile' : '/sell'}
-              className={styles.sellLink}
-              aria-label="Sell on RetailMind"
-            >
-              <Store size={15} />
-              <span>{isSeller ? 'My Store' : 'Sell Online'}</span>
-            </Link>
-
             {/* Desktop Navigation Links */}
             {desktopLinks.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href || pathname.startsWith(href + '/');
+              const active = pathname === href || (href !== '/' && pathname.startsWith(href + '/'));
               return (
                 <Link
                   key={href}
@@ -140,7 +126,7 @@ export default function Navbar() {
         </motion.nav>
       </header>
 
-      {/* ── Mobile Bottom Navigation Bar ── */}
+      {/* ── Mobile Bottom Navigation Bar (Customer Only) ── */}
       <nav className={styles.mobileBottomNav} aria-label="Mobile Navigation">
         <div className={styles.bottomNavTrack}>
           {mobileNavItems.map(({ href, label, icon: Icon }) => {

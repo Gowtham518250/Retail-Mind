@@ -1,7 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
-   AUTH MODULE - ULTRA MODERN 3D LUXE SYSTEM
-   Supports: Customer Account + Seller/Merchant Store Registration
-   Mobile & Desktop Adaptive with Framer Motion & 3D Lighting
+   RETAIL MIND — PREMIUM CUSTOMER AUTHENTICATION
+   Deep midnight surfaces, subtle glass effects, 3D soft lighting
    ═══════════════════════════════════════════════════════════════ */
 
 .authMain {
@@ -14,28 +13,28 @@
   overflow: hidden;
   background: 
     radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.18), transparent 35%),
-    radial-gradient(circle at 90% 15%, rgba(236, 72, 153, 0.15), transparent 30%),
-    radial-gradient(circle at 50% 85%, rgba(34, 211, 238, 0.14), transparent 40%),
-    linear-gradient(135deg, #090d16 0%, #0d1527 50%, #080d1a 100%);
+    radial-gradient(circle at 90% 15%, rgba(34, 211, 238, 0.15), transparent 30%),
+    radial-gradient(circle at 50% 85%, rgba(139, 92, 246, 0.14), transparent 40%),
+    linear-gradient(135deg, #070b14 0%, #0d1527 50%, #070c18 100%);
   color: #f8fafc;
   perspective: 1200px;
 }
 
 /* 3D Ambient Orbs */
-.orb1, .orb2, .orb3, .orb4 {
+.orb1, .orb2, .orb3 {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
-  filter: blur(60px);
+  filter: blur(65px);
   z-index: 1;
 }
 
 .orb1 {
   width: 420px;
   height: 420px;
-  right: -100px;
-  top: -120px;
-  background: radial-gradient(circle, rgba(236, 72, 153, 0.28), rgba(240, 180, 63, 0.1));
+  right: -80px;
+  top: -100px;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.22), transparent 70%);
   animation: authFloat1 16s ease-in-out infinite alternate;
 }
 
@@ -44,59 +43,41 @@
   height: 380px;
   left: -80px;
   bottom: -100px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.32), rgba(34, 211, 238, 0.12));
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.26), transparent 70%);
   animation: authFloat2 18s ease-in-out infinite alternate;
 }
 
 .orb3 {
   width: 300px;
   height: 300px;
-  left: 35%;
+  left: 45%;
   top: 15%;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.2), transparent);
-  animation: authFloat3 22s ease-in-out infinite;
-}
-
-.orb4 {
-  width: 250px;
-  height: 250px;
-  right: 25%;
-  bottom: 20%;
-  background: radial-gradient(circle, rgba(147, 51, 234, 0.22), transparent);
-  animation: authFloat1 20s ease-in-out infinite reverse;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.18), transparent 70%);
 }
 
 @keyframes authFloat1 {
   0% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(-30px, 40px, 30px) scale(1.08); }
-  100% { transform: translate3d(20px, -30px, -20px) scale(0.95); }
+  100% { transform: translate3d(-30px, 35px, 20px) scale(1.08); }
 }
 
 @keyframes authFloat2 {
   0% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(40px, -30px, -20px) scale(1.05); }
-  100% { transform: translate3d(-20px, 30px, 15px) scale(0.92); }
+  100% { transform: translate3d(35px, -30px, -15px) scale(0.95); }
 }
 
-@keyframes authFloat3 {
-  0% { transform: rotate(0deg) translate3d(20px, 0, 0); }
-  50% { transform: rotate(180deg) translate3d(-25px, 20px, 0); }
-  100% { transform: rotate(360deg) translate3d(20px, 0, 0); }
-}
-
-/* Auth Center Container */
+/* Auth Container */
 .authContainer {
   position: relative;
   z-index: 5;
   width: 100%;
-  max-width: 1080px;
+  max-width: 1000px;
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  grid-template-columns: 1fr 1.1fr;
   gap: 36px;
   align-items: center;
 }
 
-/* Left Hero Showcase (Desktop) */
+/* Left Hero Showcase */
 .heroShowcase {
   display: flex;
   flex-direction: column;
@@ -129,7 +110,7 @@
 }
 
 .heroGradientText {
-  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #ec4899 100%);
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -145,7 +126,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .featureItem {
@@ -157,14 +138,13 @@
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(10px);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  transform-style: preserve-3d;
+  transition: all 0.3s ease;
 }
 
 .featureItem:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.06);
   border-color: rgba(99, 102, 241, 0.3);
-  transform: translateX(6px) translateZ(10px);
+  transform: translateX(4px);
 }
 
 .featureIconWrap {
@@ -173,7 +153,7 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.2));
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(34, 211, 238, 0.2));
   color: #38bdf8;
   flex-shrink: 0;
 }
@@ -194,16 +174,15 @@
 .authCard {
   position: relative;
   overflow: hidden;
-  padding: 40px 36px;
+  padding: 38px 34px;
   border-radius: 28px;
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 23, 42, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(24px);
   box-shadow: 
     0 25px 60px -15px rgba(0, 0, 0, 0.6),
     0 0 40px rgba(99, 102, 241, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  transform-style: preserve-3d;
 }
 
 .cardGlowBar {
@@ -211,57 +190,10 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #38bdf8, #818cf8, #ec4899);
+  height: 3px;
+  background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
 }
 
-/* Role Selector (Customer vs Seller) */
-.roleSelector {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 6px;
-  border-radius: 18px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 24px;
-}
-
-.roleBtn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #94a3b8;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  z-index: 2;
-}
-
-.roleBtnActive {
-  color: #fff;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(236, 72, 153, 0.25));
-  border: 1px solid rgba(129, 140, 248, 0.4);
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.25);
-}
-
-.roleBadge {
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #10b981;
-  color: #fff;
-  font-weight: 800;
-}
-
-/* Header Text */
 .cardHeader {
   margin-bottom: 22px;
 }
@@ -280,7 +212,7 @@
   line-height: 1.5;
 }
 
-/* Mode Tabs (Sign In / Register / Reset) */
+/* Mode Tabs */
 .modeTabs {
   display: flex;
   gap: 16px;
@@ -290,7 +222,7 @@
 
 .modeTabBtn {
   position: relative;
-  padding: 8px 2px 14px;
+  padding: 8px 4px 14px;
   background: transparent;
   border: none;
   font-size: 14px;
@@ -315,7 +247,7 @@
   box-shadow: 0 0 10px #38bdf8;
 }
 
-/* Form Styles */
+/* Forms */
 .form {
   display: flex;
   flex-direction: column;
@@ -358,7 +290,6 @@
 
 .forgotLink:hover {
   text-decoration: underline;
-  opacity: 0.85;
 }
 
 .inputWrap {
@@ -385,13 +316,13 @@
   color: #fff;
   font-size: 14px;
   outline: none;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.25s ease;
 }
 
 .input:focus {
   border-color: #6366f1;
   background: rgba(15, 23, 42, 0.9);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 0 0 20px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2), 0 0 20px rgba(99, 102, 241, 0.15);
 }
 
 .input:focus + .inputIcon,
@@ -401,11 +332,6 @@
 
 .input::placeholder {
   color: #64748b;
-}
-
-select.input {
-  appearance: none;
-  cursor: pointer;
 }
 
 .eyeBtn {
@@ -426,7 +352,6 @@ select.input {
   color: #cbd5e1;
 }
 
-/* Submit Button with 3D Pop */
 .submitBtn {
   position: relative;
   display: flex;
@@ -434,9 +359,9 @@ select.input {
   justify-content: center;
   gap: 10px;
   width: 100%;
-  height: 52px;
+  height: 50px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  background: linear-gradient(135deg, #0284c7 0%, #6366f1 50%, #a855f7 100%);
   color: #fff;
   font-size: 15px;
   font-weight: 800;
@@ -445,8 +370,8 @@ select.input {
   box-shadow: 
     0 10px 25px -5px rgba(99, 102, 241, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  margin-top: 8px;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 6px;
+  transition: all 0.25s ease;
 }
 
 .submitBtn:hover:not(:disabled) {
@@ -456,16 +381,11 @@ select.input {
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.submitBtn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
 .submitBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-/* Spinner */
 .spinner {
   width: 20px;
   height: 20px;
@@ -479,7 +399,6 @@ select.input {
   to { transform: rotate(360deg); }
 }
 
-/* Feedback Banners */
 .errorBanner, .successBanner {
   display: flex;
   align-items: flex-start;
@@ -488,7 +407,6 @@ select.input {
   border-radius: 14px;
   font-size: 13px;
   line-height: 1.5;
-  animation: slideInDown 0.3s ease;
 }
 
 .errorBanner {
@@ -505,37 +423,6 @@ select.input {
   border-left: 4px solid #10b981;
 }
 
-@keyframes slideInDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Seller Benefits Strip */
-.sellerPerks {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 12px;
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.sellerPerkItem {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  color: #cbd5e1;
-}
-
-.sellerPerkItem svg {
-  color: #10b981;
-  flex-shrink: 0;
-}
-
-/* Footer Switch */
 .switchRow {
   display: flex;
   align-items: center;
@@ -558,8 +445,7 @@ select.input {
   text-decoration: underline;
 }
 
-/* Responsive layout */
-@media (max-width: 900px) {
+@media (max-width: 880px) {
   .authContainer {
     grid-template-columns: 1fr;
     max-width: 480px;
@@ -568,23 +454,15 @@ select.input {
     display: none;
   }
   .authCard {
-    padding: 32px 24px;
-    border-radius: 24px;
+    padding: 30px 22px;
   }
 }
 
 @media (max-width: 480px) {
-  .authMain {
-    padding: 20px 14px;
-  }
-  .authCard {
-    padding: 26px 18px;
-    border-radius: 20px;
-  }
-  .authTitle {
-    font-size: 23px;
-  }
   .twoCols {
     grid-template-columns: 1fr;
+  }
+  .authTitle {
+    font-size: 22px;
   }
 }

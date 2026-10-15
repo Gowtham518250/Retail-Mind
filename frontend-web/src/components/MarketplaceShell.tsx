@@ -479,7 +479,7 @@ export default function MarketplaceShell() {
         </Reveal>
       </section>
 
-      {/* ───────── 3D SELLER VIP BANNER ───────── */}
+      {/* ───────── CUSTOMER EXPERIENCE HIGHLIGHTS ───────── */}
       <section className={styles.sellerPromoSection}>
         <Reveal>
           <Tilt3D>
@@ -487,25 +487,29 @@ export default function MarketplaceShell() {
               <div className={styles.sellerPromoLeft}>
                 <div className={styles.sellerPromoBadge}>
                   <Sparkles size={14} />
-                  <span>Sell on RetailMind</span>
+                  <span>The RetailMind Promise</span>
                 </div>
                 <h2 className={styles.sellerPromoTitle}>
-                  Open Your Digital Store in <b>60 Seconds</b>
+                  Real Shops. Real Stock. <b>Direct to You.</b>
                 </h2>
                 <p className={styles.sellerPromoText}>
-                  Are you a local shop owner or creator? List your products online with 0% platform commission, receive direct UPI settlements, and serve neighborhood customers effortlessly.
+                  Order directly from verified neighbourhood stores with zero markups. Enjoy live shelf updates, direct local dispatch, and transparent payment on delivery with Cash or UPI.
                 </p>
                 <div className={styles.sellerPromoPerks}>
-                  <span><ShieldCheck size={16} /> 0% Commission</span>
-                  <span><Zap size={16} /> Instant Direct UPI</span>
-                  <span><Store size={16} /> Branded Storefront & QR</span>
+                  <span><ShieldCheck size={16} /> 100% Verified Stores</span>
+                  <span><Zap size={16} /> Real-time Stock Checked</span>
+                  <span><Truck size={16} /> Swift Local Delivery</span>
                 </div>
               </div>
-              <Link href="/sell" className={styles.sellerPromoBtn}>
+              <button
+                type="button"
+                onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}
+                className={styles.sellerPromoBtn}
+              >
                 <Store size={18} />
-                <span>Launch Your Store Free</span>
+                <span>Explore Local Shops</span>
                 <ArrowRight size={16} />
-              </Link>
+              </button>
             </div>
           </Tilt3D>
         </Reveal>
@@ -558,7 +562,7 @@ export default function MarketplaceShell() {
       )}
 
       {/* ───────── RESULTS ───────── */}
-      <section className={styles.section} id="explore">
+      <section className={styles.section} id="shops">
         {loading ? (
           <>
             <div className={styles.head}><div><div className={styles.kicker}>Discover</div><h2 className={styles.h2}>Loading nearby shops</h2></div></div>

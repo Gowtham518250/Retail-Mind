@@ -13,36 +13,27 @@ import {
   User,
   Mail,
   CheckCircle,
-  Store,
   Sparkles,
-  QrCode,
-  TrendingUp,
   ShieldCheck,
   Zap,
+  Truck,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import styles from './auth.module.css';
 
-type Role = 'customer' | 'seller';
 type View = 'login' | 'register' | 'reset';
 
 export default function AuthPage() {
   const router = useRouter();
-  const [role, setRole] = useState<Role>('customer');
   const [view, setView] = useState<View>('login');
 
-  // Common fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 
-  // Seller specific fields
-  const [shopName, setShopName] = useState('');
-  const [shopCategory, setShopCategory] = useState('General Retail');
-
-  // Reset password states (Customer)
+  // Password Reset states (OTP flow)
   const [resetStep, setResetStep] = useState<'request' | 'verify' | 'password'>('request');
   const [resetOtp, setResetOtp] = useState('');
   const [resetToken, setResetToken] = useState('');
@@ -50,27 +41,22 @@ export default function AuthPage() {
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Status indicators
+  // Status
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [redirectPath, setRedirectPath] = useState('/profile');
+  const [redirectPath, setRedirectPath] = useState('/');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const params = new URLSearchParams(window.location.search);
-    const roleParam = params.get('role') || params.get('mode');
-    if (roleParam === 'seller' || roleParam === 'merchant') {
-      setRole('seller');
-    }
-
     const resetRequested = params.get('view') === 'reset';
     const emailParam = params.get('email') || '';
-    const requestedNext = params.get('next') || '/profile';
+    const requestedNext = params.get('next') || '/';
     const safeNext = requestedNext.startsWith('/') && !requestedNext.startsWith('//')
       ? requestedNext
-      : '/profile';
+      : '/';
 
     setRedirectPath(safeNext);
 
@@ -84,8 +70,7 @@ export default function AuthPage() {
       return;
     }
 
-    // Check existing customer or merchant session
-    if (localStorage.getItem('customerToken') || localStorage.getItem('merchantToken')) {
+    if (localStorage.getItem('customerToken')) {
       router.replace(safeNext);
     }
   }, [router]);
@@ -112,17 +97,10 @@ export default function AuthPage() {
     setView(v);
   };
 
-  const switchRole = (r: Role) => {
-    setError('');
-    setSuccess('');
-    setRole(r);
-    if (view === 'reset') setView('login');
-  };
-
   const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-  // ── CUSTOMER LOGIN ────────────────────────────────────────────────────────
-  const handleCustomerLogin = async (e: React.FormEvent) => {
+  // ── Customer Login ──
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidEmail(email)) {
       setError('Please enter a valid email address.');
@@ -142,17 +120,16 @@ export default function AuthPage() {
       localStorage.setItem('customerToken', data.access_token);
       localStorage.setItem('customerName', data.customer?.name || data.name || email);
       localStorage.setItem('customerEmail', data.customer?.email || data.email || email);
-      localStorage.setItem('userRole', 'CUSTOMER');
       router.replace(redirectPath);
     } catch (err: any) {
-      setError(err.message || 'Customer login failed.');
+      setError(err.message || 'Sign in failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── CUSTOMER REGISTER ─────────────────────────────────────────────────────
-  const handleCustomerRegister = async (e: React.FormEvent) => {
+  // ── Customer Registration ──
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim().length < 2) {
       setError('Name must be at least 2 characters long.');
@@ -176,15 +153,14 @@ export default function AuthPage() {
       const res = await fetch(`${API_BASE}/store/customer/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, password }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), phone: phone.trim(), password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.message || 'Registration failed. Please try again.');
 
       localStorage.setItem('customerToken', data.access_token);
-      localStorage.setItem('customerName', data.name || name);
-      localStorage.setItem('customerEmail', email);
-      localStorage.setItem('userRole', 'CUSTOMER');
+      localStorage.setItem('customerName', data.name || name.trim());
+      localStorage.setItem('customerEmail', email.trim());
       router.replace(redirectPath);
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
@@ -193,108 +169,7 @@ export default function AuthPage() {
     }
   };
 
-  // ── SELLER / OWNER LOGIN ──────────────────────────────────────────────────
-  const handleSellerLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isValidEmail(email)) {
-      setError('Please enter your registered email address.');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Seller sign-in failed. Check credentials.');
-
-      const token = data.access_token;
-      const resolvedShopId = data.shop_profile?.shop_id || data.user_id;
-      const resolvedShopName = data.shop_profile?.shop_name || `${data.username}'s Store`;
-
-      localStorage.setItem('merchantToken', token);
-      localStorage.setItem('customerToken', token); // Allow unified browsing
-      localStorage.setItem('userRole', 'OWNER');
-      localStorage.setItem('customerName', data.username || email);
-      localStorage.setItem('customerEmail', email);
-      localStorage.setItem('shopId', String(resolvedShopId));
-      localStorage.setItem('shopName', resolvedShopName);
-
-      setSuccess('Store owner verified! Redirecting to your merchant dashboard...');
-      setTimeout(() => {
-        router.replace('/profile');
-      }, 600);
-    } catch (err: any) {
-      setError(err.message || 'Seller login failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── SELLER / OWNER REGISTER (OPEN STORE) ──────────────────────────────────
-  const handleSellerRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (name.trim().length < 2) {
-      setError('Please enter the business owner name.');
-      return;
-    }
-    if (shopName.trim().length < 2) {
-      setError('Please enter your store or shop name.');
-      return;
-    }
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid business email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: name.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          user_type: 'OWNER',
-          shop_name: shopName.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.message || 'Could not register store. Please try again.');
-
-      const token = data.access_token;
-      const registeredShopId = data.shop_profile?.shop_id || data.user_id;
-      const registeredShopName = data.shop_profile?.shop_name || shopName.trim();
-
-      localStorage.setItem('merchantToken', token);
-      localStorage.setItem('customerToken', token);
-      localStorage.setItem('userRole', 'OWNER');
-      localStorage.setItem('customerName', name.trim());
-      localStorage.setItem('customerEmail', email.trim().toLowerCase());
-      localStorage.setItem('shopId', String(registeredShopId));
-      localStorage.setItem('shopName', registeredShopName);
-
-      setSuccess(`Congratulations! "${registeredShopName}" is now registered and live online!`);
-      setTimeout(() => {
-        router.replace('/profile');
-      }, 800);
-    } catch (err: any) {
-      setError(err.message || 'Seller registration failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── CUSTOMER PASSWORD RESET ───────────────────────────────────────────────
+  // ── OTP Password Reset Flow ──
   const requestResetOtp = async () => {
     if (!isValidEmail(email)) {
       throw new Error('Please enter a valid email address.');
@@ -302,7 +177,7 @@ export default function AuthPage() {
     const res = await fetch(`${API_BASE}/store/customer/request-password-reset-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email: email.trim() }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send OTP.');
@@ -328,7 +203,7 @@ export default function AuthPage() {
         const res = await fetch(`${API_BASE}/store/customer/verify-password-reset-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, otp: resetOtp }),
+          body: JSON.stringify({ email: email.trim(), otp: resetOtp.trim() }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || data.message || 'OTP verification failed.');
@@ -364,171 +239,93 @@ export default function AuthPage() {
 
   return (
     <main className={styles.authMain}>
-      {/* 3D Floating Glow Orbs */}
+      {/* 3D Ambient Orbs */}
       <div className={styles.orb1} />
       <div className={styles.orb2} />
       <div className={styles.orb3} />
-      <div className={styles.orb4} />
 
       <div className={styles.authContainer}>
-        {/* Left Side: 3D Feature Showcase */}
+        {/* Left Hero Showcase */}
         <motion.div
           className={styles.heroShowcase}
           initial={{ opacity: 0, x: -30 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.65 }}
         >
           <div className={styles.brandPill}>
             <Sparkles size={14} />
-            <span>RetailMind Next-Gen Platform</span>
+            <span>RetailMind Customer Hub</span>
           </div>
 
           <h1 className={styles.heroTitle}>
-            {role === 'seller' ? (
-              <>
-                Sell to Thousands.{' '}
-                <span className={styles.heroGradientText}>Zero Platform Commission.</span>
-              </>
-            ) : (
-              <>
-                The Smartest Way to{' '}
-                <span className={styles.heroGradientText}>Shop Your Local Stores.</span>
-              </>
-            )}
+            Discover &amp; Order From{' '}
+            <span className={styles.heroGradientText}>Your Local Stores.</span>
           </h1>
 
           <p className={styles.heroSubtitle}>
-            {role === 'seller'
-              ? 'Launch your digital storefront in 60 seconds. Receive instant UPI payments, manage inventory with AI, and serve neighborhood customers effortlessly.'
-              : 'Discover neighborhood verified stores, order in real-time, get instant local dispatch, and enjoy AI-guided voice and text shopping.'}
+            Enjoy verified neighborhood shops, real-time stock availability, fast local delivery, and AI-guided shopping assistance.
           </p>
 
           <div className={styles.featureList}>
-            {role === 'seller' ? (
-              <>
-                <div className={styles.featureItem}>
-                  <div className={styles.featureIconWrap}>
-                    <Store size={20} />
-                  </div>
-                  <div className={styles.featureContent}>
-                    <strong>Instant Digital Storefront</strong>
-                    <span>Get a branded URL & QR code for your shop right away</span>
-                  </div>
-                </div>
-                <div className={styles.featureItem}>
-                  <div className={styles.featureIconWrap}>
-                    <QrCode size={20} />
-                  </div>
-                  <div className={styles.featureContent}>
-                    <strong>Direct UPI Settlements</strong>
-                    <span>Customers pay your UPI QR directly with instant voice alerts</span>
-                  </div>
-                </div>
-                <div className={styles.featureItem}>
-                  <div className={styles.featureIconWrap}>
-                    <TrendingUp size={20} />
-                  </div>
-                  <div className={styles.featureContent}>
-                    <strong>Realtime Stock & AI Insights</strong>
-                    <span>Live stock movement, low stock radar, and automated sales sync</span>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.featureItem}>
-                  <div className={styles.featureIconWrap}>
-                    <ShoppingBag size={20} />
-                  </div>
-                  <div className={styles.featureContent}>
-                    <strong>Curated Local Catalogs</strong>
-                    <span>Browse actual live inventory from verified retail merchants</span>
-                  </div>
-                </div>
-                <div className={styles.featureItem}>
-                  <div className={styles.featureIconWrap}>
-                    <Zap size={20} />
-                  </div>
-                  <div className={styles.featureContent}>
-                    <strong>Instant Local Delivery</strong>
-                    <span>Direct dispatch from nearby stores right to your doorstep</span>
-                  </div>
-                </div>
-                <div className={styles.featureItem}>
-                  <div className={styles.featureIconWrap}>
-                    <ShieldCheck size={20} />
-                  </div>
-                  <div className={styles.featureContent}>
-                    <strong>Verified & Secure Payments</strong>
-                    <span>Pay seamlessly with UPI, Cards, NetBanking or Cash on Delivery</span>
-                  </div>
-                </div>
-              </>
-            )}
+            <div className={styles.featureItem}>
+              <div className={styles.featureIconWrap}>
+                <ShoppingBag size={20} />
+              </div>
+              <div className={styles.featureContent}>
+                <strong>Genuine Local Catalogs</strong>
+                <span>Browse live stock and clear prices from verified shops</span>
+              </div>
+            </div>
+
+            <div className={styles.featureItem}>
+              <div className={styles.featureIconWrap}>
+                <Truck size={20} />
+              </div>
+              <div className={styles.featureContent}>
+                <strong>Swift Local Dispatch</strong>
+                <span>Direct delivery straight from nearby storefronts to your door</span>
+              </div>
+            </div>
+
+            <div className={styles.featureItem}>
+              <div className={styles.featureIconWrap}>
+                <ShieldCheck size={20} />
+              </div>
+              <div className={styles.featureContent}>
+                <strong>Safe &amp; Transparent Checkout</strong>
+                <span>Pay seamlessly on delivery with Cash or UPI with live order tracking</span>
+              </div>
+            </div>
           </div>
         </motion.div>
 
-        {/* Right Side: Auth Glass Card */}
+        {/* Right Glass Card */}
         <motion.div
           className={styles.authCard}
           initial={{ opacity: 0, y: 25 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.65, delay: 0.1 }}
         >
           <div className={styles.cardGlowBar} />
 
-          {/* Role Selector: Customer vs Seller */}
-          <div className={styles.roleSelector} role="tablist" aria-label="Account Type">
-            <button
-              type="button"
-              className={`${styles.roleBtn} ${role === 'customer' ? styles.roleBtnActive : ''}`}
-              onClick={() => switchRole('customer')}
-              role="tab"
-              aria-selected={role === 'customer'}
-            >
-              <ShoppingBag size={15} />
-              <span>Customer</span>
-            </button>
-            <button
-              type="button"
-              className={`${styles.roleBtn} ${role === 'seller' ? styles.roleBtnActive : ''}`}
-              onClick={() => switchRole('seller')}
-              role="tab"
-              aria-selected={role === 'seller'}
-            >
-              <Store size={15} />
-              <span>Sell Products</span>
-              <span className={styles.roleBadge}>NEW</span>
-            </button>
-          </div>
-
-          {/* Card Header */}
           <div className={styles.cardHeader}>
             <h2 className={styles.authTitle}>
-              {role === 'seller'
-                ? view === 'login'
-                  ? 'Merchant Sign In'
-                  : 'Open Your Online Store'
-                : view === 'login'
-                  ? 'Welcome Back'
-                  : view === 'register'
-                    ? 'Create Your Account'
-                    : 'Account Recovery'}
+              {view === 'login'
+                ? 'Sign In to Shop'
+                : view === 'register'
+                  ? 'Create Customer Account'
+                  : 'Account Recovery'}
             </h2>
             <p className={styles.authSubtitle}>
-              {role === 'seller'
-                ? view === 'login'
-                  ? 'Log in to manage your storefront, products and orders'
-                  : 'Register online and start selling your products in minutes'
-                : view === 'login'
-                  ? 'Sign in to access your orders and smart shopping hub'
-                  : view === 'register'
-                    ? 'Join RetailMind for instant local shopping and fast delivery'
-                    : 'We will send a verification OTP to reset your password'}
+              {view === 'login'
+                ? 'Sign in to access your cart, tracked orders, and saved addresses'
+                : view === 'register'
+                  ? 'Join RetailMind for instant local shopping and convenient checkout'
+                  : 'We will send a 6-digit verification code to your email'}
             </p>
           </div>
 
-          {/* Mode Tabs (Sign In / Register) */}
+          {/* Mode Tabs */}
           {view !== 'reset' && (
             <div className={styles.modeTabs}>
               <button
@@ -544,13 +341,13 @@ export default function AuthPage() {
                 className={`${styles.modeTabBtn} ${view === 'register' ? styles.modeTabActive : ''}`}
                 onClick={() => switchView('register')}
               >
-                {role === 'seller' ? 'Register Store' : 'Create Account'}
+                Create Account
                 {view === 'register' && <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />}
               </button>
             </div>
           )}
 
-          {/* Feedback Messages */}
+          {/* Feedback */}
           <AnimatePresence>
             {error && (
               <motion.div
@@ -577,13 +374,13 @@ export default function AuthPage() {
             )}
           </AnimatePresence>
 
-          {/* ═══════════════════ FORMS ═══════════════════ */}
+          {/* ── FORMS ── */}
           <AnimatePresence mode="wait">
-            {/* ── 1. CUSTOMER LOGIN ── */}
-            {role === 'customer' && view === 'login' && (
+            {/* ── Sign In ── */}
+            {view === 'login' && (
               <motion.form
-                key="cust-login"
-                onSubmit={handleCustomerLogin}
+                key="login-form"
+                onSubmit={handleLogin}
                 className={styles.form}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -648,11 +445,11 @@ export default function AuthPage() {
               </motion.form>
             )}
 
-            {/* ── 2. CUSTOMER REGISTER ── */}
-            {role === 'customer' && view === 'register' && (
+            {/* ── Register ── */}
+            {view === 'register' && (
               <motion.form
-                key="cust-reg"
-                onSubmit={handleCustomerRegister}
+                key="reg-form"
+                onSubmit={handleRegister}
                 className={styles.form}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -744,216 +541,15 @@ export default function AuthPage() {
                   disabled={loading}
                   className={styles.submitBtn}
                 >
-                  {loading ? <span className={styles.spinner} /> : <>Create Account <ArrowRight size={17} /></>}
+                  {loading ? <span className={styles.spinner} /> : <>Create Customer Account <ArrowRight size={17} /></>}
                 </motion.button>
               </motion.form>
             )}
 
-            {/* ── 3. SELLER LOGIN ── */}
-            {role === 'seller' && view === 'login' && (
-              <motion.form
-                key="seller-login"
-                onSubmit={handleSellerLogin}
-                className={styles.form}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25 }}
-              >
-                <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Merchant / Business Email</label>
-                  <div className={styles.inputWrap}>
-                    <Mail size={17} className={styles.inputIcon} />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="merchant@store.com"
-                      className={styles.input}
-                      required
-                      autoComplete="email"
-                    />
-                  </div>
-                </div>
-
-                <div className={styles.fieldGroup}>
-                  <div className={styles.labelRow}>
-                    <label className={styles.label}>Store Owner Password</label>
-                  </div>
-                  <div className={styles.inputWrap}>
-                    <Lock size={17} className={styles.inputIcon} />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className={styles.input}
-                      required
-                      autoComplete="current-password"
-                    />
-                    <button
-                      type="button"
-                      className={styles.eyeBtn}
-                      onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
-                      aria-label="Toggle password visibility"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className={styles.sellerPerks}>
-                  <div className={styles.sellerPerkItem}>
-                    <CheckCircle size={14} /> <span>0% Platform Commission</span>
-                  </div>
-                  <div className={styles.sellerPerkItem}>
-                    <CheckCircle size={14} /> <span>Live Storefront URL & QR</span>
-                  </div>
-                </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
-                  type="submit"
-                  disabled={loading}
-                  className={styles.submitBtn}
-                >
-                  {loading ? <span className={styles.spinner} /> : <>Sign In as Merchant <ArrowRight size={17} /></>}
-                </motion.button>
-              </motion.form>
-            )}
-
-            {/* ── 4. SELLER REGISTER (OPEN STORE) ── */}
-            {role === 'seller' && view === 'register' && (
-              <motion.form
-                key="seller-reg"
-                onSubmit={handleSellerRegister}
-                className={styles.form}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25 }}
-              >
-                <div className={styles.twoCols}>
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Business Owner Name</label>
-                    <div className={styles.inputWrap}>
-                      <User size={17} className={styles.inputIcon} />
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Owner name"
-                        className={styles.input}
-                        required
-                        minLength={2}
-                      />
-                    </div>
-                  </div>
-
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Shop / Store Name</label>
-                    <div className={styles.inputWrap}>
-                      <Store size={17} className={styles.inputIcon} />
-                      <input
-                        type="text"
-                        value={shopName}
-                        onChange={(e) => setShopName(e.target.value)}
-                        placeholder="e.g. Royal Mart"
-                        className={styles.input}
-                        required
-                        minLength={2}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className={styles.twoCols}>
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Business Email</label>
-                    <div className={styles.inputWrap}>
-                      <Mail size={17} className={styles.inputIcon} />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="store@email.com"
-                        className={styles.input}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Store Category</label>
-                    <div className={styles.inputWrap}>
-                      <select
-                        value={shopCategory}
-                        onChange={(e) => setShopCategory(e.target.value)}
-                        className={styles.input}
-                      >
-                        <option value="General Retail">General Store / Supermarket</option>
-                        <option value="Grocery">Grocery & Daily Essentials</option>
-                        <option value="Electronics">Electronics & Mobiles</option>
-                        <option value="Fashion">Fashion & Apparel</option>
-                        <option value="Pharmacy">Pharmacy & Healthcare</option>
-                        <option value="Bakery">Bakery & Cafe</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Set Password</label>
-                  <div className={styles.inputWrap}>
-                    <Lock size={17} className={styles.inputIcon} />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Min. 6 characters"
-                      className={styles.input}
-                      required
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      className={styles.eyeBtn}
-                      onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
-                      aria-label="Toggle password visibility"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className={styles.sellerPerks}>
-                  <div className={styles.sellerPerkItem}>
-                    <CheckCircle size={14} /> <span>Instant Store ID & QR</span>
-                  </div>
-                  <div className={styles.sellerPerkItem}>
-                    <CheckCircle size={14} /> <span>Add Products Online Anytime</span>
-                  </div>
-                </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
-                  type="submit"
-                  disabled={loading}
-                  className={styles.submitBtn}
-                >
-                  {loading ? <span className={styles.spinner} /> : <>Launch My Store Online <ArrowRight size={17} /></>}
-                </motion.button>
-              </motion.form>
-            )}
-
-            {/* ── 5. RESET PASSWORD FLOW (CUSTOMER) ── */}
+            {/* ── Password Reset Flow ── */}
             {view === 'reset' && (
               <motion.form
-                key="reset-flow"
+                key="reset-form"
                 onSubmit={handleReset}
                 className={styles.form}
                 initial={{ opacity: 0, y: 12 }}
@@ -982,7 +578,7 @@ export default function AuthPage() {
                 {resetStep === 'verify' && (
                   <>
                     <div className={styles.fieldGroup}>
-                      <label className={styles.label}>6-Digit OTP Code</label>
+                      <label className={styles.label}>6-Digit Verification Code</label>
                       <div className={styles.inputWrap}>
                         <CheckCircle size={17} className={styles.inputIcon} />
                         <input
@@ -1067,7 +663,7 @@ export default function AuthPage() {
                   ) : resetStep === 'request' ? (
                     'Send Verification OTP'
                   ) : resetStep === 'verify' ? (
-                    'Verify OTP'
+                    'Verify Code'
                   ) : (
                     'Save New Password'
                   )}
@@ -1076,7 +672,7 @@ export default function AuthPage() {
             )}
           </AnimatePresence>
 
-          {/* Footer Navigation */}
+          {/* Footer switch */}
           <div className={styles.switchRow}>
             {view === 'reset' ? (
               <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>
@@ -1084,14 +680,14 @@ export default function AuthPage() {
               </button>
             ) : view === 'login' ? (
               <span>
-                Don&apos;t have an account?{' '}
+                New customer?{' '}
                 <button type="button" className={styles.switchAction} onClick={() => switchView('register')}>
-                  {role === 'seller' ? 'Open Your Store' : 'Register Now'}
+                  Create an Account
                 </button>
               </span>
             ) : (
               <span>
-                Already registered?{' '}
+                Already have an account?{' '}
                 <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>
                   Sign In
                 </button>
