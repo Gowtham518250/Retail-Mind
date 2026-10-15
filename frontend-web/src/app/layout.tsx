@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import './globals.css';
 import './storefront-polish.css';
 import './premium-v3.css';
+import './customer-premium.css';
 import Navbar from '../components/Navbar';
 import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: '#0f5b47',
+  themeColor: '#08142b',
   width: 'device-width',
   initialScale: 1,
 };
