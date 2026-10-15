@@ -417,9 +417,11 @@ def deduct_stock_batch(
         # products decremented. Previously processed idempotent retries remain
         # successful because they do not mutate stock in this request.
         if failed_items and inventory_changes:
-            newly_staged = [result for result in results if not result.get("duplicate", False)]
             db.rollback()
-            for result in newly_staged:
+            # The batch contract is atomic: report every item as failed after
+            # rollback and refresh balances so the client cannot cache an
+            # uncommitted intermediate stock value from a previously staged row.
+            for result in results:
                 product_id = result.get("product_id")
                 current_product = (
                     db.query(Product)
@@ -440,10 +442,7 @@ def deduct_stock_batch(
             return {
                 "success": False,
                 "total_items": len(request.updates),
-                "successful": sum(
-                    1 for result in results
-                    if result["success"] and result.get("duplicate", False)
-                ),
+                "successful": 0,
                 "failed": len(failed_items),
                 "results": results,
                 "failed_items": failed_items,
