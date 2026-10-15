@@ -48,6 +48,39 @@ def _parse_client_timestamp(raw: Optional[str]) -> Optional[datetime]:
     except (TypeError, ValueError, OverflowError):
         return None
 
+
+def _resolve_invoice_sync_payment_state(
+    total_amount,
+    paid_amount,
+    is_borrow: Optional[bool],
+    notes: Optional[str],
+):
+    """Return canonical (paid_amount, document_status, payment_status) for a synced sale.
+
+    A non-borrow checkout with no recorded receipt is a completed sale in the POS,
+    whose default payment is cash. Legacy clients are repaired only when their
+    persisted note explicitly identifies a Regular Sale. Explicit partial receipts
+    remain partial, and borrow invoices remain outstanding.
+    """
+    total = Decimal(str(total_amount or 0)).quantize(Decimal("0.01"))
+    paid = Decimal(str(paid_amount or 0)).quantize(Decimal("0.01"))
+    note_text = str(notes or "").casefold()
+    legacy_regular_sale = (
+        "regular sale" in note_text and "borrow invoice" not in note_text
+    )
+
+    if paid == Decimal("0.00") and (
+        is_borrow is False or (is_borrow is None and legacy_regular_sale)
+    ):
+        paid = total
+
+    paid = min(max(paid, Decimal("0.00")), total)
+    if total > Decimal("0.00") and paid > Decimal("0.00") and paid >= total - Decimal("0.01"):
+        return float(total), "PAID", "PAID"
+    if paid > Decimal("0.00"):
+        return float(paid), "PARTIAL", "PARTIAL"
+    return 0.0, "SENT", "UNPAID"
+
 # =====================
 # SCHEMAS
 # =====================
@@ -71,6 +104,8 @@ class InvoiceSyncCreate(BaseModel):
     paid_amount: float = Field(0, ge=0)
     tax: float = Field(0, ge=0)
     payment_status: str = "PAID"
+    is_borrow: Optional[bool] = None
+    payment_method: Optional[str] = Field(default=None, max_length=50)
     line_items: Optional[List[InvoiceLineItemCreate]] = None
     invoice_date: Optional[str] = None
     sale_timestamp: Optional[str] = None
@@ -510,6 +545,12 @@ def sync_offline_invoice(
     except ValueError:
         due_date = inv_date
 
+    resolved_paid_amount, resolved_invoice_status, resolved_payment_status = (
+        _resolve_invoice_sync_payment_state(
+            data.total_amount, data.paid_amount, data.is_borrow, data.notes
+        )
+    )
+
     try:
         sub_t = Decimal(str(data.total_amount)) - Decimal(str(data.tax))
 
@@ -674,9 +715,10 @@ def sync_offline_invoice(
             subtotal=float(sub_t),
             tax=data.tax,
             total_amount=data.total_amount,
-            paid_amount=data.paid_amount,
-            status="SENT",
-            payment_status=data.payment_status.upper() if data.payment_status else "UNPAID",
+            paid_amount=resolved_paid_amount,
+            status=resolved_invoice_status,
+            payment_status=resolved_payment_status,
+            payment_method=(data.payment_method or "CASH").strip().upper(),
             source="OFFLINE_SYNC",
             notes=sanitize_input(
                 (
@@ -777,7 +819,7 @@ def sync_offline_invoice(
             shop_id=shop_id,
             tx_type="INCOME",
             category="SALE",
-            amount=data.paid_amount,
+            amount=resolved_paid_amount,
             reference_id=invoice_number,
             description=f"Sales Sync: {invoice_number}",
             tx_date=datetime.combine(inv_date, datetime.min.time()),
@@ -799,7 +841,7 @@ def sync_offline_invoice(
             "source": invoice.source,
         }]
 
-        if data.paid_amount > 0:
+        if resolved_paid_amount > 0:
             realtime_events.append({
                 "event_id": str(uuid.uuid4()),
                 "type": "payment.updated",
