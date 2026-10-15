@@ -91,10 +91,11 @@ def add_expense(
     category = sanitize_input(data.category, "category").strip()
     desc = sanitize_input(data.description or "", "description").strip() or None
     payment_method = sanitize_input(data.payment_method or "cash", "payment_method").strip() or "cash"
-    idempotency_key = (data.idempotency_key or "").strip() or None
-
-    if idempotency_key and len(idempotency_key) < 8:
-        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
+    idempotency_key = None
+    if data.idempotency_key is not None:
+        idempotency_key = data.idempotency_key.strip()
+        if len(idempotency_key) < 8:
+            raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
 
     if idempotency_key:
         existing = db.query(ShopExpense).filter(
@@ -198,6 +199,7 @@ def list_expenses(
                 "description": e.description,
                 "expense_date": e.expense_date,
                 "payment_method": e.payment_method,
+                "idempotency_key": e.idempotency_key,
             }
             for e in expenses
         ],
