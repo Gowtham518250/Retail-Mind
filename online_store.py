@@ -28,7 +28,7 @@ from datetime_utils import is_after_utc, is_before_utc
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, cast, String
 from sqlalchemy.exc import IntegrityError
 
 from db import get_db
@@ -2323,7 +2323,7 @@ def get_owner_order_analytics(
     """
     shop_id = int(current_user["user_id"])
     base = db.query(OnlineOrder).filter(OnlineOrder.shop_id == shop_id)
-    normalized_status = func.upper(func.coalesce(OnlineOrder.order_status, ""))
+    normalized_status = func.upper(func.coalesce(cast(OnlineOrder.order_status, String), ""))
     normalized_payment_status = func.upper(func.coalesce(OnlineOrder.payment_status, ""))
 
     # Store timestamps are persisted as UTC-naive values. Use India-local
