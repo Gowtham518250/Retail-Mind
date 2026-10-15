@@ -84,7 +84,7 @@ export default function OrderSuccessClientPage() {
           shop_name: data.shop_name || (data.shop_id ? `Shop #${data.shop_id}` : 'Shop details unavailable'),
           total_amount: serverTotal,
           status: serverStatus,
-          payment_method: 'COD',
+          payment_method: data.payment_method === 'UPI' || data.payment_method === 'CARD' ? data.payment_method : 'COD',
           customer_name: data.customer_name || 'Customer',
           phone: data.customer_phone || '',
           delivery_address: data.delivery_address || '',
@@ -313,10 +313,6 @@ export default function OrderSuccessClientPage() {
 
   if (!order) return null;
 
-  const placedDate = new Date(order.placed_at);
-  const estStart = new Date(placedDate.getTime() + 45 * 60 * 1000);
-  const estEnd = new Date(placedDate.getTime() + 90 * 60 * 1000);
-  const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="container" style={{ padding: '28px 20px 90px', maxWidth: 780 }}>
@@ -334,8 +330,8 @@ export default function OrderSuccessClientPage() {
 
         <div className="success-meta-row">
           <div className="success-meta-pill"><span>Order ID</span><strong>#{order.order_id}</strong></div>
-          <div className="success-meta-pill"><span>Estimated delivery</span><strong>{fmt(estStart)} – {fmt(estEnd)}</strong></div>
-          <div className="success-meta-pill"><span>Payment</span><strong>Cash on Delivery</strong></div>
+          <div className="success-meta-pill"><span>Order status</span><strong>{(liveStatus || order.status).replaceAll('_', ' ')}</strong></div>
+          <div className="success-meta-pill"><span>Payment method</span><strong>{order.payment_method === 'COD' ? 'Cash on Delivery' : order.payment_method}</strong></div>
         </div>
 
         <div className="timeline-refresh-row">
@@ -380,7 +376,7 @@ export default function OrderSuccessClientPage() {
             <ShoppingBag size={16} /> Continue shopping
           </button>
           <button className="store-link-btn" onClick={() => window.print()}>
-            <Clock size={16} /> Download invoice
+            <Clock size={16} /> Print order summary
           </button>
         </div>
       </motion.div>
