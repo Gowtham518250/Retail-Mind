@@ -30,6 +30,18 @@ from security import owner_only, worker_or_owner, sanitize_input
 
 router = APIRouter(tags=["Enterprise Intelligence"])
 
+def _normalize_optional_idempotency_key(raw: Optional[str]) -> Optional[str]:
+    if raw is None:
+        return None
+    key = raw.strip()
+    if len(key) < 8:
+        raise HTTPException(
+            status_code=422,
+            detail="idempotency_key must contain at least 8 non-space characters.",
+        )
+    return key
+
+
 # =====================================
 # EXPENSE TRACKER
 # =====================================
@@ -91,11 +103,7 @@ def add_expense(
     category = sanitize_input(data.category, "category").strip()
     desc = sanitize_input(data.description or "", "description").strip() or None
     payment_method = sanitize_input(data.payment_method or "cash", "payment_method").strip() or "cash"
-    idempotency_key = None
-    if data.idempotency_key is not None:
-        idempotency_key = data.idempotency_key.strip()
-        if len(idempotency_key) < 8:
-            raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
+    idempotency_key = _normalize_optional_idempotency_key(data.idempotency_key)
 
     if idempotency_key:
         existing = db.query(ShopExpense).filter(
@@ -490,9 +498,7 @@ def add_reconciliation(
     difference = abs(expected - actual)
     status = "MATCHED" if difference < Decimal("1.00") else "DISCREPANCY"
     notes = sanitize_input(data.notes or "", "notes").strip() or None
-    idempotency_key = (data.idempotency_key or "").strip() or None
-    if idempotency_key is not None and len(idempotency_key) < 8:
-        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
+    idempotency_key = _normalize_optional_idempotency_key(data.idempotency_key)
 
     if idempotency_key:
         existing = db.query(BankReconciliation).filter(
