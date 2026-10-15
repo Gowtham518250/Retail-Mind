@@ -148,11 +148,18 @@ def evaluate_cases(cases: Iterable[dict[str, Any]], results: Iterable[dict[str, 
         if expected_sources:
             actual_sources = _source_ids(result.get("source_record_ids"))
             covered = expected_sources & actual_sources
+            exact_sources = actual_sources == expected_sources
             expected_source_total += len(expected_sources)
             covered_source_total += len(covered)
             predicted_source_total += len(actual_sources)
             relevant_predicted_source_total += len(actual_sources & expected_sources)
-            is_critical_pass = is_critical_pass and expected_sources.issubset(actual_sources)
+            # Evidence cases are labelled against canonical shop records. An extra
+            # returned record is a false positive, even when every expected ID is
+            # present; critical accuracy must therefore require exact source sets.
+            if case.get("require_exact_source_record_ids", True):
+                is_critical_pass = is_critical_pass and exact_sources
+            else:
+                is_critical_pass = is_critical_pass and expected_sources.issubset(actual_sources)
 
         critical_passes += int(is_critical_pass)
 
@@ -195,20 +202,55 @@ def main(argv: list[str] | None = None) -> int:
         "--min-critical-pass-rate",
         type=float,
         default=0.0,
-        help="Return exit code 1 when critical_pass_rate is below this fraction (for example 0.85).",
+        help="Fail if the critical pass rate is below this fraction (for example 0.85).",
     )
+    parser.add_argument("--min-answer-accuracy", type=float, default=None)
+    parser.add_argument("--min-shop-scope-accuracy", type=float, default=None)
+    parser.add_argument("--min-date-range-accuracy", type=float, default=None)
+    parser.add_argument("--min-source-precision", type=float, default=None)
+    parser.add_argument("--min-source-recall", type=float, default=None)
     args = parser.parse_args(argv)
-    if not 0.0 <= args.min_critical_pass_rate <= 1.0:
-        parser.error("--min-critical-pass-rate must be between 0 and 1.")
+    for name in (
+        "min_critical_pass_rate",
+        "min_answer_accuracy",
+        "min_shop_scope_accuracy",
+        "min_date_range_accuracy",
+        "min_source_precision",
+        "min_source_recall",
+    ):
+        value = getattr(args, name)
+        if value is not None and not 0.0 <= value <= 1.0:
+            parser.error(f"--{name.replace('_', '-')} must be between 0 and 1.")
     try:
         report = evaluate_cases(read_jsonl(args.cases), read_jsonl(args.results))
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
+    gates = {
+        "critical_pass_rate": args.min_critical_pass_rate,
+        "answer_accuracy": args.min_answer_accuracy,
+        "shop_scope_accuracy": args.min_shop_scope_accuracy,
+        "date_range_accuracy": args.min_date_range_accuracy,
+        "source_precision": args.min_source_precision,
+        "source_recall": args.min_source_recall,
+    }
+    failures = []
+    for metric, minimum in gates.items():
+        if minimum is None:
+            continue
+        value = report.get(metric)
+        if value is None or value < minimum:
+            failures.append({
+                "metric": metric,
+                "minimum": minimum,
+                "actual": value,
+            })
+    report["release_gate"] = {
+        "passed": not failures,
+        "thresholds": {key: val for key, val in gates.items() if val is not None},
+        "failures": failures,
+    }
     print(json.dumps(report, indent=2, sort_keys=True))
-    critical_rate = report["critical_pass_rate"]
-    if critical_rate is not None and critical_rate < args.min_critical_pass_rate:
-        return 1
-    return 0
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
