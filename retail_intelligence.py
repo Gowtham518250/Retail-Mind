@@ -310,6 +310,20 @@ def update_worker(
     return {"message": "Worker updated.", "worker_id": worker_id}
 
 
+def _normalize_payroll_month(month: Optional[str]) -> str:
+    """Require an exact YYYY-MM payroll period."""
+    value = (month or "").strip()
+    if not value:
+        return date.today().strftime("%Y-%m")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m")
+        if parsed.strftime("%Y-%m") != value:
+            raise ValueError("Non-canonical payroll month")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="month must use the YYYY-MM format.")
+    return value
+
+
 @router.post("/workers/{worker_id}/pay-salary", tags=["Worker Management"])
 def pay_worker_salary(
     worker_id: int,
@@ -317,24 +331,39 @@ def pay_worker_salary(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Mark salary as paid for a specific month and record in expenses"""
-    if not month:
-        from datetime import datetime
-        month = datetime.now().strftime("%Y-%m")
-        
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
-    worker = db.query(Worker).filter(
+    """Record at most one salary expense per worker and payroll month."""
+    month = _normalize_payroll_month(month)
+    shop_id = current_user["user_id"]
+    # On PostgreSQL, locking the shop-owned worker serializes concurrent retries.
+    worker = db.query(Worker).with_for_update().filter(
         Worker.id == worker_id,
         Worker.shopkeeper_id == shop_id,
     ).first()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found.")
 
-    salary = float(worker.salary or 0)
+    salary = _expense_money(worker.salary or 0)
     if salary <= 0:
         raise HTTPException(status_code=400, detail="Worker has no salary configured.")
 
-    # Log as expense
+    reference = f"SALARY-W{worker_id}-{month}"
+    # Legacy salary writes already share this stable journal reference.
+    # Treat retries as success and never insert a second expense/journal row.
+    existing_tx = db.query(UniversalTransaction).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.category == "SALARY",
+        UniversalTransaction.reference_id == reference,
+    ).order_by(UniversalTransaction.id.asc()).first()
+    if existing_tx:
+        return {
+            "message": f"Salary for {worker.name} in {month} was already recorded; no duplicate was created.",
+            "amount": float(existing_tx.amount or 0),
+            "worker_name": worker.name,
+            "month": month,
+            "reference_id": reference,
+            "already_paid": True,
+        }
+
     expense = ShopExpense(
         shop_id=shop_id,
         category="salary",
@@ -342,29 +371,51 @@ def pay_worker_salary(
         description=f"Salary payment for {worker.name} - {month}",
         expense_date=date.today(),
         payment_method="bank_transfer",
+        idempotency_key=f"salary-worker-{worker_id}-{month}",
     )
     db.add(expense)
 
-    # Universal journal
+    # Source expense and journal mirror are committed together.
     tx = UniversalTransaction(
         shop_id=shop_id,
         tx_type="EXPENSE",
         category="SALARY",
         amount=salary,
-        reference_id=f"SALARY-W{worker_id}-{month}",
+        reference_id=reference,
         description=f"Salary: {worker.name} ({month})",
+        tx_date=datetime.combine(date.today(), datetime.min.time()),
     )
     db.add(tx)
     try:
         db.commit()
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to pay salary: {str(e)}")
+        existing_tx = db.query(UniversalTransaction).filter(
+            UniversalTransaction.shop_id == shop_id,
+            UniversalTransaction.category == "SALARY",
+            UniversalTransaction.reference_id == reference,
+        ).first()
+        if existing_tx:
+            return {
+                "message": f"Salary for {worker.name} in {month} was already recorded; no duplicate was created.",
+                "amount": float(existing_tx.amount or 0),
+                "worker_name": worker.name,
+                "month": month,
+                "reference_id": reference,
+                "already_paid": True,
+            }
+        raise HTTPException(status_code=409, detail="Salary write conflict; refresh the payroll record before retrying.")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to record salary payment.")
 
     return {
         "message": f"Salary of ₹{salary:.2f} paid to {worker.name} for {month}.",
-        "amount": salary,
+        "amount": float(salary),
         "worker_name": worker.name,
+        "month": month,
+        "reference_id": reference,
+        "already_paid": False,
     }
 
 
