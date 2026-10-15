@@ -12,7 +12,10 @@ from retail_intelligence import (
     _expense_matches,
     _expense_money,
     _expense_response,
+    _normalize_expense_category,
     _normalize_payroll_month,
+    _normalize_optional_idempotency_key,
+    _validate_date_range,
     list_expenses,
     pay_worker_salary,
 )
@@ -87,7 +90,7 @@ def test_expense_total_uses_same_filters_as_expense_rows():
     source = inspect.getsource(list_expenses)
     assert "q.with_entities(func.sum(ShopExpense.amount)).scalar()" in source
     assert "count = q.count()" in source
-    assert "start_date must be on or before end_date" in source
+    assert "_validate_date_range(start_date, end_date)" in source
     assert "offset(skip).limit(limit).all()" in source
 
 
@@ -98,3 +101,142 @@ def test_salary_route_locks_worker_and_checks_stable_month_reference_before_writ
     assert "UniversalTransaction.reference_id == reference" in source
     assert 'idempotency_key=f"salary-worker-{worker_id}-{month}"' in source
     assert "already_paid" in source
+
+def test_optional_idempotency_key_rejects_whitespace_only_values():
+    assert _normalize_optional_idempotency_key(None) is None
+    assert _normalize_optional_idempotency_key("  expense-key-12  ") == "expense-key-12"
+    with pytest.raises(HTTPException) as exc:
+        _normalize_optional_idempotency_key("        ")
+    assert exc.value.status_code == 422
+
+
+class _ExpenseQuery:
+    def __init__(self, db, model):
+        self.db = db
+        self.model = model
+        self.filters = []
+
+    def filter(self, *criteria):
+        self.filters.extend(criteria)
+        return self
+
+    def first(self):
+        constraints = {}
+        for expression in self.filters:
+            left = getattr(expression, "left", None)
+            right = getattr(expression, "right", None)
+            field_name = getattr(left, "name", None)
+            if field_name:
+                constraints[field_name] = getattr(right, "value", right)
+        for row in self.db.rows.get(self.model, []):
+            if all(getattr(row, key, None) == value for key, value in constraints.items()):
+                return row
+        return None
+
+
+class _ExpenseSession:
+    def __init__(self):
+        self.rows = {ShopExpense: [], __import__("models").UniversalTransaction: []}
+        self.pending = []
+        self.next_id = 1
+
+    def query(self, model):
+        return _ExpenseQuery(self, model)
+
+    def add(self, item):
+        self.pending.append(item)
+
+    def commit(self):
+        for item in self.pending:
+            if getattr(item, "id", None) is None:
+                item.id = self.next_id
+                self.next_id += 1
+            self.rows.setdefault(type(item), []).append(item)
+        self.pending.clear()
+
+    def refresh(self, item):
+        return None
+
+    def rollback(self):
+        self.pending.clear()
+
+
+def test_expense_handler_creates_one_source_and_journal_row_for_retry():
+    from models import UniversalTransaction
+    from retail_intelligence import add_expense
+
+    db = _ExpenseSession()
+    request = _expense_request()
+
+    created = add_expense(request, db, {"user_id": 7})
+    replay = add_expense(request, db, {"user_id": 7})
+
+    assert created["duplicate"] is False
+    assert replay["duplicate"] is True
+    assert replay["expense_id"] == created["expense_id"]
+    assert len(db.rows[ShopExpense]) == 1
+    assert len(db.rows[UniversalTransaction]) == 1
+
+
+def test_expense_handler_rejects_reused_key_for_different_amount():
+    from models import UniversalTransaction
+    from retail_intelligence import add_expense
+
+    db = _ExpenseSession()
+    add_expense(_expense_request(), db, {"user_id": 7})
+
+    with pytest.raises(HTTPException) as exc:
+        add_expense(_expense_request(amount="750"), db, {"user_id": 7})
+
+    assert exc.value.status_code == 409
+    assert len(db.rows[ShopExpense]) == 1
+    assert len(db.rows[UniversalTransaction]) == 1
+
+
+def test_financial_date_range_validation_rejects_reversed_ranges():
+    assert _validate_date_range(date(2026, 10, 1), date(2026, 10, 15)) is None
+    assert _validate_date_range(date(2026, 10, 15), None) is None
+    with pytest.raises(HTTPException) as exc:
+        _validate_date_range(date(2026, 10, 16), date(2026, 10, 15))
+    assert exc.value.status_code == 422
+
+
+def test_expense_category_is_validated_after_whitespace_cleanup():
+    assert _normalize_expense_category("  utilities  ") == "utilities"
+    with pytest.raises(HTTPException) as exc:
+        _normalize_expense_category("    ")
+    assert exc.value.status_code == 422
+
+
+def test_pnl_separates_revenue_recognition_from_payment_collections():
+    import inspect
+    from retail_intelligence import (
+        _PNL_REVENUE_CATEGORIES,
+        _PNL_COLLECTION_CATEGORIES,
+        get_profit_and_loss,
+    )
+
+    assert _PNL_REVENUE_CATEGORIES == ("SALE", "KHATA_CREDIT")
+    assert _PNL_COLLECTION_CATEGORIES == ("PAYMENT", "KHATA_REPAY")
+    assert set(_PNL_REVENUE_CATEGORIES).isdisjoint(_PNL_COLLECTION_CATEGORIES)
+
+    source = inspect.getsource(get_profit_and_loss)
+    assert "UniversalTransaction.category.in_(_PNL_REVENUE_CATEGORIES)" in source
+    assert "UniversalTransaction.category.in_(_PNL_COLLECTION_CATEGORIES)" in source
+    assert '"total_collections": float(collections)' in source
+    assert "net_profit = float(income) - float(expenses)" in source
+
+
+def test_invoice_sales_journal_uses_subtotal_not_paid_amount_or_gst():
+    import inspect
+    import re
+    from invoices_billing import create_invoice, sync_offline_invoice
+
+    for route in (create_invoice, sync_offline_invoice):
+        source = inspect.getsource(route)
+        sale_amounts = re.findall(
+            r'category="SALE",\s*amount=([^,\n]+)',
+            source,
+        )
+        assert sale_amounts, f"No SALE journal entry found in {route.__name__}"
+        assert all(value.strip() == "invoice.subtotal" for value in sale_amounts)

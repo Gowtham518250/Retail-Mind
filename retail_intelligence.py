@@ -30,12 +30,32 @@ from security import owner_only, worker_or_owner, sanitize_input
 
 router = APIRouter(tags=["Enterprise Intelligence"])
 
+# P&L distinguishes revenue recognition from settlement/collection cash flows.
+_PNL_REVENUE_CATEGORIES = ("SALE", "KHATA_CREDIT")
+_PNL_COLLECTION_CATEGORIES = ("PAYMENT", "KHATA_REPAY")
+
+def _normalize_optional_idempotency_key(raw: Optional[str]) -> Optional[str]:
+    if raw is None:
+        return None
+    key = raw.strip()
+    if len(key) < 8:
+        raise HTTPException(
+            status_code=422,
+            detail="idempotency_key must contain at least 8 non-space characters.",
+        )
+    return key
+
+def _validate_date_range(start_date: Optional[date], end_date: Optional[date]) -> None:
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+
+
 # =====================================
 # EXPENSE TRACKER
 # =====================================
 class ExpenseCreate(BaseModel):
     category: str = Field(..., min_length=2, max_length=50)
-    amount: Decimal = Field(..., gt=0)
+    amount: Decimal = Field(..., gt=0, le=Decimal("9999999999.99"), allow_inf_nan=False)
     description: Optional[str] = Field(None, max_length=200)
     expense_date: date
     payment_method: Optional[str] = Field(default="cash", max_length=50)
@@ -45,6 +65,13 @@ class ExpenseCreate(BaseModel):
 
 def _expense_money(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _normalize_expense_category(raw: str) -> str:
+    category = sanitize_input(raw, "category").strip()
+    if len(category) < 2:
+        raise HTTPException(status_code=422, detail="category must contain at least 2 non-space characters.")
+    return category
 
 
 def _expense_matches(
@@ -88,13 +115,10 @@ def add_expense(
 ):
     """Create an expense and its journal mirror as one retry-safe transaction."""
     shop_id = current_user["user_id"]
-    category = sanitize_input(data.category, "category").strip()
+    category = _normalize_expense_category(data.category)
     desc = sanitize_input(data.description or "", "description").strip() or None
     payment_method = sanitize_input(data.payment_method or "cash", "payment_method").strip() or "cash"
-    idempotency_key = (data.idempotency_key or "").strip() or None
-
-    if idempotency_key and len(idempotency_key) < 8:
-        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
+    idempotency_key = _normalize_optional_idempotency_key(data.idempotency_key)
 
     if idempotency_key:
         existing = db.query(ShopExpense).filter(
@@ -168,8 +192,7 @@ def list_expenses(
 ):
     """List expenses and return totals/counts for the exact filtered set."""
     shop_id = current_user["user_id"]
-    if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+    _validate_date_range(start_date, end_date)
 
     q = db.query(ShopExpense).filter(ShopExpense.shop_id == shop_id)
     if start_date:
@@ -198,6 +221,7 @@ def list_expenses(
                 "description": e.description,
                 "expense_date": e.expense_date,
                 "payment_method": e.payment_method,
+                "idempotency_key": e.idempotency_key,
             }
             for e in expenses
         ],
@@ -488,9 +512,7 @@ def add_reconciliation(
     difference = abs(expected - actual)
     status = "MATCHED" if difference < Decimal("1.00") else "DISCREPANCY"
     notes = sanitize_input(data.notes or "", "notes").strip() or None
-    idempotency_key = (data.idempotency_key or "").strip() or None
-    if idempotency_key is not None and len(idempotency_key) < 8:
-        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
+    idempotency_key = _normalize_optional_idempotency_key(data.idempotency_key)
 
     if idempotency_key:
         existing = db.query(BankReconciliation).filter(
@@ -549,8 +571,7 @@ def list_reconciliations(
 ):
     """View append-only shop-scoped reconciliation history."""
     shop_id = current_user["user_id"]
-    if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+    _validate_date_range(start_date, end_date)
 
     q = db.query(BankReconciliation).filter(BankReconciliation.shop_id == shop_id)
     if start_date:
@@ -602,14 +623,27 @@ def get_profit_and_loss(
         start_date = date.today().replace(day=1)  # Current month
     if not end_date:
         end_date = date.today()
+    _validate_date_range(start_date, end_date)
 
     start_dt = datetime.combine(start_date, datetime.min.time())
     end_dt = datetime.combine(end_date, datetime.max.time())
 
-    # Total income from universal journal
+    # Recognize sales/credit sales as revenue. Settlement rows such as PAYMENT
+    # and KHATA_REPAY are cash collections for revenue already recognized and
+    # must not be added to revenue a second time.
     income = db.query(func.sum(UniversalTransaction.amount)).filter(
         UniversalTransaction.shop_id == shop_id,
         UniversalTransaction.tx_type == "INCOME",
+        UniversalTransaction.category.in_(_PNL_REVENUE_CATEGORIES),
+        UniversalTransaction.tx_date >= start_dt,
+        UniversalTransaction.tx_date <= end_dt,
+    ).scalar() or 0
+
+    # Show settlement separately for cash-flow reconciliation, not profit.
+    collections = db.query(func.sum(UniversalTransaction.amount)).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.tx_type == "INCOME",
+        UniversalTransaction.category.in_(_PNL_COLLECTION_CATEGORIES),
         UniversalTransaction.tx_date >= start_dt,
         UniversalTransaction.tx_date <= end_dt,
     ).scalar() or 0
@@ -639,6 +673,8 @@ def get_profit_and_loss(
     return {
         "period": {"start": str(start_date), "end": str(end_date)},
         "total_income": float(income),
+        "total_revenue": float(income),
+        "total_collections": float(collections),
         "total_expenses": float(expenses),
         "net_profit": net_profit,
         "profit_margin_pct": round((net_profit / float(income) * 100) if income else 0, 2),
@@ -661,13 +697,14 @@ def get_all_transactions(
     category: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    skip: int = 0,
-    limit: int = Query(100, le=500),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
     """All Transactions view: every money movement (sales, expenses, khata, PO)"""
     shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    _validate_date_range(start_date, end_date)
     q = db.query(UniversalTransaction).filter(UniversalTransaction.shop_id == shop_id)
     if tx_type:
         q = q.filter(UniversalTransaction.tx_type == tx_type.upper())
