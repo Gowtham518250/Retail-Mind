@@ -2229,9 +2229,9 @@ def _verify_uncertain_translation(
         metric = str(parsed.get("metric") or "other").strip().lower()
         try:
             confidence = float(parsed.get("confidence", 0.0))
-            translation_confidence = float(
-                parsed.get("translation_confidence", parsed.get("confidence", 0.0))
-            )
+            # Classification confidence does not prove that names, dates, quantities,
+            # or negation survived translation. Missing fidelity is unknown.
+            translation_confidence = float(parsed.get("translation_confidence", 0.0))
         except (TypeError, ValueError):
             confidence = 0.0
             translation_confidence = 0.0
@@ -2363,8 +2363,9 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
                 translation_confidence = float(payload.get("translation_confidence"))
                 translation_confidence_explicit = True
             else:
-                # Backward-compatible response from models that implement the old schema.
-                translation_confidence = confidence
+                # Old schemas have not explicitly verified translation fidelity.
+                # The independent verifier below must supply that evidence.
+                translation_confidence = 0.0
         except (TypeError, ValueError):
             translation_confidence = 0.0
         if intent not in {"aggregate", "list", "comparison", "trend", "general"}:
@@ -2401,11 +2402,8 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
         intent = deterministic.get("intent", intent)
         metric = deterministic.get("metric", metric)
         confidence = float(deterministic.get("confidence", confidence))
-        # For legacy/plain-text providers there is no independent translation
-        # score. A well-formed deterministic English KPI still provides a safe
-        # compatibility confidence; never overwrite an explicit low score.
-        if not translation_confidence_explicit:
-            translation_confidence = max(translation_confidence, confidence)
+        # Deterministic English intent recognition cannot prove that the
+        # source-language meaning was preserved.
         source = "deterministic_fallback"
     else:
         source = "combined_translation_classification" if payload is not None else "deterministic_fallback"
@@ -2434,7 +2432,9 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
     needs_verification = (
         is_non_english
         and (
-            classification["confidence"] < 0.90
+            not translation_confidence_explicit
+            or payload is None
+            or classification["confidence"] < 0.90
             or classification["intent"] == "general"
             or classification["metric"] == "other"
             or (deterministic_confident and not classification_agrees)
