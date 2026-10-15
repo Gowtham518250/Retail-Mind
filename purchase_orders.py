@@ -142,7 +142,11 @@ def create_purchase_order(
 ):
     shop_id = resolve_shop_id(current_user)
     supplier_name = sanitize_input(data.supplier_name, "supplier_name").strip()
-    idempotency_key = (data.idempotency_key or "").strip() or None
+    idempotency_key = None
+    if data.idempotency_key is not None:
+        idempotency_key = data.idempotency_key.strip()
+        if len(idempotency_key) < 8:
+            raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
     requested_status = (data.status or "ORDERED").strip().upper()
     if requested_status in {"PENDING", "SENT"}:
         requested_status = "ORDERED"
