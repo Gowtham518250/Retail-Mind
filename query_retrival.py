@@ -18,6 +18,7 @@ import httpx
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from query_safety import validate_read_only_tenant_sql
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
@@ -216,21 +217,12 @@ def _repair_known_schema_aliases(sql: str) -> str:
 
 
 def _is_safe_read_only_tenant_select(sql: str) -> bool:
-    """Fail closed unless SQL is one tenant-scoped, read-only SELECT statement."""
-    candidate = re.sub(r";\s*$", "", str(sql or "").strip())
-    return bool(
-        candidate
-        and re.match(r"^(?:SELECT|WITH)\b", candidate, re.IGNORECASE)
-        and re.search(r"\bSELECT\b", candidate, re.IGNORECASE)
-        and ";" not in candidate
-        and not re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|MERGE|VACUUM|ANALYZE)\b", candidate, re.IGNORECASE)
-        and not re.search(r"\b(pg_sleep|pg_terminate_backend|pg_cancel_backend|dblink|lo_import|lo_export|pg_read_file|pg_write_file|nextval|setval|pg_advisory_lock)\s*\(", candidate, re.IGNORECASE)
-        and not re.search(r"\bFOR\s+(?:UPDATE|SHARE)\b", candidate, re.IGNORECASE)
-        and "--" not in candidate
-        and "/*" not in candidate
-        and "*/" not in candidate
-        and re.search(r":user_id\b", candidate, re.IGNORECASE)
-    )
+    """Fail closed unless an AST proves this is a read-only, tenant-scoped query."""
+    catalog = full_table_catalog if isinstance(full_table_catalog, dict) else {}
+    is_valid, reason = validate_read_only_tenant_sql(sql, catalog)
+    if not is_valid:
+        print(f"ASKQUERY SQL_VALIDATION outcome=rejected reason={reason}")
+    return is_valid
 
 
 def _sql_preserves_resolved_date_scope(sql: str, date_scope: dict | None) -> bool:
