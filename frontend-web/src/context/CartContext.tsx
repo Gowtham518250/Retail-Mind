@@ -131,6 +131,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     const stock = readStock(product);
+    if (stock === undefined) {
+      setCartMessage('The shop has not returned stock availability for this product. It cannot be added until availability is confirmed.');
+      setIsCartOpen(true);
+      return;
+    }
     if (stock === 0) {
       setCartMessage('This product is currently out of stock. It cannot be added to your cart.');
       setIsCartOpen(true);
@@ -145,7 +150,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     const requestedQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
-    const maximum = stock ?? UNKNOWN_STOCK_LIMIT;
+    const maximum = stock;
     const existing = cartItems.find((item) => item.product.id === id);
     const nextQuantity = Math.min((existing?.quantity || 0) + requestedQuantity, maximum);
     setCartItems((previous) => {
@@ -172,6 +177,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const item = cartItems.find((candidate) => candidate.product.id === productId);
     if (!item || !Number.isFinite(delta) || delta === 0) return;
     const stock = readStock(item.product);
+    if (stock === undefined) {
+      setCartMessage('Stock availability could not be confirmed. This item cannot be changed until the shop returns stock information.');
+      return;
+    }
     if (stock === 0) {
       setCartMessage('This product is out of stock. Remove it from the cart before checkout.');
       return;
