@@ -6,47 +6,38 @@ account, and explicit mutation opt-in are supplied. Production URLs are blocked.
 import os
 import time
 import uuid
-from urllib.parse import urlparse
 
 import pytest
+import requests
 
-STAGING_BASE_URL = os.environ.get("STAGING_BASE_URL", "").strip().rstrip("/")
+from tools.staging_config import validate_staging_base_url
+
+STAGING_BASE_URL = os.environ.get("STAGING_BASE_URL", "").strip()
 TEST_EMAIL = os.environ.get("STAGING_TEST_EMAIL", "").strip()
 TEST_PASSWORD = os.environ.get("STAGING_TEST_PASSWORD", "")
 ALLOW_MUTATING_E2E = os.environ.get("ALLOW_MUTATING_STAGING_E2E") == "1"
 
-# Fail closed for known production services. This list intentionally contains
-# the public production API and storefront hostnames.
-_BLOCKED_PRODUCTION_HOSTS = {
-    "retail-mind-vkbp.onrender.com",
-    "retail-mind-ikhi.onrender.com",
-    "retail-mind-web.onrender.com",
-}
-
 if not STAGING_BASE_URL:
-    pytest.skip("Set STAGING_BASE_URL to a dedicated staging deployment.", allow_module_level=True)
-
-_parsed_base_url = urlparse(STAGING_BASE_URL)
-if not _parsed_base_url.hostname:
-    raise RuntimeError("STAGING_BASE_URL must be an absolute URL with a hostname.")
-if _parsed_base_url.hostname.casefold() in _BLOCKED_PRODUCTION_HOSTS:
-    raise RuntimeError(
-        "Refusing to run mutating E2E tests against Retail Mind production. "
-        "Use a dedicated staging deployment and database."
+    pytest.skip(
+        "Set STAGING_BASE_URL to a dedicated staging deployment.",
+        allow_module_level=True,
     )
-if _parsed_base_url.scheme != "https" and _parsed_base_url.hostname not in {"localhost", "127.0.0.1"}:
-    raise RuntimeError("STAGING_BASE_URL must use HTTPS (HTTP is allowed only for localhost).")
+
+try:
+    BASE_URL = validate_staging_base_url(STAGING_BASE_URL)
+except ValueError as exc:
+    raise RuntimeError(str(exc)) from exc
 
 if not TEST_EMAIL or not TEST_PASSWORD:
-    pytest.skip("Set STAGING_TEST_EMAIL and STAGING_TEST_PASSWORD for the staging test account.", allow_module_level=True)
+    pytest.skip(
+        "Set STAGING_TEST_EMAIL and STAGING_TEST_PASSWORD for the staging test account.",
+        allow_module_level=True,
+    )
 if not ALLOW_MUTATING_E2E:
     pytest.skip(
         "These tests create invoices. Set ALLOW_MUTATING_STAGING_E2E=1 only for a disposable staging shop.",
         allow_module_level=True,
     )
-
-BASE_URL = STAGING_BASE_URL
-import requests
 
 # =============================================
 # FIXTURE: Login and obtain JWT token
