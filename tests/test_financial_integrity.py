@@ -227,7 +227,7 @@ def test_pnl_separates_revenue_recognition_from_payment_collections():
     assert "net_profit = float(income) - float(expenses)" in source
 
 
-def test_invoice_sales_journal_uses_full_invoice_total_not_paid_amount():
+def test_invoice_sales_journal_uses_subtotal_not_paid_amount_or_gst():
     import inspect
     import re
     from invoices_billing import create_invoice, sync_offline_invoice
@@ -239,4 +239,4 @@ def test_invoice_sales_journal_uses_full_invoice_total_not_paid_amount():
             source,
         )
         assert sale_amounts, f"No SALE journal entry found in {route.__name__}"
-        assert all(value.strip() == "invoice.total_amount" for value in sale_amounts)
+        assert all(value.strip() == "invoice.subtotal" for value in sale_amounts)
