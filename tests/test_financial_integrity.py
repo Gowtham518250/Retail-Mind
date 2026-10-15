@@ -90,7 +90,7 @@ def test_expense_total_uses_same_filters_as_expense_rows():
     source = inspect.getsource(list_expenses)
     assert "q.with_entities(func.sum(ShopExpense.amount)).scalar()" in source
     assert "count = q.count()" in source
-    assert "start_date must be on or before end_date" in source
+    assert "_validate_date_range(start_date, end_date)" in source
     assert "offset(skip).limit(limit).all()" in source
 
 
