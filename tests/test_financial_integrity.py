@@ -12,6 +12,7 @@ from retail_intelligence import (
     _expense_matches,
     _expense_money,
     _expense_response,
+    _normalize_expense_category,
     _normalize_payroll_month,
     _normalize_optional_idempotency_key,
     _validate_date_range,
@@ -197,4 +198,11 @@ def test_financial_date_range_validation_rejects_reversed_ranges():
     assert _validate_date_range(date(2026, 10, 15), None) is None
     with pytest.raises(HTTPException) as exc:
         _validate_date_range(date(2026, 10, 16), date(2026, 10, 15))
+    assert exc.value.status_code == 422
+
+
+def test_expense_category_is_validated_after_whitespace_cleanup():
+    assert _normalize_expense_category("  utilities  ") == "utilities"
+    with pytest.raises(HTTPException) as exc:
+        _normalize_expense_category("    ")
     assert exc.value.status_code == 422
