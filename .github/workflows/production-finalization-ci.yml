@@ -75,6 +75,7 @@ jobs:
           pytest -q tests/test_payment_contract.py
           pytest -q tests/test_ai_query_eval.py
           pytest -q tests/test_staging_safety.py
+          pytest -q tests/test_sync_resilience.py
           pytest -q tests/test_bank_reconciliation_contract.py
           pytest -q tests/test_financial_integrity.py
           pytest -q tests/test_product_image_contract.py
