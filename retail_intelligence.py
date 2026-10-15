@@ -51,7 +51,7 @@ def _validate_date_range(start_date: Optional[date], end_date: Optional[date]) -
 # =====================================
 class ExpenseCreate(BaseModel):
     category: str = Field(..., min_length=2, max_length=50)
-    amount: Decimal = Field(..., gt=0)
+    amount: Decimal = Field(..., gt=0, le=Decimal("9999999999.99"), allow_inf_nan=False)
     description: Optional[str] = Field(None, max_length=200)
     expense_date: date
     payment_method: Optional[str] = Field(default="cash", max_length=50)
@@ -61,6 +61,13 @@ class ExpenseCreate(BaseModel):
 
 def _expense_money(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _normalize_expense_category(raw: str) -> str:
+    category = sanitize_input(raw, "category").strip()
+    if len(category) < 2:
+        raise HTTPException(status_code=422, detail="category must contain at least 2 non-space characters.")
+    return category
 
 
 def _expense_matches(
@@ -104,7 +111,7 @@ def add_expense(
 ):
     """Create an expense and its journal mirror as one retry-safe transaction."""
     shop_id = current_user["user_id"]
-    category = sanitize_input(data.category, "category").strip()
+    category = _normalize_expense_category(data.category)
     desc = sanitize_input(data.description or "", "description").strip() or None
     payment_method = sanitize_input(data.payment_method or "cash", "payment_method").strip() or "cash"
     idempotency_key = _normalize_optional_idempotency_key(data.idempotency_key)
