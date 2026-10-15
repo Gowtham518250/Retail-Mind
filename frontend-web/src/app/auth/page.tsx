@@ -181,6 +181,11 @@ export default function AuthPage() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send OTP.');
+    if (data.success === false || data.email_sent === false) {
+      // Keep the response generic without telling strangers whether the address has an account.
+      setSuccess(data.message || 'If this email is eligible for password reset, a code may be sent. Check your inbox or try again later.');
+      return;
+    }
     setResetStep('verify');
     setResendCooldown(30);
     setSuccess('A 6-digit OTP has been sent to your registered email address.');
