@@ -35,10 +35,50 @@ router = APIRouter(tags=["Enterprise Intelligence"])
 # =====================================
 class ExpenseCreate(BaseModel):
     category: str = Field(..., min_length=2, max_length=50)
-    amount: float = Field(..., gt=0)
-    description: Optional[str] = None
+    amount: Decimal = Field(..., gt=0)
+    description: Optional[str] = Field(None, max_length=200)
     expense_date: date
-    payment_method: Optional[str] = "cash"
+    payment_method: Optional[str] = Field(default="cash", max_length=50)
+    # Optional for backwards compatibility. Clients should reuse this on retries.
+    idempotency_key: Optional[str] = Field(default=None, min_length=8, max_length=128)
+
+
+def _expense_money(value) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _expense_matches(
+    existing: ShopExpense,
+    data: ExpenseCreate,
+    category: str,
+    description: Optional[str],
+    payment_method: str,
+) -> bool:
+    """Only treat identical expense facts as an idempotent retry."""
+    try:
+        return (
+            (existing.category or "").strip().casefold() == category.casefold()
+            and _expense_money(existing.amount) == _expense_money(data.amount)
+            and existing.expense_date == data.expense_date
+            and (existing.description or None) == (description or None)
+            and (existing.payment_method or "cash").strip().casefold() == payment_method.casefold()
+        )
+    except (ArithmeticError, TypeError, ValueError):
+        return False
+
+
+def _expense_response(expense: ShopExpense, *, duplicate: bool = False) -> dict:
+    return {
+        "message": "Expense already recorded; canonical record returned." if duplicate else "Expense logged successfully.",
+        "expense_id": expense.id,
+        "amount": float(expense.amount or 0),
+        "category": expense.category,
+        "description": expense.description,
+        "expense_date": expense.expense_date.isoformat() if expense.expense_date else None,
+        "payment_method": expense.payment_method,
+        "duplicate": duplicate,
+    }
+
 
 @router.post("/expenses", tags=["Expense Tracker"])
 def add_expense(
@@ -46,37 +86,74 @@ def add_expense(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Log a shop expense (rent, salary, utilities, etc.)"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
-    category = sanitize_input(data.category, "category")
-    desc = sanitize_input(data.description or "", "description") or None
+    """Create an expense and its journal mirror as one retry-safe transaction."""
+    shop_id = current_user["user_id"]
+    category = sanitize_input(data.category, "category").strip()
+    desc = sanitize_input(data.description or "", "description").strip() or None
+    payment_method = sanitize_input(data.payment_method or "cash", "payment_method").strip() or "cash"
+    idempotency_key = (data.idempotency_key or "").strip() or None
+
+    if idempotency_key and len(idempotency_key) < 8:
+        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
+
+    if idempotency_key:
+        existing = db.query(ShopExpense).filter(
+            ShopExpense.shop_id == shop_id,
+            ShopExpense.idempotency_key == idempotency_key,
+        ).first()
+        if existing:
+            if _expense_matches(existing, data, category, desc, payment_method):
+                return _expense_response(existing, duplicate=True)
+            raise HTTPException(
+                status_code=409,
+                detail="Expense idempotency key was reused with different financial details.",
+            )
 
     expense = ShopExpense(
         shop_id=shop_id,
         category=category,
-        amount=data.amount,
+        amount=_expense_money(data.amount),
         description=desc,
         expense_date=data.expense_date,
-        payment_method=data.payment_method,
+        payment_method=payment_method,
+        idempotency_key=idempotency_key,
     )
     db.add(expense)
 
-    # Mirror to universal journal
+    # Keep the source expense and reporting journal in one DB transaction.
     tx = UniversalTransaction(
         shop_id=shop_id,
         tx_type="EXPENSE",
         category=category.upper(),
-        amount=data.amount,
+        amount=_expense_money(data.amount),
+        reference_id=(f"EXPENSE-{idempotency_key}" if idempotency_key else None),
         description=desc or f"{category} expense",
+        tx_date=datetime.combine(data.expense_date, datetime.min.time()),
     )
     db.add(tx)
     try:
         db.commit()
-    except Exception as e:
+        db.refresh(expense)
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to log expense: {str(e)}")
+        if idempotency_key:
+            existing = db.query(ShopExpense).filter(
+                ShopExpense.shop_id == shop_id,
+                ShopExpense.idempotency_key == idempotency_key,
+            ).first()
+            if existing and _expense_matches(existing, data, category, desc, payment_method):
+                return _expense_response(existing, duplicate=True)
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Expense idempotency key was reused with different financial details.",
+                )
+        raise HTTPException(status_code=409, detail="Expense write conflict; refresh records before retrying.")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to log expense.")
 
-    return {"message": "Expense logged successfully.", "amount": data.amount, "category": category}
+    return _expense_response(expense)
 
 
 @router.get("/expenses", tags=["Expense Tracker"])
@@ -84,26 +161,35 @@ def list_expenses(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     category: Optional[str] = None,
-    skip: int = 0,
-    limit: int = Query(100, le=500),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """List shop expenses with optional date/category filters"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    """List expenses and return totals/counts for the exact filtered set."""
+    shop_id = current_user["user_id"]
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+
     q = db.query(ShopExpense).filter(ShopExpense.shop_id == shop_id)
     if start_date:
         q = q.filter(ShopExpense.expense_date >= start_date)
     if end_date:
         q = q.filter(ShopExpense.expense_date <= end_date)
     if category:
-        q = q.filter(ShopExpense.category.ilike(f"%{category}%"))
+        safe_category = sanitize_input(category, "category").strip()
+        q = q.filter(ShopExpense.category.ilike(f"%{safe_category}%"))
 
-    expenses = q.order_by(ShopExpense.expense_date.desc()).offset(skip).limit(limit).all()
-    total = db.query(func.sum(ShopExpense.amount)).filter(ShopExpense.shop_id == shop_id).scalar() or 0
+    # Aggregate before pagination. Previously this total ignored date/category filters.
+    total = q.with_entities(func.sum(ShopExpense.amount)).scalar() or 0
+    count = q.count()
+    expenses = q.order_by(ShopExpense.expense_date.desc(), ShopExpense.id.desc()).offset(skip).limit(limit).all()
 
     return {
         "total_expenses": float(total),
+        "total_count": count,
+        "skip": skip,
+        "limit": limit,
         "expenses": [
             {
                 "id": e.id,
