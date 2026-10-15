@@ -206,3 +206,37 @@ def test_expense_category_is_validated_after_whitespace_cleanup():
     with pytest.raises(HTTPException) as exc:
         _normalize_expense_category("    ")
     assert exc.value.status_code == 422
+
+
+def test_pnl_separates_revenue_recognition_from_payment_collections():
+    import inspect
+    from retail_intelligence import (
+        _PNL_REVENUE_CATEGORIES,
+        _PNL_COLLECTION_CATEGORIES,
+        get_profit_and_loss,
+    )
+
+    assert _PNL_REVENUE_CATEGORIES == ("SALE", "KHATA_CREDIT")
+    assert _PNL_COLLECTION_CATEGORIES == ("PAYMENT", "KHATA_REPAY")
+    assert set(_PNL_REVENUE_CATEGORIES).isdisjoint(_PNL_COLLECTION_CATEGORIES)
+
+    source = inspect.getsource(get_profit_and_loss)
+    assert "UniversalTransaction.category.in_(_PNL_REVENUE_CATEGORIES)" in source
+    assert "UniversalTransaction.category.in_(_PNL_COLLECTION_CATEGORIES)" in source
+    assert '"total_collections": float(collections)' in source
+    assert "net_profit = float(income) - float(expenses)" in source
+
+
+def test_invoice_sales_journal_uses_full_invoice_total_not_paid_amount():
+    import inspect
+    import re
+    from invoices_billing import create_invoice, sync_offline_invoice
+
+    for route in (create_invoice, sync_offline_invoice):
+        source = inspect.getsource(route)
+        sale_amounts = re.findall(
+            r'category="SALE",\\s*amount=([^,\\n]+)',
+            source,
+        )
+        assert sale_amounts, f"No SALE journal entry found in {route.__name__}"
+        assert all(value.strip() == "invoice.total_amount" for value in sale_amounts)
