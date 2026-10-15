@@ -44,7 +44,7 @@ jobs:
           pip install pytest
       - name: Compile production modules
         run: |
-          python -m py_compile             app.py             models.py             durable_sync.py             query_retrival.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py
+          python -m py_compile             app.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py
       - name: Validate Alembic migration graph
         run: |
           heads="$(alembic heads)"
@@ -74,6 +74,9 @@ jobs:
           pytest -q tests/test_product_image_contract.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
           pytest -q tests/test_query_retrieval_optimization.py
+          pytest -q tests/test_query_safety.py
+          pytest -q tests/test_query_answering.py
+          pytest -q tests/test_worker_payroll_query_contract.py
 
   customer-web:
     runs-on: ubuntu-latest
