@@ -391,3 +391,66 @@ def test_translation_confidence_allows_clear_english_aggregate_to_use_fast_path(
         "Show today's sales by customer", scope, classification, translation_confidence=0.99
     )
 
+
+
+
+def test_last_14_days_resolves_to_an_inclusive_rolling_window(monkeypatch):
+    import query_retrival
+
+    today = date(2026, 10, 15)
+    monkeypatch.setattr(
+        query_retrival,
+        "_business_dates",
+        lambda: (today, date(2026, 10, 14)),
+    )
+
+    scope = query_retrival._resolve_explicit_date_scope(
+        "Show sales over the last 14 days"
+    )
+    assert scope == {
+        "kind": "range",
+        "start_date": date(2026, 10, 2),
+        "end_date": today,
+        "label": "last 14 days",
+    }
+
+
+def test_last_two_months_resolves_as_rolling_calendar_months(monkeypatch):
+    import query_retrival
+
+    today = date(2026, 10, 31)
+    monkeypatch.setattr(
+        query_retrival,
+        "_business_dates",
+        lambda: (today, date(2026, 10, 30)),
+    )
+
+    scope = query_retrival._resolve_explicit_date_scope(
+        "What were my sales in the last 2 months?"
+    )
+    assert scope["start_date"] == date(2026, 8, 31)
+    assert scope["end_date"] == today
+    assert scope["label"] == "last 2 months"
+
+
+def test_unknown_quarter_scope_requests_clarification_instead_of_guessing():
+    import query_retrival
+
+    scope = {"kind": "unspecified", "start_date": None, "end_date": None}
+    assert query_retrival._has_unresolved_date_intent(
+        "How much were sales last quarter?",
+        scope,
+    )
+
+
+def test_before_a_single_date_is_not_silently_treated_as_that_exact_date():
+    import query_retrival
+
+    scope = query_retrival._resolve_explicit_date_scope(
+        "Show sales before 2026-10-01"
+    )
+    assert scope["kind"] == "unsupported"
+    assert query_retrival._has_unresolved_date_intent(
+        "Show sales before 2026-10-01",
+        scope,
+    )
