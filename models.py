@@ -1021,17 +1021,29 @@ class PasswordReset(Base):
 # ==================== EXPENSE TRACKING ====================
 
 class ShopExpense(Base):
-    """Track shop daily expenses (rent, staff, utilities, supplies)"""
+    """Track shop expenses with optional retry-safe write identity."""
     __tablename__ = "shop_expenses"
-    
+
     id = Column(Integer, primary_key=True)
-    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
-    category = Column(String(50), nullable=False)  # rent, utilities, salary, supplies, etc
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    category = Column(String(50), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     description = Column(String(200))
-    expense_date = Column(Date, nullable=False)
-    payment_method = Column(String(50))  # cash, bank_transfer, etc
+    expense_date = Column(Date, nullable=False, index=True)
+    payment_method = Column(String(50))
+    idempotency_key = Column(String(128), nullable=True)
     branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    __table_args__ = (
+        Index(
+            "uq_shop_expense_shop_idempotency",
+            "shop_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
 # ==================== ONLINE STORE & SHOP PROFILE ====================
 
