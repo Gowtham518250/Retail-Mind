@@ -81,3 +81,16 @@ def test_stock_endpoint_checks_tenant_product_before_replay_and_saves_key():
     assert "except IntegrityError:" in source
     assert "status_code=409" in source
     assert "background_tasks.add_task(" in source
+
+
+def test_batch_endpoint_persists_idempotency_and_scopes_every_product_to_shop():
+    from inventory_sync_service import deduct_stock_batch
+
+    source = getsource(deduct_stock_batch)
+    assert "StockMovement.idempotency_key == item.idempotency_key" in source
+    assert "idempotency_key=item.idempotency_key" in source
+    assert "Product.user_id == user_id" in source
+    assert "func.upper(StockMovement.reason) == item.reason" in source
+    assert "except IntegrityError:" in source
+    assert 'status_code=409' in source
+    assert "background_tasks.add_task(" in source
