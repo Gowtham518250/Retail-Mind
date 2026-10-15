@@ -37,6 +37,74 @@ router = APIRouter(prefix="/api/invoices", tags=["invoices & billing"])
 logger = logging.getLogger(__name__)
 
 
+def _invoice_replay_matches(existing: Invoice, data: "InvoiceSyncCreate", invoice_number: str) -> bool:
+    """Treat an offline retry as idempotent only when immutable sale facts match.
+
+    Paid state is intentionally excluded because a later payment may legitimately
+    update an invoice after the original offline sale has synced.
+    """
+    def _money(value) -> Decimal:
+        return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    def _name(value) -> str:
+        return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+    try:
+        if not data.invoice_date:
+            return False
+        if str(existing.invoice_number or "").strip() != invoice_number:
+            return False
+        if _money(existing.total_amount) != _money(data.total_amount):
+            return False
+        if _money(existing.tax) != _money(data.tax):
+            return False
+        parsed_date = datetime.strptime(data.invoice_date, "%Y-%m-%d").date()
+        if existing.invoice_date != parsed_date:
+            return False
+        if data.customer_phone and _name(existing.customer_phone) != _name(data.customer_phone):
+            return False
+        if data.customer_name and _name(existing.customer_name) != _name(data.customer_name):
+            return False
+
+        if data.line_items is None:
+            return True
+        stored_lines = list(getattr(existing, "line_items", []) or [])
+        if len(stored_lines) != len(data.line_items):
+            return False
+        incoming = sorted(
+            (_name(line.product_name),
+             Decimal(str(line.quantity)).quantize(Decimal("0.001")),
+             _money(line.unit_price))
+            for line in data.line_items
+        )
+        persisted = sorted(
+            (_name(line.description),
+             Decimal(str(line.quantity)).quantize(Decimal("0.001")),
+             _money(line.unit_price))
+            for line in stored_lines
+        )
+        return incoming == persisted
+    except (ArithmeticError, TypeError, ValueError):
+        return False
+
+
+def _already_synced_invoice(existing: Invoice) -> dict:
+    return {
+        "message": "Invoice already synced; canonical server record returned.",
+        "invoice_id": existing.id,
+        "invoice_number": existing.invoice_number,
+        "offline_id": existing.offline_id,
+        "status": "ALREADY_SYNCED",
+        "total_amount": float(existing.total_amount or 0),
+        "paid_amount": float(existing.paid_amount or 0),
+        "payment_status": (
+            existing.payment_status.value
+            if hasattr(existing.payment_status, "value")
+            else str(existing.payment_status or "")
+        ),
+    }
+
+
 def _parse_client_timestamp(raw: Optional[str]) -> Optional[datetime]:
     """Normalize an ISO-8601 phone timestamp to naive UTC for DateTime columns."""
     if not raw:
@@ -607,7 +675,12 @@ def sync_offline_invoice(
             Invoice.offline_id == data.offline_id
         ).first()
         if existing:
-            return {"message": "Invoice already synced (offline_id).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "offline_id": data.offline_id}
+            if _invoice_replay_matches(existing, data, invoice_number):
+                return _already_synced_invoice(existing)
+            raise HTTPException(
+                status_code=409,
+                detail="offline_id already belongs to an invoice with different immutable sale details.",
+            )
     
     existing = db.query(Invoice).filter(
         Invoice.user_id == shop_id,
@@ -615,7 +688,12 @@ def sync_offline_invoice(
     ).first()
 
     if existing:
-        return {"message": "Invoice already synced (invoice_number).", "invoice_id": existing.id, "status": "ALREADY_SYNCED", "invoice_number": invoice_number}
+        if _invoice_replay_matches(existing, data, invoice_number):
+            return _already_synced_invoice(existing)
+        raise HTTPException(
+            status_code=409,
+            detail="invoice_number already belongs to a different invoice; refusing to hide a financial conflict.",
+        )
 
     customer_id = None
     if data.customer_phone:
@@ -1033,13 +1111,12 @@ def sync_offline_invoice(
                 Invoice.invoice_number == invoice_number,
             ).first()
         if existing is not None:
-            return {
-                "message": "Invoice already synced",
-                "invoice_id": existing.id,
-                "invoice_number": existing.invoice_number,
-                "offline_id": existing.offline_id,
-                "status": "ALREADY_SYNCED",
-            }
+            if _invoice_replay_matches(existing, data, invoice_number):
+                return _already_synced_invoice(existing)
+            raise HTTPException(
+                status_code=409,
+                detail="Existing invoice conflicts with this offline retry payload.",
+            )
         raise HTTPException(status_code=409, detail="Invoice idempotency conflict")
     except Exception as e:
         db.rollback()
