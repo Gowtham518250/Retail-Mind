@@ -11,12 +11,14 @@ Covers:
 """
 
 import json
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from datetime import date, datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, and_
 
 from db import get_db
@@ -285,9 +287,56 @@ def pay_worker_salary(
 # =====================================
 class ReconCreate(BaseModel):
     recon_date: date
-    expected_upi_amount: float = Field(0, ge=0)
-    actual_bank_deposit: float = Field(0, ge=0)
-    notes: Optional[str] = None
+    expected_upi_amount: Decimal = Field(Decimal("0"), ge=0)
+    actual_bank_deposit: Decimal = Field(Decimal("0"), ge=0)
+    notes: Optional[str] = Field(None, max_length=2000)
+    # Client must reuse this value for a retry of the same submission.
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
+
+
+def _recon_money(value) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _reconciliation_matches(existing: BankReconciliation, data: ReconCreate, normalized_notes: Optional[str]) -> bool:
+    """Only acknowledge retries whose immutable reconciliation facts match."""
+    try:
+        return (
+            existing.recon_date == data.recon_date
+            and _recon_money(existing.expected_upi_amount) == _recon_money(data.expected_upi_amount)
+            and _recon_money(existing.actual_bank_deposit) == _recon_money(data.actual_bank_deposit)
+            and (existing.notes or None) == (normalized_notes or None)
+        )
+    except (ArithmeticError, TypeError, ValueError):
+        return False
+
+
+def _reconciliation_response(record: BankReconciliation, *, duplicate: bool = False) -> dict:
+    expected = _recon_money(record.expected_upi_amount)
+    actual = _recon_money(record.actual_bank_deposit)
+    difference = abs(expected - actual)
+    status = getattr(record.status, "value", record.status)
+    return {
+        "message": "Reconciliation already recorded; canonical record returned." if duplicate else "Reconciliation recorded.",
+        "reconciliation_id": record.id,
+        "date": record.recon_date.isoformat() if record.recon_date else None,
+        "expected_upi_amount": float(expected),
+        "actual_bank_deposit": float(actual),
+        # Keep old field names for consumers that display the history response.
+        "expected_upi": float(expected),
+        "actual_bank": float(actual),
+        "status": str(status),
+        "difference": float(difference),
+        "notes": record.notes,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "duplicate": duplicate,
+        "alert": (
+            f"Discrepancy of ₹{difference:.2f} detected!"
+            if str(status) == "DISCREPANCY"
+            else "Accounts balanced."
+        ),
+    }
+
 
 @router.post("/bank-recon", tags=["Bank Reconciliation"])
 def add_reconciliation(
@@ -295,34 +344,63 @@ def add_reconciliation(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Record daily UPI vs bank deposit reconciliation"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    """Append an auditable UPI-versus-bank comparison; retries are idempotent."""
+    shop_id = current_user["user_id"]
+    expected = _recon_money(data.expected_upi_amount)
+    actual = _recon_money(data.actual_bank_deposit)
+    difference = abs(expected - actual)
+    status = "MATCHED" if difference < Decimal("1.00") else "DISCREPANCY"
+    notes = sanitize_input(data.notes or "", "notes").strip() or None
+    idempotency_key = (data.idempotency_key or "").strip() or None
+    if idempotency_key is not None and len(idempotency_key) < 8:
+        raise HTTPException(status_code=422, detail="idempotency_key must contain at least 8 non-space characters.")
 
-    diff = abs(data.expected_upi_amount - data.actual_bank_deposit)
-    status = "MATCHED" if diff < 1.0 else "DISCREPANCY"
+    if idempotency_key:
+        existing = db.query(BankReconciliation).filter(
+            BankReconciliation.shop_id == shop_id,
+            BankReconciliation.idempotency_key == idempotency_key,
+        ).first()
+        if existing:
+            if _reconciliation_matches(existing, data, notes):
+                return _reconciliation_response(existing, duplicate=True)
+            raise HTTPException(
+                status_code=409,
+                detail="Reconciliation idempotency key was reused with different financial details.",
+            )
 
-    recon = BankReconciliation(
+    record = BankReconciliation(
         shop_id=shop_id,
         recon_date=data.recon_date,
-        expected_upi_amount=data.expected_upi_amount,
-        actual_bank_deposit=data.actual_bank_deposit,
+        expected_upi_amount=expected,
+        actual_bank_deposit=actual,
         status=status,
-        notes=data.notes,
+        notes=notes,
+        idempotency_key=idempotency_key,
     )
-    db.add(recon)
+    db.add(record)
     try:
         db.commit()
-    except Exception as e:
+        db.refresh(record)
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to record reconciliation: {str(e)}")
+        if idempotency_key:
+            existing = db.query(BankReconciliation).filter(
+                BankReconciliation.shop_id == shop_id,
+                BankReconciliation.idempotency_key == idempotency_key,
+            ).first()
+            if existing and _reconciliation_matches(existing, data, notes):
+                return _reconciliation_response(existing, duplicate=True)
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Reconciliation idempotency key was reused with different financial details.",
+                )
+        raise HTTPException(status_code=409, detail="Reconciliation write conflict; refresh history before retrying.")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to record reconciliation.")
 
-    return {
-        "message": "Reconciliation recorded.",
-        "status": status,
-        "difference": diff,
-        "date": data.recon_date,
-        "alert": f"⚠️ Discrepancy of ₹{diff:.2f} detected!" if status == "DISCREPANCY" else "✅ Accounts balanced!",
-    }
+    return _reconciliation_response(record)
 
 
 @router.get("/bank-recon", tags=["Bank Reconciliation"])
@@ -332,27 +410,38 @@ def list_reconciliations(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """View bank reconciliation history"""
-    shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    """View append-only shop-scoped reconciliation history."""
+    shop_id = current_user["user_id"]
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+
     q = db.query(BankReconciliation).filter(BankReconciliation.shop_id == shop_id)
     if start_date:
         q = q.filter(BankReconciliation.recon_date >= start_date)
     if end_date:
         q = q.filter(BankReconciliation.recon_date <= end_date)
-    records = q.order_by(BankReconciliation.recon_date.desc()).all()
+    records = q.order_by(
+        BankReconciliation.recon_date.desc(),
+        BankReconciliation.created_at.desc(),
+        BankReconciliation.id.desc(),
+    ).all()
 
     return {
         "records": [
             {
-                "id": r.id,
-                "date": r.recon_date,
-                "expected_upi": float(r.expected_upi_amount),
-                "actual_bank": float(r.actual_bank_deposit),
-                "status": r.status,
-                "difference": abs(float(r.expected_upi_amount) - float(r.actual_bank_deposit)),
-                "notes": r.notes,
+                "id": record.id,
+                "reconciliation_id": record.id,
+                "date": record.recon_date.isoformat(),
+                "expected_upi": float(_recon_money(record.expected_upi_amount)),
+                "expected_upi_amount": float(_recon_money(record.expected_upi_amount)),
+                "actual_bank": float(_recon_money(record.actual_bank_deposit)),
+                "actual_bank_deposit": float(_recon_money(record.actual_bank_deposit)),
+                "status": str(getattr(record.status, "value", record.status)),
+                "difference": float(abs(_recon_money(record.expected_upi_amount) - _recon_money(record.actual_bank_deposit))),
+                "notes": record.notes,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
             }
-            for r in records
+            for record in records
         ]
     }
 
