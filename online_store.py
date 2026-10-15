@@ -19,6 +19,7 @@ import re
 from urllib.parse import quote
 from typing import Optional, List, Literal
 from datetime import datetime, timezone, timedelta, date
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from uuid import uuid4
 
@@ -27,7 +28,7 @@ from datetime_utils import is_after_utc, is_before_utc
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, cast, String
 from sqlalchemy.exc import IntegrityError
 
 from db import get_db
@@ -429,7 +430,7 @@ def register_customer(
                 event_type="WELCOME"
             )
     except Exception as e:
-        logger.error(f"Failed to send welcome email to customer: {e}")
+        logger.warning("Failed to send welcome email (%s)", type(e).__name__)
 
     token = create_access_token({"sub": str(customer.id), "role": ROLE_CUSTOMER})
     return {
@@ -1392,7 +1393,7 @@ def place_order(
         db.commit()
         db.refresh(order)
     except Exception as e:
-        logger.error(f"Failed to save online order (shop_id={data.shop_id}, customer_id={customer_id}): {e}")
+        logger.error("Failed to save online order for shop_id=%s customer_id=%s (%s)", data.shop_id, customer_id, type(e).__name__)
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place order right now. Please try again later.")
 
@@ -1452,6 +1453,26 @@ def place_order(
     }
 
 
+def _guest_phone_matches_verified(provided_phone: str, verified_phone: str) -> bool:
+    """Compare a guest-entered phone with a verified Firebase E.164 phone."""
+    provided = re.sub(r"\D", "", str(provided_phone or ""))
+    verified = re.sub(r"\D", "", str(verified_phone or ""))
+    if not provided or not verified:
+        return False
+    if provided == verified:
+        return True
+
+    # Accept India's common local 10-digit form only when the verified number
+    # is explicitly an Indian +91 number. Do not use substring matching.
+    local = provided[1:] if len(provided) == 11 and provided.startswith("0") else provided
+    return (
+        len(local) == 10
+        and verified.startswith("91")
+        and len(verified) == 12
+        and verified.endswith(local)
+    )
+
+
 @router.post("/guest-order")
 def place_guest_order(
     data: GuestOrder,
@@ -1459,35 +1480,52 @@ def place_guest_order(
     _rl: None = Depends(check_rate_limit),
 ):
     """Place an online order as a guest (no auth required)"""
-    logger.info(f"Received guest order: shop_id={data.shop_id}, customer={data.customer_name}, phone={data.phone}, items_count={len(data.items)}")
+    logger.info("Received guest order: shop_id=%s items_count=%s", data.shop_id, len(data.items))
     
-    # 1. Verify Firebase Phone Auth Token (if provided)
+    # If the client supplies a Firebase credential, it must be valid and
+    # belong to the submitted phone. Never fall back to an unverified identity
+    # after a token verification error.
     if data.firebase_id_token:
         try:
             import firebase_admin
             if not firebase_admin._apps:
-                raise HTTPException(status_code=503, detail="Firebase not configured. Please contact support.")
-                
+                raise HTTPException(
+                    status_code=503,
+                    detail="Phone verification is temporarily unavailable. Please retry later.",
+                )
+
             from firebase_admin import auth
             decoded_token = auth.verify_id_token(data.firebase_id_token)
-            phone_number = decoded_token.get('phone_number')
-            
-            if not phone_number:
-                raise HTTPException(status_code=400, detail="Invalid token: No phone number associated with this login.")
-                
-            # Ensure the verified phone matches the one provided (stripping non-digits for comparison if needed, or exact match)
-            # Firebase phone numbers include country code (e.g., +919876543210).
-            # We check if the provided phone is a substring of the verified phone to allow local format (e.g., 9876543210)
-            if data.phone not in phone_number:
-                logger.warning(f"Verified phone number does not match provided phone number: {data.phone} vs {phone_number}")
-                
         except HTTPException:
-            raise  # Re-raise — a rejected token must not silently fall through
-        except Exception as e:
-            logger.error(f"Firebase token verification failed: {e}")
-            logger.warning("Falling back to unverified phone number for guest order.")
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Guest-order phone token validation failed for shop_id=%s (%s)",
+                data.shop_id,
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="Phone verification token is invalid or expired. Please verify your phone and retry.",
+            ) from None
+
+        verified_phone = decoded_token.get("phone_number")
+        if not verified_phone:
+            raise HTTPException(
+                status_code=401,
+                detail="The verified account does not contain a phone number.",
+            )
+        if not _guest_phone_matches_verified(data.phone, verified_phone):
+            logger.warning(
+                "Verified phone mismatch during guest checkout for shop_id=%s",
+                data.shop_id,
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="The checkout phone number does not match the verified phone.",
+            )
     else:
-        logger.info(f"No Firebase token provided for guest checkout, proceeding with unverified phone {data.phone}")
+        logger.info("Guest checkout has no Firebase phone token: shop_id=%s", data.shop_id)
 
     idempotency_key = (data.idempotency_key or "").strip() or None
     if idempotency_key:
@@ -1690,7 +1728,7 @@ def place_guest_order(
             detail="This order may already have been submitted. Refresh your order history before retrying.",
         )
     except Exception as e:
-        logger.error(f"Failed to save guest order (shop_id={data.shop_id}, phone={data.phone}): {e}")
+        logger.error("Failed to save guest order for shop_id=%s (%s)", data.shop_id, type(e).__name__)
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to place your order right now. Please try again later.")
     
@@ -2305,6 +2343,70 @@ def match_online_order_payment_from_notification(
         "payment_reference": order.payment_reference,
         "invoice_number": linked_invoice.invoice_number if linked_invoice else None,
         "invoice_payment_delegated_to_invoice_sync": invoice_payment_delegated,
+    }
+
+
+@router.get("/owner/orders/analytics")
+def get_owner_order_analytics(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    """Return unpaginated, shop-scoped order counts and order-value aggregates.
+
+    This endpoint is intentionally separate from the paginated order list so
+    dashboard totals remain correct for shops with more than one page of orders.
+    "Revenue" values preserve the existing client contract; they represent gross
+    non-rejected/non-cancelled order value, not verified cash collection.
+    """
+    shop_id = int(current_user["user_id"])
+    base = db.query(OnlineOrder).filter(OnlineOrder.shop_id == shop_id)
+    normalized_status = func.upper(func.coalesce(cast(OnlineOrder.order_status, String), ""))
+    normalized_payment_status = func.upper(func.coalesce(OnlineOrder.payment_status, ""))
+
+    # Store timestamps are persisted as UTC-naive values. Use India-local
+    # calendar boundaries to keep "today" stable for the target retail market.
+    local_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    local_end = local_start + timedelta(days=1)
+    utc_start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end.astimezone(timezone.utc).replace(tzinfo=None)
+
+    excluded_statuses = ("REJECTED", "CANCELLED", "RETURNED")
+    eligible = base.filter(normalized_status.notin_(excluded_statuses))
+    today_eligible = eligible.filter(
+        OnlineOrder.created_at >= utc_start,
+        OnlineOrder.created_at < utc_end,
+    )
+    sum_total = func.coalesce(func.sum(OnlineOrder.total_amount), 0)
+
+    total_count = int(base.count() or 0)
+    pending_count = int(base.filter(normalized_status == "PENDING").count() or 0)
+    rejected_count = int(base.filter(normalized_status == "REJECTED").count() or 0)
+    cancelled_count = int(
+        base.filter(normalized_status.in_(("CANCELLED", "RETURNED"))).count() or 0
+    )
+    total_paid_count = int(
+        base.filter(normalized_payment_status == "PAID").count() or 0
+    )
+    today_count = int(today_eligible.count() or 0)
+    today_paid_count = int(
+        today_eligible.filter(normalized_payment_status == "PAID").count() or 0
+    )
+    total_revenue = float(eligible.with_entities(sum_total).scalar() or 0)
+    today_revenue = float(today_eligible.with_entities(sum_total).scalar() or 0)
+
+    return {
+        "pending": pending_count,
+        "todayCount": today_count,
+        "todayRevenue": round(today_revenue, 2),
+        "paidCount": today_paid_count,
+        "todayPaidCount": today_paid_count,
+        "totalCount": total_count,
+        "totalRevenue": round(total_revenue, 2),
+        "totalPaidCount": total_paid_count,
+        "rejectedCount": rejected_count,
+        "cancelledCount": cancelled_count,
+        "available": True,
     }
 
 

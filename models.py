@@ -363,15 +363,26 @@ class Product(Base):
 
 class StockMovement(Base):
     __tablename__ = "stock_movements"
-    
+    __table_args__ = (
+        Index(
+            "uq_stock_movement_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
+
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     movement_type = Column(Enum(StockMovementType, name="stock_movement_type"), nullable=False)
     quantity = Column(Numeric(12, 3), nullable=False)
     reason = Column(String(200))  # e.g., "Purchase", "Sale", "Damage", "Inventory Adjustment"
     reference_id = Column(String(100))  # e.g., invoice_id, purchase_order_id
+    # Nullable for legacy movements; new API writes always provide a stable request key.
+    idempotency_key = Column(String(128), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
-    
+
     # Relationship
     product = relationship("Product", back_populates="stock_movements")
 

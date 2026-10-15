@@ -6,6 +6,7 @@ Frontend can cache but never modify stock without backend confirmation.
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, func, desc
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -28,12 +29,12 @@ logger = logging.getLogger(__name__)
 # ==================== PYDANTIC MODELS ====================
 
 class StockDeductionRequest(BaseModel):
-    """Request to deduct stock with idempotency"""
+    """Request to deduct stock with idempotency."""
     product_id: int
-    quantity: Decimal = Field(..., gt=0)
-    reason: str = "SALE"
-    reference_id: str  # invoice_number or sale_id
-    idempotency_key: str  # Prevent duplicate deductions
+    quantity: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    reason: str = Field(default="SALE", min_length=1, max_length=200)
+    reference_id: str = Field(..., min_length=1, max_length=100)
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
 
 
 class StockDeductionResponse(BaseModel):
@@ -66,87 +67,115 @@ class InventoryReconciliationResponse(BaseModel):
 
 # ==================== INVENTORY SYNC ENDPOINTS ====================
 
+def _stock_movement_matches_request(existing_movement, request: StockDeductionRequest) -> bool:
+    """Return whether a persisted stock movement represents this exact request."""
+    try:
+        existing_quantity = Decimal(str(existing_movement.quantity)).quantize(Decimal("0.001"))
+        requested_quantity = Decimal(str(request.quantity)).quantize(Decimal("0.001"))
+    except Exception:
+        return False
+
+    return (
+        int(existing_movement.product_id) == int(request.product_id)
+        and str(existing_movement.reference_id or "").strip() == str(request.reference_id or "").strip()
+        and str(existing_movement.reason or "").strip().casefold() == str(request.reason or "").strip().casefold()
+        and existing_quantity == requested_quantity
+        and str(getattr(existing_movement.movement_type, "value", existing_movement.movement_type)).upper() == "OUT"
+    )
+
+
+def _duplicate_stock_response(product, existing_movement) -> StockDeductionResponse:
+    # The original before-stock level cannot be reconstructed from current stock
+    # alone after later movements; do not fabricate it by adding this request's
+    # quantity. The duplicate response reports the current canonical balance.
+    current_stock = product.current_stock
+    return StockDeductionResponse(
+        success=True,
+        product_id=product.id,
+        previous_stock=current_stock,
+        new_stock=current_stock,
+        message="Already processed (idempotent)",
+        sync_timestamp=existing_movement.created_at or datetime.utcnow(),
+    )
+
+
 @router.post("/deduct-stock", response_model=StockDeductionResponse)
 def deduct_stock_with_idempotency(
     request: StockDeductionRequest,
     background_tasks: BackgroundTasks,
     user_id: int = Depends(check_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    Deduct stock with idempotency protection.
-    This is the SINGLE SOURCE OF TRUTH for stock deduction.
-    Frontend MUST call this for every stock change.
-    """
+    """Deduct stock once, using a durable idempotency key and legacy replay guard."""
+    product = (
+        db.query(Product)
+        .filter(Product.id == request.product_id, Product.user_id == user_id)
+        .with_for_update()
+        .first()
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    request.idempotency_key = request.idempotency_key.strip()
+    request.reference_id = request.reference_id.strip()
+    request.reason = request.reason.strip().upper()
+    if not request.idempotency_key or not request.reference_id or not request.reason:
+        raise HTTPException(status_code=422, detail="idempotency_key, reference_id and reason are required")
+
     try:
-        # Check idempotency - prevent duplicate deductions
-        existing_movement = db.query(StockMovement).filter(
-            and_(
-                StockMovement.product_id == request.product_id,
+        # The key is authoritative. A reused key with a changed payload is a
+        # conflict, never a successful no-op.
+        existing_by_key = (
+            db.query(StockMovement)
+            .filter(StockMovement.idempotency_key == request.idempotency_key)
+            .first()
+        )
+        if existing_by_key is not None:
+            if not _stock_movement_matches_request(existing_by_key, request):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency key was already used for a different stock movement.",
+                )
+            return _duplicate_stock_response(product, existing_by_key)
+
+        # Backward compatibility for stock movements created before this column
+        # existed or by old clients that did not persist a request key.
+        existing_legacy = (
+            db.query(StockMovement)
+            .filter(
+                StockMovement.product_id == product.id,
                 StockMovement.reference_id == request.reference_id,
                 StockMovement.movement_type == "OUT",
-                StockMovement.reason == request.reason
+                func.upper(StockMovement.reason) == request.reason,
             )
-        ).first()
-        
-        if existing_movement:
-            # Already processed - return current state
-            product = db.query(Product).filter(
-                Product.id == request.product_id,
-                Product.user_id == user_id
-            ).first()
-            
-            return StockDeductionResponse(
-                success=True,
-                product_id=request.product_id,
-                previous_stock=product.current_stock + request.quantity,
-                new_stock=product.current_stock,
-                message="Already processed (idempotent)",
-                sync_timestamp=existing_movement.created_at
-            )
-        
-        # Get product (row-level lock to prevent concurrent syncs from overselling)
-        product = db.query(Product).filter(
-            Product.id == request.product_id,
-            Product.user_id == user_id
-        ).with_for_update().first()
-        
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
-        
+            .first()
+        )
+        if existing_legacy is not None:
+            if not _stock_movement_matches_request(existing_legacy, request):
+                raise HTTPException(
+                    status_code=409,
+                    detail="A stock movement already exists for this reference with different quantity or details.",
+                )
+            return _duplicate_stock_response(product, existing_legacy)
+
         previous_stock = product.current_stock
-        
-        # Check sufficient stock
-        if product.current_stock < request.quantity:
+        if previous_stock < request.quantity:
             raise HTTPException(
-                status_code=400, 
-                detail=f"Insufficient stock. Available: {product.current_stock}, Requested: {request.quantity}"
+                status_code=400,
+                detail=f"Insufficient stock. Available: {previous_stock}, Requested: {request.quantity}",
             )
-        
-        # Deduct stock
+
         product.current_stock -= request.quantity
-        
-        # Create stock movement record
         movement = StockMovement(
-            product_id=request.product_id,
+            product_id=product.id,
             movement_type="OUT",
             quantity=request.quantity,
             reason=request.reason,
-            reference_id=request.reference_id
+            reference_id=request.reference_id,
+            idempotency_key=request.idempotency_key,
         )
         db.add(movement)
-        
-        # Check for low stock alert
-        if product.current_stock <= product.min_stock:
-            background_tasks.add_task(
-                _trigger_low_stock_alert,
-                product_id=product.id,
-                product_name=product.product_name,
-                current_stock=product.current_stock,
-                min_stock=product.min_stock,
-                user_id=user_id
-            )
-        
+
         sync_event = append_sync_event(db, {
             "event_id": str(uuid4()),
             "type": "inventory.changed",
@@ -159,6 +188,7 @@ def deduct_stock_with_idempotency(
         })
         db.commit()
         db.refresh(product)
+        db.refresh(movement)
 
         try:
             AuditService.log_action(
@@ -173,34 +203,62 @@ def deduct_stock_with_idempotency(
                     "quantity": float(request.quantity),
                     "reason": request.reason,
                     "reference_id": request.reference_id,
+                    "idempotency_key": request.idempotency_key,
                 },
                 description=f"Inventory stock deducted for product {product.id}",
             )
         except Exception as audit_error:
-            logger.warning(
-                "Inventory audit logging failed after commit: %s",
-                audit_error,
+            logger.warning("Inventory audit logging failed after commit: %s", audit_error)
+
+        if product.current_stock <= product.min_stock:
+            background_tasks.add_task(
+                _trigger_low_stock_alert,
+                product_id=product.id,
+                product_name=product.product_name,
+                current_stock=product.current_stock,
+                min_stock=product.min_stock,
+                user_id=user_id,
             )
 
         publish_realtime_event(sync_event)
-        
-        logger.info(f"Stock deducted: Product {product.id}, Qty: {request.quantity}, New Stock: {product.current_stock}")
-        
+        logger.info(
+            "Stock deducted for product_id=%s reference_id=%s quantity=%s",
+            product.id, request.reference_id, request.quantity,
+        )
         return StockDeductionResponse(
             success=True,
-            product_id=request.product_id,
+            product_id=product.id,
             previous_stock=previous_stock,
             new_stock=product.current_stock,
             message="Stock deducted successfully",
-            sync_timestamp=datetime.utcnow()
+            sync_timestamp=movement.created_at or datetime.utcnow(),
         )
-        
     except HTTPException:
         raise
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        logger.error(f"Stock deduction failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Stock deduction failed: {str(e)}")
+        # A concurrent retry may have committed the same request first.
+        existing = (
+            db.query(StockMovement)
+            .filter(StockMovement.idempotency_key == request.idempotency_key)
+            .first()
+        )
+        current_product = (
+            db.query(Product)
+            .filter(Product.id == request.product_id, Product.user_id == user_id)
+            .first()
+        )
+        if existing is not None and current_product is not None:
+            if _stock_movement_matches_request(existing, request):
+                return _duplicate_stock_response(current_product, existing)
+        raise HTTPException(status_code=409, detail="Conflicting stock movement; refresh inventory and retry.")
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Stock deduction failed for product_id=%s reference_id=%s",
+            request.product_id, request.reference_id,
+        )
+        raise HTTPException(status_code=500, detail="Stock deduction failed. Please retry safely.")
 
 
 @router.post("/deduct-stock-batch")
@@ -208,95 +266,188 @@ def deduct_stock_batch(
     request: BatchStockUpdateRequest,
     background_tasks: BackgroundTasks,
     user_id: int = Depends(check_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    Batch stock deduction for multiple products in a single transaction.
-    Used for invoice sync with multiple line items.
-    """
+    """Apply stock updates with the same durable idempotency rules as single writes."""
+    results = []
+    failed_items = []
+    inventory_changes = []
+    low_stock_alerts = []
+    seen_keys = {}
+
     try:
-        results = []
-        failed_items = []
-        inventory_changes = []
-        
         for item in request.updates:
-            try:
-                # Process each item
-                existing_movement = db.query(StockMovement).filter(
-                    and_(
-                        StockMovement.product_id == item.product_id,
-                        StockMovement.reference_id == item.reference_id,
-                        StockMovement.movement_type == "OUT",
-                        StockMovement.reason == item.reason
-                    )
-                ).first()
-                
-                if existing_movement:
-                    product = db.query(Product).filter(
-                        Product.id == item.product_id,
-                        Product.user_id == user_id
-                    ).first()
-                    
-                    results.append({
-                        "product_id": item.product_id,
-                        "success": True,
-                        "message": "Already processed (idempotent)",
-                        "new_stock": product.current_stock
-                    })
-                    continue
-                
-                product = db.query(Product).filter(
-                    Product.id == item.product_id,
-                    Product.user_id == user_id
-                ).with_for_update().first()
-                
-                if not product:
+            # Pydantic has already validated bounds. Normalize inputs so old and
+            # new clients use the same canonical comparison values.
+            item.idempotency_key = item.idempotency_key.strip()
+            item.reference_id = item.reference_id.strip()
+            item.reason = item.reason.strip().upper()
+            if not item.idempotency_key or not item.reference_id or not item.reason:
+                failed_items.append({
+                    "product_id": item.product_id,
+                    "error": "idempotency_key, reference_id and reason are required",
+                })
+                continue
+
+            # Reject key collisions within a single request before any mutation.
+            fingerprint = (
+                item.product_id,
+                item.reference_id,
+                item.reason.casefold(),
+                str(Decimal(str(item.quantity)).quantize(Decimal("0.001"))),
+            )
+            previous_fingerprint = seen_keys.get(item.idempotency_key)
+            if previous_fingerprint is not None and previous_fingerprint != fingerprint:
+                failed_items.append({
+                    "product_id": item.product_id,
+                    "error": "Idempotency key is reused for different items in this batch.",
+                })
+                continue
+            seen_keys[item.idempotency_key] = fingerprint
+
+            product = (
+                db.query(Product)
+                .filter(Product.id == item.product_id, Product.user_id == user_id)
+                .with_for_update()
+                .first()
+            )
+            if product is None:
+                failed_items.append({
+                    "product_id": item.product_id,
+                    "error": "Product not found",
+                })
+                continue
+
+            existing_by_key = (
+                db.query(StockMovement)
+                .filter(StockMovement.idempotency_key == item.idempotency_key)
+                .first()
+            )
+            if existing_by_key is not None:
+                if not _stock_movement_matches_request(existing_by_key, item):
                     failed_items.append({
                         "product_id": item.product_id,
-                        "error": "Product not found"
+                        "error": "Idempotency key was already used for a different stock movement.",
                     })
                     continue
-                
-                if product.current_stock < item.quantity:
-                    failed_items.append({
-                        "product_id": item.product_id,
-                        "error": f"Insufficient stock: {product.current_stock} < {item.quantity}"
-                    })
-                    continue
-                
-                previous_stock = product.current_stock
-                product.current_stock -= item.quantity
-                
-                movement = StockMovement(
-                    product_id=item.product_id,
-                    movement_type="OUT",
-                    quantity=item.quantity,
-                    reason=item.reason,
-                    reference_id=item.reference_id
-                )
-                db.add(movement)
-                
                 results.append({
                     "product_id": item.product_id,
                     "success": True,
-                    "previous_stock": previous_stock,
+                    "message": "Already processed (idempotent)",
                     "new_stock": product.current_stock,
-                    "message": "Stock deducted"
+                    "duplicate": True,
                 })
-                inventory_changes.append({
+                continue
+
+            # Compatibility with movements written before idempotency keys
+            # were added. Conflicting replay payloads must not appear successful.
+            existing_legacy = (
+                db.query(StockMovement)
+                .filter(
+                    StockMovement.product_id == item.product_id,
+                    StockMovement.reference_id == item.reference_id,
+                    StockMovement.movement_type == "OUT",
+                    func.upper(StockMovement.reason) == item.reason,
+                )
+                .first()
+            )
+            if existing_legacy is not None:
+                if not _stock_movement_matches_request(existing_legacy, item):
+                    failed_items.append({
+                        "product_id": item.product_id,
+                        "error": "A stock movement already exists for this reference with different quantity or details.",
+                    })
+                    continue
+                results.append({
                     "product_id": item.product_id,
-                    "reference_id": item.reference_id,
-                    "reason": item.reason,
-                    "quantity": float(item.quantity),
-                    "new_stock": float(product.current_stock),
+                    "success": True,
+                    "message": "Already processed (legacy idempotent match)",
+                    "new_stock": product.current_stock,
+                    "duplicate": True,
                 })
-                
-            except Exception as e:
+                continue
+
+            if product.current_stock < item.quantity:
                 failed_items.append({
                     "product_id": item.product_id,
-                    "error": str(e)
+                    "error": f"Insufficient stock: {product.current_stock} < {item.quantity}",
                 })
-        
+                continue
+
+            previous_stock = product.current_stock
+            product.current_stock -= item.quantity
+            movement = StockMovement(
+                product_id=item.product_id,
+                movement_type="OUT",
+                quantity=item.quantity,
+                reason=item.reason,
+                reference_id=item.reference_id,
+                idempotency_key=item.idempotency_key,
+            )
+            db.add(movement)
+
+            results.append({
+                "product_id": item.product_id,
+                "success": True,
+                "previous_stock": previous_stock,
+                "new_stock": product.current_stock,
+                "message": "Stock deducted",
+                "duplicate": False,
+            })
+            change = {
+                "product_id": item.product_id,
+                "reference_id": item.reference_id,
+                "reason": item.reason,
+                "quantity": float(item.quantity),
+                "new_stock": float(product.current_stock),
+                "idempotency_key": item.idempotency_key,
+            }
+            inventory_changes.append(change)
+
+            if product.current_stock <= product.min_stock:
+                low_stock_alerts.append({
+                    "product_id": product.id,
+                    "product_name": product.product_name,
+                    "current_stock": product.current_stock,
+                    "min_stock": product.min_stock,
+                })
+
+        # A sale/invoice batch is one business operation. If any line fails,
+        # roll back every new deduction so invoice sync cannot leave only some
+        # products decremented. Previously processed idempotent retries remain
+        # successful because they do not mutate stock in this request.
+        if failed_items and inventory_changes:
+            db.rollback()
+            # The batch contract is atomic: report every item as failed after
+            # rollback and refresh balances so the client cannot cache an
+            # uncommitted intermediate stock value from a previously staged row.
+            for result in results:
+                product_id = result.get("product_id")
+                current_product = (
+                    db.query(Product)
+                    .filter(Product.id == product_id, Product.user_id == user_id)
+                    .first()
+                )
+                result["success"] = False
+                result["message"] = "Batch rolled back because another item failed."
+                result["new_stock"] = (
+                    current_product.current_stock if current_product is not None else None
+                )
+                failed_items.append({
+                    "product_id": product_id,
+                    "error": "Batch rolled back because another item failed.",
+                })
+            inventory_changes.clear()
+            low_stock_alerts.clear()
+            return {
+                "success": False,
+                "total_items": len(request.updates),
+                "successful": 0,
+                "failed": len(failed_items),
+                "results": results,
+                "failed_items": failed_items,
+            }
+
         sync_event = None
         if inventory_changes:
             sync_event = append_sync_event(db, {
@@ -305,6 +456,8 @@ def deduct_stock_batch(
                 "shop_id": user_id,
                 "changes": inventory_changes,
             })
+
+        # Stock values, movement records and durable event commit together.
         db.commit()
 
         for change in inventory_changes:
@@ -316,34 +469,54 @@ def deduct_stock_batch(
                     table_name="products",
                     record_id=int(change["product_id"]),
                     new_values=change,
-                    description=(
-                        f"Batch inventory deduction for product "
-                        f"{change['product_id']}"
-                    ),
+                    description=f"Batch inventory deduction for product {change['product_id']}",
                 )
             except Exception as audit_error:
                 logger.warning(
-                    "Batch inventory audit logging failed for product %s: %s",
+                    "Batch inventory audit logging failed for product_id=%s (%s)",
                     change.get("product_id"),
-                    audit_error,
+                    type(audit_error).__name__,
                 )
+
+        for alert in low_stock_alerts:
+            background_tasks.add_task(
+                _trigger_low_stock_alert,
+                product_id=alert["product_id"],
+                product_name=alert["product_name"],
+                current_stock=alert["current_stock"],
+                min_stock=alert["min_stock"],
+                user_id=user_id,
+            )
 
         if sync_event is not None:
             publish_realtime_event(sync_event)
-        
+
         return {
             "success": len(failed_items) == 0,
             "total_items": len(request.updates),
-            "successful": len(results),
+            "successful": sum(1 for result in results if result["success"]),
             "failed": len(failed_items),
             "results": results,
-            "failed_items": failed_items
+            "failed_items": failed_items,
         }
-        
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        logger.error(f"Batch stock deduction failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Batch deduction failed: {str(e)}")
+        logger.warning("Batch stock write hit an idempotency constraint for shop_id=%s", user_id)
+        raise HTTPException(
+            status_code=409,
+            detail="A concurrent stock update conflicted. Refresh inventory and retry the batch.",
+        )
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Batch stock deduction failed for shop_id=%s (%s)",
+            user_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Batch stock deduction failed. Please retry safely.",
+        )
 
 
 @router.post("/reconcile", response_model=InventoryReconciliationResponse)
