@@ -13,22 +13,45 @@
 }
 .scrolled { background: rgba(251, 246, 236, .92); border-color: rgba(24, 40, 32, .16); box-shadow: 0 16px 40px rgba(24, 40, 32, .14); padding-block: 6px; }
 
-.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--deep); }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--deep); text-decoration: none; }
 .logo { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; background: var(--deep); color: var(--rm-lime, #f3ca4f); transition: transform .5s cubic-bezier(.2, .75, .25, 1); }
 .brand:hover .logo { transform: rotate(-12deg) scale(1.08); }
 .word { font: 800 1.55rem/1 var(--font-display); text-transform: uppercase; letter-spacing: .02em; }
 .word b { color: var(--orange); font-weight: 800; }
 
-.actions { display: flex; align-items: center; gap: 4px; }
-.link { position: relative; display: inline-flex; align-items: center; padding: 10px 14px; border-radius: 999px; color: var(--deep); font: 700 .88rem var(--font-body); }
+.actions { display: flex; align-items: center; gap: 6px; }
+.link { position: relative; display: inline-flex; align-items: center; padding: 9px 14px; border-radius: 999px; color: var(--deep); font: 700 .88rem var(--font-body); text-decoration: none; }
 .link:hover:not(.active) { background: rgba(24, 40, 32, .07); }
 .linkInner { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; }
 .activePill { position: absolute; inset: 0; border-radius: 999px; background: var(--deep); }
 .active { color: var(--paper); }
 
+/* Highlighted Sell CTA in Desktop Nav */
+.sellLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(234, 88, 12, 0.12));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #b45309;
+  font: 800 .86rem var(--font-body);
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(.2, .75, .25, 1);
+}
+
+.sellLink:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(234, 88, 12, 0.2));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+}
+
 .cart {
   position: relative; display: inline-flex; align-items: center; gap: 8px; margin-left: 6px; padding: 11px 18px; border-radius: 999px;
   background: var(--orange); color: #fff; font: 800 .9rem var(--font-body);
+  border: none; cursor: pointer;
   box-shadow: 0 8px 20px rgba(232, 84, 30, .35); transition: transform .25s cubic-bezier(.2, .75, .25, 1), box-shadow .25s;
 }
 .cart:hover { transform: translateY(-2px) rotate(-1deg); box-shadow: 0 12px 26px rgba(232, 84, 30, .45); }
@@ -37,10 +60,77 @@
   background: var(--deep); color: var(--rm-lime, #f3ca4f); font-size: .74rem; font-weight: 800;
 }
 
-@media (max-width: 760px) {
-  .label, .cartLabel { display: none; }
-  .link { padding: 10px 11px; }
-  .cart { padding: 11px 14px; }
-  .word { font-size: 1.35rem; }
+/* ── Mobile Bottom Navigation Bar ── */
+.mobileBottomNav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  background: rgba(24, 40, 32, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.35);
 }
-@media (max-width: 380px) { .word { display: none; } }
+
+.bottomNavTrack {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.bottomNavItem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  min-width: 60px;
+}
+
+.bottomNavItemActive {
+  color: #f3ca4f;
+}
+
+.bottomNavIconWrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.bottomActiveDot {
+  position: absolute;
+  bottom: -4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f3ca4f;
+  box-shadow: 0 0 6px #f3ca4f;
+}
+
+@media (max-width: 768px) {
+  .actions .link { display: none; }
+  .sellLink { display: none; }
+  .mobileBottomNav { display: block; }
+  .cartLabel { display: none; }
+  .cart { padding: 9px 14px; }
+  .word { font-size: 1.3rem; }
+}
+
+@media (max-width: 380px) {
+  .word { display: none; }
+}

@@ -1,11 +1,590 @@
-.authMain{position:relative;min-height:100vh;display:grid;place-items:center;padding:28px 16px;overflow:hidden;background:radial-gradient(circle at 18% 16%,rgba(110,231,183,.16),transparent 25%),radial-gradient(circle at 86% 10%,rgba(240,180,63,.18),transparent 24%),linear-gradient(145deg,#092b22 0%,#0f5b47 52%,#0b3b2f 100%)}
-.orb1,.orb2,.orb3{position:absolute;border-radius:50%;pointer-events:none;filter:blur(30px)}.orb1{width:340px;height:340px;right:-90px;top:-120px;background:rgba(240,180,63,.18);animation:authFloat 11s ease-in-out infinite}.orb2{width:300px;height:300px;left:-100px;bottom:-120px;background:rgba(110,231,183,.18);animation:authFloat 13s ease-in-out infinite reverse}.orb3{width:220px;height:220px;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.06);animation:authFloat 15s ease-in-out infinite}
-@keyframes authFloat{0%,100%{translate:0 0}50%{translate:-18px 16px}}
-.authCenter{position:relative;z-index:3;width:100%;max-width:460px}.authCard{position:relative;overflow:hidden;padding:38px;border-radius:28px;background:rgba(255,253,249,.97);border:1px solid rgba(255,255,255,.35);box-shadow:0 30px 80px rgba(4,28,21,.28)}.authCard:before{content:'';position:absolute;inset:0 0 auto;height:5px;background:linear-gradient(90deg,#f0b43f,#62bd99,#0f5b47)}
-.logoArea{display:flex;align-items:center;gap:10px;margin-bottom:30px;cursor:pointer}.logoIcon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#0f5b47,#1a8a6a);color:#fff;box-shadow:0 10px 22px rgba(15,91,71,.22)}.logoText{font-family:var(--font-display);font-size:21px;font-weight:900;color:#17211d}
-.authTitle{font-size:31px;letter-spacing:-.05em;color:#17211d;margin-bottom:6px}.authSubtitle{color:#718078;font-size:13px;margin-bottom:24px}.form{display:flex;flex-direction:column;gap:15px}.fieldGroup{display:flex;flex-direction:column;gap:7px}.labelRow{display:flex;justify-content:space-between;align-items:center}.label{font-size:10px;font-weight:900;color:#62736b;letter-spacing:.08em;text-transform:uppercase}
-.inputWrap{position:relative}.inputIcon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#91a19a}.eyeBtn{position:absolute;right:11px;top:50%;transform:translateY(-50%);padding:6px;color:#83938c}.input{width:100%;height:48px;padding:0 42px;border:1px solid #d9e5df;border-radius:12px;background:#f8faf8;color:#17211d;font-size:14px;outline:0;transition:.2s ease}.input::placeholder{color:#9aa9a2}.input:focus{border-color:#77b69f;box-shadow:0 0 0 4px rgba(119,182,159,.14);background:#fff}
-.submitBtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:50px;border-radius:12px;background:linear-gradient(135deg,#0f5b47,#17785b);color:#fff;font-size:14px;font-weight:900;box-shadow:0 11px 22px rgba(15,91,71,.20);margin-top:4px}.submitBtn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 14px 26px rgba(15,91,71,.26)}.submitBtn:disabled{opacity:.65}
-.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.28);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.link{font-size:12px;font-weight:800;color:#0f6b50}.link:hover{color:#0b4c3a;text-decoration:underline}.switchText{text-align:center;color:#718078;font-size:12.5px;margin-top:2px}
-.errorBanner,.successBanner{display:flex;align-items:flex-start;gap:8px;padding:12px 14px;border-radius:12px;font-size:12.5px;line-height:1.5}.errorBanner{background:#fff3f0;border:1px solid #f2c8bf;color:#a94534;border-left:3px solid #e36c55}.successBanner{background:#edf9f2;border:1px solid #c6e6d5;color:#1d7052;border-left:3px solid #4eaa82}
-@media(max-width:480px){.authCard{padding:30px 22px 24px;border-radius:23px}.authTitle{font-size:27px}}
+/* ═══════════════════════════════════════════════════════════════
+   AUTH MODULE - ULTRA MODERN 3D LUXE SYSTEM
+   Supports: Customer Account + Seller/Merchant Store Registration
+   Mobile & Desktop Adaptive with Framer Motion & 3D Lighting
+   ═══════════════════════════════════════════════════════════════ */
+
+.authMain {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow: hidden;
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.18), transparent 35%),
+    radial-gradient(circle at 90% 15%, rgba(236, 72, 153, 0.15), transparent 30%),
+    radial-gradient(circle at 50% 85%, rgba(34, 211, 238, 0.14), transparent 40%),
+    linear-gradient(135deg, #090d16 0%, #0d1527 50%, #080d1a 100%);
+  color: #f8fafc;
+  perspective: 1200px;
+}
+
+/* 3D Ambient Orbs */
+.orb1, .orb2, .orb3, .orb4 {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(60px);
+  z-index: 1;
+}
+
+.orb1 {
+  width: 420px;
+  height: 420px;
+  right: -100px;
+  top: -120px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.28), rgba(240, 180, 63, 0.1));
+  animation: authFloat1 16s ease-in-out infinite alternate;
+}
+
+.orb2 {
+  width: 380px;
+  height: 380px;
+  left: -80px;
+  bottom: -100px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.32), rgba(34, 211, 238, 0.12));
+  animation: authFloat2 18s ease-in-out infinite alternate;
+}
+
+.orb3 {
+  width: 300px;
+  height: 300px;
+  left: 35%;
+  top: 15%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.2), transparent);
+  animation: authFloat3 22s ease-in-out infinite;
+}
+
+.orb4 {
+  width: 250px;
+  height: 250px;
+  right: 25%;
+  bottom: 20%;
+  background: radial-gradient(circle, rgba(147, 51, 234, 0.22), transparent);
+  animation: authFloat1 20s ease-in-out infinite reverse;
+}
+
+@keyframes authFloat1 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-30px, 40px, 30px) scale(1.08); }
+  100% { transform: translate3d(20px, -30px, -20px) scale(0.95); }
+}
+
+@keyframes authFloat2 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(40px, -30px, -20px) scale(1.05); }
+  100% { transform: translate3d(-20px, 30px, 15px) scale(0.92); }
+}
+
+@keyframes authFloat3 {
+  0% { transform: rotate(0deg) translate3d(20px, 0, 0); }
+  50% { transform: rotate(180deg) translate3d(-25px, 20px, 0); }
+  100% { transform: rotate(360deg) translate3d(20px, 0, 0); }
+}
+
+/* Auth Center Container */
+.authContainer {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  max-width: 1080px;
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 36px;
+  align-items: center;
+}
+
+/* Left Hero Showcase (Desktop) */
+.heroShowcase {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px;
+}
+
+.brandPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  width: fit-content;
+  font-size: 13px;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 0.02em;
+}
+
+.heroTitle {
+  font-size: clamp(32px, 3.8vw, 46px);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+
+.heroGradientText {
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.heroSubtitle {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #94a3b8;
+  max-width: 420px;
+}
+
+.featureList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.featureItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+
+.featureItem:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateX(6px) translateZ(10px);
+}
+
+.featureIconWrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.2));
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.featureContent strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.featureContent span {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Right Glass Card */
+.authCard {
+  position: relative;
+  overflow: hidden;
+  padding: 40px 36px;
+  border-radius: 28px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(24px);
+  box-shadow: 
+    0 25px 60px -15px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(99, 102, 241, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transform-style: preserve-3d;
+}
+
+.cardGlowBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #38bdf8, #818cf8, #ec4899);
+}
+
+/* Role Selector (Customer vs Seller) */
+.roleSelector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 24px;
+}
+
+.roleBtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  z-index: 2;
+}
+
+.roleBtnActive {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(236, 72, 153, 0.25));
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.25);
+}
+
+.roleBadge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #10b981;
+  color: #fff;
+  font-weight: 800;
+}
+
+/* Header Text */
+.cardHeader {
+  margin-bottom: 22px;
+}
+
+.authTitle {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.authSubtitle {
+  font-size: 13.5px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+/* Mode Tabs (Sign In / Register / Reset) */
+.modeTabs {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 22px;
+}
+
+.modeTabBtn {
+  position: relative;
+  padding: 8px 2px 14px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.modeTabActive {
+  color: #38bdf8;
+}
+
+.modeIndicator {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  border-radius: 999px;
+  box-shadow: 0 0 10px #38bdf8;
+}
+
+/* Form Styles */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.twoCols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #cbd5e1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.forgotLink {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.forgotLink:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 14px;
+  color: #64748b;
+  pointer-events: none;
+  transition: color 0.2s;
+}
+
+.input {
+  width: 100%;
+  height: 48px;
+  padding: 0 42px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.input:focus {
+  border-color: #6366f1;
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 0 0 20px rgba(99, 102, 241, 0.15);
+}
+
+.input:focus + .inputIcon,
+.inputWrap:focus-within .inputIcon {
+  color: #818cf8;
+}
+
+.input::placeholder {
+  color: #64748b;
+}
+
+select.input {
+  appearance: none;
+  cursor: pointer;
+}
+
+.eyeBtn {
+  position: absolute;
+  right: 12px;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  transition: color 0.2s;
+}
+
+.eyeBtn:hover {
+  color: #cbd5e1;
+}
+
+/* Submit Button with 3D Pop */
+.submitBtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 
+    0 10px 25px -5px rgba(99, 102, 241, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  margin-top: 8px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.submitBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 14px 30px -4px rgba(99, 102, 241, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.submitBtn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Spinner */
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: authSpin 0.7s linear infinite;
+}
+
+@keyframes authSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Feedback Banners */
+.errorBanner, .successBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  animation: slideInDown 0.3s ease;
+}
+
+.errorBanner {
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  border-left: 4px solid #ef4444;
+}
+
+.successBanner {
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+  border-left: 4px solid #10b981;
+}
+
+@keyframes slideInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Seller Benefits Strip */
+.sellerPerks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sellerPerkItem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: #cbd5e1;
+}
+
+.sellerPerkItem svg {
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+/* Footer Switch */
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.switchAction {
+  color: #38bdf8;
+  font-weight: 700;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.switchAction:hover {
+  text-decoration: underline;
+}
+
+/* Responsive layout */
+@media (max-width: 900px) {
+  .authContainer {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+  }
+  .heroShowcase {
+    display: none;
+  }
+  .authCard {
+    padding: 32px 24px;
+    border-radius: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .authMain {
+    padding: 20px 14px;
+  }
+  .authCard {
+    padding: 26px 18px;
+    border-radius: 20px;
+  }
+  .authTitle {
+    font-size: 23px;
+  }
+  .twoCols {
+    grid-template-columns: 1fr;
+  }
+}

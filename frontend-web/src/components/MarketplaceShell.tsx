@@ -479,6 +479,38 @@ export default function MarketplaceShell() {
         </Reveal>
       </section>
 
+      {/* ───────── 3D SELLER VIP BANNER ───────── */}
+      <section className={styles.sellerPromoSection}>
+        <Reveal>
+          <Tilt3D>
+            <div className={styles.sellerPromoCard}>
+              <div className={styles.sellerPromoLeft}>
+                <div className={styles.sellerPromoBadge}>
+                  <Sparkles size={14} />
+                  <span>Sell on RetailMind</span>
+                </div>
+                <h2 className={styles.sellerPromoTitle}>
+                  Open Your Digital Store in <b>60 Seconds</b>
+                </h2>
+                <p className={styles.sellerPromoText}>
+                  Are you a local shop owner or creator? List your products online with 0% platform commission, receive direct UPI settlements, and serve neighborhood customers effortlessly.
+                </p>
+                <div className={styles.sellerPromoPerks}>
+                  <span><ShieldCheck size={16} /> 0% Commission</span>
+                  <span><Zap size={16} /> Instant Direct UPI</span>
+                  <span><Store size={16} /> Branded Storefront & QR</span>
+                </div>
+              </div>
+              <Link href="/sell" className={styles.sellerPromoBtn}>
+                <Store size={18} />
+                <span>Launch Your Store Free</span>
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+          </Tilt3D>
+        </Reveal>
+      </section>
+
       {/* ───────── QUICK DISCOVERY ───────── */}
       <section className={styles.section}>
         <Reveal className={styles.discovery}>

@@ -297,6 +297,124 @@
 .empty strong { color: var(--ink); font: 800 1.6rem var(--font-display); text-transform: uppercase; }
 .empty p { margin: 0; }
 
+/* ───────── 3D Seller VIP Banner ───────── */
+.sellerPromoSection {
+  width: min(100% - 24px, 1480px);
+  margin: 48px auto 0;
+}
+
+.sellerPromoCard {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(32px, 4vw, 48px) clamp(24px, 4vw, 56px);
+  border-radius: 36px;
+  background: linear-gradient(135deg, rgba(24, 40, 32, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1.5px solid rgba(243, 202, 79, 0.35);
+  box-shadow: 
+    0 24px 60px -15px rgba(0, 0, 0, 0.45),
+    0 0 35px rgba(243, 202, 79, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+  color: #fff;
+}
+
+.sellerPromoCard::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(243, 202, 79, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.sellerPromoLeft {
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sellerPromoBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(243, 202, 79, 0.15);
+  border: 1px solid rgba(243, 202, 79, 0.4);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #f3ca4f;
+  width: fit-content;
+}
+
+.sellerPromoTitle {
+  font-size: clamp(24px, 3vw, 36px);
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  color: #fff;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.sellerPromoTitle b {
+  color: #f3ca4f;
+}
+
+.sellerPromoText {
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(251, 246, 236, 0.8);
+  margin: 0;
+}
+
+.sellerPromoPerks {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #34d399;
+}
+
+.sellerPromoPerks span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sellerPromoBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 32px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #e8541e 0%, #f3ca4f 100%);
+  color: #182820;
+  font-size: 15px;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 10px 25px rgba(232, 84, 30, 0.35);
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.sellerPromoBtn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 14px 30px rgba(232, 84, 30, 0.45);
+}
+
 /* ───────── responsive ───────── */
 @media (max-width: 1040px) {
   .hero { grid-template-columns: minmax(0, 1fr); border-radius: 34px; padding-bottom: 20px; min-height: 0; }

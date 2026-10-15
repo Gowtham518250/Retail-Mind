@@ -1,0 +1,674 @@
+/* ═══════════════════════════════════════════════════════════════
+   PROFILE & SELLER HUB - 3D LUXE SYSTEM
+   Supports: Customer Account, Seller Dashboard, Product Creator
+   ═══════════════════════════════════════════════════════════════ */
+
+.profilePage {
+  position: relative;
+  min-height: 100vh;
+  padding: 40px 20px 80px;
+  background: 
+    radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.15), transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(236, 72, 153, 0.12), transparent 35%),
+    radial-gradient(circle at 50% 90%, rgba(34, 211, 238, 0.12), transparent 40%),
+    linear-gradient(135deg, #090d16 0%, #0d1527 50%, #080d1a 100%);
+  color: #f8fafc;
+  overflow-x: hidden;
+}
+
+/* Ambient 3D Orbs */
+.orbA, .orbB {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(70px);
+  z-index: 1;
+}
+
+.orbA {
+  width: 450px;
+  height: 450px;
+  top: -100px;
+  right: -80px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25), transparent);
+  animation: orbFloatA 18s ease-in-out infinite alternate;
+}
+
+.orbB {
+  width: 400px;
+  height: 400px;
+  bottom: 50px;
+  left: -100px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.2), transparent);
+  animation: orbFloatB 20s ease-in-out infinite alternate;
+}
+
+@keyframes orbFloatA {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(40px) scale(1.1); }
+}
+
+@keyframes orbFloatB {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-40px) scale(0.95); }
+}
+
+.container {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ── Top Profile Header Card ── */
+.profileHeaderCard {
+  position: relative;
+  padding: 32px 36px;
+  border-radius: 28px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(24px);
+  box-shadow: 
+    0 20px 50px -15px rgba(0, 0, 0, 0.5),
+    0 0 35px rgba(99, 102, 241, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.headerGlowLine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #38bdf8, #818cf8, #ec4899);
+}
+
+.userInfoArea {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.avatarAura {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  padding: 3px;
+  background: linear-gradient(135deg, #38bdf8, #818cf8, #ec4899);
+  box-shadow: 0 0 25px rgba(99, 102, 241, 0.35);
+  flex-shrink: 0;
+}
+
+.avatarInner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #0f172a;
+  display: grid;
+  place-items: center;
+  font-size: 32px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.userMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.userNameRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.userName {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0;
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.roleSeller {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(234, 88, 12, 0.2));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+
+.roleCustomer {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.2));
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+}
+
+.userEmail {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logoutBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.logoutBtn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ── Seller Hub Card ── */
+.sellerHubCard {
+  position: relative;
+  padding: 32px 36px;
+  border-radius: 28px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  backdrop-filter: blur(24px);
+  box-shadow: 
+    0 20px 50px -15px rgba(0, 0, 0, 0.5),
+    0 0 35px rgba(245, 158, 11, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.hubTopRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.hubTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hubIconBadge {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(234, 88, 12, 0.25));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  display: grid;
+  place-items: center;
+  color: #fbbf24;
+}
+
+.hubTitleText h2 {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0 0 4px;
+}
+
+.hubTitleText p {
+  font-size: 13.5px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.hubQuickActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.storeLinkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.storeLinkBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.addProductTriggerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+  transition: all 0.25s ease;
+}
+
+.addProductTriggerBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 25px rgba(16, 185, 129, 0.45);
+}
+
+/* Seller Metrics Bar */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.metricTile {
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.metricTileIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  color: #38bdf8;
+}
+
+.metricInfo strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.metricInfo span {
+  font-size: 12.5px;
+  color: #94a3b8;
+}
+
+/* ── "Become a Seller" Promotional Card (For Customers) ── */
+.becomeSellerCard {
+  position: relative;
+  overflow: hidden;
+  padding: 36px 40px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  backdrop-filter: blur(24px);
+  box-shadow: 
+    0 20px 50px -15px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(99, 102, 241, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.becomeSellerText {
+  max-width: 540px;
+}
+
+.becomeSellerText h3 {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0 0 8px;
+}
+
+.becomeSellerText p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  margin: 0 0 16px;
+}
+
+.perksRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.perkPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.launchStoreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 26px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  border: none;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(99, 102, 241, 0.35);
+  transition: all 0.25s ease;
+  text-decoration: none;
+}
+
+.launchStoreBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(99, 102, 241, 0.45);
+}
+
+/* ── Quick Navigation Bento Cards ── */
+.bentoNavGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.navCard {
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.navCard:hover {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 35px -10px rgba(0, 0, 0, 0.5), 0 0 25px rgba(99, 102, 241, 0.1);
+}
+
+.navCardIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.15));
+  color: #38bdf8;
+}
+
+.navCardTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.navCardDesc {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Add Product Modal (3D Glass Form) ── */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(12px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modalContent {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+  padding: 36px 32px;
+  border-radius: 28px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 25px 60px -15px rgba(0, 0, 0, 0.8),
+    0 0 45px rgba(16, 185, 129, 0.15);
+  color: #fff;
+}
+
+.modalCloseBtn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modalCloseBtn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.modalHeader {
+  margin-bottom: 24px;
+}
+
+.modalHeader h3 {
+  font-size: 24px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0 0 6px;
+}
+
+.modalHeader p {
+  font-size: 13.5px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.productForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.twoCols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inputLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.textInput {
+  width: 100%;
+  height: 46px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.textInput:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+textarea.textInput {
+  height: 80px;
+  padding: 12px 16px;
+  resize: vertical;
+}
+
+select.textInput {
+  cursor: pointer;
+  appearance: none;
+}
+
+.productSubmitBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 50px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 10px;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+  transition: all 0.25s ease;
+}
+
+.productSubmitBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 25px rgba(16, 185, 129, 0.45);
+}
+
+.productSubmitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Toast Notice */
+.toastNotice {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+  border-radius: 16px;
+  background: rgba(16, 185, 129, 0.95);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  animation: toastIn 0.3s ease;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .profilePage {
+    padding: 20px 14px 60px;
+  }
+  .profileHeaderCard {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+  .sellerHubCard {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+  .becomeSellerCard {
+    padding: 26px 20px;
+    border-radius: 20px;
+  }
+  .twoCols {
+    grid-template-columns: 1fr;
+  }
+  .modalContent {
+    padding: 26px 20px;
+  }
+}
