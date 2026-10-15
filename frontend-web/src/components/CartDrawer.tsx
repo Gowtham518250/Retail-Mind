@@ -21,7 +21,7 @@ export default function CartDrawer() {
   const shopId = Number(params?.shopId || 0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const count = cartItems.reduce((s, i) => s + i.quantity, 0);
-  const hasUnavailableItems = cartItems.some((item) => item.product.stock_available !== undefined && Number(item.product.stock_available) <= 0);
+  const hasUnavailableItems = cartItems.some((item) => item.product.stock_available === undefined || item.product.stock_available === null || !Number.isFinite(Number(item.product.stock_available)) || Number(item.product.stock_available) <= 0);
 
   useEffect(() => {
     if (!isCartOpen) return;
@@ -43,7 +43,7 @@ export default function CartDrawer() {
       return;
     }
     if (hasUnavailableItems) {
-      setCartMessage('Your cart contains an out-of-stock item. Remove it before continuing.');
+      setCartMessage('Your cart contains an item whose stock is unavailable or unconfirmed. Remove it or revisit the shop to refresh availability.');
       return;
     }
 
