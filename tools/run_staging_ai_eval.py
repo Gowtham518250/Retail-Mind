@@ -21,14 +21,15 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import requests
 
 from query_safety import validate_read_only_tenant_sql
 from tools.ai_query_eval import evaluate_cases
 from tools.staging_config import validate_staging_base_url
-
-
-ROOT = Path(__file__).resolve().parents[1]
 MONEY_FIELDS = (
     "total_sales_amount",
     "sales_amount",
