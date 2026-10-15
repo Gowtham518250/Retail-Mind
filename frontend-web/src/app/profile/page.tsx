@@ -33,6 +33,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [customer, setCustomer] = useState<CustomerData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -58,25 +59,14 @@ export default function ProfilePage() {
           return;
         }
 
+        if (!res.ok) throw new Error('Your customer profile could not be verified.');
         const data = await res.json();
-        if (data && data.customer) {
-          setCustomer(data.customer);
-          localStorage.setItem('customerName', data.customer.name || 'Shopper');
-          if (data.customer.email) localStorage.setItem('customerEmail', data.customer.email);
-        } else {
-          // Fallback to localStorage data
-          setCustomer({
-            id: 0,
-            name: localStorage.getItem('customerName') || 'Shopper',
-            email: localStorage.getItem('customerEmail') || '',
-          });
-        }
-      } catch {
-        setCustomer({
-          id: 0,
-          name: localStorage.getItem('customerName') || 'Shopper',
-          email: localStorage.getItem('customerEmail') || '',
-        });
+        if (!data?.customer) throw new Error('The customer profile response was incomplete.');
+        setCustomer(data.customer as CustomerData);
+        localStorage.setItem('customerName', data.customer.name || 'Shopper');
+        if (data.customer.email) localStorage.setItem('customerEmail', data.customer.email);
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : 'Unable to load your customer profile. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -93,9 +83,32 @@ export default function ProfilePage() {
     router.push('/');
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <main className={styles.profilePage} aria-busy="true">
+        <div className={styles.container}>
+          <section className={styles.accountDetailsCard} role="status">Loading your customer account…</section>
+        </div>
+      </main>
+    );
+  }
 
-  const displayName = customer?.name || 'Shopper';
+  if (loadError || !customer) {
+    return (
+      <main className={styles.profilePage}>
+        <div className={styles.container}>
+          <section className={styles.accountDetailsCard} role="alert">
+            <h1>Account temporarily unavailable</h1>
+            <p>{loadError || 'We could not verify your customer account.'}</p>
+            <p>Your account details are hidden until the server confirms your identity.</p>
+            <button type="button" onClick={() => window.location.reload()} className={styles.logoutBtn}>Retry</button>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  const displayName = customer.name || 'Shopper';
 
   return (
     <main className={styles.profilePage}>
@@ -125,18 +138,18 @@ export default function ProfilePage() {
                 <h1 className={styles.userName}>{displayName}</h1>
                 <span className={styles.roleBadge}>
                   <ShoppingBag size={13} />
-                  Verified Shopper
+                  Customer Account
                 </span>
               </div>
 
               <div className={styles.userContactRow}>
-                {customer?.email && (
+                {customer.email && (
                   <span>
                     <Mail size={13} />
                     {customer.email}
                   </span>
                 )}
-                {customer?.phone && (
+                {customer.phone && (
                   <span>
                     <Phone size={13} />
                     {customer.phone}
@@ -168,21 +181,21 @@ export default function ProfilePage() {
             <div className={styles.detailBox}>
               <span className={styles.detailLabel}>Default Address</span>
               <span className={styles.detailValue}>
-                {customer?.address || 'No address saved yet (added during checkout)'}
+                {customer.address || 'No saved address returned by the account API.'}
               </span>
             </div>
 
             <div className={styles.detailBox}>
               <span className={styles.detailLabel}>City / Area</span>
               <span className={styles.detailValue}>
-                {customer?.city || 'Local Delivery Zone'}
+                {customer.city || 'Not provided'}
               </span>
             </div>
 
             <div className={styles.detailBox}>
               <span className={styles.detailLabel}>Account Security</span>
               <span className={styles.detailValue} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#34d399' }}>
-                <ShieldCheck size={16} /> Verified &amp; Protected
+                <ShieldCheck size={16} /> Authenticated customer profile
               </span>
             </div>
           </div>
