@@ -799,6 +799,66 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             "label": "last 1 month",
         }
 
+    # Relative windows with an explicit count are resolved deterministically.
+    # Windows include today: "last 14 days" means today plus the previous 13 dates.
+    count_words = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "eleven": 11, "twelve": 12,
+    }
+    rolling = re.search(
+        r"\b(?:last|past|previous|rolling)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(days?|weeks?|months?|years?)\b",
+        q,
+    )
+    if rolling:
+        raw_count, raw_unit = rolling.groups()
+        count = int(raw_count) if raw_count.isdigit() else count_words[raw_count]
+        unit = raw_unit.rstrip("s")
+        if count > 0 and (
+            (unit == "day" and count <= 7300)
+            or (unit == "week" and count <= 1040)
+            or (unit == "month" and count <= 120)
+            or (unit == "year" and count <= 100)
+        ):
+            if unit == "day":
+                start = today - timedelta(days=count - 1)
+            elif unit == "week":
+                start = today - timedelta(days=count * 7 - 1)
+            elif unit == "month":
+                month_index = today.year * 12 + (today.month - 1) - count
+                target_year, zero_month = divmod(month_index, 12)
+                target_month = zero_month + 1
+                target_day = min(today.day, calendar.monthrange(target_year, target_month)[1])
+                start = date(target_year, target_month, target_day)
+            else:
+                target_year = today.year - count
+                target_day = min(today.day, calendar.monthrange(target_year, today.month)[1])
+                start = date(target_year, today.month, target_day)
+            return {
+                "kind": "range",
+                "start_date": start,
+                "end_date": today,
+                "label": f"last {count} {unit}{'' if count == 1 else 's'}",
+            }
+
+    # Relative date boundaries whose precise semantics aren't implemented must
+    # never fall through to an LLM guess (e.g. before/after a date or a quarter).
+    date_boundary_with_one_date = bool(
+        re.search(r"\b(before|after|since|until|from)\b", q)
+        and (
+            re.search(r"\b20\d{2}-\d{1,2}-\d{1,2}\b", q)
+            or re.search(r"\b\d{1,2}[/-]\d{1,2}[/-]20\d{2}\b", q)
+        )
+        and len(re.findall(r"\b(?:20\d{2}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]20\d{2})\b", q)) == 1
+    )
+    if date_boundary_with_one_date:
+        return {
+            "kind": "unsupported",
+            "start_date": None,
+            "end_date": None,
+            "label": "unsupported date boundary",
+        }
+
     # Explicit date ranges take precedence over individual mentions of today.
     range_dates = re.findall(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
     if len(range_dates) >= 2 and re.search(r"\b(from|between|to|through|until)\b", q):
@@ -910,6 +970,30 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             pass
 
     return {"kind": "unspecified", "start_date": None, "end_date": None, "label": "not specified"}
+
+
+def _has_unresolved_date_intent(query: str, resolved_scope: dict | None = None) -> bool:
+    """Detect requested date semantics the deterministic resolver cannot safely apply."""
+    scope = resolved_scope if isinstance(resolved_scope, dict) else {}
+    if scope.get("kind") == "unsupported":
+        return True
+    if scope.get("kind") in {"exact", "range"}:
+        return False
+
+    q = re.sub(r"\s+", " ", str(query or "").lower()).strip()
+    if re.search(r"\b(all time|all-time|ever|lifetime|historical record)\b", q):
+        return False
+
+    patterns = (
+        r"\b(?:last|past|previous|this|current|rolling)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:days?|weeks?|months?|years?|quarters?)\b",
+        r"\b(?:last|past|previous|this|current)\s+(?:day|week|month|year|quarter|financial year|fiscal year)\b",
+        r"\b(?:quarterly|financial year|fiscal year|year to date|ytd|q[1-4])\b",
+        r"\b(?:before|after|since|until)\s+(?:20\d{2}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]20\d{2})\b",
+        r"\b(?:in|during|for)\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+20\d{2})?\b",
+        r"\b(?:from|between)\b.*\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b",
+        r"\b(?:today|yesterday|tomorrow|last night|this morning|this evening)\b",
+    )
+    return any(re.search(pattern, q) for pattern in patterns)
 
 
 def _fast_business_query(
@@ -3161,10 +3245,7 @@ async def ask_query(
     # after the high-reasoning verification pass. Ask for a clearer utterance
     # instead of producing a plausible but potentially incorrect business number.
     translation_confidence = float(
-        (query_classification or {}).get(
-            "translation_confidence",
-            (query_classification or {}).get("confidence") or 0.0,
-        ) or 0.0
+        (query_classification or {}).get("translation_confidence", 0.0) or 0.0
     )
     if translation_used and translation_confidence < 0.80:
         print(
@@ -3183,6 +3264,22 @@ async def ask_query(
     source_date_scope = _resolve_explicit_date_scope(original_query)
     if source_date_scope.get("kind") != "unspecified":
         date_scope = source_date_scope
+
+    # Do not let the SQL model guess a period when the date parser could not
+    # implement the user's requested window/boundary precisely.
+    if (
+        _has_unresolved_date_intent(original_query, date_scope)
+        or _has_unresolved_date_intent(query, date_scope)
+    ):
+        print("ASKQUERY outcome=clarification_required reason=unsupported_date_scope sql_generation_llm_calls=0")
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "I couldn't safely resolve that reporting period. Use today, yesterday, "
+                "this/last week, this/last month, this/last year, an exact date or date range, "
+                "or a rolling count such as last 14 days. No shop data was queried."
+            ),
+        )
 
     # If the question explicitly asks about both days, return two separate figures.
     # _resolve_explicit_date_scope intentionally resolves one date; it must not
