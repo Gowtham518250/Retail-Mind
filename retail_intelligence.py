@@ -672,7 +672,7 @@ def get_all_transactions(
     category: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    skip: int = 0,
+    skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
