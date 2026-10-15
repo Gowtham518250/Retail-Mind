@@ -69,7 +69,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
         <div className={styles.body}>
           {product.category && <span className={styles.category}>{product.category}</span>}
           <h3 className={styles.title}><Link href={href}>{product.name}</Link></h3>
-          {product.description && <p className={styles.desc}>{product.description}</p>
+          {product.description && <p className={styles.desc}>{product.description}</p>}
 
           <div className={styles.buy}>
             <div className={styles.priceBox}>
