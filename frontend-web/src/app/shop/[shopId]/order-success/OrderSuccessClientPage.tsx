@@ -23,7 +23,7 @@ export default function OrderSuccessClientPage() {
   const params = useParams();
   const search = useSearchParams();
   const router = useRouter();
-  const shopId = Number(params?.shopId || 8);
+  const shopId = Number(params?.shopId || 0);
   const orderId = search?.get('orderId');
 
   const [order, setOrder] = useState<StoredOrder | null>(null);
@@ -36,7 +36,7 @@ export default function OrderSuccessClientPage() {
     let cancelled = false;
 
     const loadOrder = async () => {
-      if (!orderId) {
+      if (!Number.isSafeInteger(shopId) || shopId <= 0 || !orderId || !/^\d+$/.test(orderId)) {
         setNotFound(true);
         return;
       }
@@ -72,35 +72,30 @@ export default function OrderSuccessClientPage() {
 
         if (cancelled) return;
 
-        const stored = sessionStorage.getItem(`order:${orderId}`);
-        let storedOrder: Partial<StoredOrder> = {};
-        if (stored) {
-          try {
-            storedOrder = JSON.parse(stored);
-          } catch {
-            storedOrder = {};
-          }
+        const serverOrderId = Number(data.order_id);
+        const serverTotal = Number(data.total_amount);
+        const serverStatus = String(data.status || '').trim().toUpperCase();
+        if (!Number.isSafeInteger(serverOrderId) || serverOrderId !== Number(orderId) || !Number.isFinite(serverTotal) || !serverStatus || !Array.isArray(data.items)) {
+          throw new Error('The server returned incomplete order details. Open My Orders to confirm the saved order.');
         }
 
         setOrder({
-          order_id: Number(data.order_id),
-          shop_name: data.shop_name || storedOrder.shop_name || `Shop #${data.shop_id}`,
-          total_amount: Number(data.total_amount || 0),
-          status: data.status || 'PENDING',
+          order_id: serverOrderId,
+          shop_name: data.shop_name || (data.shop_id ? `Shop #${data.shop_id}` : 'Shop details unavailable'),
+          total_amount: serverTotal,
+          status: serverStatus,
           payment_method: 'COD',
-          customer_name: data.customer_name || storedOrder.customer_name || 'Customer',
-          phone: data.customer_phone || storedOrder.phone || '',
-          delivery_address: data.delivery_address || storedOrder.delivery_address || '',
-          items: Array.isArray(data.items)
-            ? data.items.map((item: any) => ({
-                name: item.product_name || item.name || `Product #${item.product_id}`,
-                quantity: Number(item.quantity || 0),
-                price: Number(item.unit_price ?? item.price ?? 0),
-              }))
-            : storedOrder.items || [],
-          placed_at: data.created_at || storedOrder.placed_at || new Date().toISOString(),
+          customer_name: data.customer_name || 'Customer',
+          phone: data.customer_phone || '',
+          delivery_address: data.delivery_address || '',
+          items: data.items.map((item: any) => ({
+            name: item.product_name || item.name || (item.product_id ? `Product #${item.product_id}` : 'Product details unavailable'),
+            quantity: Number(item.quantity ?? 0),
+            price: Number(item.unit_price ?? item.price ?? 0),
+          })),
+          placed_at: data.created_at || '',
         });
-        setLiveStatus(String(data.status || 'PENDING').toUpperCase());
+        setLiveStatus(serverStatus);
       } catch (error: any) {
         if (!cancelled) {
           setTrackingError(error?.message || 'Unable to load order status right now.');
