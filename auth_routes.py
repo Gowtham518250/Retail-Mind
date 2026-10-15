@@ -37,6 +37,145 @@ class UserLogin(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
+class GoogleAuthRequest(BaseModel):
+    google_token: str
+
+
+@router.post("/google")
+def google_login(request: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """Authenticate an owner using a Google ID token verified on the server.
+
+    The client-sent email/name are deliberately ignored. Google claims are the
+    only source of identity, and the expected Web OAuth client ID is configured
+    through GOOGLE_OAUTH_CLIENT_ID on the backend.
+    """
+    import os
+    from sqlalchemy import func
+    from sqlalchemy.exc import IntegrityError
+
+    raw_token = request.google_token.strip()
+    if not raw_token:
+        raise HTTPException(status_code=400, detail="Google ID token is required")
+
+    expected_client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+    if not expected_client_id:
+        logger.error("Google authentication is unavailable: GOOGLE_OAUTH_CLIENT_ID is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="Google sign-in is not configured on the server. Please contact support.",
+        )
+
+    try:
+        # firebase-admin installs google-auth as a dependency. Verify signature,
+        # expiry, issuer and audience instead of trusting client-provided fields.
+        from google.auth.transport.requests import Request as GoogleRequest
+        from google.oauth2 import id_token
+
+        claims = id_token.verify_oauth2_token(
+            raw_token,
+            GoogleRequest(),
+            audience=expected_client_id,
+        )
+    except Exception as exc:
+        # Do not log the ID token, since it is a bearer credential.
+        logger.warning("Google ID-token verification failed (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=401,
+            detail="Google sign-in could not verify this account. Please try again.",
+        )
+
+    email = str(claims.get("email") or "").strip().lower()
+    verified = str(claims.get("email_verified", "")).strip().lower() == "true"
+    if not email or not verified:
+        raise HTTPException(
+            status_code=401,
+            detail="Google must provide a verified email address to sign in.",
+        )
+
+    display_name = str(claims.get("name") or email.split("@", 1)[0]).strip()
+    if not display_name:
+        display_name = email.split("@", 1)[0]
+    display_name = display_name[:100]
+
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+    is_new_user = user is None
+
+    if user is None:
+        # Match the app's existing public registration policy: a verified Google
+        # account can create an OWNER account on first sign-in. The random
+        # password is never returned to the client and cannot be guessed.
+        user = User(
+            user_name=display_name,
+            email=email,
+            password=hash_password(secrets.token_urlsafe(48)),
+            user_type=ROLE_OWNER,
+            is_active=True,
+        )
+        try:
+            db.add(user)
+            db.flush()
+            db.commit()
+            db.refresh(user)
+        except IntegrityError:
+            # Another concurrent Google login may have created the same email.
+            db.rollback()
+            user = db.query(User).filter(func.lower(User.email) == email).first()
+            if user is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This account was created concurrently. Please try signing in again.",
+                )
+            is_new_user = False
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to create an owner account from verified Google identity")
+            raise HTTPException(
+                status_code=500,
+                detail="Could not create the Retail Mind account. Please try again.",
+            )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Account is deactivated. Please contact support.",
+        )
+
+    user_role = getattr(user, "user_type", ROLE_OWNER) or ROLE_OWNER
+    shop_profile = None
+    if str(user_role).upper() == str(ROLE_OWNER).upper():
+        from shop_management import ShopService
+        shop_profile = ShopService.get_shop_profile(db, user.id)
+
+    access_token = create_access_token(
+        data={"sub": str(user.id), "role": user_role, "user_type": user_role}
+    )
+    from security import create_refresh_token
+    refresh_token = create_refresh_token(user.id, user_role)
+
+    return {
+        "token": access_token,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "email": user.email,
+        "username": user.user_name,
+        "user_name": user.user_name,
+        "role": user_role,
+        "user_type": user_role,
+        "is_new_user": is_new_user,
+        "shop_name": shop_profile.shop_name if shop_profile else None,
+        "shop_profile": {
+            "id": shop_profile.id,
+            "shop_id": shop_profile.shop_id,
+            "shop_name": shop_profile.shop_name,
+            "shop_type": shop_profile.shop_type,
+            "logo_url": shop_profile.logo_url,
+            "is_online_store_enabled": bool(shop_profile.is_online_store_enabled),
+        } if shop_profile else None,
+    }
+
+
 @router.post("/register")
 def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # Email is required and must be unique (we treat email as the primary login identifier)
