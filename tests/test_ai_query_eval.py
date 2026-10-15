@@ -54,7 +54,8 @@ def test_evaluator_reports_answer_scope_date_clarification_and_source_metrics():
     assert report["date_range_accuracy"] == 1.0
     assert report["source_recall"] == 1.0
     assert report["source_precision"] == 0.6667
-    assert report["critical_pass_rate"] == 1.0
+    # Extra sources are false positives, so this case must fail the strict gate.
+    assert report["critical_pass_rate"] == 0.5
 
 
 def test_missing_answer_result_fails_critical_pass_and_scope():
@@ -76,3 +77,38 @@ def test_duplicate_and_unknown_ids_are_rejected():
 def test_empty_labelled_case_set_is_rejected():
     with pytest.raises(ValueError, match="at least one case"):
         evaluate_cases([], [])
+
+
+def test_exact_source_gate_rejects_extra_rows_even_when_recall_is_one():
+    cases = [{
+        "case_id": "detail",
+        "expected_source_record_ids": ["INV-1", "INV-2"],
+        "requires_clarification": False,
+    }]
+    results = [{
+        "case_id": "detail",
+        "source_record_ids": ["INV-1", "INV-2", "INV-OTHER"],
+        "needs_clarification": False,
+        "shop_scope_valid": True,
+    }]
+    report = evaluate_cases(cases, results)
+    assert report["source_recall"] == 1.0
+    assert report["source_precision"] == 0.6667
+    assert report["critical_pass_rate"] == 0.0
+
+
+def test_source_subset_mode_can_be_explicit_for_partial_result_pages():
+    cases = [{
+        "case_id": "page",
+        "expected_source_record_ids": ["INV-1", "INV-2"],
+        "require_exact_source_record_ids": False,
+        "requires_clarification": False,
+    }]
+    results = [{
+        "case_id": "page",
+        "source_record_ids": ["INV-1", "INV-2", "INV-3"],
+        "needs_clarification": False,
+        "shop_scope_valid": True,
+    }]
+    report = evaluate_cases(cases, results)
+    assert report["critical_pass_rate"] == 1.0
