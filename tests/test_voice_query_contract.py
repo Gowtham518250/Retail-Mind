@@ -289,6 +289,7 @@ def test_combined_query_translation_and_classification_uses_one_chat_call(monkey
                             "intent": "aggregate",
                             "metric": "sales_amount",
                             "confidence": 0.98,
+                            "translation_confidence": 0.98,
                         })
                     )
                 )
@@ -310,6 +311,7 @@ def test_combined_query_translation_and_classification_uses_one_chat_call(monkey
     assert result["classification"]["intent"] == "aggregate"
     assert result["classification"]["metric"] == "sales_amount"
     assert result["classification"]["confidence"] == 0.98
+    assert result["classification"]["translation_confidence"] == 0.98
     assert len(calls) == 1
     assert calls[0]["stream"] is False
     assert "reasoning_effort" not in calls[0]
@@ -364,7 +366,8 @@ def test_combined_query_translation_keeps_plain_text_provider_fallback(monkeypat
         "నిన్న ఎంత అమ్మకాలు జరిగాయి?", "te"
     )
     assert result["english_query"] == "How much were sales yesterday?"
-    assert result["classification"]["source"] == "deterministic_fallback"
+    assert result["classification"]["source"] == "unverified_translation"
+    assert result["classification"]["translation_confidence"] < 0.80
 
 
 def test_query_path_has_no_separate_llm_planner(monkeypatch):
@@ -434,6 +437,7 @@ def test_uncertain_telugu_sales_translation_gets_high_reasoning_verification(mon
                 "intent": "aggregate",
                 "metric": "sales_amount",
                 "confidence": 0.99,
+                "translation_confidence": 0.99,
             }
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))]
