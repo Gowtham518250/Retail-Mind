@@ -138,11 +138,11 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
               {logo ? <img src={logo} alt={(shop?.shop_name || 'Shop') + ' profile'} /> : <Store size={32} strokeWidth={1.6} />}
             </div>
             <div>
-              <div className={styles.type}><span className={styles.pulse} /> {shop?.shop_type || 'Local storefront'} · Online</div>
+              <div className={styles.type}>{shop?.shop_type || 'Local storefront'}</div>
               <div className={styles.ratingRow}>
                 <StarRating value={rating} />
                 <b>{rating > 0 ? rating.toFixed(1) : 'New'}</b>
-                <span>{Number(shop?.rating_count || 0)} verified reviews</span>
+                <span>{Number(shop?.rating_count || 0)} reviews</span>
               </div>
             </div>
           </motion.div>
