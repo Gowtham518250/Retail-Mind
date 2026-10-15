@@ -22,7 +22,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     : product.discount_pct || 0;
 
   const stock = product.stock_available;
-  const stockUnconfirmed = stock === undefined || !Number.isFinite(Number(stock));
+  const stockUnconfirmed = stock === undefined || stock === null || !Number.isFinite(Number(stock));
   const isOutOfStock = !stockUnconfirmed && Number(stock) <= 0;
   const lowStock = !isOutOfStock && !stockUnconfirmed && Number(stock) <= 5;
   const href = `/shop/${shopId}/product/${product.id}`;
