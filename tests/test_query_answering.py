@@ -9,7 +9,7 @@ def test_single_invoice_total_amount_is_not_reported_as_shop_total():
     )
     assert "one matching record" in answer.lower()
     assert "₹300.00" not in answer
-    assert "overall total has been inferred" in answer.lower()
+    assert "no total has been inferred" in answer.lower().lower()
 
 
 def test_scalar_sales_aggregate_is_summarized_from_the_actual_result():
