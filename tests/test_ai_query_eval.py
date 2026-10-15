@@ -71,3 +71,8 @@ def test_duplicate_and_unknown_ids_are_rejected():
         evaluate_cases([{"case_id": "x"}, {"case_id": "x"}], [])
     with pytest.raises(ValueError, match="no labelled case"):
         evaluate_cases([{"case_id": "x"}], [{"case_id": "other"}])
+
+
+def test_empty_labelled_case_set_is_rejected():
+    with pytest.raises(ValueError, match="at least one case"):
+        evaluate_cases([], [])
