@@ -161,8 +161,8 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
 
           <motion.div className={styles.stats} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.75, duration: 0.6, ease: EASE }}>
             <span><PackageCheck size={17} /> {products.length} products</span>
-            <span><ShieldCheck size={17} /> Secure checkout</span>
-            <span><Sparkles size={17} /> Fast dispatch</span>
+            <span><ShieldCheck size={17} /> Customer-only order access</span>
+            <span><Sparkles size={17} /> Shop-provided product details</span>
             {(shop?.online_setup_fee || 0) > 0 && <span><b className={styles.rupee}>₹</b> Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>}
           </motion.div>
 
@@ -178,7 +178,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
           <HeroScene3D lite className={styles.canvas} />
           <motion.div className={styles.floatChip} animate={{ y: [0, -9, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
             <span className={styles.floatIcon}><PackageCheck size={16} /></span>
-            <span><b>{loading ? 'Loading shelves…' : `${products.length} products`}</b><small>Ready to order</small></span>
+            <span><b>{loading ? 'Loading shelves…' : `${products.length} products`}</b><small>Availability shown per item</small></span>
           </motion.div>
         </div>
       </section>
