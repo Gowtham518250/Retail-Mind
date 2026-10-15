@@ -54,23 +54,30 @@ def _resolve_invoice_sync_payment_state(
     paid_amount,
     is_borrow: Optional[bool],
     notes: Optional[str],
+    payment_method: Optional[str],
 ):
-    """Return canonical (paid_amount, document_status, payment_status) for a synced sale.
+    """Return canonical paid amount, document status, and payment status.
 
-    A non-borrow checkout with no recorded receipt is a completed sale in the POS,
-    whose default payment is cash. Legacy clients are repaired only when their
-    persisted note explicitly identifies a Regular Sale. Explicit partial receipts
-    remain partial, and borrow invoices remain outstanding.
+    Only a checkout explicitly marked CASH can default zero received to a full
+    cash receipt. Older clients are repaired only when invoice notes explicitly
+    identify both cash and a regular (not borrow) sale. Online/unlabelled records
+    with no receipt are never assumed to be paid.
     """
     total = Decimal(str(total_amount or 0)).quantize(Decimal("0.01"))
     paid = Decimal(str(paid_amount or 0)).quantize(Decimal("0.01"))
     note_text = str(notes or "").casefold()
-    legacy_regular_sale = (
-        "regular sale" in note_text and "borrow invoice" not in note_text
+    method_text = str(payment_method or "").strip().casefold().replace("_", " ").replace("-", " ")
+    explicit_cash_method = method_text in {"cash", "cod", "cash on delivery"}
+    cash_in_legacy_note = "payment via cash" in note_text
+    legacy_regular_cash_sale = (
+        "regular sale" in note_text
+        and "borrow invoice" not in note_text
+        and cash_in_legacy_note
     )
 
     if paid == Decimal("0.00") and (
-        is_borrow is False or (is_borrow is None and legacy_regular_sale)
+        (is_borrow is False and (explicit_cash_method or cash_in_legacy_note))
+        or (is_borrow is None and legacy_regular_cash_sale)
     ):
         paid = total
 
@@ -80,6 +87,7 @@ def _resolve_invoice_sync_payment_state(
     if paid > Decimal("0.00"):
         return float(paid), "PARTIAL", "PARTIAL"
     return 0.0, "SENT", "UNPAID"
+
 
 # =====================
 # SCHEMAS
@@ -547,7 +555,8 @@ def sync_offline_invoice(
 
     resolved_paid_amount, resolved_invoice_status, resolved_payment_status = (
         _resolve_invoice_sync_payment_state(
-            data.total_amount, data.paid_amount, data.is_borrow, data.notes
+            data.total_amount, data.paid_amount, data.is_borrow,
+            data.notes, data.payment_method
         )
     )
 
