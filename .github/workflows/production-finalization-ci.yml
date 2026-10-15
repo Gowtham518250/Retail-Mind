@@ -49,7 +49,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^029_expense_idempotency')"
+          count="$(printf '%s\n' "$heads" | grep -c '^030_regular_cash_paid_state')"
           test "$count" -eq 1
           head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
@@ -85,6 +85,7 @@ jobs:
           pytest -q tests/test_query_answering.py
           pytest -q tests/test_worker_payroll_query_contract.py
           pytest -q tests/test_customer_phone_normalization.py
+          pytest -q tests/test_invoice_sync_payment_state.py
 
   customer-web:
     runs-on: ubuntu-latest
