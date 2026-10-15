@@ -118,6 +118,16 @@ def _parse_client_timestamp(raw: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _invoice_event_timestamp(invoice: Invoice) -> datetime:
+    """Return the sale event time in naive UTC for DateTime database columns."""
+    timestamp = getattr(invoice, "created_at", None)
+    if timestamp is None:
+        return datetime.utcnow()
+    if timestamp.tzinfo is not None:
+        return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+    return timestamp
+
+
 def _resolve_invoice_sync_payment_state(
     total_amount,
     paid_amount,
@@ -1089,7 +1099,7 @@ def sync_offline_invoice(
             amount=resolved_paid_amount,
             reference_id=invoice_number,
             description=f"Sales Sync: {invoice_number}",
-            tx_date=datetime.combine(inv_date, datetime.min.time()),
+            tx_date=_invoice_event_timestamp(invoice),
         )
         db.add(tx)
 
@@ -1491,6 +1501,7 @@ def create_invoice(
         customer_phone=data.customer_phone,
         invoice_number=invoice_number,
         invoice_date=inv_date,
+        created_at=datetime.utcnow(),
         due_date=due_date,
         subtotal=float(sub_t2),
         tax=data.tax,
@@ -1633,7 +1644,7 @@ def create_invoice(
         amount=data.paid_amount,
         reference_id=invoice_number,
         description=f"Manual Invoice: {invoice_number}",
-        tx_date=datetime.combine(inv_date, datetime.min.time()),
+        tx_date=_invoice_event_timestamp(invoice),
     )
     db.add(tx)
 
