@@ -62,7 +62,7 @@ function Reveal({ children, delay = 0, className }: { children: React.ReactNode;
 function ShopCard({ shop, index }: { shop: any; index: number }) {
   const [from, to, ink] = SHOP_TONES[Math.abs(Number(shop.shop_id) || index) % SHOP_TONES.length];
   const logo = resolveLogo(shop.logo_url);
-  const rated = Boolean(shop.rating_count);
+  const rated = Number(shop.rating_count) > 0 && Number(shop.rating) > 0;
   return (
     <motion.div
       initial={{ opacity: 0, y: 40, rotateX: -8 }}
