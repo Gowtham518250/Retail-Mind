@@ -108,9 +108,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      STAGING_BASE_URL: \${{ secrets.STAGING_BASE_URL }}
-      STAGING_TEST_EMAIL: \${{ secrets.STAGING_TEST_EMAIL }}
-      STAGING_TEST_PASSWORD: \${{ secrets.STAGING_TEST_PASSWORD }}
+      STAGING_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+      STAGING_TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}
+      STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
