@@ -235,7 +235,7 @@ def test_invoice_sales_journal_uses_full_invoice_total_not_paid_amount():
     for route in (create_invoice, sync_offline_invoice):
         source = inspect.getsource(route)
         sale_amounts = re.findall(
-            r'category="SALE",\\s*amount=([^,\\n]+)',
+            r'category="SALE",\s*amount=([^,\n]+)',
             source,
         )
         assert sale_amounts, f"No SALE journal entry found in {route.__name__}"
