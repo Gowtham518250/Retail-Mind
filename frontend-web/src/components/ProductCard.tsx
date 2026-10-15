@@ -22,8 +22,9 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     : product.discount_pct || 0;
 
   const stock = product.stock_available;
-  const isOutOfStock = (stock ?? 0) <= 0;
-  const lowStock = !isOutOfStock && stock !== undefined && stock <= 5;
+  const stockUnconfirmed = stock === undefined || stock === null || !Number.isFinite(Number(stock));
+  const isOutOfStock = !stockUnconfirmed && Number(stock) <= 0;
+  const lowStock = !isOutOfStock && !stockUnconfirmed && Number(stock) <= 5;
   const href = `/shop/${shopId}/product/${product.id}`;
 
   const handleAdd = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -60,14 +61,15 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
           <div className={styles.badges}>
             {discount > 0 && <span className={`${styles.badge} ${styles.sale}`}>{discount}% off</span>}
             {isOutOfStock && <span className={`${styles.badge} ${styles.out}`}>Sold out</span>}
+            {stockUnconfirmed && <span className={`${styles.badge} ${styles.out}`}>Stock unconfirmed</span>}
             {lowStock && <span className={`${styles.badge} ${styles.low}`}>Only {stock} left</span>}
           </div>
         </Link>
 
         <div className={styles.body}>
-          <span className={styles.category}>{product.category || 'Featured'}</span>
+          {product.category && <span className={styles.category}>{product.category}</span>}
           <h3 className={styles.title}><Link href={href}>{product.name}</Link></h3>
-          <p className={styles.desc}>{product.description || 'Freshly curated for your daily essentials.'}</p>
+          {product.description && <p className={styles.desc}>{product.description}</p>}
 
           <div className={styles.buy}>
             <div className={styles.priceBox}>
@@ -80,7 +82,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
             <motion.button
               className={`${styles.add} ${state === 'added' ? styles.added : ''}`}
               onClick={handleAdd}
-              disabled={isOutOfStock}
+              disabled={isOutOfStock || stockUnconfirmed}
               whileTap={{ scale: 0.94 }}
               aria-label={`Add ${product.name} to cart`}
             >
@@ -94,6 +96,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
                   transition={{ duration: 0.18 }}
                 >
                   {isOutOfStock ? 'Unavailable'
+                    : stockUnconfirmed ? 'Stock unconfirmed'
                     : state === 'added' ? <><Check size={16} strokeWidth={3} /> Added</>
                     : state === 'incart' ? <><Plus size={16} strokeWidth={3} /> In cart · {inCartCount}</>
                     : <><ShoppingBag size={16} /> Add</>}

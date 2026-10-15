@@ -15,12 +15,13 @@ function Money({ value }: { value: number }) {
 }
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, updateQuantity, removeFromCart, cartTotal } = useCart();
+  const { cartItems, isCartOpen, toggleCart, updateQuantity, removeFromCart, cartTotal, cartMessage, clearCartMessage, setCartMessage } = useCart();
   const router = useRouter();
   const params = useParams();
-  const shopId = Number(params?.shopId || 8);
+  const shopId = Number(params?.shopId || 0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const count = cartItems.reduce((s, i) => s + i.quantity, 0);
+  const hasUnavailableItems = cartItems.some((item) => item.product.stock_available === undefined || item.product.stock_available === null || !Number.isFinite(Number(item.product.stock_available)) || Number(item.product.stock_available) <= 0);
 
   useEffect(() => {
     if (!isCartOpen) return;
@@ -36,8 +37,18 @@ export default function CartDrawer() {
   }, [isCartOpen, toggleCart]);
 
   const handleCheckout = () => {
+    const cartShopId = Number(cartItems[0]?.product.shop_id ?? shopId);
+    if (!Number.isSafeInteger(cartShopId) || cartShopId <= 0 || cartItems.some((item) => Number(item.product.shop_id) !== cartShopId)) {
+      setCartMessage('We could not verify the shop for every item. Remove and re-add the affected item from its shop page.');
+      return;
+    }
+    if (hasUnavailableItems) {
+      setCartMessage('Your cart contains an item whose stock is unavailable or unconfirmed. Remove it or revisit the shop to refresh availability.');
+      return;
+    }
+
+    clearCartMessage();
     toggleCart();
-    const cartShopId = cartItems[0]?.product.shop_id || shopId;
     const token = localStorage.getItem('customerToken');
 
     if (!token) {
@@ -86,6 +97,12 @@ export default function CartDrawer() {
               </button>
             </div>
 
+            {cartMessage && (
+              <div role="alert" style={{ margin: '0 18px 12px', padding: '11px 13px', border: '1px solid #f3b4be', borderRadius: 12, background: '#fff1f2', color: '#9f1239', fontSize: 13, lineHeight: 1.45, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span>{cartMessage}</span>
+                <button type="button" onClick={clearCartMessage} aria-label="Dismiss cart message" style={{ alignSelf: 'flex-start', fontWeight: 800 }}>×</button>
+              </div>
+            )}
             <div className={styles.scroll}>
               {cartItems.length === 0 ? (
                 <div className={styles.empty}>
@@ -153,8 +170,8 @@ export default function CartDrawer() {
                     <span>Subtotal</span>
                     <b><Money value={cartTotal} /></b>
                   </div>
-                  <p>Taxes included. Delivery charges calculated at checkout.</p>
-                  <button className={styles.checkout} onClick={handleCheckout} id="checkout-btn">
+                  <p>Estimated subtotal. Final prices, stock and applicable charges are confirmed by the shop at checkout.</p>
+                  <button className={styles.checkout} onClick={handleCheckout} id="checkout-btn" disabled={hasUnavailableItems} aria-disabled={hasUnavailableItems} style={hasUnavailableItems ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}>
                     Proceed to checkout <ArrowRight size={18} />
                   </button>
                 </motion.div>
