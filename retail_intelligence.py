@@ -41,6 +41,10 @@ def _normalize_optional_idempotency_key(raw: Optional[str]) -> Optional[str]:
         )
     return key
 
+def _validate_date_range(start_date: Optional[date], end_date: Optional[date]) -> None:
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+
 
 # =====================================
 # EXPENSE TRACKER
@@ -177,8 +181,7 @@ def list_expenses(
 ):
     """List expenses and return totals/counts for the exact filtered set."""
     shop_id = current_user["user_id"]
-    if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+    _validate_date_range(start_date, end_date)
 
     q = db.query(ShopExpense).filter(ShopExpense.shop_id == shop_id)
     if start_date:
@@ -557,8 +560,7 @@ def list_reconciliations(
 ):
     """View append-only shop-scoped reconciliation history."""
     shop_id = current_user["user_id"]
-    if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=422, detail="start_date must be on or before end_date.")
+    _validate_date_range(start_date, end_date)
 
     q = db.query(BankReconciliation).filter(BankReconciliation.shop_id == shop_id)
     if start_date:
@@ -610,6 +612,7 @@ def get_profit_and_loss(
         start_date = date.today().replace(day=1)  # Current month
     if not end_date:
         end_date = date.today()
+    _validate_date_range(start_date, end_date)
 
     start_dt = datetime.combine(start_date, datetime.min.time())
     end_dt = datetime.combine(end_date, datetime.max.time())
@@ -670,12 +673,13 @@ def get_all_transactions(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     skip: int = 0,
-    limit: int = Query(100, le=500),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
     """All Transactions view: every money movement (sales, expenses, khata, PO)"""
     shop_id = current_user["user_id"]  # FIX: owner_only returns dict, not int
+    _validate_date_range(start_date, end_date)
     q = db.query(UniversalTransaction).filter(UniversalTransaction.shop_id == shop_id)
     if tx_type:
         q = q.filter(UniversalTransaction.tx_type == tx_type.upper())
