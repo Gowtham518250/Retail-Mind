@@ -2,6 +2,8 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
+from pydantic import ValidationError
+
 from invoices_billing import InvoiceSyncCreate, InvoiceLineItemCreate, _invoice_replay_matches
 
 
@@ -48,3 +50,48 @@ def test_invoice_retry_rejects_changed_line_items_under_same_offline_id():
     existing = _existing_invoice(lines=[SimpleNamespace(description="Rice", quantity=Decimal("2"), unit_price=Decimal("50"))])
     changed = _payload(lines=[InvoiceLineItemCreate(product_name="Rice", quantity=3, unit_price=50)])
     assert _invoice_replay_matches(existing, changed, "INV-1") is False
+
+
+def _financial_sync_payload(**overrides):
+    values = {
+        "invoice_number": "BILL-FINANCIAL-1",
+        "offline_id": "offline-financial-1",
+        "total_amount": 100.00,
+        "paid_amount": 0.00,
+        "tax": 10.00,
+        "invoice_date": "2026-10-15",
+        "line_items": [
+            InvoiceLineItemCreate(product_name="Rice", quantity=1, unit_price=90)
+        ],
+    }
+    values.update(overrides)
+    return values
+
+
+def test_sync_invoice_rejects_paid_amount_above_total():
+    with pytest.raises(ValidationError, match="paid_amount cannot exceed total_amount"):
+        InvoiceSyncCreate(**_financial_sync_payload(total_amount=100, paid_amount=100.01))
+
+
+def test_sync_invoice_rejects_tax_above_total():
+    with pytest.raises(ValidationError, match="tax cannot exceed total_amount"):
+        InvoiceSyncCreate(**_financial_sync_payload(total_amount=100, tax=100.01))
+
+
+def test_sync_invoice_rounds_money_to_paise_before_balance_validation():
+    data = InvoiceSyncCreate(
+        **_financial_sync_payload(
+            total_amount=100.005,
+            paid_amount=100.004,
+            tax=10.004,
+        )
+    )
+    assert data.total_amount == 100.01
+    assert data.paid_amount == 100.00
+    assert data.tax == 10.00
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), -0.01])
+def test_sync_invoice_rejects_non_finite_or_negative_monetary_values(bad_value):
+    with pytest.raises(ValidationError):
+        InvoiceSyncCreate(**_financial_sync_payload(total_amount=bad_value))
