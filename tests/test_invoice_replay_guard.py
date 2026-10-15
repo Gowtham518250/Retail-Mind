@@ -2,6 +2,8 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
+
 from pydantic import ValidationError
 
 from invoices_billing import InvoiceSyncCreate, InvoiceLineItemCreate, _invoice_replay_matches
