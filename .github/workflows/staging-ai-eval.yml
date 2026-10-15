@@ -1,0 +1,45 @@
+name: Staging AI Data-Accuracy Evaluation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STAGING_BASE_URL: \${{ secrets.STAGING_BASE_URL }}
+      STAGING_TEST_EMAIL: \${{ secrets.STAGING_TEST_EMAIL }}
+      STAGING_TEST_PASSWORD: \${{ secrets.STAGING_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install evaluator dependencies
+        run: python -m pip install --upgrade requests sqlglot
+      - name: Require dedicated staging credentials
+        run: |
+          test -n "$STAGING_BASE_URL" || (echo "::error::Configure STAGING_BASE_URL in repository Actions secrets."; exit 1)
+          test -n "$STAGING_TEST_EMAIL" || (echo "::error::Configure STAGING_TEST_EMAIL in repository Actions secrets."; exit 1)
+          test -n "$STAGING_TEST_PASSWORD" || (echo "::error::Configure STAGING_TEST_PASSWORD in repository Actions secrets."; exit 1)
+      - name: Compare AI answers with canonical staging invoices
+        run: |
+          python tools/run_staging_ai_eval.py \
+            --output staging-ai-eval.json \
+            --min-critical-pass-rate 1.0 \
+            --min-answer-accuracy 1.0 \
+            --min-shop-scope-accuracy 1.0 \
+            --min-date-range-accuracy 1.0 \
+            --min-source-precision 1.0 \
+            --min-source-recall 1.0
+      - name: Upload sanitized evaluation evidence
+        if: always() && hashFiles('staging-ai-eval.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-ai-evaluation
+          path: staging-ai-eval.json
+          if-no-files-found: error
