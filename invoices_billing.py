@@ -139,6 +139,36 @@ class InvoiceSyncCreate(BaseModel):
     total_amount: float = Field(..., ge=0)
     paid_amount: float = Field(0, ge=0)
     tax: float = Field(0, ge=0)
+
+    @validator("total_amount", "paid_amount", "tax", pre=True)
+    def normalize_money_to_paise(cls, value):
+        """Normalize monetary inputs before validation or persistence.
+
+        A float's extra binary precision must not leak into invoice balances.
+        Once rounded to paise, every later comparison uses the same currency
+        precision as the stored NUMERIC financial fields.
+        """
+        try:
+            amount = Decimal(str(value))
+            if not amount.is_finite() or amount < 0:
+                raise ValueError("Monetary amounts must be finite and non-negative.")
+            return float(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError("Monetary amounts must be finite and non-negative.") from exc
+
+    @validator("paid_amount")
+    def paid_amount_must_not_exceed_total(cls, value, values):
+        total = values.get("total_amount")
+        if total is not None and value > total:
+            raise ValueError("paid_amount cannot exceed total_amount.")
+        return value
+
+    @validator("tax")
+    def tax_must_not_exceed_total(cls, value, values):
+        total = values.get("total_amount")
+        if total is not None and value > total:
+            raise ValueError("tax cannot exceed total_amount.")
+        return value
     payment_status: str = "PAID"
     payment_method: Optional[str] = Field(default=None, max_length=50)
     line_items: Optional[List[InvoiceLineItemCreate]] = None
