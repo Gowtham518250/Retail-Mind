@@ -106,3 +106,86 @@ def test_optional_idempotency_key_rejects_whitespace_only_values():
     with pytest.raises(HTTPException) as exc:
         _normalize_optional_idempotency_key("        ")
     assert exc.value.status_code == 422
+
+
+class _ExpenseQuery:
+    def __init__(self, db, model):
+        self.db = db
+        self.model = model
+        self.filters = []
+
+    def filter(self, *criteria):
+        self.filters.extend(criteria)
+        return self
+
+    def first(self):
+        constraints = {}
+        for expression in self.filters:
+            left = getattr(expression, "left", None)
+            right = getattr(expression, "right", None)
+            field_name = getattr(left, "name", None)
+            if field_name:
+                constraints[field_name] = getattr(right, "value", right)
+        for row in self.db.rows.get(self.model, []):
+            if all(getattr(row, key, None) == value for key, value in constraints.items()):
+                return row
+        return None
+
+
+class _ExpenseSession:
+    def __init__(self):
+        self.rows = {ShopExpense: [], __import__("models").UniversalTransaction: []}
+        self.pending = []
+        self.next_id = 1
+
+    def query(self, model):
+        return _ExpenseQuery(self, model)
+
+    def add(self, item):
+        self.pending.append(item)
+
+    def commit(self):
+        for item in self.pending:
+            if getattr(item, "id", None) is None:
+                item.id = self.next_id
+                self.next_id += 1
+            self.rows.setdefault(type(item), []).append(item)
+        self.pending.clear()
+
+    def refresh(self, item):
+        return None
+
+    def rollback(self):
+        self.pending.clear()
+
+
+def test_expense_handler_creates_one_source_and_journal_row_for_retry():
+    from models import UniversalTransaction
+    from retail_intelligence import add_expense
+
+    db = _ExpenseSession()
+    request = _expense_request()
+
+    created = add_expense(request, db, {"user_id": 7})
+    replay = add_expense(request, db, {"user_id": 7})
+
+    assert created["duplicate"] is False
+    assert replay["duplicate"] is True
+    assert replay["expense_id"] == created["expense_id"]
+    assert len(db.rows[ShopExpense]) == 1
+    assert len(db.rows[UniversalTransaction]) == 1
+
+
+def test_expense_handler_rejects_reused_key_for_different_amount():
+    from models import UniversalTransaction
+    from retail_intelligence import add_expense
+
+    db = _ExpenseSession()
+    add_expense(_expense_request(), db, {"user_id": 7})
+
+    with pytest.raises(HTTPException) as exc:
+        add_expense(_expense_request(amount="750"), db, {"user_id": 7})
+
+    assert exc.value.status_code == 409
+    assert len(db.rows[ShopExpense]) == 1
+    assert len(db.rows[UniversalTransaction]) == 1
