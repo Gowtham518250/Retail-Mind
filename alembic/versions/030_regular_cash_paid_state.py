@@ -20,13 +20,17 @@ def upgrade():
         """
         UPDATE invoices
         SET paid_amount = total_amount,
+            payment_method = 'CASH',
             payment_status = 'PAID',
             status = 'PAID',
             updated_at = CURRENT_TIMESTAMP
         WHERE COALESCE(paid_amount, 0) = 0
           AND COALESCE(total_amount, 0) > 0
           AND source = 'OFFLINE_SYNC'
-          AND UPPER(COALESCE(payment_method, '')) = 'CASH'
+          AND (
+              UPPER(COALESCE(payment_method, '')) IN ('CASH', 'COD', 'CASH ON DELIVERY')
+              OR LOWER(COALESCE(notes, '')) LIKE '%payment via cash%'
+          )
           AND (payment_status IS NULL OR payment_status IN ('UNPAID', 'OVERDUE'))
           AND (status IS NULL OR status NOT IN ('CANCELLED', 'DRAFT'))
           AND LOWER(COALESCE(notes, '')) LIKE '%regular sale%'
