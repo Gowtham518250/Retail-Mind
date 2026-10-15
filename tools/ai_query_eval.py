@@ -91,6 +91,9 @@ def evaluate_cases(cases: Iterable[dict[str, Any]], results: Iterable[dict[str, 
             raise ValueError(f"Duplicate case_id in cases: {case_id}")
         case_map[case_id] = row
 
+    if not case_map:
+        raise ValueError("The labelled case set must contain at least one case.")
+
     for row in result_rows:
         result_id = str(row.get("case_id", "")).strip()
         if not result_id:
