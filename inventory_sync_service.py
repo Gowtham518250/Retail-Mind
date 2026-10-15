@@ -412,6 +412,43 @@ def deduct_stock_batch(
                     "min_stock": product.min_stock,
                 })
 
+        # A sale/invoice batch is one business operation. If any line fails,
+        # roll back every new deduction so invoice sync cannot leave only some
+        # products decremented. Previously processed idempotent retries remain
+        # successful because they do not mutate stock in this request.
+        if failed_items and inventory_changes:
+            newly_staged = [result for result in results if not result.get("duplicate", False)]
+            db.rollback()
+            for result in newly_staged:
+                product_id = result.get("product_id")
+                current_product = (
+                    db.query(Product)
+                    .filter(Product.id == product_id, Product.user_id == user_id)
+                    .first()
+                )
+                result["success"] = False
+                result["message"] = "Batch rolled back because another item failed."
+                result["new_stock"] = (
+                    current_product.current_stock if current_product is not None else None
+                )
+                failed_items.append({
+                    "product_id": product_id,
+                    "error": "Batch rolled back because another item failed.",
+                })
+            inventory_changes.clear()
+            low_stock_alerts.clear()
+            return {
+                "success": False,
+                "total_items": len(request.updates),
+                "successful": sum(
+                    1 for result in results
+                    if result["success"] and result.get("duplicate", False)
+                ),
+                "failed": len(failed_items),
+                "results": results,
+                "failed_items": failed_items,
+            }
+
         sync_event = None
         if inventory_changes:
             sync_event = append_sync_event(db, {
