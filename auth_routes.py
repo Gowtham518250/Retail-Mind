@@ -42,7 +42,12 @@ class GoogleAuthRequest(BaseModel):
 
 
 @router.post("/google")
-def google_login(request: GoogleAuthRequest, db: Session = Depends(get_db)):
+@rate_limit_endpoint(max_requests=10, window_seconds=60)
+def google_login(
+    payload: GoogleAuthRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """Authenticate an owner using a Google ID token verified on the server.
 
     The client-sent email/name are deliberately ignored. Google claims are the
@@ -53,7 +58,7 @@ def google_login(request: GoogleAuthRequest, db: Session = Depends(get_db)):
     from sqlalchemy import func
     from sqlalchemy.exc import IntegrityError
 
-    raw_token = request.google_token.strip()
+    raw_token = payload.google_token.strip()
     if not raw_token:
         raise HTTPException(status_code=400, detail="Google ID token is required")
 
