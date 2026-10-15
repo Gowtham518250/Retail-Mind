@@ -133,7 +133,7 @@ def register_user(
         # Store refresh token
         _store_refresh_token(db, new_user.id, refresh_token)
         
-        logger.info(f"New user registered: {new_user.email}")
+        logger.info("New user registered: user_id=%s", new_user.id)
         
         return LoginResponse(
             access_token=access_token,
@@ -173,7 +173,7 @@ def login_user(
         
         if not user or not verify_password(login_data.password, user.password):
             # Log failed attempt (implement rate limiting here)
-            logger.warning(f"Failed login attempt for email: {login_data.email}")
+            logger.warning("Failed login attempt")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
@@ -189,7 +189,7 @@ def login_user(
         # Create session token
         _create_session_token(db, user.id, access_token, refresh_token)
         
-        logger.info(f"User logged in: {user.email}")
+        logger.info("User logged in: user_id=%s", user.id)
         
         return LoginResponse(
             access_token=access_token,
