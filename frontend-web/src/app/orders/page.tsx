@@ -1203,22 +1203,24 @@ export default function MyOrdersPage() {
             </button>
           </div>
         ) : visibleOrders.length === 0 ? (
-          <div className="orders-fk-empty">
-            <div className="orders-fk-empty-icon">
-              <ShoppingBag size={30} />
+          <div className="orders-fk-empty" role="status">
+            <div className="orders-fk-empty-illustration">
+              <ShoppingBag size={29} aria-hidden="true" />
             </div>
-            <h2>{orders.length === 0 ? 'No orders yet' : 'No matching orders'}</h2>
+            <span className="orders-fk-eyebrow">{orders.length === 0 ? 'A FRESH START' : 'NO MATCHES'}</span>
+            <h2>{orders.length === 0 ? 'Your next favourite is out there.' : 'No orders match these filters.'}</h2>
             <p>
               {orders.length === 0
-                ? 'Place your first order and it will appear here with live tracking.'
-                : 'Try another filter or search term.'}
+                ? 'When you place an order from a Retail Mind shop, its status and details will appear here.'
+                : 'Clear the status, search or date filters to see your other orders.'}
             </p>
-            {orders.length === 0 && (
-              <button
-                className="orders-fk-primary-btn"
-                onClick={() => router.push('/')}
-              >
-                Start Shopping
+            {orders.length === 0 ? (
+              <button type="button" className="orders-fk-primary-btn" onClick={() => router.push('/')}>
+                Browse shops <ArrowLeft size={15} className="orders-fk-arrow-forward" />
+              </button>
+            ) : (
+              <button type="button" className="orders-fk-primary-btn" onClick={clearOrderFilters}>
+                Clear filters <X size={15} />
               </button>
             )}
           </div>
@@ -1273,13 +1275,19 @@ export default function MyOrdersPage() {
                     className="orders-fk-card"
                   >
                     <div className="orders-fk-card-top">
-                      <div>
-                        <div className="orders-fk-order-number">
-                          Order #{order.order_id}
-                        </div>
-                        <div className="orders-fk-order-date">
-                          {formatDate(order.created_at)}
-                        </div>
+                      <div className="orders-fk-order-identity">
+                        <button
+                          type="button"
+                          className="orders-fk-order-number-trigger"
+                          onClick={() => toggleOrder(order.order_id)}
+                          aria-expanded={isOpen}
+                          aria-controls={'order-details-' + order.order_id}
+                        >
+                          <span className="orders-fk-order-number">Order #{order.order_id}</span>
+                          {isOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        </button>
+                        <div className="orders-fk-order-date">{formatDate(order.created_at)}</div>
+                        <div className="orders-fk-shop-name"><Store size={14} aria-hidden="true" /> {order.shop_name || 'Local shop'}</div>
                       </div>
                       <div className="orders-fk-card-total">
                         <span>Order total</span>
@@ -1365,8 +1373,9 @@ export default function MyOrdersPage() {
                         {(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status)) && (
                           <button
                             className="orders-fk-details-btn danger"
-                            onClick={() => void cancelOrder(order)}
-                            disabled={cancelingOrderId === order.order_id}
+                            type="button"
+                            onClick={(event) => requestCancelOrder(order, event.currentTarget)}
+                            disabled={cancelingOrderId !== null || !(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status))}
                           >
                             {cancelingOrderId === order.order_id ? 'Cancelling…' : 'Cancel order'}
                             <Ban size={14} />
@@ -1409,9 +1418,11 @@ export default function MyOrdersPage() {
                           <Truck size={14} />
                         </button>
                         <button
+                          type="button"
                           className="orders-fk-details-btn"
-                          onClick={() => void toggleOrder(order.order_id)}
+                          onClick={() => toggleOrder(order.order_id)}
                           aria-expanded={isOpen}
+                          aria-controls={'order-details-' + order.order_id}
                         >
                           {isOpen ? 'Hide Details' : 'View Details'}
                           {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -1420,7 +1431,7 @@ export default function MyOrdersPage() {
                     </div>
 
                     {isOpen && (
-                      <div className="orders-fk-details">
+                      <div className="orders-fk-details" id={'order-details-' + order.order_id}>
                         <div className="orders-fk-details-grid">
                           <div>
                             <span>Delivery address</span>
@@ -1442,6 +1453,10 @@ export default function MyOrdersPage() {
                             <span>Items</span>
                             <strong>{order.items.length}</strong>
                           </div>
+                          <div>
+                            <span>Payment method</span>
+                            <strong>{String(order.payment_method || 'COD').toUpperCase() === 'COD' ? 'Cash on delivery' : String(order.payment_method || 'Online payment').toUpperCase()}</strong>
+                          </div>
                         </div>
 
                         {returnActive && (
@@ -1459,86 +1474,7 @@ export default function MyOrdersPage() {
                           </div>
                         )}
 
-                        {deliveryLoadingId === order.order_id ? (
-                          <div
-                            style={{
-                              marginBottom: 16,
-                              padding: '12px 14px',
-                              borderRadius: 14,
-                              background: 'rgba(99,102,241,.06)',
-                              border: '1px solid rgba(99,102,241,.12)',
-                              color: '#64748b',
-                              fontSize: 12,
-                            }}
-                          >
-                            Loading delivery tracking…
-                          </div>
-                        ) : deliveryByOrder[order.order_id] ? (
-                          <div
-                            style={{
-                              marginBottom: 16,
-                              padding: '14px',
-                              borderRadius: 16,
-                              background: 'linear-gradient(135deg, rgba(37,99,235,.07), rgba(34,211,238,.05))',
-                              border: '1px solid rgba(96,165,250,.18)',
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 12,
-                              }}
-                            >
-                              <div>
-                                <div
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 900,
-                                    letterSpacing: '.11em',
-                                    color: '#64748b',
-                                  }}
-                                >
-                                  DELIVERY TRACKING
-                                </div>
-                                <div
-                                  style={{
-                                    marginTop: 4,
-                                    fontWeight: 800,
-                                    color: '#0f172a',
-                                  }}
-                                >
-                                  {String(deliveryByOrder[order.order_id].status || 'NOT_ASSIGNED').replaceAll('_', ' ')}
-                                </div>
-                              </div>
-                              <Truck size={20} color="#2563EB" />
-                            </div>
-                            {deliveryByOrder[order.order_id].driver_name && (
-                              <div
-                                style={{
-                                  marginTop: 10,
-                                  display: 'flex',
-                                  gap: 14,
-                                  flexWrap: 'wrap',
-                                  fontSize: 11,
-                                  color: '#475569',
-                                }}
-                              >
-                                <span>
-                                  Driver: <strong>{deliveryByOrder[order.order_id].driver_name}</strong>
-                                </span>
-                                {deliveryByOrder[order.order_id].driver_phone && (
-                                  <span>
-                                    {deliveryByOrder[order.order_id].driver_phone}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-
-                        {order.status === 'DELIVERED' && order.review && (
+                       {order.status === 'DELIVERED' && order.review && (
                           <div className="orders-fk-review-card">
                             <div className="orders-fk-detail-eyebrow">YOUR VERIFIED REVIEW</div>
                             <div className="orders-fk-review-row">
@@ -1597,15 +1533,20 @@ export default function MyOrdersPage() {
                                 type="button"
                                 className="orders-fk-primary-btn"
                                 onClick={() => void submitReview(order)}
+                                disabled={reviewSubmittingId === order.order_id}
                               >
-                                Publish review <Sparkles size={14} />
+                                {reviewSubmittingId === order.order_id ? 'Publishing…' : 'Publish review'} <Sparkles size={14} />
                               </button>
                             </div>
                           </div>
                         )}
 
                         <div className="orders-fk-items">
-                          {order.items.map((item, idx) => {
+                          <div className="orders-fk-items-heading">
+                            <strong>Items in this order</strong>
+                            <span>{order.items.length} {order.items.length === 1 ? 'item' : 'items'}</span>
+                          </div>
+                          {order.items.map((item, idx) => {}
                             const name =
                               item.product_name ||
                               item.name ||
@@ -1623,7 +1564,15 @@ export default function MyOrdersPage() {
                                 key={item.product_id + '-' + idx}
                               >
                                 <div className="orders-fk-product-icon small">
-                                  <Package size={18} />
+                                  {resolveOrderImage(item.image_url || item.product_image_url) ? (
+                                    <img
+                                      src={resolveOrderImage(item.image_url || item.product_image_url)}
+                                      alt=""
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <Package size={18} aria-hidden="true" />
+                                  )}
                                 </div>
                                 <div className="orders-fk-detail-name">
                                   <strong>{name}</strong>
@@ -1636,6 +1585,22 @@ export default function MyOrdersPage() {
                               </div>
                             );
                           })}
+                        </div>
+                        <div className="orders-fk-price-summary" aria-label="Order price breakdown">
+                          <div>
+                            <span>Subtotal</span>
+                            <strong>{formatCurrency(Number(order.subtotal ?? (Number(order.total_amount || 0) - Number(order.online_setup_fee || 0))))}</strong>
+                          </div>
+                          {Number(order.online_setup_fee || 0) > 0 && (
+                            <div>
+                              <span>Online setup / service fee</span>
+                              <strong>{formatCurrency(Number(order.online_setup_fee || 0))}</strong>
+                            </div>
+                          )}
+                          <div className="orders-fk-price-total">
+                            <span>Order total</span>
+                            <strong>{formatCurrency(order.total_amount)}</strong>
+                          </div>
                         </div>
                       </div>
                     )}
