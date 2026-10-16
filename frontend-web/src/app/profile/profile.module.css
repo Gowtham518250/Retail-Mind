@@ -313,3 +313,30 @@
     padding: 22px 18px;
   }
 }
+
+
+/* Market Crate account hub — retain existing account and logout behavior. */
+.profilePage { background:radial-gradient(circle at 5% 0%,rgba(243,202,79,.18),transparent 28%),linear-gradient(180deg,var(--rm-paper),#f4ebdb); color:var(--rm-ink); }
+.container { max-width:1180px; }
+.profileHeaderCard,.accountDetailsCard { border:1px solid var(--rm-line); border-radius:26px; background:rgba(255,253,247,.91); color:var(--rm-ink); box-shadow:0 20px 48px rgba(24,40,32,.07); backdrop-filter:blur(16px); }
+.profileHeaderCard { position:relative; overflow:hidden; }
+.headerGlowLine { background:linear-gradient(90deg,var(--rm-green),var(--rm-lime),var(--rm-orange)); }
+.avatarAura { background:radial-gradient(circle,var(--rm-lime),rgba(232,84,30,.18)); }
+.avatarInner { background:var(--rm-green-deep); color:var(--rm-lime); }
+.userName { color:var(--rm-green-deep); font:900 clamp(2rem,4vw,3.6rem)/.9 var(--font-display); }
+.roleBadge { border:1px solid rgba(43,68,54,.13); background:var(--rm-green-soft); color:var(--rm-green-deep); border-radius:999px; }
+.userContactRow { color:var(--rm-muted); }
+.logoutBtn { border-radius:13px; background:var(--rm-orange); color:#fffdf7; }
+.cardSectionTitle { color:var(--rm-green-deep); font:900 1.8rem/.95 var(--font-display); }
+.detailsGrid { gap:12px; }
+.detailBox { border:1px solid var(--rm-line); border-radius:17px; background:#fff; }
+.detailLabel { color:var(--rm-muted); }
+.detailValue { color:var(--rm-ink); }
+.bentoNavGrid { gap:14px; }
+.navCard { position:relative; overflow:hidden; border:1px solid var(--rm-line); border-radius:22px; background:var(--rm-paper-2); box-shadow:0 12px 30px rgba(24,40,32,.055); transform-style:preserve-3d; transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease; }
+.navCard:hover { transform:perspective(900px) rotateX(1.8deg) rotateY(-1.8deg) translateY(-4px); border-color:rgba(232,84,30,.35); box-shadow:0 20px 40px rgba(24,40,32,.12); }
+.navCardTitle { color:var(--rm-green-deep); font:800 1.35rem/1 var(--font-display); }
+.navCardDesc { color:var(--rm-muted); }
+.navCardIcon { background:var(--rm-lime); color:var(--rm-green-deep); border-radius:15px; }
+@media(max-width:640px) { .profileHeaderCard { padding:20px; } .navCard { transform:none; } .navCard:hover { transform:translateY(-2px); } }
+@media(prefers-reduced-motion:reduce) { .navCard { transition:none; } .navCard:hover { transform:none; } }

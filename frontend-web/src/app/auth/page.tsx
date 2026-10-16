@@ -19,6 +19,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
+import HeroScene3D from '../../components/HeroScene3D';
 import styles from './auth.module.css';
 
 type View = 'login' | 'register' | 'reset';
@@ -302,6 +303,9 @@ export default function AuthPage() {
               </div>
             </div>
           </div>
+          <div className={styles.authScene} aria-label="Animated 3D shopping scene">
+            <HeroScene3D lite className={styles.authSceneCanvas} />
+          </div>
         </motion.div>
 
         {/* Right Glass Card */}
@@ -536,6 +540,23 @@ export default function AuthPage() {
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
+                  </div>
+                  <div className={styles.passwordStrength} aria-live="polite">
+                    <div className={styles.passwordStrengthTrack}>
+                      <span
+                        className={styles.passwordStrengthFill}
+                        data-strength={password.length === 0 ? 'empty' : password.length < 6 ? 'weak' : password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) ? 'medium' : 'strong'}
+                      />
+                    </div>
+                    <small>
+                      {password.length === 0
+                        ? 'Use 8+ characters for a stronger password.'
+                        : password.length < 6
+                          ? 'Weak — add more characters.'
+                          : password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)
+                            ? 'Fair — add a number and uppercase letter.'
+                            : 'Strong password.'}
+                    </small>
                   </div>
                 </div>
 

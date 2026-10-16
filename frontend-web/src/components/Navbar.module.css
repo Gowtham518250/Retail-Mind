@@ -111,3 +111,45 @@
 @media (max-width: 380px) {
   .word { display: none; }
 }
+
+
+/* Mobile-safe navigation refinement */
+.wrap { width:100%; z-index:80; }
+.nav { width:min(1280px,calc(100% - 32px)); gap:12px; padding:10px 14px; border:1px solid rgba(43,68,54,.12); border-radius:20px; background:rgba(255,253,247,.94); color:var(--rm-ink); box-shadow:0 12px 34px rgba(24,40,32,.075); backdrop-filter:blur(18px); }
+.scrolled { background:rgba(255,253,247,.97); box-shadow:0 16px 38px rgba(24,40,32,.12); }
+.brand { flex:0 0 auto; color:var(--rm-green-deep); }
+.logo { background:var(--rm-lime); color:var(--rm-green-deep); border-radius:12px; }
+.word { color:var(--rm-green-deep); font:900 1.35rem/.9 var(--font-display); letter-spacing:-.02em; }
+.word b { color:var(--rm-orange); }
+.actions { min-width:0; gap:5px; }
+.link { min-width:0; border-radius:12px; }
+.linkInner { gap:7px; }
+.label { white-space:nowrap; }
+.activePill { background:var(--rm-green); border-radius:12px; }
+.active { color:var(--rm-paper); }
+.cart { flex:0 0 auto; border-radius:12px; background:var(--rm-orange); color:#fffdf7; }
+.badge { background:var(--rm-lime); color:var(--rm-green-deep); }
+.mobileBottomNav { z-index:90; }
+.bottomNavTrack { border:1px solid rgba(43,68,54,.13); border-radius:18px 18px 0 0; background:rgba(255,253,247,.96); box-shadow:0 -10px 30px rgba(24,40,32,.09); backdrop-filter:blur(18px); }
+.bottomNavItem { min-width:0; color:var(--rm-muted); }
+.bottomNavItemActive { color:var(--rm-green-deep); }
+.bottomNavIconWrap { position:relative; }
+.bottomActiveDot { background:var(--rm-orange); }
+@media(max-width:900px) {
+  .nav { width:calc(100% - 20px); }
+  .label { font-size:.75rem; }
+}
+@media(max-width:700px) {
+  .nav { width:calc(100% - 16px); padding:9px 10px; border-radius:16px; }
+  .actions { gap:3px; }
+  .link { padding:8px 7px; }
+  .linkInner { gap:0; }
+  .linkInner > svg { width:18px; height:18px; }
+  .label { display:none; }
+  .cart { padding:9px; }
+  .cartLabel { display:none; }
+  .mobileBottomNav { display:block; position:fixed; left:0; right:0; bottom:0; padding:0; padding-bottom:env(safe-area-inset-bottom); }
+  .bottomNavTrack { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:0; padding:8px 4px 6px; }
+  .bottomNavItem { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:5px 1px; font-size:.68rem; line-height:1; }
+  .bottomNavIconWrap svg { width:19px; height:19px; }
+}

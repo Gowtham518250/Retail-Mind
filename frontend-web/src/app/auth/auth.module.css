@@ -466,3 +466,56 @@
     font-size: 22px;
   }
 }
+
+
+/* Market Crate customer auth redesign */
+.authMain { min-height: 100svh; padding: 12px; background: var(--rm-paper); color: var(--rm-ink); }
+.authContainer { width: min(1500px, 100%); min-height: calc(100svh - 24px); display: grid; grid-template-columns: minmax(0,1.08fr) minmax(360px,.92fr); gap: 12px; align-items: stretch; }
+.heroShowcase { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; gap: 20px; padding: clamp(26px,4vw,54px); border-radius: 34px; background: radial-gradient(65% 55% at 80% 20%,rgba(232,84,30,.3),transparent 65%), radial-gradient(55% 55% at 15% 100%,rgba(243,202,79,.18),transparent 60%), linear-gradient(145deg,#20392b,#142219); color: var(--rm-paper); min-height: 620px; }
+.heroShowcase::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .22; background-image: linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px); background-size: 48px 48px; mask-image: radial-gradient(ellipse at 60% 45%,#000,transparent 78%); }
+.orb1,.orb2,.orb3 { pointer-events:none; filter:blur(26px); opacity:.32; }
+.brandPill { align-self:flex-start; display:inline-flex; gap:8px; align-items:center; padding:9px 13px; border:1px solid rgba(251,246,236,.22); border-radius:999px; color:var(--rm-lime); background:rgba(255,255,255,.055); font-size:.78rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.heroTitle { max-width:10ch; margin:4px 0 0; color:var(--rm-paper); font:900 clamp(3rem,5.8vw,5.7rem)/.87 var(--font-display); letter-spacing:-.015em; text-wrap:balance; }
+.heroGradientText { background:linear-gradient(95deg,var(--rm-lime),#ff925b); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.heroSubtitle { max-width:52ch; color:rgba(251,246,236,.76); font-size:1.04rem; line-height:1.58; }
+.featureList { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.featureItem { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:16px; border:1px solid rgba(251,246,236,.16); border-radius:18px; background:rgba(255,255,255,.055); backdrop-filter:blur(10px); }
+.featureIconWrap { width:38px; height:38px; display:grid; place-items:center; flex:0 0 auto; border-radius:13px; color:var(--rm-green-deep); background:var(--rm-lime); }
+.featureContent strong { display:block; color:var(--rm-paper); font-size:.88rem; line-height:1.2; }
+.featureContent span { display:block; margin-top:6px; color:rgba(251,246,236,.63); font-size:.75rem; line-height:1.5; }
+.authScene { width:100%; min-height:180px; height:min(28vh,300px); margin-top:auto; position:relative; }
+.authSceneCanvas { position:absolute; inset:0; width:100%; height:100%; }
+.authCard { align-self:center; width:min(100%,520px); justify-self:center; padding:clamp(24px,3.2vw,42px); border:1px solid rgba(43,68,54,.12); border-radius:30px; background:var(--rm-paper-2); color:var(--rm-ink); box-shadow:0 28px 70px rgba(24,40,32,.12); }
+.cardGlowBar { height:5px; border-radius:99px; background:linear-gradient(90deg,var(--rm-green),var(--rm-lime),var(--rm-orange)); }
+.cardHeader { margin-top:18px; }
+.authTitle { margin:0; color:var(--rm-ink); font:900 clamp(2.4rem,4.2vw,3.45rem)/.91 var(--font-display); letter-spacing:-.01em; }
+.authSubtitle { margin:10px 0 22px; color:var(--rm-muted); font-size:.96rem; line-height:1.55; }
+.modeTabs { position:relative; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:5px; margin:0 0 24px; border:1px solid var(--rm-line); border-radius:999px; background:#f0e7d7; }
+.modeTabBtn { position:relative; min-height:44px; padding:10px; border:0; border-radius:999px; background:transparent; color:var(--rm-muted); font-size:.9rem; font-weight:800; }
+.modeTabActive { color:#fffdf7; }
+.modeIndicator { position:absolute; inset:0; z-index:-0; border-radius:999px; background:var(--rm-green-deep); box-shadow:0 8px 18px rgba(24,40,32,.2); }
+.modeTabBtn { isolation:isolate; }
+.modeIndicator { z-index:-1; }
+.form { gap:15px; }
+.fieldGroup { gap:7px; }
+.label { color:var(--rm-muted); font-size:.72rem; font-weight:900; letter-spacing:.1em; }
+.inputWrap { border-radius:15px; }
+.input { height:54px; border:1.5px solid var(--rm-line); border-radius:15px; background:#fff; color:var(--rm-ink); transition:border-color .2s,box-shadow .2s,background .2s; }
+.input:focus { border-color:var(--rm-orange); box-shadow:0 0 0 4px rgba(232,84,30,.12); }
+.inputIcon { color:#958a78; }
+.eyeBtn { color:var(--rm-muted); }
+.submitBtn { min-height:54px; border:0; border-radius:15px; background:var(--rm-orange); color:#fffdf7; box-shadow:0 12px 25px rgba(232,84,30,.2); font-weight:900; }
+.submitBtn:not(:disabled):hover { background:var(--rm-orange-dark); box-shadow:0 16px 30px rgba(232,84,30,.26); }
+.link,.forgotLink { color:var(--rm-green); font-weight:800; }
+.errorBanner { border-radius:13px; }
+.successBanner { border-radius:13px; }
+.passwordStrength { display:grid; gap:6px; margin-top:9px; }
+.passwordStrengthTrack { height:6px; width:100%; overflow:hidden; border-radius:999px; background:#e8decb; }
+.passwordStrengthFill { display:block; height:100%; width:0; border-radius:999px; transition:width .2s,background .2s; }
+.passwordStrengthFill[data-strength="weak"] { width:33%; background:#d9583c; }
+.passwordStrengthFill[data-strength="medium"] { width:66%; background:var(--rm-lime); }
+.passwordStrengthFill[data-strength="strong"] { width:100%; background:#43885e; }
+.passwordStrength small { color:var(--rm-muted); font-size:.75rem; }
+@media(max-width:1050px) { .authContainer { grid-template-columns:minmax(0,1fr) minmax(340px,.85fr); } .featureList { grid-template-columns:1fr; } .featureItem { flex-direction:row; align-items:center; } .authScene { height:210px; } }
+@media(max-width:760px) { .authMain { padding:10px; } .authContainer { display:flex; flex-direction:column; gap:10px; } .heroShowcase { min-height:unset; padding:26px 22px 10px; border-radius:25px; } .heroTitle { max-width:12ch; font-size:clamp(2.65rem,12vw,4rem); } .featureList { grid-template-columns:1fr; gap:8px; } .featureItem { padding:12px; } .authScene { height:190px; min-height:160px; } .authCard { width:100%; padding:24px 20px; border-radius:24px; } }
+@media(max-width:420px) { .authTitle { font-size:2.25rem; } .twoCols { grid-template-columns:1fr; } .authScene { height:150px; min-height:140px; } }

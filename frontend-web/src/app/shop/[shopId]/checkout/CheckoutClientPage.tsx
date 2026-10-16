@@ -386,6 +386,14 @@ export default function CheckoutClientPage() {
         <ArrowLeft size={16} /> Back to shop
       </button>
 
+      <div className="checkout-stepper" aria-label="Checkout progress">
+        <div className="checkout-step is-complete"><span>1</span><b>Cart</b></div>
+        <span className="checkout-step-line" aria-hidden="true" />
+        <div className="checkout-step is-active" aria-current="step"><span>2</span><b>Delivery</b></div>
+        <span className="checkout-step-line" aria-hidden="true" />
+        <div className="checkout-step"><span>3</span><b>Confirm</b></div>
+      </div>
+
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="checkout-grid">
         <div className="checkout-main">
           <section className="checkout-card">

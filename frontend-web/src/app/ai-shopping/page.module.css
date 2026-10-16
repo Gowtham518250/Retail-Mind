@@ -970,3 +970,12 @@
 @media(prefers-reduced-motion:reduce){
   .showroomRingA,.showroomRingB,.scanBeam{animation:none!important}
 }
+
+
+/* Fix cramped AI Shopping heading while preserving the existing 3D shopping engine. */
+.page { background:radial-gradient(circle at 8% 0%,rgba(243,202,79,.2),transparent 30%),radial-gradient(circle at 100% 12%,rgba(232,84,30,.12),transparent 28%),linear-gradient(180deg,#fbf6ec,#f5eddf); color:var(--rm-ink); }
+.hero h1 { max-width:11ch; font:900 clamp(3.3rem,8vw,7.8rem)/.82 var(--font-display); letter-spacing:-.02em; text-wrap:balance; overflow-wrap:normal; }
+.hero h1 span,.hero h1 em { display:block; }
+.heroLead { max-width:52ch; font-family:var(--font-body); font-size:clamp(1rem,1.5vw,1.15rem); line-height:1.55; letter-spacing:0; color:var(--rm-muted); }
+.copy { min-width:0; }
+@media(max-width:600px) { .hero h1 { font-size:clamp(3.1rem,15vw,5.1rem); line-height:.84; } .heroLead { font-size:1rem; } }
