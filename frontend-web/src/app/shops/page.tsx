@@ -38,30 +38,18 @@ function normalize(value: string) {
 }
 
 function ShopCoverImage({ shop }: { shop: Shop }) {
-  const [failedLogo, setFailedLogo] = useState(false);
-  const logo = assetUrl(shop.logo_url || shop.shop_logo_url);
-  const hasLogo = Boolean(logo) && !failedLogo;
+  const initial = (shop.shop_name || 'S').trim().charAt(0).toUpperCase() || 'S';
+  const type = (shop.shop_type || tagsFor(shop)[0] || 'Local shop').trim();
 
   return (
-    <div className={styles.image}>
+    <div className={styles.image} aria-label={shop.shop_name + ' brand'}>
       <div className={styles.imageFallback}>
-        {hasLogo ? (
-          <img
-            className={styles.shopLogoImage}
-            src={logo}
-            alt={(shop.shop_name || 'Local shop') + ' logo'}
-            loading="lazy"
-            decoding="async"
-            onError={() => setFailedLogo(true)}
-          />
-        ) : (
-          <div className={styles.shopLogoPlaceholder} aria-label={(shop.shop_name || 'Local shop') + ' logo placeholder'}>
-            <Store size={34} aria-hidden="true" />
-            <span aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
-          </div>
-        )}
+        <div className={styles.shopLogoPlaceholder}>
+          <Store size={34} aria-hidden="true" />
+          <span aria-hidden="true">{initial}</span>
+        </div>
       </div>
-      <span className={styles.categoryTag}>{shop.shop_type || tagsFor(shop)[0] || 'Local shop'}</span>
+      <span className={styles.categoryTag}>{type}</span>
     </div>
   );
 }
