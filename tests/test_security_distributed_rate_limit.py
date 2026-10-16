@@ -76,3 +76,17 @@ def test_login_lockout_is_shared_and_success_clears_it(monkeypatch):
 
     security.record_login_success(ip)
     security.check_login_lockout(ip)
+
+
+def test_local_lockout_is_still_honored_when_redis_has_no_lockout(monkeypatch):
+    import time
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(security, "_get_security_redis_client", lambda: fake_redis)
+    security._login_lockout.clear()
+    ip = "192.0.2.12"
+    security._login_lockout[ip] = time.time() + 30
+
+    with pytest.raises(HTTPException) as error:
+        security.check_login_lockout(ip)
+    assert error.value.status_code == 429
