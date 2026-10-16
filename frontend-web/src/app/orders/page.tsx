@@ -268,6 +268,7 @@ export default function MyOrdersPage() {
   const [query, setQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'ALL' | '30D' | '90D'>('ALL');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [trackingOrders, setTrackingOrders] = useState<Set<number>>(new Set());
   const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
   const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
   const [reviewingOrderId, setReviewingOrderId] = useState<number | null>(null);
@@ -781,6 +782,15 @@ export default function MyOrdersPage() {
     });
   }, [orders, filter, query, periodFilter]);
 
+  const toggleTracking = (orderId: number) => {
+    setTrackingOrders((current) => {
+      const next = new Set(current);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
   const toggleOrder = async (orderId: number) => {
     const willOpen = !expandedOrders.has(orderId);
     setExpandedOrders((current) => {
@@ -1265,9 +1275,15 @@ export default function MyOrdersPage() {
       {String(order.return_request?.status || 'REQUESTED').replaceAll('_', ' ')}
     </span>
   </div>
-) : (
-  <OrderTimeline status={order.status} />
-)}
+) : trackingOrders.has(order.order_id) ? (
+  <div className="orders-fk-tracking-panel">
+    <div className="orders-fk-tracking-heading">
+      <div><span>ORDER TRACKING</span><strong>#{order.order_id}</strong></div>
+      <span className="orders-fk-tracking-current">{effectiveMeta.label}</span>
+    </div>
+    <OrderTimeline status={order.status} />
+  </div>
+) : null}
 
                     <div className="orders-fk-card-actions">
                       <div className="orders-fk-delivery">
@@ -1314,16 +1330,21 @@ export default function MyOrdersPage() {
                           </button>
                         )}
                         <button
-                          className="orders-fk-details-btn"
-                          onClick={() => toggleOrder(order.order_id)}
+                          className="orders-fk-primary-btn orders-fk-track-btn"
+                          onClick={() => toggleTracking(order.order_id)}
+                          aria-expanded={trackingOrders.has(order.order_id)}
                         >
-                        {isOpen ? 'Hide details' : 'View details'}
-                        {isOpen ? (
-                          <ChevronUp size={16} />
-                        ) : (
-                          <ChevronDown size={16} />
-                        )}
-                      </button>
+                          {trackingOrders.has(order.order_id) ? 'Hide Tracking' : 'Track Order'}
+                          <Truck size={14} />
+                        </button>
+                        <button
+                          className="orders-fk-details-btn"
+                          onClick={() => void toggleOrder(order.order_id)}
+                          aria-expanded={isOpen}
+                        >
+                          {isOpen ? 'Hide Details' : 'View Details'}
+                          {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
                       </div>
                     </div>
 
