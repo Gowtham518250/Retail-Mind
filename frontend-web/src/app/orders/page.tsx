@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Package,
   MapPin,
@@ -22,6 +22,9 @@ import {
   Ban,
   RotateCcw,
   Sparkles,
+  Store,
+  X,
+  AlertCircle,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 
@@ -62,6 +65,8 @@ interface Order {
   payment_status?: string;
   payment_reference?: string | null;
   total_amount: number;
+  subtotal?: number;
+  online_setup_fee?: number;
   delivery_address: string;
   items: OrderItem[];
   created_at: string;
@@ -128,6 +133,19 @@ const STATUS_META: Record<
 const TERMINAL_STATUSES = ['DELIVERED', 'REJECTED', 'CANCELLED', 'RETURNED'];
 const REVERSIBLE_STATUSES = ['PENDING', 'ACCEPTED'];
 
+type OrderFilter = 'ALL' | 'PENDING' | 'ACCEPTED' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED' | 'REJECTED';
+
+const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
+  { value: 'ALL', label: 'All orders' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'ACCEPTED', label: 'Accepted' },
+  { value: 'DISPATCHED', label: 'Dispatched' },
+  { value: 'DELIVERED', label: 'Delivered' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'RETURNED', label: 'Returned' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
 function getCustomerSyncCursorKey(token: string): string | null {
   try {
     // The JWT subject is used only to namespace local cursor storage. The API
@@ -158,13 +176,15 @@ function formatCurrency(value: number) {
 
 function formatDate(value?: string | null) {
   if (!value) return '—';
-  return new Date(value).toLocaleString('en-IN', {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  });
+  }).format(date);
 }
 
 function resolveOrderImage(value?: string | null) {
@@ -191,66 +211,55 @@ function returnLabel(order: Order) {
 }
 
 function OrderTimeline({ status }: { status: string }) {
-  const current = statusIndex(status);
-  const terminal = !STATUS_STEPS.includes(status as (typeof STATUS_STEPS)[number]);
+  const normalized = String(status || '').toUpperCase();
+  const current = statusIndex(normalized);
+  const terminal = !STATUS_STEPS.includes(normalized as (typeof STATUS_STEPS)[number]);
+
   if (terminal) {
-    const meta = STATUS_META[status] || STATUS_META.REJECTED;
-    const Icon = meta.icon;
+    const meta = STATUS_META[normalized];
+    const Icon = meta?.icon || CircleDot;
     return (
-      <div className="rejected-banner">
-        <Icon size={17} />
+      <div className={'rejected-banner ' + normalized.toLowerCase()} role="status">
+        <Icon size={18} aria-hidden="true" />
         <div>
-          <strong>{meta.label}</strong>
-          <span>{meta.description}</span>
+          <strong>{meta?.label || 'Status update'}</strong>
+          <span>{meta?.description || 'The shop has updated this order.'}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="order-timeline">
+    <div className="order-timeline" role="list" aria-label="Order progress">
       {STATUS_STEPS.map((step, index) => {
         const meta = STATUS_META[step];
         const Icon = meta.icon;
         const completed = current >= index;
         const active = current === index;
-
         return (
-          <div className="timeline-step" key={step}>
+          <div
+            className={'timeline-step ' + (completed ? 'complete ' : '') + (active ? 'active' : '')}
+            key={step}
+            role="listitem"
+            aria-current={active ? 'step' : undefined}
+          >
             <div
-              className={
-                'timeline-node ' +
-                (completed ? 'completed ' : '') +
-                (active ? 'active' : '')
-              }
-              style={
-                completed
-                  ? { borderColor: meta.tone, color: meta.tone }
-                  : undefined
-              }
+              className={'timeline-node ' + (completed ? 'completed ' : '') + (active ? 'active' : '')}
+              style={completed ? { borderColor: meta.tone, color: meta.tone } : undefined}
+              aria-hidden="true"
             >
               {completed ? <Icon size={15} /> : <CircleDot size={12} />}
             </div>
-
             <div className="timeline-copy">
               <div className="timeline-label">{meta.label}</div>
-              {active && (
-                <div className="timeline-description">{meta.description}</div>
-              )}
+              {active && <div className="timeline-description">{meta.description}</div>}
             </div>
-
             {index < STATUS_STEPS.length - 1 && (
-              <div
-                className={
-                  'timeline-line ' +
-                  (current > index ? 'filled' : '')
-                }
-              />
+              <div className={'timeline-line ' + (current > index ? 'filled' : '')} aria-hidden="true" />
             )}
           </div>
         );
       })}
-
     </div>
   );
 }
@@ -260,22 +269,27 @@ export default function MyOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
-  const [filter, setFilter] = useState<
-    'ALL' | 'ACTIVE' | 'DELIVERED' | 'RETURNED' | 'CANCELLED'
-  >('ALL');
+  const [filter, setFilter] = useState<OrderFilter>('ALL');
   const [query, setQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'ALL' | '30D' | '90D'>('ALL');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [trackingOrders, setTrackingOrders] = useState<Set<number>>(new Set());
   const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
   const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
+  const [cancelCandidate, setCancelCandidate] = useState<Order | null>(null);
+  const [cancelDialogError, setCancelDialogError] = useState('');
+  const cancelConfirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cancelDialogRef = useRef<HTMLElement | null>(null);
+  const cancelTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const ordersRequestIdRef = useRef(0);
+  const ordersRevisionRef = useRef(0);
   const [reviewingOrderId, setReviewingOrderId] = useState<number | null>(null);
+  const [reviewSubmittingId, setReviewSubmittingId] = useState<number | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
-  const [deliveryByOrder, setDeliveryByOrder] = useState<Record<number, any>>({});
-  const [deliveryLoadingId, setDeliveryLoadingId] = useState<number | null>(null);
   const customerCursorKeyRef = useRef<string | null>(null);
   const customerFeedSupportedRef = useRef<boolean | null>(null);
   const customerFeedProbeAfterRef = useRef(0);
@@ -283,16 +297,52 @@ export default function MyOrdersPage() {
   const seenRealtimeEventIdsRef = useRef<Set<string>>(new Set());
   const router = useRouter();
 
+  useEffect(() => {
+    if (!cancelCandidate) {
+      if (cancelTriggerRef.current?.isConnected) cancelTriggerRef.current.focus();
+      cancelTriggerRef.current = null;
+      return;
+    }
+
+    cancelConfirmButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && cancelingOrderId === null) {
+        setCancelCandidate(null);
+        setCancelDialogError('');
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = cancelDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cancelCandidate, cancelingOrderId]);
+
   const fetchOrders = useCallback(
     async (silent = false): Promise<boolean> => {
       const token = localStorage.getItem('customerToken');
-
       if (!token) {
+        setLoading(false);
         router.push('/auth');
         return false;
       }
 
+      const requestId = ++ordersRequestIdRef.current;
+      const revisionAtStart = ordersRevisionRef.current;
       if (silent) setRefreshing(true);
+      else setLoading(true);
 
       try {
         const response = await fetch(API_BASE + '/store/my-orders', {
@@ -300,6 +350,7 @@ export default function MyOrdersPage() {
           cache: 'no-store',
         });
 
+        if (requestId !== ordersRequestIdRef.current) return false;
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) {
             localStorage.removeItem('customerToken');
@@ -310,16 +361,24 @@ export default function MyOrdersPage() {
         }
 
         const data = await response.json();
+        if (requestId !== ordersRequestIdRef.current || revisionAtStart !== ordersRevisionRef.current) {
+          return false;
+        }
+
         setOrders(Array.isArray(data.orders) ? data.orders : []);
         setError('');
         setLastUpdated(new Date());
         return true;
-      } catch (err: any) {
-        setError(err?.message || 'Unable to refresh orders right now.');
+      } catch (err: unknown) {
+        if (requestId === ordersRequestIdRef.current && revisionAtStart === ordersRevisionRef.current) {
+          setError(err instanceof Error ? err.message : 'Unable to refresh orders right now.');
+        }
         return false;
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (requestId === ordersRequestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [router],
@@ -500,6 +559,7 @@ export default function MyOrdersPage() {
         // A failed snapshot must never advance the cursor. The same durable
         // events are retried on the next wake-up instead of being skipped.
         if (requiresOrderRefresh) {
+          ordersRevisionRef.current += 1;
           const refreshed = await fetchOrders(true);
           if (!refreshed) return;
         }
@@ -587,6 +647,7 @@ export default function MyOrdersPage() {
             const eventId = String(event?.event_id || '');
 
             if (event?.type === 'order.status_changed') {
+              ordersRevisionRef.current += 1;
               const orderId = Number(event.order_id);
               const nextStatus = String(event.status || '').toUpperCase();
 
@@ -608,6 +669,7 @@ export default function MyOrdersPage() {
               setLastUpdated(new Date());
               markRealtimeEventSeen(eventId);
             } else if (event?.type === 'order.payment_confirmed') {
+              ordersRevisionRef.current += 1;
               const orderId = Number(event.order_id);
               setOrders((current) =>
                 current.map((order) =>
@@ -625,6 +687,7 @@ export default function MyOrdersPage() {
               setLastUpdated(new Date());
               markRealtimeEventSeen(eventId);
             } else if (event?.type === 'order.created') {
+              ordersRevisionRef.current += 1;
               const refreshed = await fetchOrders(true);
               if (refreshed) markRealtimeEventSeen(eventId);
             }
@@ -719,34 +782,17 @@ export default function MyOrdersPage() {
   }, [fetchOrders, router]);
 
   const activeCount = useMemo(
-    () => orders.filter((order) => !TERMINAL_STATUSES.includes(order.status)).length,
-    [orders],
-  );
-
-  const returnedCount = useMemo(
-    () => orders.filter((order) => activeReturnRequest(order)).length,
+    () => orders.filter((order) => ['PENDING', 'ACCEPTED', 'DISPATCHED'].includes(order.status)).length,
     [orders],
   );
 
   const cancelledCount = useMemo(
-    () => orders.filter((order) => ['CANCELLED', 'REJECTED'].includes(order.status)).length,
+    () => orders.filter((order) => order.status === 'CANCELLED').length,
     [orders],
   );
 
   const deliveredCount = useMemo(
     () => orders.filter((order) => order.status === 'DELIVERED').length,
-    [orders],
-  );
-
-  const totalSpent = useMemo(
-    () =>
-      orders.reduce(
-        (sum, order) =>
-          ['CANCELLED', 'REJECTED', 'RETURNED'].includes(order.status)
-            ? sum
-            : sum + Number(order.total_amount || 0),
-        0,
-      ),
     [orders],
   );
 
@@ -760,16 +806,12 @@ export default function MyOrdersPage() {
         : null;
 
     return orders.filter((order) => {
-      const filterMatch =
-        filter === 'ALL' ||
-        (filter === 'ACTIVE' && !TERMINAL_STATUSES.includes(order.status)) ||
-        (filter === 'DELIVERED' && order.status === 'DELIVERED') ||
-        (filter === 'RETURNED' && activeReturnRequest(order)) ||
-        (filter === 'CANCELLED' && ['CANCELLED', 'REJECTED'].includes(order.status));
-
+      const filterMatch = filter === 'ALL' || order.status === filter;
       const queryMatch =
         !q ||
         String(order.order_id).includes(q) ||
+        String(order.shop_name || '').toLowerCase().includes(q) ||
+        String(order.delivery_address || '').toLowerCase().includes(q) ||
         order.items.some((item) =>
           String(item.product_name || item.name || '').toLowerCase().includes(q),
         );
@@ -777,10 +819,15 @@ export default function MyOrdersPage() {
       const createdAt = new Date(order.created_at).getTime();
       const dateMatch = !periodMs ||
         (Number.isFinite(createdAt) && now - createdAt >= 0 && now - createdAt <= periodMs);
-
       return filterMatch && queryMatch && dateMatch;
     });
   }, [orders, filter, query, periodFilter]);
+
+  const clearOrderFilters = () => {
+    setFilter('ALL');
+    setQuery('');
+    setPeriodFilter('ALL');
+  };
 
   const toggleTracking = (orderId: number) => {
     setTrackingOrders((current) => {
@@ -791,88 +838,84 @@ export default function MyOrdersPage() {
     });
   };
 
-  const toggleOrder = async (orderId: number) => {
-    const willOpen = !expandedOrders.has(orderId);
+  const toggleOrder = (orderId: number) => {
     setExpandedOrders((current) => {
       const next = new Set(current);
       if (next.has(orderId)) next.delete(orderId);
       else next.add(orderId);
       return next;
     });
-
-    if (!willOpen || deliveryByOrder[orderId] || deliveryLoadingId === orderId) {
-      return;
-    }
-
-    const token = localStorage.getItem('customerToken');
-    if (!token) {
-      router.push('/auth');
-      return;
-    }
-
-    setDeliveryLoadingId(orderId);
-    try {
-      const response = await fetch(
-        API_BASE + '/store/orders/' + orderId + '/delivery',
-        {
-          headers: { Authorization: 'Bearer ' + token },
-          cache: 'no-store',
-        },
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setDeliveryByOrder((current) => ({ ...current, [orderId]: data }));
-      }
-    } catch {
-      // The main order timeline remains authoritative.
-    } finally {
-      setDeliveryLoadingId(null);
-    }
   };
-  const cancelOrder = async (order: Order) => {
-    const canCancel =
-      order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status);
-    if (!canCancel || cancelingOrderId !== null) return;
 
-    const confirmed = window.confirm(
-      'Cancel Order #' +
-        order.order_id +
-        '? Reserved stock will be released and the online order will be closed.',
-    );
-    if (!confirmed) return;
+  const requestCancelOrder = (order: Order, trigger?: HTMLButtonElement) => {
+    const canCancel = order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status);
+    if (!canCancel || cancelingOrderId !== null) return;
+    cancelTriggerRef.current = trigger || null;
+    setCancelDialogError('');
+    setCancelCandidate(order);
+  };
+
+  const confirmCancelOrder = async () => {
+    const order = cancelCandidate;
+    if (!order || cancelingOrderId !== null) return;
+
+    const canCancel = order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status);
+    if (!canCancel) {
+      setCancelDialogError('This order is no longer eligible for cancellation. Refresh your order history.');
+      return;
+    }
 
     const token = localStorage.getItem('customerToken');
     if (!token) {
+      setCancelCandidate(null);
       router.push('/auth');
       return;
     }
 
     setCancelingOrderId(order.order_id);
+    setCancelDialogError('');
     try {
-      const response = await fetch(
-        API_BASE + '/store/order/' + order.order_id + '/cancel',
-        {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + token },
-          cache: 'no-store',
-        },
-      );
+      const response = await fetch(API_BASE + '/store/order/' + order.order_id + '/cancel', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        cache: 'no-store',
+      });
       const data = await response.json().catch(() => ({}));
 
       if (response.status === 401 || response.status === 403) {
         localStorage.removeItem('customerToken');
+        setCancelCandidate(null);
         router.push('/auth');
         return;
       }
-
       if (!response.ok) {
         throw new Error(data?.detail || 'Unable to cancel this order.');
       }
 
-      setError('Order #' + order.order_id + ' was cancelled successfully.');
+      const serverStatus = String(data?.status || '').toUpperCase();
+      if (serverStatus !== 'CANCELLED') {
+        throw new Error('The server did not confirm cancellation. Refresh your order history before retrying.');
+      }
+
+      ordersRevisionRef.current += 1;
+      setOrders((current) =>
+        current.map((existing) =>
+          existing.order_id === order.order_id
+            ? {
+                ...existing,
+                status: serverStatus,
+                can_cancel: false,
+                payment_status: data?.payment_status || existing.payment_status,
+              }
+            : existing,
+        ),
+      );
+      setNotice(data?.message || ('Cancellation confirmed for Order #' + order.order_id + '.'));
+      setError('');
+      setCancelCandidate(null);
       await fetchOrders(true);
-    } catch (err: any) {
-      setError(err?.message || 'Unable to cancel this order.');
+    } catch (err: unknown) {
+      setCancelDialogError(err instanceof Error ? err.message : 'Unable to cancel this order.');
     } finally {
       setCancelingOrderId(null);
     }
@@ -921,11 +964,10 @@ export default function MyOrdersPage() {
         );
       }
 
-      setError(
-        'Return request submitted for Order #' +
-          order.order_id +
-          '. The shop will review it.',
-      );
+      ordersRevisionRef.current += 1;
+      setNotice('Return request submitted for Order #' + order.order_id + '. The shop will review it.');
+      setError('');
+      await fetchOrders(true);
     } catch (err: any) {
       setError(err?.message || 'Unable to submit the return request.');
     } finally {
@@ -948,6 +990,7 @@ export default function MyOrdersPage() {
       return;
     }
 
+    setReviewSubmittingId(order.order_id);
     try {
       const response = await fetch(
         API_BASE + '/store/order/' + order.order_id + '/rating',
@@ -975,13 +1018,17 @@ export default function MyOrdersPage() {
         throw new Error(data?.detail || 'Unable to save your review.');
       }
 
-      setError('Thanks! Your verified review is now visible on the shop.');
+      ordersRevisionRef.current += 1;
+      setNotice('Thanks! Your verified review is now visible on the shop.');
+      setError('');
       setReviewingOrderId(null);
       setReviewComment('');
       setReviewRating(5);
       await fetchOrders(true);
     } catch (err: any) {
       setError(err?.message || 'Unable to save your review.');
+    } finally {
+      setReviewSubmittingId(null);
     }
   };
 
@@ -991,30 +1038,37 @@ export default function MyOrdersPage() {
     <div className="orders-fk-page">
       <div className="orders-fk-shell">
         <header className="orders-fk-topbar">
-          <div className="orders-fk-brand">
-            <button
-              className="orders-fk-back"
-              onClick={() => router.back()}
-              aria-label="Go back"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <div className="orders-fk-brand-title">My Orders</div>
-              <div className="orders-fk-brand-subtitle">
-                Track, manage and review your orders
+          <div className="orders-fk-header-row">
+            <div className="orders-fk-brand">
+              <button
+                className="orders-fk-back"
+                type="button"
+                onClick={() => router.push('/')}
+                aria-label="Back to shopping"
+                title="Back to shopping"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div className="orders-fk-heading">
+                <div className="orders-fk-eyebrow">RETAIL MIND / CUSTOMER ACCOUNT</div>
+                <h1 className="orders-fk-brand-title">Your Orders</h1>
+                <p className="orders-fk-brand-subtitle">Every order, every update, all in one place.</p>
               </div>
+            </div>
+            <div className={'orders-fk-live ' + (liveConnected ? 'connected' : 'offline')} role="status" aria-live="polite">
+              <span className={'orders-fk-live-dot' + (liveConnected ? '' : ' offline')} aria-hidden="true" />
+              <span>{liveConnected ? 'Live updates connected' : 'Reconnecting to live updates'}</span>
             </div>
           </div>
 
           <div className="orders-fk-top-actions">
             <label className="orders-fk-search">
-              <Search size={17} />
+              <Search size={17} aria-hidden="true" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search orders…"
-                aria-label="Search orders"
+                placeholder="Search order, shop or product"
+                aria-label="Search orders by number, shop, product or delivery address"
               />
             </label>
             <label className="orders-fk-period">
@@ -1032,69 +1086,86 @@ export default function MyOrdersPage() {
             </label>
             <button
               className="orders-fk-refresh"
+              type="button"
               onClick={() => void fetchOrders(true)}
               disabled={refreshing}
               title={liveConnected ? 'Live updates connected. Refresh orders' : 'Refresh orders'}
               aria-label="Refresh orders"
             >
-              <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
+              <RefreshCw size={15} className={refreshing ? 'spin' : ''} aria-hidden="true" />
             </button>
           </div>
         </header>
 
-        <section className="orders-fk-stats">
-          <div className="orders-fk-stat">
-            <span>Total orders</span>
-            <strong>{orders.length}</strong>
+        {notice && (
+          <div className="orders-fk-notice" role="status" aria-live="polite">
+            <CheckCircle2 size={17} aria-hidden="true" />
+            <span>{notice}</span>
+            <button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={16} /></button>
           </div>
-          <div className="orders-fk-stat">
-            <span>In progress</span>
-            <strong>{activeCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Delivered</span>
-            <strong>{deliveredCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Returned</span>
-            <strong>{returnedCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Cancelled</span>
-            <strong>{cancelledCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Net spent</span>
-            <strong>{formatCurrency(totalSpent)}</strong>
-          </div>
-        </section>
+        )}
 
-        <section className="orders-fk-toolbar">
-          <div
-            className="orders-fk-tabs"
-            role="tablist"
-            aria-label="Order filters"
-          >
-            {([
-              ['ALL', 'All (' + orders.length + ')'],
-              ['ACTIVE', 'Active (' + activeCount + ')'],
-              ['DELIVERED', 'Completed (' + deliveredCount + ')'],
-              ['CANCELLED', 'Cancelled (' + cancelledCount + ')'],
-              ['RETURNED', 'Returned (' + returnedCount + ')'],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                className={
-                  'orders-fk-tab ' + (filter === value ? 'active' : '')
-                }
-                onClick={() => setFilter(value)}
-              >
-                {label}
-              </button>
+        {loading ? (
+          <section className="orders-fk-stats orders-fk-stats-loading" aria-label="Loading order summary" aria-busy="true">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className="orders-fk-stat-skeleton" key={index}><span /><strong /></div>
             ))}
+          </section>
+        ) : error && orders.length === 0 ? null : (
+          <section className="orders-fk-stats" aria-label="Order summary">
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon"><ShoppingBag size={17} /></span><span>Total orders</span></div>
+              <strong>{orders.length}</strong>
+              <small>All time</small>
+            </div>
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon in-progress"><Clock size={17} /></span><span>In progress</span></div>
+              <strong>{activeCount}</strong>
+              <small>Pending, accepted or dispatched</small>
+            </div>
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon delivered"><CheckCircle2 size={17} /></span><span>Delivered</span></div>
+              <strong>{deliveredCount}</strong>
+              <small>Delivered orders</small>
+            </div>
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon cancelled"><Ban size={17} /></span><span>Cancelled</span></div>
+              <strong>{cancelledCount}</strong>
+              <small>Cancellation confirmed by the server</small>
+            </div>
+          </section>
+        )}
+
+        <section className="orders-fk-history" aria-label="Order history">
+          <div className="orders-fk-history-heading">
+            <div>
+              <span className="orders-fk-eyebrow">ORDER HISTORY</span>
+              <h2>Everything in one place.</h2>
+              <p>Choose a status or search the details of an order from your account.</p>
+            </div>
+            <span className="orders-fk-result-count">{visibleOrders.length} of {orders.length} orders</span>
           </div>
-
-
+          <div className="orders-fk-toolbar">
+            <div className="orders-fk-tabs" role="group" aria-label="Filter orders by status">
+              {ORDER_FILTERS.map(({ value, label }) => {
+                const count = value === 'ALL'
+                  ? orders.length
+                  : orders.filter((order) => order.status === value).length;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={'orders-fk-tab ' + (filter === value ? 'active' : '')}
+                    onClick={() => setFilter(value)}
+                    aria-pressed={filter === value}
+                  >
+                    <span>{label}</span>
+                    <span className="orders-fk-tab-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
         {lastUpdated && !loading && (
@@ -1132,22 +1203,24 @@ export default function MyOrdersPage() {
             </button>
           </div>
         ) : visibleOrders.length === 0 ? (
-          <div className="orders-fk-empty">
-            <div className="orders-fk-empty-icon">
-              <ShoppingBag size={30} />
+          <div className="orders-fk-empty" role="status">
+            <div className="orders-fk-empty-illustration">
+              <ShoppingBag size={29} aria-hidden="true" />
             </div>
-            <h2>{orders.length === 0 ? 'No orders yet' : 'No matching orders'}</h2>
+            <span className="orders-fk-eyebrow">{orders.length === 0 ? 'A FRESH START' : 'NO MATCHES'}</span>
+            <h2>{orders.length === 0 ? 'Your next favourite is out there.' : 'No orders match these filters.'}</h2>
             <p>
               {orders.length === 0
-                ? 'Place your first order and it will appear here with live tracking.'
-                : 'Try another filter or search term.'}
+                ? 'When you place an order from a Retail Mind shop, its status and details will appear here.'
+                : 'Clear the status, search or date filters to see your other orders.'}
             </p>
-            {orders.length === 0 && (
-              <button
-                className="orders-fk-primary-btn"
-                onClick={() => router.push('/')}
-              >
-                Start Shopping
+            {orders.length === 0 ? (
+              <button type="button" className="orders-fk-primary-btn" onClick={() => router.push('/')}>
+                Browse shops <ArrowLeft size={15} className="orders-fk-arrow-forward" />
+              </button>
+            ) : (
+              <button type="button" className="orders-fk-primary-btn" onClick={clearOrderFilters}>
+                Clear filters <X size={15} />
               </button>
             )}
           </div>
@@ -1202,13 +1275,19 @@ export default function MyOrdersPage() {
                     className="orders-fk-card"
                   >
                     <div className="orders-fk-card-top">
-                      <div>
-                        <div className="orders-fk-order-number">
-                          Order #{order.order_id}
-                        </div>
-                        <div className="orders-fk-order-date">
-                          {formatDate(order.created_at)}
-                        </div>
+                      <div className="orders-fk-order-identity">
+                        <button
+                          type="button"
+                          className="orders-fk-order-number-trigger"
+                          onClick={() => toggleOrder(order.order_id)}
+                          aria-expanded={isOpen}
+                          aria-controls={'order-details-' + order.order_id}
+                        >
+                          <span className="orders-fk-order-number">Order #{order.order_id}</span>
+                          {isOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        </button>
+                        <div className="orders-fk-order-date">{formatDate(order.created_at)}</div>
+                        <div className="orders-fk-shop-name"><Store size={14} aria-hidden="true" /> {order.shop_name || 'Local shop'}</div>
                       </div>
                       <div className="orders-fk-card-total">
                         <span>Order total</span>
@@ -1294,8 +1373,9 @@ export default function MyOrdersPage() {
                         {(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status)) && (
                           <button
                             className="orders-fk-details-btn danger"
-                            onClick={() => void cancelOrder(order)}
-                            disabled={cancelingOrderId === order.order_id}
+                            type="button"
+                            onClick={(event) => requestCancelOrder(order, event.currentTarget)}
+                            disabled={cancelingOrderId !== null || !(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status))}
                           >
                             {cancelingOrderId === order.order_id ? 'Cancelling…' : 'Cancel order'}
                             <Ban size={14} />
@@ -1338,9 +1418,11 @@ export default function MyOrdersPage() {
                           <Truck size={14} />
                         </button>
                         <button
+                          type="button"
                           className="orders-fk-details-btn"
-                          onClick={() => void toggleOrder(order.order_id)}
+                          onClick={() => toggleOrder(order.order_id)}
                           aria-expanded={isOpen}
+                          aria-controls={'order-details-' + order.order_id}
                         >
                           {isOpen ? 'Hide Details' : 'View Details'}
                           {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -1349,7 +1431,7 @@ export default function MyOrdersPage() {
                     </div>
 
                     {isOpen && (
-                      <div className="orders-fk-details">
+                      <div className="orders-fk-details" id={'order-details-' + order.order_id}>
                         <div className="orders-fk-details-grid">
                           <div>
                             <span>Delivery address</span>
@@ -1371,6 +1453,10 @@ export default function MyOrdersPage() {
                             <span>Items</span>
                             <strong>{order.items.length}</strong>
                           </div>
+                          <div>
+                            <span>Payment method</span>
+                            <strong>{String(order.payment_method || 'COD').toUpperCase() === 'COD' ? 'Cash on delivery' : String(order.payment_method || 'Online payment').toUpperCase()}</strong>
+                          </div>
                         </div>
 
                         {returnActive && (
@@ -1388,86 +1474,7 @@ export default function MyOrdersPage() {
                           </div>
                         )}
 
-                        {deliveryLoadingId === order.order_id ? (
-                          <div
-                            style={{
-                              marginBottom: 16,
-                              padding: '12px 14px',
-                              borderRadius: 14,
-                              background: 'rgba(99,102,241,.06)',
-                              border: '1px solid rgba(99,102,241,.12)',
-                              color: '#64748b',
-                              fontSize: 12,
-                            }}
-                          >
-                            Loading delivery tracking…
-                          </div>
-                        ) : deliveryByOrder[order.order_id] ? (
-                          <div
-                            style={{
-                              marginBottom: 16,
-                              padding: '14px',
-                              borderRadius: 16,
-                              background: 'linear-gradient(135deg, rgba(37,99,235,.07), rgba(34,211,238,.05))',
-                              border: '1px solid rgba(96,165,250,.18)',
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 12,
-                              }}
-                            >
-                              <div>
-                                <div
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 900,
-                                    letterSpacing: '.11em',
-                                    color: '#64748b',
-                                  }}
-                                >
-                                  DELIVERY TRACKING
-                                </div>
-                                <div
-                                  style={{
-                                    marginTop: 4,
-                                    fontWeight: 800,
-                                    color: '#0f172a',
-                                  }}
-                                >
-                                  {String(deliveryByOrder[order.order_id].status || 'NOT_ASSIGNED').replaceAll('_', ' ')}
-                                </div>
-                              </div>
-                              <Truck size={20} color="#2563EB" />
-                            </div>
-                            {deliveryByOrder[order.order_id].driver_name && (
-                              <div
-                                style={{
-                                  marginTop: 10,
-                                  display: 'flex',
-                                  gap: 14,
-                                  flexWrap: 'wrap',
-                                  fontSize: 11,
-                                  color: '#475569',
-                                }}
-                              >
-                                <span>
-                                  Driver: <strong>{deliveryByOrder[order.order_id].driver_name}</strong>
-                                </span>
-                                {deliveryByOrder[order.order_id].driver_phone && (
-                                  <span>
-                                    {deliveryByOrder[order.order_id].driver_phone}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-
-                        {order.status === 'DELIVERED' && order.review && (
+                       {order.status === 'DELIVERED' && order.review && (
                           <div className="orders-fk-review-card">
                             <div className="orders-fk-detail-eyebrow">YOUR VERIFIED REVIEW</div>
                             <div className="orders-fk-review-row">
@@ -1526,14 +1533,19 @@ export default function MyOrdersPage() {
                                 type="button"
                                 className="orders-fk-primary-btn"
                                 onClick={() => void submitReview(order)}
+                                disabled={reviewSubmittingId === order.order_id}
                               >
-                                Publish review <Sparkles size={14} />
+                                {reviewSubmittingId === order.order_id ? 'Publishing…' : 'Publish review'} <Sparkles size={14} />
                               </button>
                             </div>
                           </div>
                         )}
 
                         <div className="orders-fk-items">
+                          <div className="orders-fk-items-heading">
+                            <strong>Items in this order</strong>
+                            <span>{order.items.length} {order.items.length === 1 ? 'item' : 'items'}</span>
+                          </div>
                           {order.items.map((item, idx) => {
                             const name =
                               item.product_name ||
@@ -1552,7 +1564,15 @@ export default function MyOrdersPage() {
                                 key={item.product_id + '-' + idx}
                               >
                                 <div className="orders-fk-product-icon small">
-                                  <Package size={18} />
+                                  {resolveOrderImage(item.image_url || item.product_image_url) ? (
+                                    <img
+                                      src={resolveOrderImage(item.image_url || item.product_image_url)}
+                                      alt=""
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <Package size={18} aria-hidden="true" />
+                                  )}
                                 </div>
                                 <div className="orders-fk-detail-name">
                                   <strong>{name}</strong>
@@ -1566,6 +1586,22 @@ export default function MyOrdersPage() {
                             );
                           })}
                         </div>
+                        <div className="orders-fk-price-summary" aria-label="Order price breakdown">
+                          <div>
+                            <span>Subtotal</span>
+                            <strong>{formatCurrency(Number(order.subtotal ?? (Number(order.total_amount || 0) - Number(order.online_setup_fee || 0))))}</strong>
+                          </div>
+                          {Number(order.online_setup_fee || 0) > 0 && (
+                            <div>
+                              <span>Online setup / service fee</span>
+                              <strong>{formatCurrency(Number(order.online_setup_fee || 0))}</strong>
+                            </div>
+                          )}
+                          <div className="orders-fk-price-total">
+                            <span>Order total</span>
+                            <strong>{formatCurrency(order.total_amount)}</strong>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </motion.article>
@@ -1575,6 +1611,90 @@ export default function MyOrdersPage() {
           </>
         )}
       </div>
+
+      <AnimatePresence>
+        {cancelCandidate && (
+          <motion.div
+            className="orders-fk-modal-backdrop"
+            role="presentation"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && cancelingOrderId === null) {
+                setCancelCandidate(null);
+                setCancelDialogError('');
+              }
+            }}
+          >
+            <motion.section
+              className="orders-fk-cancel-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="orders-fk-cancel-title"
+              aria-describedby="orders-fk-cancel-description"
+              ref={cancelDialogRef}
+              tabIndex={-1}
+              initial={{ opacity: 0, y: 14, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.99 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="orders-fk-dialog-close"
+                onClick={() => {
+                  if (cancelingOrderId === null) {
+                    setCancelCandidate(null);
+                    setCancelDialogError('');
+                  }
+                }}
+                aria-label="Close cancellation dialog"
+                disabled={cancelingOrderId !== null}
+              >
+                <X size={17} />
+              </button>
+              <span className="orders-fk-dialog-eyebrow">ORDER CANCELLATION</span>
+              <div className="orders-fk-dialog-icon"><AlertCircle size={22} /></div>
+              <h2 id="orders-fk-cancel-title">Cancel Order #{cancelCandidate.order_id}?</h2>
+              <p id="orders-fk-cancel-description">
+                The shop will be notified and reserved stock will be released only if the server accepts cancellation.
+                Only pending or accepted orders are eligible.
+              </p>
+              {String(cancelCandidate.payment_status || '').toUpperCase() === 'PAID' && (
+                <div className="orders-fk-refund-note">
+                  This order is marked as paid. Cancellation is not an automatic refund; the shop may need to follow up on the refund.
+                </div>
+              )}
+              {cancelDialogError && <div className="orders-fk-dialog-error" role="alert">{cancelDialogError}</div>}
+              <div className="orders-fk-dialog-actions">
+                <button
+                  type="button"
+                  className="orders-fk-dialog-keep"
+                  onClick={() => {
+                    setCancelCandidate(null);
+                    setCancelDialogError('');
+                  }}
+                  disabled={cancelingOrderId !== null}
+                >
+                  Keep order
+                </button>
+                <button
+                  type="button"
+                  className="orders-fk-dialog-confirm"
+                  ref={cancelConfirmButtonRef}
+                  onClick={() => void confirmCancelOrder()}
+                  disabled={cancelingOrderId !== null}
+                >
+                  {cancelingOrderId === cancelCandidate.order_id ? 'Cancelling…' : 'Confirm cancellation'}
+                  {cancelingOrderId === cancelCandidate.order_id ? <RefreshCw size={15} className="spin" /> : <Ban size={15} />}
+                </button>
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

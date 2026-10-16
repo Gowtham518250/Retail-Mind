@@ -39,3 +39,16 @@
 @media(max-width:760px){.page{padding-top:8px}.shell{width:calc(100% - 16px)}.hero{padding:24px 18px;border-radius:22px}.hero h1{margin-top:20px;font-size:clamp(2.8rem,11vw,4rem)}.sectionHead{align-items:flex-start;flex-direction:column}.count{align-self:flex-start}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.image{height:120px}.cardBody{padding:11px}.cardBody h3{font-size:1.05rem}.description{font-size:.7rem}.trustRow{gap:9px 13px;font-size:.69rem}}
 @media(max-width:390px){.grid{grid-template-columns:minmax(0,1fr)}.image{height:160px}}
 @media(prefers-reduced-motion:reduce){.card,.image>img{transition:none}.card:hover,.card:hover .image>img{transform:none}.skeleton{animation:none}}
+
+
+/* Shop identity is a logo, not the first product in the catalogue. */
+.image{display:grid;place-items:center;background:radial-gradient(circle at 80% 15%,rgba(40,201,187,.18),transparent 34%),linear-gradient(135deg,#eef1ff 0%,#eafbf7 100%)}
+.image>img{display:none}
+.imageFallback{position:absolute;inset:0;display:grid;place-items:center;background:transparent}
+.shopLogoImage{display:block;width:min(42%,112px);height:min(72%,100px);object-fit:contain;padding:8px;border:1px solid rgba(255,255,255,.88);border-radius:20px;background:rgba(255,255,255,.92);box-shadow:0 12px 27px rgba(20,35,75,.12)}
+.shopLogoPlaceholder{position:relative;display:grid;place-items:center;width:76px;height:76px;border:1px solid rgba(102,87,245,.12);border-radius:24px;background:rgba(255,255,255,.82);color:#6657f5;box-shadow:0 10px 25px rgba(20,35,75,.08)}
+.shopLogoPlaceholder>svg{width:30px;height:30px}
+.shopLogoPlaceholder>span{position:absolute;right:-7px;bottom:-7px;display:grid;place-items:center;width:28px;height:28px;border:2px solid #fff;border-radius:10px;background:#6657f5;color:#fff;font:900 .82rem var(--font-display)}
+.categoryTag{z-index:2}
+@media(max-width:760px){.image{height:120px}.shopLogoImage{width:min(44%,88px);height:min(72%,82px);border-radius:16px}.shopLogoPlaceholder{width:63px;height:63px;border-radius:20px}}
+@media(max-width:390px){.image{height:160px}}

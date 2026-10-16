@@ -431,9 +431,9 @@ export default function AuthPage() {
                 <div className={styles.fieldGroup}>
                   <div className={styles.labelRow}>
                     <label className={styles.label}>Password</label>
-                    <span className={styles.forgotLink} onClick={() => switchView('reset')}>
+                    <button type="button" className={styles.forgotLink} onClick={() => switchView('reset')}>
                       Forgot Password?
-                    </span>
+                    </button>
                   </div>
                   <div className={styles.inputWrap}>
                     <Lock size={17} className={styles.inputIcon} />
@@ -450,7 +450,6 @@ export default function AuthPage() {
                       type="button"
                       className={styles.eyeBtn}
                       onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
                       aria-label="Toggle password visibility"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -551,7 +550,6 @@ export default function AuthPage() {
                       type="button"
                       className={styles.eyeBtn}
                       onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
                       aria-label="Toggle password visibility"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}

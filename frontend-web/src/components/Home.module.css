@@ -71,3 +71,66 @@
 @media(max-width:760px){.page{padding-bottom:110px}.hero{min-height:0;grid-template-columns:minmax(0,1fr);gap:0;margin-top:-63px;padding:86px 12px 17px;border-radius:0 0 19px 19px}.heroCopy{max-width:none}.eyebrow{font-size:.56rem}.title{max-width:11ch;margin:13px 0 8px;font-size:clamp(2.75rem,11.6vw,3.65rem);line-height:.86}.lead{max-width:40ch;margin-bottom:11px;font-size:.82rem}.search{min-height:44px;gap:6px;padding:5px 5px 5px 10px;border-radius:12px}.search input{font-size:.73rem}.search button{min-height:33px;padding:0 9px;font-size:.67rem}.categoryQuickLinks{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:9px}.categoryQuickLink{min-height:56px;gap:4px;padding:6px 2px;border-radius:9px}.categoryQuickLink>span{width:23px;height:23px}.categoryQuickLink>span svg{width:16px;height:16px}.categoryQuickLink small{font-size:.52rem}.trust{gap:5px 9px;margin-top:9px;font-size:.58rem}.stage{min-height:180px;margin-top:-3px}.canvas{inset:0;width:100%;height:100%}.chip{padding:6px 8px;gap:6px;border-radius:10px}.chipA{top:0;right:0}.chipB{left:0;bottom:2%}.chipIcon{width:24px;height:24px}.chip b{font-size:.59rem}.chip small{font-size:.52rem}.hint{display:none}.section{width:calc(100% - 20px);margin-top:22px}.head{align-items:flex-start}.h2{font-size:1.55rem}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.shopVisual{height:103px}.shopBody{gap:5px;padding:9px}.shopName{font-size:.96rem}.shopTopline{font-size:.56rem}.shopTopline b{font-size:.57rem}.shopBody p{display:none}.shopFoot{font-size:.56rem;padding-top:7px}.row{grid-template-columns:32px minmax(0,1fr) auto;gap:8px;padding:9px}.rowMark{width:30px;height:30px}.rowArrow{display:none}.rowPrice{font-size:.84rem}.customerFooter{width:calc(100% - 20px)}}
 @media(max-width:390px){.categoryQuickLinks{gap:5px}.categoryQuickLink small{font-size:.49rem}.stage{min-height:155px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shopVisual{height:94px}.shopName{font-size:.88rem}.shopTopline{font-size:.52rem}}
 @media(prefers-reduced-motion:reduce){.shopCard,.shopCover,.categoryQuickLink{transition:none}.shopCard:hover,.shopCard:hover .shopCover,.categoryQuickLink:hover{transform:none}.skeleton{animation:none}}
+
+
+/* Center the 3D shopping bag in the hero viewport rather than placing it beneath the copy. */
+.hero{
+  min-height:clamp(560px,calc(100svh - 68px),760px);
+  padding:clamp(100px,12vh,136px) 24px 30px;
+}
+.heroCopy{width:min(100%,650px);max-width:650px}
+.stage{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  align-self:auto;
+  width:100%;
+  height:100%;
+  min-height:0;
+  margin:0;
+  pointer-events:none;
+}
+.stageGlow{left:50%;top:50%;width:min(64vw,800px);transform:translate(-50%,-50%)}
+.canvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  transform:none;
+  pointer-events:auto;
+}
+.chipA{top:25%;right:7%}
+.chipB{left:43%;bottom:13%}
+.hint{right:24px;bottom:8%}
+@media(max-width:1100px){
+  .hero{min-height:clamp(540px,calc(100svh - 68px),700px)}
+  .heroCopy{width:min(100%,600px);max-width:600px}
+  .stageGlow{width:min(70vw,660px)}
+  .chipA{right:4%;top:19%}
+}
+@media(max-width:760px){
+  .hero{
+    position:relative;
+    min-height:0;
+    padding:86px 12px 17px;
+  }
+  .heroCopy{width:100%;max-width:none}
+  .stage{
+    position:relative;
+    inset:auto;
+    width:100%;
+    height:190px;
+    min-height:190px;
+    margin:10px 0 0;
+    pointer-events:none;
+  }
+  .stageGlow{left:50%;top:50%;width:min(88vw,370px)}
+  .canvas{position:absolute;inset:0;width:100%;height:100%;transform:none;pointer-events:auto}
+  .chipA{top:0;right:0}
+  .chipB{left:0;bottom:2%}
+  .hint{display:none}
+}
+@media(max-width:390px){
+  .stage{height:165px;min-height:165px}
+}

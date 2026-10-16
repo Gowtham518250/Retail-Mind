@@ -20,7 +20,6 @@ type Shop = {
   rating_count?: number | null;
   categories?: string[] | string | null;
 };
-type ShopProduct = { image_url?: string | null; product_image_url?: string | null };
 
 function assetUrl(value?: string | null) {
   if (!value) return '';
@@ -38,9 +37,37 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function ShopCoverImage({ shop }: { shop: Shop }) {
+  const [failedLogo, setFailedLogo] = useState(false);
+  const logo = assetUrl(shop.logo_url || shop.shop_logo_url);
+  const hasLogo = Boolean(logo) && !failedLogo;
+
+  return (
+    <div className={styles.image}>
+      <div className={styles.imageFallback}>
+        {hasLogo ? (
+          <img
+            className={styles.shopLogoImage}
+            src={logo}
+            alt={(shop.shop_name || 'Local shop') + ' logo'}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailedLogo(true)}
+          />
+        ) : (
+          <div className={styles.shopLogoPlaceholder} aria-label={(shop.shop_name || 'Local shop') + ' logo placeholder'}>
+            <Store size={34} aria-hidden="true" />
+            <span aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
+          </div>
+        )}
+      </div>
+      <span className={styles.categoryTag}>{shop.shop_type || tagsFor(shop)[0] || 'Local shop'}</span>
+    </div>
+  );
+}
+
 export default function ShopDiscoveryPage() {
   const [shops, setShops] = useState<Shop[]>([]);
-  const [covers, setCovers] = useState<Record<number, string>>({});
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [loading, setLoading] = useState(true);
@@ -61,28 +88,7 @@ export default function ShopDiscoveryPage() {
         const list: Shop[] = Array.isArray(data.shops) ? data.shops : [];
         setShops(list);
 
-        // Use real product photography supplied by shops when available.
-        // Keep the number of supplemental calls bounded for performance.
-        const coverEntries = await Promise.all(
-          list.slice(0, 12).map(async (shop) => {
-            try {
-              const productResponse = await fetch(
-                API_BASE + '/store/shops/' + encodeURIComponent(String(shop.shop_id)) + '/products',
-                { cache: 'no-store', signal: controller.signal },
-              );
-              if (!productResponse.ok) return [shop.shop_id, ''] as const;
-              const detail = await productResponse.json();
-              const products: ShopProduct[] = Array.isArray(detail.products) ? detail.products : [];
-              const image = products.map((product) => product.image_url || product.product_image_url).find(Boolean);
-              return [shop.shop_id, assetUrl(image)] as const;
-            } catch {
-              return [shop.shop_id, ''] as const;
-            }
-          }),
-        );
-        if (!controller.signal.aborted) {
-          setCovers(Object.fromEntries(coverEntries.filter((entry) => entry[1])));
-        }
+        // Product photography is requested lazily by each visible shop card.
       } catch (cause) {
         if (!controller.signal.aborted) {
           setShops([]);
@@ -190,19 +196,11 @@ export default function ShopDiscoveryPage() {
           ) : (
             <div className={styles.grid}>
               {visibleShops.map((shop, index) => {
-                const cover = covers[shop.shop_id] || assetUrl(shop.logo_url || shop.shop_logo_url);
                 const rating = Number(shop.rating || 0);
                 const reviewCount = Number(shop.rating_count || 0);
                 return (
                   <Link href={'/shop/' + shop.shop_id} className={styles.card} key={shop.shop_id}>
-                    <div className={styles.image}>
-                      {cover ? (
-                        <img src={cover} alt="" loading={index < 4 ? 'eager' : 'lazy'} />
-                      ) : (
-                        <div className={styles.imageFallback}><Store size={34} /><span>{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span></div>
-                      )}
-                      <span className={styles.categoryTag}>{shop.shop_type || tagsFor(shop)[0] || 'Local shop'}</span>
-                    </div>
+                    <ShopCoverImage shop={shop} />
                     <div className={styles.cardBody}>
                       <div className={styles.cardMeta}>
                         <span><Star size={13} fill={rating > 0 ? 'currentColor' : 'none'} /> {rating > 0 && reviewCount > 0 ? rating.toFixed(1) : 'New'}{reviewCount > 0 ? ' · ' + reviewCount + ' reviews' : ''}</span>
