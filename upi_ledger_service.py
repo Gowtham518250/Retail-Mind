@@ -222,4 +222,3 @@ class UpiLedgerService:
             "failed_transactions": failed_count,
             "refunded_transactions": refunded_count,
         }
-    }
