@@ -129,3 +129,20 @@
   .item { grid-template-columns: 56px minmax(0,1fr) 68px; gap: 8px; }
   .foot { border-top-color: var(--rm-line); }
 }
+
+
+/* Simple cart drawer from the reference UI */
+.overlay{background:rgba(7,15,35,.68);backdrop-filter:blur(8px)}
+.drawer{width:min(470px,calc(100vw - 20px));border:1px solid rgba(102,87,245,.18);border-radius:25px;background:#fff;color:#101a34;box-shadow:-28px 0 80px rgba(8,20,43,.28)}
+.head{padding:19px 20px 17px;background:linear-gradient(130deg,#101e43,#08142b);color:#f7f9ff}.head h2{font:900 1.75rem/.98 var(--font-display);text-transform:none}
+.headIcon{background:#28c9bb;color:#08142b;border-radius:13px}.count{background:#6657f5;color:#fff}.close{background:rgba(255,255,255,.09);color:#f7f9ff}.close:hover{background:#6657f5}
+.scroll{padding:14px;background:#fff}.items{gap:9px}.item{grid-template-columns:64px minmax(0,1fr) auto;gap:10px;padding:10px;border:1px solid #e1e7f4;border-radius:16px;background:#fff}
+.thumb{width:64px;height:64px;border-radius:13px;background:linear-gradient(145deg,#edf1ff,#e5fbf9);color:#6657f5}.name{color:#101a34;font-size:.9rem}.unit{color:#64718a}
+.qty{border:1px solid #dfe6f3;border-radius:10px;background:#f8faff}.qty button{color:#3157d5;border-radius:7px}.qty button:hover{background:#6657f5;color:#fff}
+.line{color:#08142b;font:900 1.15rem var(--font-display)}.remove{color:#8190ad}.remove:hover{background:#fff0f3;color:#c13c58}
+.foot{padding:16px 20px calc(18px + env(safe-area-inset-bottom));border-top:1px solid #e1e7f4;background:#f7f9ff}.total span{color:#64718a}.total b{color:#08142b;font:900 2.15rem/1 var(--font-display)}.foot p{color:#64718a}
+.checkout{height:51px;border-radius:13px;background:linear-gradient(120deg,#6657f5,#4f61e5);box-shadow:0 10px 24px rgba(102,87,245,.23);font-weight:900}.checkout:hover{background:#3157d5;box-shadow:0 12px 26px rgba(49,87,213,.24);transform:translateY(-1px)}
+.keep{border-radius:11px;background:#edf1ff;color:#3157d5}.keep:hover{background:#e2e8ff}
+.empty{color:#64718a}.empty strong{color:#101a34}.emptyBag{background:#e9efff;color:#6657f5;box-shadow:7px 8px 0 #d8dfff}
+@media(max-width:520px){.drawer{inset:0;width:100vw;max-height:100dvh;border-radius:0}.head{padding:calc(13px + env(safe-area-inset-top)) 14px 12px}.scroll{padding:10px}.item{grid-template-columns:52px minmax(0,1fr) 64px;gap:8px;padding:8px}.thumb{width:52px;height:52px}.qty button{width:25px;height:26px}.qty span{min-width:20px}.foot{padding:12px 14px calc(12px + env(safe-area-inset-bottom))}.total b{font-size:1.9rem}}
+@media(prefers-reduced-motion:reduce){.drawer,.checkout,.close,.qty button,.remove{transition:none}}
