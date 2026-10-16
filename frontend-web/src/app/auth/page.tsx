@@ -583,6 +583,42 @@ export default function AuthPage() {
                 exit={{ opacity: 0, y: -12 }}
                 transition={{ duration: 0.25 }}
               >
+                <section className={styles.resetFlowIntro} aria-label="Password reset progress">
+                  <div className={styles.resetFlowHeading}>
+                    <span className={styles.resetFlowEyebrow}>SECURE ACCOUNT RECOVERY</span>
+                    <h3>
+                      {resetStep === 'request' ? 'Reset your password' : resetStep === 'verify' ? 'Verify your email' : 'Create a new password'}
+                    </h3>
+                    <p>
+                      {resetStep === 'request'
+                        ? 'Enter the email address associated with your customer account.'
+                        : resetStep === 'verify'
+                          ? 'Enter the 6-digit code sent to your registered email.'
+                          : 'Choose a new password to secure your account.'}
+                    </p>
+                  </div>
+                  <span className={styles.resetFlowCount}>
+                    {resetStep === 'request' ? '01' : resetStep === 'verify' ? '02' : '03'} <small>/ 03</small>
+                  </span>
+                </section>
+                <div
+                  className={styles.resetProgressTrack}
+                  role="progressbar"
+                  aria-label="Password recovery progress"
+                  aria-valuemin={1}
+                  aria-valuemax={3}
+                  aria-valuenow={resetStep === 'request' ? 1 : resetStep === 'verify' ? 2 : 3}
+                >
+                  <span
+                    className={styles.resetProgressFill}
+                    style={{ width: resetStep === 'request' ? '33.333%' : resetStep === 'verify' ? '66.666%' : '100%' }}
+                  />
+                </div>
+                <div className={styles.resetStepGrid} aria-hidden="true">
+                  <span className={styles.resetStep + ' ' + (resetStep === 'request' ? styles.resetStepActive : styles.resetStepDone)}>1&nbsp; Email</span>
+                  <span className={styles.resetStep + ' ' + (resetStep === 'verify' ? styles.resetStepActive : resetStep === 'password' ? styles.resetStepDone : '')}>2&nbsp; Verify</span>
+                  <span className={styles.resetStep + ' ' + (resetStep === 'password' ? styles.resetStepActive : '')}>3&nbsp; New password</span>
+                </div>
                 {resetStep === 'request' && (
                   <div className={styles.fieldGroup}>
                     <label className={styles.label}>Registered Email Address</label>

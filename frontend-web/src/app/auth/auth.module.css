@@ -580,3 +580,21 @@
   .heroShowcase { border-radius: 25px; }
   .authCard { width: min(100%,680px); }
 }
+
+
+/* Password recovery: clear three-step OTP flow, consistent with the customer auth design. */
+.resetFlowIntro { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin:0 0 2px; padding:15px; border:1px solid rgba(102,87,245,.14); border-radius:17px; background:linear-gradient(135deg,#f7f8ff,#f0fbfc); }
+.resetFlowHeading { min-width:0; }
+.resetFlowEyebrow { display:block; margin-bottom:7px; color:var(--rm-blue,#3157d5); font-size:.62rem; font-weight:900; letter-spacing:.12em; }
+.resetFlowHeading h3 { margin:0; color:var(--rm-navy,#08142b); font:900 1.55rem/.98 var(--font-display); }
+.resetFlowHeading p { max-width:37ch; margin:7px 0 0; color:var(--rm-muted,#64718a); font-size:.82rem; line-height:1.45; }
+.resetFlowCount { flex:0 0 auto; color:var(--rm-violet,#6657f5); font:900 1.45rem/1 var(--font-display); }
+.resetFlowCount small { color:var(--rm-muted,#64718a); font:700 .68rem var(--font-body); }
+.resetProgressTrack { height:6px; overflow:hidden; border-radius:99px; background:#e3e8f5; }
+.resetProgressFill { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#6657f5,#28c9bb); transition:width .25s ease; }
+.resetStepGrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-bottom:5px; }
+.resetStep { min-width:0; padding:8px 6px; border-radius:10px; border:1px solid var(--rm-line,#dfe6f3); background:#fff; color:var(--rm-muted,#64718a); text-align:center; font-size:.68rem; font-weight:800; }
+.resetStepActive { border-color:rgba(102,87,245,.26); background:#eeedff; color:var(--rm-violet,#6657f5); }
+.resetStepDone { border-color:rgba(40,201,187,.24); background:#e9fbf8; color:#087d85; }
+@media(max-width:420px) { .resetFlowIntro { padding:12px; } .resetFlowHeading h3 { font-size:1.35rem; } .resetFlowHeading p { font-size:.78rem; } .resetStep { font-size:.62rem; padding:8px 3px; } }
+@media(prefers-reduced-motion:reduce) { .resetProgressFill { transition:none; } }
