@@ -115,7 +115,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .smart3d-page { color: var(--rm-ink); background: radial-gradient(circle at 12% 4%, rgba(243,202,79,.22), transparent 28%), radial-gradient(circle at 90% 15%, rgba(232,84,30,.12), transparent 26%), linear-gradient(180deg, #fbf6ec, #f5eddf); }
 .smart3d-shell { max-width: 1280px; }
 .smart3d-hero { border-color: rgba(43,68,54,.16); }
-.smart3d-hero-lead { max-width: 13ch; font: 900 clamp(3rem, 7vw, 6rem)/.88 var(--font-display); letter-spacing: -.01em; text-wrap: balance; color: var(--rm-ink); }
+.smart3d-hero-lead { max-width: min(610px, 100%); color: rgba(240,249,245,.76); font: 500 clamp(.96rem, 1.2vw, 1.08rem)/1.68 var(--font-body); letter-spacing: 0; text-wrap: pretty; }
 .smart3d-primary, .smart3d-light-btn { border-radius: 14px; }
 .smart3d-primary { background: var(--rm-orange); }
 .smart3d-primary:hover { background: var(--rm-orange-dark); }
@@ -142,4 +142,45 @@ button { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .success-icon-wrap svg { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; }
+}
+
+
+/* Smart Hub responsive fix: keep the headline separate from its supporting copy. */
+.smart3d-shell { width: 100%; }
+.smart3d-hero-copy { min-width: 0; }
+.smart3d-hero h1 { max-width: 13ch; font-size: clamp(2.65rem, 5.2vw, 4.75rem); line-height: .94; letter-spacing: -.045em; text-wrap: balance; }
+.smart3d-hero-lead { display: block; margin: 0; }
+.smart3d-hero-visual { min-width: 0; }
+@media (max-width: 960px) {
+  .smart3d-shell { padding-left: 14px; padding-right: 14px; }
+  .smart3d-hero { grid-template-columns: minmax(0, 1fr); gap: 8px; min-height: 0; padding: clamp(22px, 4vw, 34px); }
+  .smart3d-hero-copy { padding: 8px 0 0; }
+  .smart3d-hero h1 { max-width: 14ch; font-size: clamp(2.8rem, 7vw, 4.2rem); line-height: .94; }
+  .smart3d-hero-lead { max-width: 58ch; font-size: 1rem; line-height: 1.62; }
+  .smart3d-hero-visual { min-height: 340px; transform: scale(.9); margin: -14px 0 -25px; }
+  .smart3d-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .smart3d-shell { padding-left: 10px; padding-right: 10px; }
+  .smart3d-hero { padding: 20px 17px; border-radius: 23px; }
+  .smart3d-hero h1 { max-width: 14ch; font-size: clamp(2.35rem, 10.5vw, 3.2rem); line-height: .94; letter-spacing: -.04em; }
+  .smart3d-hero-lead { max-width: 100%; font-size: .94rem; line-height: 1.58; }
+  .smart3d-hero-actions { flex-direction: column; align-items: stretch; }
+  .smart3d-primary, .smart3d-secondary { width: 100%; min-height: 46px; }
+  .smart3d-hero-proof { gap: 8px 12px; }
+  .smart3d-hero-visual { min-height: 250px; transform: scale(.78); margin: -30px 0 -50px; }
+  .smart3d-stats { grid-template-columns: minmax(0, 1fr); }
+  .smart3d-section { padding: 16px; }
+  .smart3d-section-head { align-items: flex-start; flex-direction: column; }
+  .smart3d-product-grid, .smart3d-recommend-grid, .smart3d-skeleton-grid { grid-template-columns: minmax(0, 1fr); }
+  .smart3d-bottom-cta { align-items: stretch; flex-direction: column; padding: 18px; }
+  .smart3d-return-section { grid-template-columns: minmax(0, 1fr); padding: 18px; }
+  .smart3d-return-visual { min-height: 140px; }
+}
+@media (max-width: 380px) {
+  .smart3d-hero h1 { font-size: clamp(2.1rem, 10vw, 2.5rem); }
+  .smart3d-hero-visual { min-height: 210px; transform: scale(.7); margin: -35px 0 -58px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .smart3d-hero *, .smart3d-hero *::before, .smart3d-hero *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }

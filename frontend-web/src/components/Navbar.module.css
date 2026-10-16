@@ -153,3 +153,48 @@
   .bottomNavItem { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:5px 1px; font-size:.68rem; line-height:1; }
   .bottomNavIconWrap svg { width:19px; height:19px; }
 }
+
+
+/* Responsive compact cart shortcut for tablet and mobile shopping. */
+.mobileCartBar { display: none; }
+.mobileCartBarInfo { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mobileCartBarIcon { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 12px; background: var(--rm-lime); color: var(--rm-green-deep); }
+.mobileCartBarLabels { display: flex; flex-direction: column; min-width: 0; text-align: left; gap: 2px; }
+.mobileCartBarLabels strong { font: 800 .96rem/1.05 var(--font-body); color: var(--rm-paper); }
+.mobileCartBarLabels small, .mobileCartBarSubtotal small { color: rgba(251,246,236,.68); font-size: .68rem; line-height: 1.2; }
+.mobileCartBarSubtotal { display: flex; flex-direction: column; gap: 3px; text-align: right; min-width: 0; }
+.mobileCartBarSubtotal strong { color: var(--rm-lime); font: 800 1.2rem/1 var(--font-display); white-space: nowrap; }
+.mobileCartBarAction { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px; min-height: 38px; padding: 0 12px; border-radius: 12px; background: var(--rm-orange); color: #fffdf7; font-size: .78rem; font-weight: 900; white-space: nowrap; }
+@media (min-width: 701px) and (max-width: 1024px) {
+  .nav { width: calc(100% - 24px); padding: 9px 11px; gap: 6px; }
+  .actions { gap: 3px; }
+  .link { padding: 8px 7px; }
+  .linkInner { gap: 5px; }
+  .label { font-size: .72rem; }
+  .mobileCartBar { position: fixed; z-index: 85; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; justify-content: space-between; gap: 12px; width: min(560px, calc(100vw - 28px)); padding: 10px 12px; border: 1px solid rgba(243,202,79,.28); border-radius: 18px; background: var(--rm-green-deep); box-shadow: 0 14px 38px rgba(24,40,32,.24); }
+}
+@media (min-width: 701px) and (max-width: 820px) {
+  .label { display: none; }
+  .linkInner { gap: 0; }
+  .linkInner > svg { width: 18px; height: 18px; }
+  .cartLabel { display: none; }
+}
+@media (max-width: 700px) {
+  .mobileCartBar { position: fixed; z-index: 85; left: 10px; right: 10px; bottom: calc(80px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 8px; width: auto; padding: 9px 10px; border: 1px solid rgba(243,202,79,.28); border-radius: 17px; background: var(--rm-green-deep); box-shadow: 0 14px 34px rgba(24,40,32,.25); }
+  .mobileCartBarInfo { gap: 8px; }
+  .mobileCartBarIcon { width: 34px; height: 34px; flex-basis: 34px; }
+  .mobileCartBarLabels strong { font-size: .82rem; }
+  .mobileCartBarLabels small, .mobileCartBarSubtotal small { font-size: .62rem; }
+  .mobileCartBarSubtotal strong { font-size: 1rem; }
+  .mobileCartBarAction { min-height: 34px; padding: 0 9px; font-size: .7rem; }
+}
+@media (max-width: 365px) {
+  .mobileCartBar { gap: 6px; left: 7px; right: 7px; padding: 8px; }
+  .mobileCartBarIcon { display: none; }
+  .mobileCartBarLabels strong { font-size: .77rem; }
+  .mobileCartBarSubtotal strong { font-size: .94rem; }
+  .mobileCartBarAction { padding: 0 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobileCartBar { scroll-behavior: auto; }
+}

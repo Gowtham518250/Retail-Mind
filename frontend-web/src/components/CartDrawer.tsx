@@ -80,11 +80,10 @@ export default function CartDrawer() {
             aria-label="Shopping cart"
             role="dialog"
             aria-modal="true"
-            initial={{ x: '104%', rotateY: -14 }}
-            animate={{ x: 0, rotateY: 0 }}
-            exit={{ x: '104%', rotateY: -14 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-            style={{ transformPerspective: 1600, transformOrigin: 'right center' }}
+            initial={{ x: '104%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '104%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 34 }}
           >
             <div className={styles.head}>
               <div className={styles.headLeft}>

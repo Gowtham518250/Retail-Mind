@@ -519,3 +519,27 @@
 @media(max-width:1050px) { .authContainer { grid-template-columns:minmax(0,1fr) minmax(340px,.85fr); } .featureList { grid-template-columns:1fr; } .featureItem { flex-direction:row; align-items:center; } .authScene { height:210px; } }
 @media(max-width:760px) { .authMain { padding:10px; } .authContainer { display:flex; flex-direction:column; gap:10px; } .heroShowcase { min-height:unset; padding:26px 22px 10px; border-radius:25px; } .heroTitle { max-width:12ch; font-size:clamp(2.65rem,12vw,4rem); } .featureList { grid-template-columns:1fr; gap:8px; } .featureItem { padding:12px; } .authScene { height:190px; min-height:160px; } .authCard { width:100%; padding:24px 20px; border-radius:24px; } }
 @media(max-width:420px) { .authTitle { font-size:2.25rem; } .twoCols { grid-template-columns:1fr; } .authScene { height:150px; min-height:140px; } }
+
+
+/* Tablet auth layout: avoid squeezing the 3D showcase and form side-by-side. */
+@media (max-width: 900px) {
+  .authContainer { display: flex; flex-direction: column; width: min(760px, 100%); min-height: 0; margin: 0 auto; gap: 12px; }
+  .heroShowcase { min-height: 0; padding: clamp(22px, 4vw, 34px); }
+  .heroTitle { max-width: 13ch; font-size: clamp(2.6rem, 7.5vw, 4.3rem); line-height: .9; }
+  .heroSubtitle { max-width: 58ch; }
+  .authScene { height: 190px; min-height: 150px; }
+  .authCard { width: min(100%, 620px); }
+}
+@media (min-width: 761px) and (max-width: 900px) {
+  .featureList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .featureItem { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 760px) {
+  .authMain { padding: 8px; }
+  .heroShowcase { padding: 24px 18px 8px; }
+  .heroTitle { font-size: clamp(2.55rem, 11vw, 3.9rem); }
+  .featureList { grid-template-columns: minmax(0, 1fr); }
+  .featureItem { flex-direction: row; align-items: center; }
+  .authScene { height: 160px; min-height: 140px; }
+  .authCard { padding: 22px 18px; }
+}

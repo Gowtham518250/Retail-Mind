@@ -61,3 +61,50 @@
   .item { grid-template-columns: 62px minmax(0, 1fr) auto; }
   .thumb { width: 62px; height: 62px; }
 }
+
+
+/* Compact, touch-friendly cart layout for tablets and phones. */
+@media (max-width: 900px) {
+  .drawer { width: min(480px, calc(100vw - 28px)); top: 14px; right: 14px; bottom: 14px; border-radius: 26px; }
+  .head { padding: 17px 17px 15px; }
+  .scroll { padding: 13px; }
+  .item { grid-template-columns: 64px minmax(0, 1fr) 76px; gap: 10px; padding: 10px; border-radius: 18px; }
+  .thumb { width: 64px; height: 64px; border-radius: 15px; }
+  .line { font-size: 1.15rem; white-space: nowrap; }
+  .foot { padding: 16px 17px 18px; }
+  .total b { font-size: clamp(1.8rem, 4vw, 2.2rem); }
+}
+@media (max-width: 520px) {
+  .drawer { inset: 0; width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; padding-bottom: env(safe-area-inset-bottom); }
+  .head { padding: calc(13px + env(safe-area-inset-top)) 15px 13px; }
+  .head h2 { font-size: 1.55rem; }
+  .headIcon { width: 36px; height: 36px; border-radius: 12px; }
+  .close { width: 40px; height: 40px; }
+  .scroll { padding: 11px; }
+  .items { gap: 9px; }
+  .item { grid-template-columns: 56px minmax(0, 1fr) 68px; gap: 8px; padding: 9px; border-radius: 16px; }
+  .thumb { width: 56px; height: 56px; border-radius: 13px; }
+  .name { font-size: .88rem; line-height: 1.25; overflow-wrap: anywhere; }
+  .unit { font-size: .72rem; margin-bottom: 6px; }
+  .qty { gap: 0; }
+  .qty button { width: 26px; height: 28px; }
+  .qty span { min-width: 21px; font-size: .85rem; }
+  .side { gap: 8px; }
+  .line { font-size: 1.02rem; }
+  .remove { width: 29px; height: 29px; }
+  .foot { padding: 12px 15px calc(14px + env(safe-area-inset-bottom)); }
+  .total b { font-size: clamp(1.75rem, 7vw, 2.1rem); }
+  .foot p { margin-bottom: 10px; font-size: .74rem; line-height: 1.35; }
+  .checkout { height: 50px; min-height: 50px; border-radius: 14px; }
+}
+@media (max-width: 365px) {
+  .item { grid-template-columns: 50px minmax(0, 1fr) 61px; gap: 6px; padding: 8px; }
+  .thumb { width: 50px; height: 50px; }
+  .line { font-size: .92rem; }
+  .qty button { width: 24px; }
+  .qty span { min-width: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .close, .qty button, .remove, .checkout, .checkout svg { transition: none !important; }
+  .close:hover, .checkout:hover, .checkout:hover svg { transform: none !important; }
+}

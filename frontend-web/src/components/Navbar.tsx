@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ShoppingBag, User, Package, LogIn, Sparkles, Trophy, Store, Home } from 'lucide-react';
+import { ArrowRight, ShoppingBag, User, Package, LogIn, Sparkles, Trophy, Store, Home } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import styles from './Navbar.module.css';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { toggleCart, itemCount } = useCart();
+  const { toggleCart, itemCount, cartTotal } = useCart();
   const [signedIn, setSignedIn] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [scrolled, setScrolled] = useState(false);
@@ -125,6 +125,33 @@ export default function Navbar() {
           </div>
         </motion.nav>
       </header>
+
+      {/* Compact cart shortcut on small screens; opens the same live cart drawer. */}
+      {itemCount > 0 &&
+        (pathname === '/' ||
+          pathname === '/smart-shop' ||
+          pathname === '/ai-shopping' ||
+          /^\/shop\/\d+$/.test(pathname)) && (
+          <button
+            type="button"
+            className={styles.mobileCartBar}
+            onClick={toggleCart}
+            aria-label={'Open cart with ' + itemCount + ' items'}
+          >
+            <span className={styles.mobileCartBarInfo}>
+              <span className={styles.mobileCartBarIcon}><ShoppingBag size={18} /></span>
+              <span className={styles.mobileCartBarLabels}>
+                <strong>{itemCount} {itemCount === 1 ? 'item' : 'items'}</strong>
+                <small>In your cart</small>
+              </span>
+            </span>
+            <span className={styles.mobileCartBarSubtotal}>
+              <small>Subtotal</small>
+              <strong>₹{cartTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
+            </span>
+            <span className={styles.mobileCartBarAction}>View cart <ArrowRight size={16} /></span>
+          </button>
+        )}
 
       {/* ── Mobile Bottom Navigation Bar (Customer Only) ── */}
       <nav className={styles.mobileBottomNav} aria-label="Mobile Navigation">
