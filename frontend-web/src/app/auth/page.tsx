@@ -284,8 +284,8 @@ export default function AuthPage() {
                           <ShoppingBag size={20} />
                         </div>
                         <div className={styles.featureContent}>
-                          <strong>Local Storefront Listings</strong>
-                          <span>Browse product details and stock information when provided</span>
+                          <strong>Wide Range of Local Stores</strong>
+                          <span>Groceries, daily needs, fresh products and more</span>
                         </div>
                       </div>
           
@@ -294,8 +294,8 @@ export default function AuthPage() {
                           <Truck size={20} />
                         </div>
                         <div className={styles.featureContent}>
-                          <strong>Shop Fulfilment Details</strong>
-                          <span>Review the delivery information each shop provides</span>
+                          <strong>Fast &amp; Reliable Delivery</strong>
+                          <span>Review local delivery options from nearby stores</span>
                         </div>
                       </div>
           
@@ -304,8 +304,8 @@ export default function AuthPage() {
                           <ShieldCheck size={20} />
                         </div>
                         <div className={styles.featureContent}>
-                          <strong>Clear Checkout Options</strong>
-                          <span>Use the checkout options shown for each shop, then follow supported order updates</span>
+                          <strong>Safe &amp; Secure Shopping</strong>
+                          <span>Your customer account and order details stay protected</span>
                         </div>
                       </div>
                     </div>
