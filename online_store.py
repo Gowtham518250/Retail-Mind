@@ -278,6 +278,8 @@ class PlaceOrder(BaseModel):
     shop_id: int
     items: List[OrderItem] = Field(..., min_length=1)
     delivery_address: str = Field(..., min_length=5)
+    # Existing clients infer pickup from "Store Pickup"; new clients can set this explicitly.
+    fulfillment_method: Optional[Literal["PICKUP", "DELIVERY"]] = None
     idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
     coupon_code: Optional[str] = Field(None, min_length=3, max_length=50)
     payment_method: Literal["COD", "UPI"] = "COD"
@@ -1291,6 +1293,17 @@ def place_order(
         })
 
     delivery_address = sanitize_input(data.delivery_address, "delivery_address")
+    # Do not charge a delivery fee when the customer selected Store Pickup.
+    # Legacy callers can infer the mode from the old delivery_address value;
+    # newer clients pass fulfillment_method explicitly.
+    requested_fulfillment = data.fulfillment_method
+    if requested_fulfillment is None:
+        normalized_address = delivery_address.strip().casefold()
+        requested_fulfillment = (
+            "PICKUP"
+            if normalized_address in {"store pickup", "pickup", "pick up"}
+            else "DELIVERY"
+        )
     online_setup_fee = round(float(getattr(profile, "online_setup_fee", 0) or 0), 2)
     min_order = round(float(getattr(profile, "online_min_order", 0) or 0), 2)
     delivery_fee = round(float(getattr(profile, "online_delivery_fee", 0) or 0), 2)
@@ -1306,6 +1319,12 @@ def place_order(
         )
     if not offer_delivery and not offer_pickup:
         raise HTTPException(status_code=400, detail="This shop is not accepting online delivery or pickup orders.")
+    if requested_fulfillment == "PICKUP" and not offer_pickup:
+        raise HTTPException(status_code=400, detail="This shop is not accepting pickup orders.")
+    if requested_fulfillment == "DELIVERY" and not offer_delivery:
+        raise HTTPException(status_code=400, detail="This shop is not accepting delivery orders.")
+    if requested_fulfillment == "DELIVERY" and delivery_address.strip().casefold() in {"store pickup", "pickup", "pick up"}:
+        raise HTTPException(status_code=400, detail="A delivery address is required for delivery orders.")
     if not accept_cod and not accept_online:
         raise HTTPException(status_code=400, detail="This shop has no online payment method enabled.")
     selected_payment_method = data.payment_method.upper()
@@ -1344,7 +1363,7 @@ def place_order(
             raise HTTPException(status_code=400, detail="Order does not meet the coupon requirements.")
         coupon.used_count = int(coupon.used_count or 0) + 1
 
-    delivery_charge = delivery_fee if offer_delivery else 0.0
+    delivery_charge = delivery_fee if requested_fulfillment == "DELIVERY" else 0.0
     total_amount = round(
         max(0.0, items_subtotal - discount_amount)
         + online_setup_fee
