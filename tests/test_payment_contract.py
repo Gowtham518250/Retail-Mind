@@ -136,3 +136,70 @@ def test_sqlalchemy_text_is_available_for_payment_transaction_guard():
 
     assert isinstance(statement, TextClause)
 
+
+
+def test_upi_ledger_reports_only_confirmed_collections():
+    from datetime import date, datetime
+    from decimal import Decimal
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from models import UpiLedger, UpiStatus
+    from upi_ledger_service import UpiLedgerService
+
+    # Isolated SQLite table keeps this regression test independent of production data.
+    engine = create_engine("sqlite:///:memory:")
+    UpiLedger.__table__.create(engine)
+    Session = sessionmaker(bind=engine)
+    today = date.today()
+    with Session() as db:
+        records = [
+            ("confirmed", Decimal("100.00"), UpiStatus.CONFIRM),
+            ("pending", Decimal("200.00"), UpiStatus.PENDING),
+            ("failed", Decimal("300.00"), UpiStatus.FAILED),
+            ("refunded", Decimal("400.00"), UpiStatus.REFUND),
+        ]
+        for name, amount, status in records:
+            db.add(UpiLedger(
+                shop_id=42,
+                invoice_id=None,
+                upi_id=f"merchant-{name}",
+                amount=amount,
+                upi_reference=f"{today.isoformat()}-{name}",
+                status=status,
+                payment_date=datetime(today.year, today.month, today.day, 12, 0, 0),
+            ))
+        db.commit()
+
+        daily = UpiLedgerService.get_today_upi_summary(db, 42)
+        assert daily["today_upi_total"] == 100.0
+        assert daily["confirmed_upi_total"] == 100.0
+        assert daily["pending_upi_total"] == 200.0
+        assert daily["failed_upi_total"] == 300.0
+        assert daily["refunded_upi_total"] == 400.0
+        assert daily["confirmed_transactions"] == 1
+        assert daily["pending_transactions"] == 1
+        assert daily["failed_transactions"] == 1
+        assert daily["refunded_transactions"] == 1
+
+        breakdown = UpiLedgerService.get_upi_by_id(db, 42)["upi_breakdown"]
+        assert breakdown == [{
+            "upi_id": "merchant-confirmed",
+            "amount": 100.0,
+            "transaction_count": 1,
+        }]
+
+        monthly = UpiLedgerService.get_monthly_upi_report(db, 42, today.year, today.month)
+        assert monthly["total_upi"] == 100.0
+        assert monthly["transaction_count"] == 1
+        assert monthly["avg_transaction"] == 100.0
+        assert monthly["pending_upi_total"] == 200.0
+        assert monthly["failed_upi_total"] == 300.0
+        assert monthly["refunded_upi_total"] == 400.0
+        assert monthly["pending_transactions"] == 1
+        assert monthly["failed_transactions"] == 1
+        assert monthly["refunded_transactions"] == 1
+
+    UpiLedger.__table__.drop(engine)
+    engine.dispose()
