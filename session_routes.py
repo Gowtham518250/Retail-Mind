@@ -115,6 +115,8 @@ def logout(
     # The bearer dependency authenticates the caller; independently validate
     # the body token before revoking it so a caller cannot log out another user.
     payload = decode_token(token)
+    if payload.get("type") == "refresh":
+        raise HTTPException(status_code=400, detail="A refresh token cannot be logged out as an access session")
     raw_subject = payload.get("sub")
     try:
         token_user_id = int(raw_subject)
