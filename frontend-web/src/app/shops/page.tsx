@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, MapPin, Search, Sparkles, Star, Store } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
@@ -20,7 +20,6 @@ type Shop = {
   rating_count?: number | null;
   categories?: string[] | string | null;
 };
-type ShopProduct = { image_url?: string | null; product_image_url?: string | null };
 
 function assetUrl(value?: string | null) {
   if (!value) return '';
@@ -38,84 +37,30 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function ShopCoverImage({ shop, priority }: { shop: Shop; priority: boolean }) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const [nearViewport, setNearViewport] = useState(priority);
-  const [productImage, setProductImage] = useState('');
-  const [failedImageUrl, setFailedImageUrl] = useState('');
+function ShopCoverImage({ shop }: { shop: Shop }) {
+  const [failedLogo, setFailedLogo] = useState(false);
   const logo = assetUrl(shop.logo_url || shop.shop_logo_url);
-
-  useEffect(() => {
-    if (priority) {
-      setNearViewport(true);
-      return;
-    }
-    const node = hostRef.current;
-    if (!node || typeof IntersectionObserver === 'undefined') {
-      setNearViewport(true);
-      return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setNearViewport(true);
-        observer.disconnect();
-      }
-    }, { rootMargin: '220px 0px' });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [priority]);
-
-  useEffect(() => {
-    if (!nearViewport) return;
-    const controller = new AbortController();
-    let active = true;
-    const loadProductImage = async () => {
-      try {
-        const response = await fetch(
-          API_BASE + '/store/shops/' + encodeURIComponent(String(shop.shop_id)) + '/products',
-          { cache: 'no-store', signal: controller.signal },
-        );
-        if (!response.ok) return;
-        const detail = await response.json();
-        const products: ShopProduct[] = Array.isArray(detail.products) ? detail.products : [];
-        const image = products
-          .map((product) => product.image_url || product.product_image_url)
-          .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
-        if (active && image) setProductImage(assetUrl(image));
-      } catch {
-        // A missing product photo falls back to the shop's own logo or initials.
-      }
-    };
-    void loadProductImage();
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [nearViewport, shop.shop_id]);
-
-  const image = productImage && failedImageUrl !== productImage
-    ? productImage
-    : logo && failedImageUrl !== logo
-      ? logo
-      : '';
-  const usingProductImage = Boolean(image && image === productImage);
+  const hasLogo = Boolean(logo) && !failedLogo;
 
   return (
-    <div className={styles.image} ref={hostRef}>
-      {image ? (
-        <img
-          src={image}
-          alt={usingProductImage ? (shop.shop_name || 'Local shop') + ' product photo' : (shop.shop_name || 'Local shop') + ' logo'}
-          loading={priority ? 'eager' : 'lazy'}
-          decoding="async"
-          onError={() => setFailedImageUrl(image)}
-        />
-      ) : (
-        <div className={styles.imageFallback}>
-          <Store size={34} aria-hidden="true" />
-          <span aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
-        </div>
-      )}
+    <div className={styles.image}>
+      <div className={styles.imageFallback}>
+        {hasLogo ? (
+          <img
+            className={styles.shopLogoImage}
+            src={logo}
+            alt={(shop.shop_name || 'Local shop') + ' logo'}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailedLogo(true)}
+          />
+        ) : (
+          <div className={styles.shopLogoPlaceholder} aria-label={(shop.shop_name || 'Local shop') + ' logo placeholder'}>
+            <Store size={34} aria-hidden="true" />
+            <span aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
+          </div>
+        )}
+      </div>
       <span className={styles.categoryTag}>{shop.shop_type || tagsFor(shop)[0] || 'Local shop'}</span>
     </div>
   );
@@ -255,7 +200,7 @@ export default function ShopDiscoveryPage() {
                 const reviewCount = Number(shop.rating_count || 0);
                 return (
                   <Link href={'/shop/' + shop.shop_id} className={styles.card} key={shop.shop_id}>
-                    <ShopCoverImage shop={shop} priority={index < 4} />
+                    <ShopCoverImage shop={shop} />
                     <div className={styles.cardBody}>
                       <div className={styles.cardMeta}>
                         <span><Star size={13} fill={rating > 0 ? 'currentColor' : 'none'} /> {rating > 0 && reviewCount > 0 ? rating.toFixed(1) : 'New'}{reviewCount > 0 ? ' · ' + reviewCount + ' reviews' : ''}</span>
