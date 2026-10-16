@@ -387,9 +387,9 @@ export default function CheckoutClientPage() {
       </button>
 
       <div className="checkout-stepper" aria-label="Checkout progress">
-        <div className="checkout-step is-complete"><span>1</span><b>Cart</b></div>
+        <div className="checkout-step is-complete"><span>1</span><b>Address</b></div>
         <span className="checkout-step-line" aria-hidden="true" />
-        <div className="checkout-step is-active" aria-current="step"><span>2</span><b>Delivery</b></div>
+        <div className="checkout-step is-active" aria-current="step"><span>2</span><b>Review</b></div>
         <span className="checkout-step-line" aria-hidden="true" />
         <div className="checkout-step"><span>3</span><b>Confirm</b></div>
       </div>
