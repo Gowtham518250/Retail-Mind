@@ -21,6 +21,8 @@ from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from passlib.context import CryptContext
+import logging
+import redis as redis_module
 
 # =====================
 # CONSTANTS
@@ -149,51 +151,142 @@ def resolve_shop_id(current_user) -> int:
     return int(current_user)
 
 # =====================
-# RATE LIMITER (In-Memory)
+# RATE LIMITER (Redis-backed with local fallback)
 # =====================
+logger = logging.getLogger(__name__)
+
+# These maps remain a safe local fallback for development/test environments or
+# during a Redis outage. In production, set REDIS_URL so workers share limits.
 _rate_limit_store: dict = defaultdict(list)  # {ip: [timestamp, ...]}
 _login_fail_store: dict = defaultdict(int)   # {ip: fail_count}
 _login_lockout: dict = defaultdict(float)    # {ip: unlock_timestamp}
+_security_redis_client = None
 
 RATE_LIMIT_CALLS = int(os.getenv("RATE_LIMIT_CALLS", 100))
 RATE_LIMIT_WINDOW_SECS = int(os.getenv("RATE_LIMIT_WINDOW_SECS", 60))
 LOGIN_MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", 5))
-LOGIN_LOCKOUT_SECS = int(os.getenv("LOGIN_LOCKOUT_SECS", 300))  # 5 minutes
+LOGIN_LOCKOUT_SECS = int(os.getenv("LOGIN_LOCKOUT_SECS", 300))
+
+
+def _get_security_redis_client():
+    """Create a lazy Redis client when REDIS_URL is configured."""
+    global _security_redis_client
+    if _security_redis_client is not None:
+        return _security_redis_client
+    url = os.getenv("REDIS_URL", "").strip()
+    if not url:
+        return None
+    _security_redis_client = redis_module.Redis.from_url(
+        url,
+        decode_responses=True,
+        socket_connect_timeout=0.2,
+        socket_timeout=0.2,
+    )
+    return _security_redis_client
+
+
+def _security_ip_key(ip: str) -> str:
+    # Avoid writing raw IP addresses into Redis key names.
+    return hashlib.sha256((ip or "unknown").encode("utf-8")).hexdigest()[:32]
+
 
 def check_rate_limit(request: Request):
-    """Dependency: block IP addresses making too many requests"""
-    ip = request.client.host
+    """Block over-limit IPs using a shared Redis counter when configured."""
+    ip = request.client.host if request.client else "unknown"
     now = time.time()
-    window_start = now - RATE_LIMIT_WINDOW_SECS
+    window = max(1, RATE_LIMIT_WINDOW_SECS)
+    redis_client = _get_security_redis_client()
 
-    # Clean old timestamps
-    _rate_limit_store[ip] = [t for t in _rate_limit_store[ip] if t > window_start]
+    if redis_client is not None:
+        bucket = int(now // window)
+        key = f"retail_mind:security:rate:{bucket}:{_security_ip_key(ip)}"
+        try:
+            current_count = int(redis_client.incr(key))
+            if current_count == 1:
+                # Keep the fixed-window counter slightly longer than one window.
+                redis_client.expire(key, window * 2)
+            if current_count > RATE_LIMIT_CALLS:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Too many requests. Limit: {RATE_LIMIT_CALLS} per {window}s. Slow down!",
+                )
+            return
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("Shared request rate limiter unavailable; using local fallback (%s)", type(exc).__name__)
 
+    window_start = now - window
+    _rate_limit_store[ip] = [timestamp for timestamp in _rate_limit_store[ip] if timestamp > window_start]
     if len(_rate_limit_store[ip]) >= RATE_LIMIT_CALLS:
         raise HTTPException(
             status_code=429,
-            detail=f"Too many requests. Limit: {RATE_LIMIT_CALLS} per {RATE_LIMIT_WINDOW_SECS}s. Slow down!"
+            detail=f"Too many requests. Limit: {RATE_LIMIT_CALLS} per {window}s. Slow down!",
         )
     _rate_limit_store[ip].append(now)
 
+
 def check_login_lockout(ip: str):
-    """Raise 429 if this IP is in brute-force lockout"""
+    """Raise 429 when the shared/local failed-login lockout is active."""
+    redis_client = _get_security_redis_client()
+    if redis_client is not None:
+        lockout_key = f"retail_mind:security:login-lockout:{_security_ip_key(ip)}"
+        try:
+            if redis_client.get(lockout_key):
+                ttl = int(redis_client.ttl(lockout_key) or 0)
+                secs_remaining = ttl if ttl > 0 else LOGIN_LOCKOUT_SECS
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Too many failed login attempts. Try again in {secs_remaining} seconds.",
+                )
+            return
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("Shared login lockout unavailable; using local fallback (%s)", type(exc).__name__)
+
     if _login_lockout[ip] > time.time():
-        secs_remaining = int(_login_lockout[ip] - time.time())
+        secs_remaining = max(1, int(_login_lockout[ip] - time.time()))
         raise HTTPException(
             status_code=429,
-            detail=f"Too many failed login attempts. Try again in {secs_remaining} seconds."
+            detail=f"Too many failed login attempts. Try again in {secs_remaining} seconds.",
         )
 
+
 def record_login_failure(ip: str):
-    """Track a failed login. Lock IP after LOGIN_MAX_FAILS attempts."""
+    """Track failed logins in Redis so the threshold is shared across workers."""
+    redis_client = _get_security_redis_client()
+    if redis_client is not None:
+        failures_key = f"retail_mind:security:login-failures:{_security_ip_key(ip)}"
+        lockout_key = f"retail_mind:security:login-lockout:{_security_ip_key(ip)}"
+        try:
+            failures = int(redis_client.incr(failures_key))
+            # Expire the failure count so old attempts do not persist forever.
+            redis_client.expire(failures_key, max(1, LOGIN_LOCKOUT_SECS))
+            if failures >= LOGIN_MAX_FAILS:
+                redis_client.set(lockout_key, "1", ex=max(1, LOGIN_LOCKOUT_SECS))
+                redis_client.delete(failures_key)
+            return
+        except Exception as exc:
+            logger.warning("Shared login failure counter unavailable; using local fallback (%s)", type(exc).__name__)
+
     _login_fail_store[ip] += 1
     if _login_fail_store[ip] >= LOGIN_MAX_FAILS:
         _login_lockout[ip] = time.time() + LOGIN_LOCKOUT_SECS
-        _login_fail_store[ip] = 0  # reset counter after lockout
+        _login_fail_store[ip] = 0
+
 
 def record_login_success(ip: str):
-    """Clear failed attempts on successful login"""
+    """Clear failed-login and lockout state from the shared/local stores."""
+    redis_client = _get_security_redis_client()
+    if redis_client is not None:
+        try:
+            redis_client.delete(
+                f"retail_mind:security:login-failures:{_security_ip_key(ip)}",
+                f"retail_mind:security:login-lockout:{_security_ip_key(ip)}",
+            )
+        except Exception as exc:
+            logger.warning("Shared login success reset unavailable (%s)", type(exc).__name__)
     _login_fail_store[ip] = 0
     _login_lockout[ip] = 0
 
