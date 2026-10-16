@@ -71,6 +71,7 @@ jobs:
           pytest -q tests/test_inventory_upload_ai_contract.py
           pytest -q tests/test_purchase_order_recommendations_contract.py
           pytest -q tests/test_order_idempotency_contract.py
+          pytest -q tests/test_security_distributed_rate_limit.py
           pytest -q tests/test_invoice_replay_guard.py
           pytest -q tests/test_purchase_order_receiving.py
           pytest -q tests/test_payment_contract.py
