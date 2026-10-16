@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from models import User, ShopProfile, Worker
-from security import hash_password, verify_password, create_access_token, ROLE_OWNER, get_current_user, check_login_lockout, record_login_failure, record_login_success
+from security import hash_password, verify_password, create_access_token, create_refresh_token, ROLE_OWNER, get_current_user, check_login_lockout, record_login_failure, record_login_success
 from email_notifications import EmailNotificationService
 from rate_limiter import rate_limit_endpoint, get_client_ip, ip_rate_limiter
 import random
@@ -112,6 +112,9 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     access_token = create_access_token(
         data={"sub": str(new_user.id), "role": new_user.user_type, "user_type": new_user.user_type}
     )
+    # Match the login response contract so newly registered users can refresh
+    # their session without being forced to log in again after access-token expiry.
+    refresh_token = create_refresh_token(new_user.id, new_user.user_type)
 
     registered_profile = (
         db.query(ShopProfile)
@@ -123,6 +126,7 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         "msg": "User registered successfully",
         "user_id": new_user.id,
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "role": new_user.user_type,
         "user_type": new_user.user_type,
