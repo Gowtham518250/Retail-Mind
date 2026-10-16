@@ -194,17 +194,19 @@ export default function AuthPage() {
     setSuccess('A 6-digit OTP has been sent to your registered email address.');
   };
 
-  const handleReset = async (e: React.FormEvent) => {
+  const handleReset = async (e: React.FormEvent, forcedStep?: 'request' | 'verify' | 'password') => {
+    const activeStep = forcedStep || resetStep;
     e.preventDefault();
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      if (resetStep === 'request') {
+      if (activeStep !== resetStep) throw new Error('Complete the previous recovery step first.');
+      if (activeStep === 'request') {
         await requestResetOtp();
         return;
       }
-      if (resetStep === 'verify') {
+      if (activeStep === 'verify') {
         if (!/^\d{6}$/.test(resetOtp)) {
           throw new Error('Enter the 6-digit OTP from your email.');
         }
@@ -252,67 +254,72 @@ export default function AuthPage() {
       <div className={styles.orb2} />
       <div className={styles.orb3} />
 
-      <div className={styles.authContainer}>
-        {/* Left Hero Showcase */}
-        <motion.div
-          className={styles.heroShowcase}
-          initial={{ opacity: 0, x: -30 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.65 }}
-        >
-          <div className={styles.brandPill}>
-            <Sparkles size={14} />
-            <span>RetailMind Customer Hub</span>
-          </div>
-
-          <h1 className={styles.heroTitle}>
-            Discover &amp; Order From{' '}
-            <span className={styles.heroGradientText}>Your Local Stores.</span>
-          </h1>
-
-          <p className={styles.heroSubtitle}>
-            Explore local shop listings, review stock information when provided, and use AI-guided shopping assistance.
-          </p>
-
-          <div className={styles.featureList}>
-            <div className={styles.featureItem}>
-              <div className={styles.featureIconWrap}>
-                <ShoppingBag size={20} />
-              </div>
-              <div className={styles.featureContent}>
-                <strong>Local Storefront Listings</strong>
-                <span>Browse product details and stock information when provided</span>
-              </div>
-            </div>
-
-            <div className={styles.featureItem}>
-              <div className={styles.featureIconWrap}>
-                <Truck size={20} />
-              </div>
-              <div className={styles.featureContent}>
-                <strong>Shop Fulfilment Details</strong>
-                <span>Review the delivery information each shop provides</span>
-              </div>
-            </div>
-
-            <div className={styles.featureItem}>
-              <div className={styles.featureIconWrap}>
-                <ShieldCheck size={20} />
-              </div>
-              <div className={styles.featureContent}>
-                <strong>Clear Checkout Options</strong>
-                <span>Use the checkout options shown for each shop, then follow supported order updates</span>
-              </div>
-            </div>
-          </div>
-          <div className={styles.authScene} aria-label="Animated 3D shopping scene">
-            <HeroScene3D lite className={styles.authSceneCanvas} />
-          </div>
-        </motion.div>
-
+      <div className={`${styles.authContainer} ${view === 'reset' ? styles.authContainerReset : ''}`}>
+        {view !== 'reset' && (
+          <>
+                  {/* Left Hero Showcase */}
+                  <motion.div
+                    className={styles.heroShowcase}
+                    initial={{ opacity: 0, x: -30 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.65 }}
+                  >
+                    <div className={styles.brandPill}>
+                      <Sparkles size={14} />
+                      <span>RetailMind Customer Hub</span>
+                    </div>
+          
+                    <h1 className={styles.heroTitle}>
+                      Discover &amp; Order From{' '}
+                      <span className={styles.heroGradientText}>Your Local Stores.</span>
+                    </h1>
+          
+                    <p className={styles.heroSubtitle}>
+                      Explore local shop listings, review stock information when provided, and use AI-guided shopping assistance.
+                    </p>
+          
+                    <div className={styles.featureList}>
+                      <div className={styles.featureItem}>
+                        <div className={styles.featureIconWrap}>
+                          <ShoppingBag size={20} />
+                        </div>
+                        <div className={styles.featureContent}>
+                          <strong>Local Storefront Listings</strong>
+                          <span>Browse product details and stock information when provided</span>
+                        </div>
+                      </div>
+          
+                      <div className={styles.featureItem}>
+                        <div className={styles.featureIconWrap}>
+                          <Truck size={20} />
+                        </div>
+                        <div className={styles.featureContent}>
+                          <strong>Shop Fulfilment Details</strong>
+                          <span>Review the delivery information each shop provides</span>
+                        </div>
+                      </div>
+          
+                      <div className={styles.featureItem}>
+                        <div className={styles.featureIconWrap}>
+                          <ShieldCheck size={20} />
+                        </div>
+                        <div className={styles.featureContent}>
+                          <strong>Clear Checkout Options</strong>
+                          <span>Use the checkout options shown for each shop, then follow supported order updates</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={styles.authScene} aria-label="Animated 3D shopping scene">
+                      <HeroScene3D lite className={styles.authSceneCanvas} />
+                    </div>
+                  </motion.div>
+          
+          
+          </>
+        )}
         {/* Right Glass Card */}
         <motion.div
-          className={styles.authCard}
+          className={`${styles.authCard} ${view === 'reset' ? styles.authCardReset : ''}`}
           initial={{ opacity: 0, y: 25 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.65, delay: 0.1 }}
@@ -320,67 +327,116 @@ export default function AuthPage() {
           <div className={styles.cardGlowBar} />
 
           <div className={styles.cardHeader}>
-            <h2 className={styles.authTitle}>
-              {view === 'login'
-                ? 'Sign In to Shop'
-                : view === 'register'
-                  ? 'Create Customer Account'
-                  : 'Account Recovery'}
-            </h2>
-            <p className={styles.authSubtitle}>
-              {view === 'login'
-                ? 'Sign in to access your cart, tracked orders, and saved addresses'
-                : view === 'register'
-                  ? 'Join RetailMind for instant local shopping and convenient checkout'
-                  : 'We will send a 6-digit verification code to your email'}
-            </p>
-          </div>
-
-          {/* Mode Tabs */}
-          {view !== 'reset' && (
-            <div className={styles.modeTabs}>
-              <button
-                type="button"
-                className={`${styles.modeTabBtn} ${view === 'login' ? styles.modeTabActive : ''}`}
-                onClick={() => switchView('login')}
-              >
-                Sign In
-                {view === 'login' && <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />}
-              </button>
-              <button
-                type="button"
-                className={`${styles.modeTabBtn} ${view === 'register' ? styles.modeTabActive : ''}`}
-                onClick={() => switchView('register')}
-              >
-                Create Account
-                {view === 'register' && <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />}
-              </button>
-            </div>
-          )}
-
-          {/* Feedback */}
-          <AnimatePresence>
-            {error && (
+            {view === 'reset' && (
               <motion.div
-                key="err"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className={styles.errorBanner}
+                key="reset-board"
+                className={styles.resetBoard}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.22 }}
               >
-                {error}
-              </motion.div>
-            )}
-            {success && (
-              <motion.div
-                key="ok"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className={styles.successBanner}
-              >
-                <CheckCircle size={17} style={{ flexShrink: 0 }} />
-                <span>{success}</span>
+                <section className={styles.resetStageCard + ' ' + (resetStep === 'request' ? styles.resetStageActive : styles.resetStageComplete)}>
+                  <div className={styles.resetStageIllustration}><Mail size={27} /><span>EMAIL</span></div>
+                  <div className={styles.resetStageBadge}>01 · ACCOUNT RECOVERY</div>
+                  <h3>Reset your password</h3>
+                  <p>Enter your email address and we’ll send a 6 digit reset code.</p>
+                  <form onSubmit={(event) => void handleReset(event, 'request')} className={styles.resetStageForm}>
+                    <label className={styles.label}>Email Address</label>
+                    <div className={styles.inputWrap}>
+                      <Mail size={16} className={styles.inputIcon} />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="you@example.com"
+                        className={styles.input}
+                        required
+                        autoComplete="email"
+                      />
+                    </div>
+                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'request'}>
+                      {loading && resetStep === 'request' ? <span className={styles.spinner} /> : 'Send OTP'} <ArrowRight size={15} />
+                    </button>
+                  </form>
+                  {resetStep !== 'request' && <div className={styles.resetStageState}><CheckCircle size={13} /> OTP requested</div>}
+                </section>
+
+                <section className={styles.resetStageCard + ' ' + (resetStep === 'verify' ? styles.resetStageActive : resetStep === 'password' ? styles.resetStageComplete : '')}>
+                  <div className={styles.resetStageIllustration}><Smartphone size={27} /><span>OTP</span></div>
+                  <div className={styles.resetStageBadge}>02 · VERIFY IDENTITY</div>
+                  <h3>Enter the 6 digit OTP</h3>
+                  <p>Enter the verification code sent to <strong className={styles.resetEmail}>{email || 'your email address'}</strong>.</p>
+                  <form onSubmit={(event) => void handleReset(event, 'verify')} className={styles.resetStageForm}>
+                    <label className={styles.label}>Verification Code</label>
+                    <div className={styles.inputWrap}>
+                      <CheckCircle size={16} className={styles.inputIcon} />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={resetOtp}
+                        onChange={(event) => setResetOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        maxLength={6}
+                        className={styles.input}
+                        required
+                        autoComplete="one-time-code"
+                        aria-label="Six digit OTP"
+                      />
+                    </div>
+                    <button type="button" className={styles.resetResend} onClick={() => void requestResetOtp().catch((err) => setError(err instanceof Error ? err.message : 'Unable to resend OTP.'))} disabled={resendCooldown > 0 || loading || resetStep !== 'verify'}>
+                      {resendCooldown > 0 ? 'Resend in ' + resendCooldown + 's' : 'Resend OTP'}
+                    </button>
+                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'verify'}>
+                      {loading && resetStep === 'verify' ? <span className={styles.spinner} /> : 'Verify OTP'} <ArrowRight size={15} />
+                    </button>
+                  </form>
+                  {resetStep === 'password' && <div className={styles.resetStageState}><CheckCircle size={13} /> Email verified</div>}
+                </section>
+
+                <section className={styles.resetStageCard + ' ' + (resetStep === 'password' ? styles.resetStageActive : '')}>
+                  <div className={styles.resetStageIllustration}><KeyRound size={27} /><span>SECURE</span></div>
+                  <div className={styles.resetStageBadge}>03 · NEW PASSWORD</div>
+                  <h3>Create new password</h3>
+                  <p>Set a new password for your customer account.</p>
+                  <form onSubmit={(event) => void handleReset(event, 'password')} className={styles.resetStageForm}>
+                    <label className={styles.label}>New Password</label>
+                    <div className={styles.inputWrap}>
+                      <Lock size={16} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={resetPassword}
+                        onChange={(event) => setResetPassword(event.target.value)}
+                        placeholder="Enter new password"
+                        className={styles.input}
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                      />
+                      <button type="button" className={styles.eyeBtn} onClick={() => setShowPassword((value) => !value)} aria-label="Toggle password visibility">
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    <label className={styles.label}>Confirm New Password</label>
+                    <div className={styles.inputWrap}>
+                      <Lock size={16} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={resetPasswordConfirm}
+                        onChange={(event) => setResetPasswordConfirm(event.target.value)}
+                        placeholder="Confirm new password"
+                        className={styles.input}
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div className={styles.resetMiniStrength}><span style={{ width: Math.min(100, Math.round(resetPassword.length / 12 * 100)) + '%' }} /></div>
+                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'password'}>
+                      {loading && resetStep === 'password' ? <span className={styles.spinner} /> : 'Reset Password'} <ArrowRight size={15} />
+                    </button>
+                  </form>
+                </section>
               </motion.div>
             )}
           </AnimatePresence>
@@ -743,9 +799,7 @@ export default function AuthPage() {
           {/* Footer switch */}
           <div className={styles.switchRow}>
             {view === 'reset' ? (
-              <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>
-                ← Back to Sign In
-              </button>
+              <span>Remember your password? <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>Back to Sign In</button></span>
             ) : view === 'login' ? (
               <span>
                 New customer?{' '}
