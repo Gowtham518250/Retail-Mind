@@ -270,8 +270,8 @@ export default function AuthPage() {
                     </div>
           
                     <h1 className={styles.heroTitle}>
-                      Discover &amp; Order From{' '}
-                      <span className={styles.heroGradientText}>Your Local Stores.</span>
+                      Welcome to{' '}
+                      <span className={styles.heroGradientText}>Retail Mind</span>
                     </h1>
           
                     <p className={styles.heroSubtitle}>
