@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShoppingBag, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
@@ -446,7 +446,7 @@ export default function MarketplaceShell() {
             <button className={`${styles.bentoTile} ${styles.tileYellow}`} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
               <span className={styles.tileKicker}>01 · Discover</span>
               <strong>Local storefronts</strong>
-              <p>Meet verified shops near you and order straight from their shelves.</p>
+              <p>Explore local shops, compare the details they provide, and order using each shop’s supported checkout options.</p>
               <span className={styles.tileGo}>Browse shops <ArrowRight size={16} /></span>
               <div className={styles.stack} aria-hidden="true"><i /><i /><i /></div>
             </button>
@@ -489,10 +489,10 @@ export default function MarketplaceShell() {
                   <span>The RetailMind Promise</span>
                 </div>
                 <h2 className={styles.sellerPromoTitle}>
-                  Real Shops. Real Stock. <b>Direct to You.</b>
+                  Local Shops. Clear Details. <b>All in One Place.</b>
                 </h2>
                 <p className={styles.sellerPromoText}>
-                  Browse local shop listings, compare the product details they provide, and place orders only through checkout options the shop currently supports.
+                  Browse shop listings, review available product information, and check stock and checkout options shown by each shop.
                 </p>
                 <div className={styles.sellerPromoPerks}>
                   <span><ShieldCheck size={16} /> Shop details from the marketplace</span>
@@ -634,6 +634,26 @@ export default function MarketplaceShell() {
           </>
         )}
       </section>
+      <footer className={styles.customerFooter}>
+        <div className={styles.customerFooterTop}>
+          <div className={styles.customerFooterBrand}>
+            <span className={styles.customerFooterMark}><ShoppingBag size={19} /></span>
+            <div><strong>Retail Mind</strong><p>Your local shopping space.</p></div>
+          </div>
+          <nav className={styles.customerFooterLinks} aria-label="Customer footer navigation">
+            <Link href="/">Discover shops</Link>
+            <Link href="/ai-shopping">AI shopping</Link>
+            <Link href="/smart-shop">Smart Hub</Link>
+            <Link href="/orders">My orders</Link>
+            <Link href="/profile">My account</Link>
+          </nav>
+        </div>
+        <div className={styles.customerFooterBottom}>
+          <span>Customer storefront</span>
+          <span>Availability, fulfilment and checkout options depend on each shop’s information.</span>
+        </div>
+      </footer>
+
     </div>
   );
 }

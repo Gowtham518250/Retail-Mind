@@ -237,7 +237,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <h3 className={styles.navCardTitle}>
-                Explore Verified Shops <ArrowRight size={16} />
+                Explore Local Shops <ArrowRight size={16} />
               </h3>
               <p className={styles.navCardDesc}>
                 Discover local grocery, bakery, electronics, and daily essential storefronts near you.

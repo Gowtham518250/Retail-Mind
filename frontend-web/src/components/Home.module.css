@@ -446,3 +446,32 @@
   .marqueeTrack, .stack i, .shopTile, .pulse, .liveTag i, .skeleton { animation: none; }
   .canvas { transition: none; }
 }
+
+
+/* Customer-first promise and complete footer */
+.sellerPromoCard { border-color: rgba(121,133,255,.35) !important; background: radial-gradient(circle at 100% 0%,rgba(102,87,245,.25),transparent 38%),radial-gradient(circle at 0% 100%,rgba(40,201,187,.14),transparent 40%),linear-gradient(140deg,#111e40,#08142b 75%) !important; box-shadow: 0 28px 66px rgba(8,20,43,.18) !important; }
+.sellerPromoBadge { background: rgba(102,87,245,.18) !important; border-color: rgba(121,133,255,.28) !important; color: #cbd4ff !important; }
+.sellerPromoTitle { color: #f7f9ff !important; }
+.sellerPromoTitle b { color: #8feee0 !important; }
+.sellerPromoText { color: rgba(237,243,255,.76) !important; }
+.sellerPromoPerks { color: #a9f1eb !important; }
+.sellerPromoBtn { background: linear-gradient(120deg,#6657f5,#28c9bb) !important; color: #08142b !important; box-shadow: 0 10px 24px rgba(102,87,245,.25) !important; }
+.sellerPromoBtn:hover { box-shadow: 0 15px 32px rgba(102,87,245,.34) !important; }
+.customerFooter { width: min(calc(100% - 32px),1320px); margin: 34px auto 0; padding: clamp(22px,3.4vw,36px); border: 1px solid var(--line); border-radius: 28px; background: linear-gradient(145deg,#111e40,#08142b); color: #f7f9ff; box-shadow: 0 20px 48px rgba(8,20,43,.13); }
+.customerFooterTop { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
+.customerFooterBrand { display:flex; align-items:center; gap:12px; min-width:0; }
+.customerFooterMark { display:grid; place-items:center; width:42px; height:42px; flex:0 0 42px; border-radius:14px; background:#28c9bb; color:#08142b; }
+.customerFooterBrand strong { display:block; font:900 1.6rem/.95 var(--font-display); }
+.customerFooterBrand p { margin-top:5px; color:rgba(237,243,255,.65); font-size:.88rem; }
+.customerFooterLinks { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px 18px; }
+.customerFooterLinks a { color:#e3eaff; font-size:.9rem; font-weight:700; text-decoration:none; }
+.customerFooterLinks a:hover { color:#8feee0; }
+.customerFooterBottom { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:24px; padding-top:17px; border-top:1px solid rgba(237,243,255,.14); color:rgba(237,243,255,.6); font-size:.78rem; line-height:1.45; }
+@media(max-width:720px) {
+  .sellerPromoCard { align-items:flex-start; flex-direction:column; gap:22px; padding:25px 21px !important; border-radius:26px !important; }
+  .sellerPromoBtn { width:100%; justify-content:center; }
+  .customerFooter { width:calc(100% - 16px); padding:22px 18px; border-radius:22px; }
+  .customerFooterTop { flex-direction:column; gap:22px; }
+  .customerFooterLinks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; justify-content:start; gap:12px; }
+  .customerFooterBottom { flex-direction:column; align-items:flex-start; }
+}
