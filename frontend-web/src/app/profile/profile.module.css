@@ -340,3 +340,25 @@
 .navCardIcon { background:var(--rm-lime); color:var(--rm-green-deep); border-radius:15px; }
 @media(max-width:640px) { .profileHeaderCard { padding:20px; } .navCard { transform:none; } .navCard:hover { transform:translateY(-2px); } }
 @media(prefers-reduced-motion:reduce) { .navCard { transition:none; } .navCard:hover { transform:none; } }
+
+
+/* Midnight customer profile hub */
+.profilePage { background: radial-gradient(circle at 10% 0%,rgba(102,87,245,.1),transparent 28%),radial-gradient(circle at 95% 10%,rgba(40,201,187,.1),transparent 30%),linear-gradient(180deg,#f7f9ff,#f1f5fc); color: var(--rm-ink); }
+.profileHeaderCard,.accountDetailsCard { border-color: var(--rm-line); background: rgba(255,255,255,.94); box-shadow: 0 20px 48px rgba(8,20,43,.075); }
+.headerGlowLine { background: linear-gradient(90deg,#3157d5,#6657f5,#28c9bb); }
+.avatarAura { background: radial-gradient(circle,#b8baff,rgba(40,201,187,.24)); }
+.avatarInner { background: linear-gradient(145deg,#111e40,#08142b); color: #8feee0; }
+.userName { color: var(--rm-navy); }
+.roleBadge { border-color: rgba(49,87,213,.16); background: #edf1ff; color: var(--rm-blue); }
+.userContactRow { color: var(--rm-muted); }
+.logoutBtn { background: var(--rm-violet); color: #fff; }
+.logoutBtn:hover { background: var(--rm-blue); }
+.cardSectionTitle { color: var(--rm-navy); }
+.detailBox { border-color: var(--rm-line); background: #fafdff; }
+.detailLabel { color: var(--rm-muted); }
+.detailValue { color: var(--rm-ink); }
+.navCard { border-color: var(--rm-line); background: #fff; box-shadow: 0 12px 30px rgba(8,20,43,.055); }
+.navCard:hover { border-color: rgba(102,87,245,.38); box-shadow: 0 20px 40px rgba(8,20,43,.12); }
+.navCardTitle { color: var(--rm-navy); }
+.navCardDesc { color: var(--rm-muted); }
+.navCardIcon { background: #e9efff; color: var(--rm-blue); }

@@ -543,3 +543,40 @@
   .authScene { height: 160px; min-height: 140px; }
   .authCard { padding: 22px 18px; }
 }
+
+
+/* Midnight + electric violet/teal authentication skin */
+.authMain { background: radial-gradient(circle at 2% 10%,rgba(102,87,245,.08),transparent 30%),linear-gradient(180deg,#f7f9ff,#eff4fc); color: var(--rm-ink); }
+.heroShowcase { background: radial-gradient(65% 55% at 80% 20%,rgba(102,87,245,.34),transparent 65%),radial-gradient(55% 55% at 15% 100%,rgba(40,201,187,.2),transparent 60%),linear-gradient(145deg,#111e40,#08142b) !important; }
+.brandPill { border-color: rgba(143,238,224,.2); color: #8feee0; background: rgba(255,255,255,.055); }
+.heroTitle { color: #f7f9ff; }
+.heroGradientText { background: linear-gradient(95deg,#8feee0,#aeb6ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.heroSubtitle { color: rgba(237,243,255,.76); }
+.featureItem { border-color: rgba(237,243,255,.15); background: rgba(255,255,255,.055); }
+.featureIconWrap { color: #08142b; background: #28c9bb; }
+.featureContent strong { color: #f7f9ff; }
+.featureContent span { color: rgba(237,243,255,.65); }
+.authCard { border-color: var(--rm-line); background: #fff; color: var(--rm-ink); box-shadow: 0 28px 70px rgba(8,20,43,.13); }
+.cardGlowBar { background: linear-gradient(90deg,#3157d5,#6657f5,#28c9bb); }
+.authTitle { color: var(--rm-navy); }
+.authSubtitle { color: var(--rm-muted); }
+.modeTabs { border-color: var(--rm-line); background: #edf1fb; }
+.modeTabBtn { color: var(--rm-muted); }
+.modeTabActive { color: #fff; }
+.modeIndicator { background: var(--rm-navy); }
+.input { border-color: var(--rm-line); background: #f9fbff; color: var(--rm-ink); }
+.input:focus { border-color: var(--rm-violet); box-shadow: 0 0 0 4px rgba(102,87,245,.12); }
+.inputIcon { color: #7788ad; }
+.submitBtn { background: linear-gradient(110deg,#6657f5,#4d5fe4); box-shadow: 0 12px 25px rgba(102,87,245,.2); }
+.submitBtn:not(:disabled):hover { background: linear-gradient(110deg,#5041dc,#3157d5); box-shadow: 0 16px 30px rgba(102,87,245,.25); }
+.link,.forgotLink { color: var(--rm-blue); }
+.errorBanner { border-color: #f2c3cf; background: #fff3f6; color: #a02e55; }
+.successBanner { border-color: rgba(40,201,187,.3); background: #effcfb; color: #087d85; }
+.passwordStrengthTrack { background: #e5eaf5; }
+.passwordStrengthFill[data-strength="medium"] { background: #d5a72d; }
+.passwordStrengthFill[data-strength="strong"] { background: #28c9bb; }
+@media (max-width: 900px) {
+  .authContainer { width: min(100%,820px); }
+  .heroShowcase { border-radius: 25px; }
+  .authCard { width: min(100%,680px); }
+}

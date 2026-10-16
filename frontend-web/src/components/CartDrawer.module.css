@@ -108,3 +108,24 @@
   .close, .qty button, .remove, .checkout, .checkout svg { transition: none !important; }
   .close:hover, .checkout:hover, .checkout:hover svg { transform: none !important; }
 }
+
+
+/* Midnight overlays and touch-friendly customer cart. */
+.overlay { background: rgba(8,20,43,.58); }
+.drawer { border-color: rgba(49,87,213,.16); box-shadow: -30px 0 80px rgba(8,20,43,.26); }
+.head { background: linear-gradient(120deg,#111e40,#08142b); }
+.headIcon { background: var(--rm-teal); color: var(--rm-navy); }
+.count { background: var(--rm-violet); color: #fff; }
+.close:hover { background: var(--rm-violet); }
+.qty button:hover { background: var(--rm-blue); color: #fff; }
+.remove:hover { background: #f0efff; color: var(--rm-violet); }
+.keep { background: var(--rm-navy); }
+.keep:hover { background: var(--rm-violet); }
+.checkout { background: var(--rm-violet); box-shadow: 0 14px 30px rgba(102,87,245,.25); }
+.checkout:hover { background: var(--rm-blue); box-shadow: 0 20px 38px rgba(49,87,213,.28); }
+@media (max-width: 900px) { .drawer { border-radius: 24px; } }
+@media (max-width: 520px) {
+  .drawer { border-radius: 0; }
+  .item { grid-template-columns: 56px minmax(0,1fr) 68px; gap: 8px; }
+  .foot { border-top-color: var(--rm-line); }
+}

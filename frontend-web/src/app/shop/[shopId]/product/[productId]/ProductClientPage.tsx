@@ -85,13 +85,13 @@ export default function ProductClientPage() {
               ? <img src={product.image_url} alt={product.name} onError={() => setFailedImageUrl(product.image_url || null)} />
               : <Package2 size={70} />}
           </motion.div>
-          <div className="product-floating-badge"><CheckCircle2 size={15} /> Local stock</div>
+          <div className="product-floating-badge"><CheckCircle2 size={15} /> Shop listing</div>
         </div>
 
         <div className="product-copy">
           <span className="store-category-pill">{product.category || 'Featured'}</span>
           <h1>{product.name}</h1>
-          <p>{product.description || 'A carefully selected everyday essential, available from your local shop.'}</p>
+          <p>{product.description || 'No description has been provided by this shop yet.'}</p>
 
           <div className="product-price-row">
             <div className="product-main-price">₹{product.price.toFixed(2)}</div>
@@ -100,9 +100,9 @@ export default function ProductClientPage() {
           </div>
 
           <div className="product-benefits">
-            <div><Truck size={16} /><span>Fast delivery</span></div>
+            <div><Truck size={16} /><span>Shop delivery details</span></div>
             <div><ShieldCheck size={16} /><span>Secure checkout</span></div>
-            <div><Sparkles size={16} /><span>Retail Mind verified</span></div>
+            <div><Sparkles size={16} /><span>Customer order updates</span></div>
           </div>
 
           <div className="product-availability">

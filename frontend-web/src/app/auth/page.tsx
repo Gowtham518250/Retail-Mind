@@ -269,7 +269,7 @@ export default function AuthPage() {
           </h1>
 
           <p className={styles.heroSubtitle}>
-            Enjoy verified neighborhood shops, real-time stock availability, fast local delivery, and AI-guided shopping assistance.
+            Explore local shop listings, review stock information when provided, and use AI-guided shopping assistance.
           </p>
 
           <div className={styles.featureList}>
@@ -279,7 +279,7 @@ export default function AuthPage() {
               </div>
               <div className={styles.featureContent}>
                 <strong>Genuine Local Catalogs</strong>
-                <span>Browse live stock and clear prices from verified shops</span>
+                <span>Browse product details and stock information when provided</span>
               </div>
             </div>
 
@@ -289,7 +289,7 @@ export default function AuthPage() {
               </div>
               <div className={styles.featureContent}>
                 <strong>Swift Local Dispatch</strong>
-                <span>Direct delivery straight from nearby storefronts to your door</span>
+                <span>Review the delivery information each shop provides</span>
               </div>
             </div>
 
@@ -299,7 +299,7 @@ export default function AuthPage() {
               </div>
               <div className={styles.featureContent}>
                 <strong>Safe &amp; Transparent Checkout</strong>
-                <span>Pay seamlessly on delivery with Cash or UPI with live order tracking</span>
+                <span>Use the checkout options shown for each shop, then follow supported order updates</span>
               </div>
             </div>
           </div>
