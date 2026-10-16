@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store, X } from 'lucide-react';
+import { ArrowLeft, Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { API_BASE } from '../lib/api';
 import type { ShopProduct, ShopResponse } from '../lib/types';
