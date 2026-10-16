@@ -1238,6 +1238,7 @@ def place_order(
                 "status": existing_order.order_status,
                 "payment_method": existing_order.payment_method or "COD",
                 "payment_status": existing_order.payment_status or "COD_DUE",
+                "payment_confirmation_source": existing_order.payment_confirmation_source,
                 "duplicate": True,
             }
 
@@ -1450,6 +1451,7 @@ def place_order(
         "status": "PENDING",
         "payment_method": order.payment_method,
         "payment_status": order.payment_status,
+        "payment_confirmation_source": order.payment_confirmation_source,
     }
 
 
@@ -1550,6 +1552,7 @@ def place_guest_order(
                     "status": existing_order.order_status,
                     "payment_method": existing_order.payment_method or "COD",
                     "payment_status": existing_order.payment_status or "COD_DUE",
+                    "payment_confirmation_source": existing_order.payment_confirmation_source,
                     "duplicate": True,
                 }
 
@@ -1717,6 +1720,7 @@ def place_guest_order(
                     "status": duplicate_order.order_status,
                     "payment_method": duplicate_order.payment_method or "COD",
                     "payment_status": duplicate_order.payment_status or "COD_DUE",
+                    "payment_confirmation_source": duplicate_order.payment_confirmation_source,
                     "duplicate": True,
                 }
         logger.warning(
@@ -1813,6 +1817,7 @@ def get_my_orders(
                 "status": o.order_status,
                 "payment_method": o.payment_method or "COD",
                 "payment_status": o.payment_status or "COD_DUE",
+                "payment_confirmation_source": o.payment_confirmation_source,
                 "subtotal": round(float(o.total_amount) - float(getattr(o, "online_setup_fee", 0) or 0), 2),
                 "online_setup_fee": float(getattr(o, "online_setup_fee", 0) or 0),
                 "total_amount": float(o.total_amount),
@@ -1973,6 +1978,7 @@ def track_order(
         "status": order.order_status,
         "payment_method": order.payment_method or "COD",
         "payment_status": order.payment_status or "COD_DUE",
+        "payment_confirmation_source": order.payment_confirmation_source,
         "payment_reference": order.payment_reference,
         "progress_step": current_step + 1,
         "total_steps": len(STATUS_STEPS),
@@ -2191,6 +2197,7 @@ def match_online_order_payment_from_notification(
             "duplicate": True,
             "order_id": existing_order.id,
             "payment_status": existing_order.payment_status,
+            "payment_confirmation_source": existing_order.payment_confirmation_source,
         }
 
     amount = round(float(data.amount), 2)
@@ -2308,6 +2315,7 @@ def match_online_order_payment_from_notification(
         }
 
     order.payment_status = "PAID"
+    order.payment_confirmation_source = "OWNER_DEVICE_NOTIFICATION_MATCH"
     order.payment_reference = reference
     order.payment_detection_key = detection_key
     order.payment_confirmed_at = datetime.utcnow()
@@ -2321,6 +2329,7 @@ def match_online_order_payment_from_notification(
         "amount": amount,
         "payment_method": "UPI",
         "payment_status": "PAID",
+        "payment_confirmation_source": order.payment_confirmation_source,
         "payment_reference": order.payment_reference,
         "source": data.source,
     })
@@ -2369,6 +2378,7 @@ def match_online_order_payment_from_notification(
         "duplicate": False,
         "order_id": order.id,
         "payment_status": order.payment_status,
+        "payment_confirmation_source": order.payment_confirmation_source,
         "payment_reference": order.payment_reference,
         "invoice_number": linked_invoice.invoice_number if linked_invoice else None,
         "invoice_payment_delegated_to_invoice_sync": invoice_payment_delegated,
