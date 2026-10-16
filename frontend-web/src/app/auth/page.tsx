@@ -275,7 +275,7 @@ export default function AuthPage() {
                     </h1>
           
                     <p className={styles.heroSubtitle}>
-                      Explore local shop listings, review stock information when provided, and use AI-guided shopping assistance.
+                      Shop from local stores, discover fresh products and find everyday essentials — delivered to your doorstep.
                     </p>
           
                     <div className={styles.featureList}>
@@ -327,116 +327,74 @@ export default function AuthPage() {
           <div className={styles.cardGlowBar} />
 
           <div className={styles.cardHeader}>
+            <div className={styles.cardHeadingCopy}>
+              <h2 className={styles.authTitle}>
+                {view === 'login'
+                  ? 'Sign In to Shop'
+                  : view === 'register'
+                    ? 'Create Customer Account'
+                    : 'Forgot Password'}
+              </h2>
+              <p className={styles.authSubtitle}>
+                {view === 'login'
+                  ? 'Sign in to access your cart, tracked orders, and saved addresses'
+                  : view === 'register'
+                    ? 'Join RetailMind for instant local shopping and convenient checkout'
+                    : 'Reset your password using your email and 6-digit verification code.'}
+              </p>
+            </div>
             {view === 'reset' && (
-              <motion.div
-                key="reset-board"
-                className={styles.resetBoard}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.22 }}
+              <button type="button" className={styles.resetBackLink} onClick={() => switchView('login')}>
+                <ArrowRight size={14} /> Back to Sign In
+              </button>
+            )}
+          </div>
+
+          {/* Mode Tabs */}
+          {view !== 'reset' && (
+            <div className={styles.modeTabs}>
+              <button
+                type="button"
+                className={`${styles.modeTabBtn} ${view === 'login' ? styles.modeTabActive : ''}`}
+                onClick={() => switchView('login')}
               >
-                <section className={styles.resetStageCard + ' ' + (resetStep === 'request' ? styles.resetStageActive : styles.resetStageComplete)}>
-                  <div className={styles.resetStageIllustration}><Mail size={27} /><span>EMAIL</span></div>
-                  <div className={styles.resetStageBadge}>01 · ACCOUNT RECOVERY</div>
-                  <h3>Reset your password</h3>
-                  <p>Enter your email address and we’ll send a 6 digit reset code.</p>
-                  <form onSubmit={(event) => void handleReset(event, 'request')} className={styles.resetStageForm}>
-                    <label className={styles.label}>Email Address</label>
-                    <div className={styles.inputWrap}>
-                      <Mail size={16} className={styles.inputIcon} />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        placeholder="you@example.com"
-                        className={styles.input}
-                        required
-                        autoComplete="email"
-                      />
-                    </div>
-                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'request'}>
-                      {loading && resetStep === 'request' ? <span className={styles.spinner} /> : 'Send OTP'} <ArrowRight size={15} />
-                    </button>
-                  </form>
-                  {resetStep !== 'request' && <div className={styles.resetStageState}><CheckCircle size={13} /> OTP requested</div>}
-                </section>
+                Sign In
+                {view === 'login' && <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />}
+              </button>
+              <button
+                type="button"
+                className={`${styles.modeTabBtn} ${view === 'register' ? styles.modeTabActive : ''}`}
+                onClick={() => switchView('register')}
+              >
+                Create Account
+                {view === 'register' && <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />}
+              </button>
+            </div>
+          )}
 
-                <section className={styles.resetStageCard + ' ' + (resetStep === 'verify' ? styles.resetStageActive : resetStep === 'password' ? styles.resetStageComplete : '')}>
-                  <div className={styles.resetStageIllustration}><Smartphone size={27} /><span>OTP</span></div>
-                  <div className={styles.resetStageBadge}>02 · VERIFY IDENTITY</div>
-                  <h3>Enter the 6 digit OTP</h3>
-                  <p>Enter the verification code sent to <strong className={styles.resetEmail}>{email || 'your email address'}</strong>.</p>
-                  <form onSubmit={(event) => void handleReset(event, 'verify')} className={styles.resetStageForm}>
-                    <label className={styles.label}>Verification Code</label>
-                    <div className={styles.inputWrap}>
-                      <CheckCircle size={16} className={styles.inputIcon} />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={resetOtp}
-                        onChange={(event) => setResetOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                        placeholder="000000"
-                        maxLength={6}
-                        className={styles.input}
-                        required
-                        autoComplete="one-time-code"
-                        aria-label="Six digit OTP"
-                      />
-                    </div>
-                    <button type="button" className={styles.resetResend} onClick={() => void requestResetOtp().catch((err) => setError(err instanceof Error ? err.message : 'Unable to resend OTP.'))} disabled={resendCooldown > 0 || loading || resetStep !== 'verify'}>
-                      {resendCooldown > 0 ? 'Resend in ' + resendCooldown + 's' : 'Resend OTP'}
-                    </button>
-                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'verify'}>
-                      {loading && resetStep === 'verify' ? <span className={styles.spinner} /> : 'Verify OTP'} <ArrowRight size={15} />
-                    </button>
-                  </form>
-                  {resetStep === 'password' && <div className={styles.resetStageState}><CheckCircle size={13} /> Email verified</div>}
-                </section>
-
-                <section className={styles.resetStageCard + ' ' + (resetStep === 'password' ? styles.resetStageActive : '')}>
-                  <div className={styles.resetStageIllustration}><KeyRound size={27} /><span>SECURE</span></div>
-                  <div className={styles.resetStageBadge}>03 · NEW PASSWORD</div>
-                  <h3>Create new password</h3>
-                  <p>Set a new password for your customer account.</p>
-                  <form onSubmit={(event) => void handleReset(event, 'password')} className={styles.resetStageForm}>
-                    <label className={styles.label}>New Password</label>
-                    <div className={styles.inputWrap}>
-                      <Lock size={16} className={styles.inputIcon} />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={resetPassword}
-                        onChange={(event) => setResetPassword(event.target.value)}
-                        placeholder="Enter new password"
-                        className={styles.input}
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                      />
-                      <button type="button" className={styles.eyeBtn} onClick={() => setShowPassword((value) => !value)} aria-label="Toggle password visibility">
-                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
-                    </div>
-                    <label className={styles.label}>Confirm New Password</label>
-                    <div className={styles.inputWrap}>
-                      <Lock size={16} className={styles.inputIcon} />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={resetPasswordConfirm}
-                        onChange={(event) => setResetPasswordConfirm(event.target.value)}
-                        placeholder="Confirm new password"
-                        className={styles.input}
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                      />
-                    </div>
-                    <div className={styles.resetMiniStrength}><span style={{ width: Math.min(100, Math.round(resetPassword.length / 12 * 100)) + '%' }} /></div>
-                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'password'}>
-                      {loading && resetStep === 'password' ? <span className={styles.spinner} /> : 'Reset Password'} <ArrowRight size={15} />
-                    </button>
-                  </form>
-                </section>
+          {/* Feedback */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                key="err"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className={styles.errorBanner}
+              >
+                {error}
+              </motion.div>
+            )}
+            {success && (
+              <motion.div
+                key="ok"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className={styles.successBanner}
+              >
+                <CheckCircle size={17} style={{ flexShrink: 0 }} />
+                <span>{success}</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -632,167 +590,115 @@ export default function AuthPage() {
 
             {/* ── Password Reset Flow ── */}
             {view === 'reset' && (
-              <motion.form
-                key="reset-form"
-                onSubmit={handleReset}
-                className={styles.form}
-                initial={{ opacity: 0, y: 12 }}
+              <motion.div
+                key="reset-board"
+                className={styles.resetBoard}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.22 }}
               >
-                <section className={styles.resetFlowIntro} aria-label="Password reset progress">
-                  <div className={styles.resetFlowArt} aria-hidden="true">
-                    {resetStep === 'request' ? <Mail size={25} /> : resetStep === 'verify' ? <Smartphone size={25} /> : <KeyRound size={25} />}
-                    <span>{resetStep === 'request' ? 'EMAIL' : resetStep === 'verify' ? 'OTP' : 'SECURE'}</span>
-                  </div>
-                  <div className={styles.resetFlowHeading}>
-                    <span className={styles.resetFlowEyebrow}>SECURE ACCOUNT RECOVERY</span>
-                    <h3>
-                      {resetStep === 'request' ? 'Reset your password' : resetStep === 'verify' ? 'Verify your email' : 'Create a new password'}
-                    </h3>
-                    <p>
-                      {resetStep === 'request'
-                        ? 'Enter the email address associated with your customer account.'
-                        : resetStep === 'verify'
-                          ? 'Enter the 6-digit code sent to your registered email.'
-                          : 'Choose a new password to secure your account.'}
-                    </p>
-                  </div>
-                  <span className={styles.resetFlowCount}>
-                    {resetStep === 'request' ? '01' : resetStep === 'verify' ? '02' : '03'} <small>/ 03</small>
-                  </span>
-                </section>
-                <div
-                  className={styles.resetProgressTrack}
-                  role="progressbar"
-                  aria-label="Password recovery progress"
-                  aria-valuemin={1}
-                  aria-valuemax={3}
-                  aria-valuenow={resetStep === 'request' ? 1 : resetStep === 'verify' ? 2 : 3}
-                >
-                  <span
-                    className={styles.resetProgressFill}
-                    style={{ width: resetStep === 'request' ? '33.333%' : resetStep === 'verify' ? '66.666%' : '100%' }}
-                  />
-                </div>
-                <div className={styles.resetStepGrid} aria-hidden="true">
-                  <span className={styles.resetStep + ' ' + (resetStep === 'request' ? styles.resetStepActive : styles.resetStepDone)}>1&nbsp; Email</span>
-                  <span className={styles.resetStep + ' ' + (resetStep === 'verify' ? styles.resetStepActive : resetStep === 'password' ? styles.resetStepDone : '')}>2&nbsp; Verify</span>
-                  <span className={styles.resetStep + ' ' + (resetStep === 'password' ? styles.resetStepActive : '')}>3&nbsp; New password</span>
-                </div>
-                {resetStep === 'request' && (
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Registered Email Address</label>
+                <section className={styles.resetStageCard + ' ' + (resetStep === 'request' ? styles.resetStageActive : styles.resetStageComplete)}>
+                  <div className={styles.resetStageIllustration}><Mail size={27} /><span>EMAIL</span></div>
+                  <div className={styles.resetStageBadge}>01 · ACCOUNT RECOVERY</div>
+                  <h3>Reset your password</h3>
+                  <p>Enter your email address and we’ll send a 6 digit reset code.</p>
+                  <form onSubmit={(event) => void handleReset(event, 'request')} className={styles.resetStageForm}>
+                    <label className={styles.label}>Email Address</label>
                     <div className={styles.inputWrap}>
-                      <Mail size={17} className={styles.inputIcon} />
+                      <Mail size={16} className={styles.inputIcon} />
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(event) => setEmail(event.target.value)}
                         placeholder="you@example.com"
                         className={styles.input}
                         required
                         autoComplete="email"
                       />
                     </div>
-                  </div>
-                )}
-
-                {resetStep === 'verify' && (
-                  <>
-                    <div className={styles.fieldGroup}>
-                      <label className={styles.label}>6-Digit Verification Code</label>
-                      <div className={styles.inputWrap}>
-                        <CheckCircle size={17} className={styles.inputIcon} />
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={resetOtp}
-                          onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          placeholder="000000"
-                          maxLength={6}
-                          className={styles.input}
-                          required
-                          autoComplete="one-time-code"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className={styles.forgotLink}
-                      onClick={() => void requestResetOtp()}
-                      disabled={resendCooldown > 0 || loading}
-                      style={{ background: 'none', border: 'none', alignSelf: 'flex-start', padding: 0 }}
-                    >
-                      {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'request'}>
+                      {loading && resetStep === 'request' ? <span className={styles.spinner} /> : 'Send OTP'} <ArrowRight size={15} />
                     </button>
-                  </>
-                )}
+                  </form>
+                  {resetStep !== 'request' && <div className={styles.resetStageState}><CheckCircle size={13} /> OTP requested</div>}
+                </section>
 
-                {resetStep === 'password' && (
-                  <>
-                    <div className={styles.fieldGroup}>
-                      <label className={styles.label}>New Password</label>
-                      <div className={styles.inputWrap}>
-                        <Lock size={17} className={styles.inputIcon} />
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={resetPassword}
-                          onChange={(e) => setResetPassword(e.target.value)}
-                          placeholder="Min. 8 characters"
-                          className={styles.input}
-                          required
-                          minLength={8}
-                        />
-                        <button
-                          type="button"
-                          className={styles.eyeBtn}
-                          onClick={() => setShowPassword(!showPassword)}
-                          tabIndex={-1}
-                          aria-label="Toggle password visibility"
-                        >
-                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
+                <section className={styles.resetStageCard + ' ' + (resetStep === 'verify' ? styles.resetStageActive : resetStep === 'password' ? styles.resetStageComplete : '')}>
+                  <div className={styles.resetStageIllustration}><Smartphone size={27} /><span>OTP</span></div>
+                  <div className={styles.resetStageBadge}>02 · VERIFY IDENTITY</div>
+                  <h3>Enter the 6 digit OTP</h3>
+                  <p>Enter the verification code sent to <strong className={styles.resetEmail}>{email || 'your email address'}</strong>.</p>
+                  <form onSubmit={(event) => void handleReset(event, 'verify')} className={styles.resetStageForm}>
+                    <label className={styles.label}>Verification Code</label>
+                    <div className={styles.inputWrap}>
+                      <CheckCircle size={16} className={styles.inputIcon} />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={resetOtp}
+                        onChange={(event) => setResetOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        maxLength={6}
+                        className={styles.input}
+                        required
+                        autoComplete="one-time-code"
+                      />
                     </div>
+                    <button type="button" className={styles.resetResend} onClick={() => void requestResetOtp().catch((err) => setError(err instanceof Error ? err.message : 'Unable to resend OTP.'))} disabled={resendCooldown > 0 || loading || resetStep !== 'verify'}>
+                      {resendCooldown > 0 ? 'Resend in ' + resendCooldown + 's' : 'Resend OTP'}
+                    </button>
+                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'verify'}>
+                      {loading && resetStep === 'verify' ? <span className={styles.spinner} /> : 'Verify OTP'} <ArrowRight size={15} />
+                    </button>
+                  </form>
+                  {resetStep === 'password' && <div className={styles.resetStageState}><CheckCircle size={13} /> Email verified</div>}
+                </section>
 
-                    <div className={styles.fieldGroup}>
-                      <label className={styles.label}>Confirm New Password</label>
-                      <div className={styles.inputWrap}>
-                        <Lock size={17} className={styles.inputIcon} />
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={resetPasswordConfirm}
-                          onChange={(e) => setResetPasswordConfirm(e.target.value)}
-                          placeholder="Re-enter new password"
-                          className={styles.input}
-                          required
-                          minLength={8}
-                        />
-                      </div>
+                <section className={styles.resetStageCard + ' ' + (resetStep === 'password' ? styles.resetStageActive : '')}>
+                  <div className={styles.resetStageIllustration}><KeyRound size={27} /><span>SECURE</span></div>
+                  <div className={styles.resetStageBadge}>03 · NEW PASSWORD</div>
+                  <h3>Create new password</h3>
+                  <p>Set a new password for your customer account.</p>
+                  <form onSubmit={(event) => void handleReset(event, 'password')} className={styles.resetStageForm}>
+                    <label className={styles.label}>New Password</label>
+                    <div className={styles.inputWrap}>
+                      <Lock size={16} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={resetPassword}
+                        onChange={(event) => setResetPassword(event.target.value)}
+                        placeholder="Enter new password"
+                        className={styles.input}
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                      />
+                      <button type="button" className={styles.eyeBtn} onClick={() => setShowPassword((value) => !value)} aria-label="Toggle password visibility">
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
                     </div>
-                  </>
-                )}
-
-                <motion.button
-                  whileHover={{ scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
-                  type="submit"
-                  disabled={loading}
-                  className={styles.submitBtn}
-                >
-                  {loading ? (
-                    <span className={styles.spinner} />
-                  ) : resetStep === 'request' ? (
-                    'Send Verification OTP'
-                  ) : resetStep === 'verify' ? (
-                    'Verify Code'
-                  ) : (
-                    'Save New Password'
-                  )}
-                </motion.button>
-              </motion.form>
+                    <label className={styles.label}>Confirm New Password</label>
+                    <div className={styles.inputWrap}>
+                      <Lock size={16} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={resetPasswordConfirm}
+                        onChange={(event) => setResetPasswordConfirm(event.target.value)}
+                        placeholder="Confirm new password"
+                        className={styles.input}
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div className={styles.resetMiniStrength}><span style={{ width: Math.min(100, Math.round(resetPassword.length / 12 * 100)) + '%' }} /></div>
+                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'password'}>
+                      {loading && resetStep === 'password' ? <span className={styles.spinner} /> : 'Reset Password'} <ArrowRight size={15} />
+                    </button>
+                  </form>
+                </section>
+              </motion.div>
             )}
           </AnimatePresence>
 
