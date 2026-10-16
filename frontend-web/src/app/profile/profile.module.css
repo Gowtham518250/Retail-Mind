@@ -408,3 +408,21 @@
 .logoutConfirmBtn:hover { background: var(--rm-blue,#3157d5); transform: translateY(-1px); }
 @media(max-width:420px) { .logoutDialog { border-radius: 23px; padding: 30px 18px 20px; } .logoutDialogActions { grid-template-columns: 1fr; } }
 @media(prefers-reduced-motion:reduce) { .logoutCancelBtn,.logoutConfirmBtn { transition: none; } .logoutConfirmBtn:hover { transform:none; } }
+
+
+/* Customer profile/account hub aligned with the reference board */
+.profilePage{min-height:100svh;padding:24px 0 104px;background:#f7f9ff;color:#101a34}
+.container{width:min(calc(100% - 28px),1200px)}
+.profileHeaderCard,.accountDetailsCard{border:1px solid #dfe6f3;border-radius:23px;background:#fff;box-shadow:0 14px 36px rgba(8,20,43,.06)}
+.profileHeaderCard{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.headerGlowLine{background:linear-gradient(90deg,#6657f5,#28c9bb)}
+.avatarAura{background:radial-gradient(circle,#c8ccff,rgba(40,201,187,.25))}
+.avatarInner{background:linear-gradient(145deg,#111e40,#08142b);color:#8feee0}
+.userName{color:#08142b}.roleBadge{background:#edf1ff;border-color:#d9ddff;color:#4f4cd1}
+.userContactRow{color:#64718a}.logoutBtn{background:linear-gradient(120deg,#6657f5,#4e5fe5);color:#fff;border-radius:12px}.logoutBtn:hover{background:#3157d5}
+.accountDetailsCard{padding:clamp(19px,3vw,30px)}.cardSectionTitle{color:#08142b}.detailsGrid{gap:12px}
+.detailBox{border:1px solid #e1e7f4;border-radius:15px;background:#f9fbff}.detailLabel{color:#71809a}.detailValue{color:#101a34}
+.bentoNavGrid{gap:13px}.navCard{border:1px solid #dfe6f3;border-radius:19px;background:#fff;box-shadow:0 12px 30px rgba(8,20,43,.05)}
+.navCard:hover{border-color:rgba(102,87,245,.35);box-shadow:0 18px 40px rgba(8,20,43,.1)}
+.navCardTitle{color:#08142b}.navCardDesc{color:#64718a}.navCardIcon{background:#edf1ff;color:#6657f5}
+@media(max-width:700px){.profilePage{padding-top:15px}.container{width:calc(100% - 18px)}.profileHeaderCard{align-items:flex-start;flex-direction:column}.logoutBtn{align-self:stretch;justify-content:center}.bentoNavGrid{grid-template-columns:minmax(0,1fr)}}

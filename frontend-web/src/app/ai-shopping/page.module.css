@@ -979,3 +979,23 @@
 .heroLead { max-width:52ch; font-family:var(--font-body); font-size:clamp(1rem,1.5vw,1.15rem); line-height:1.55; letter-spacing:0; color:var(--rm-muted); }
 .copy { min-width:0; }
 @media(max-width:600px) { .hero h1 { font-size:clamp(3.1rem,15vw,5.1rem); line-height:.84; } .heroLead { font-size:1rem; } }
+
+
+/* AI Shopping: bright content surface with a midnight assistant hero */
+.page{color:#101a34;background:radial-gradient(circle at 8% 2%,rgba(102,87,245,.12),transparent 28%),radial-gradient(circle at 95% 12%,rgba(40,201,187,.1),transparent 30%),linear-gradient(180deg,#f7f9ff,#f0f4fc)}
+.hero{border:1px solid rgba(102,87,245,.2);border-radius:30px;background:linear-gradient(138deg,#111e40,#08142b 72%,#17183c);box-shadow:0 24px 60px rgba(8,20,43,.17)}
+.copy{min-width:0}
+.kicker{color:#a9f1eb}.eyebrowLine{color:#bfd0f0}.eyebrowLine i{background:#28c9bb}
+.heroLead{max-width:48ch;color:rgba(237,243,255,.77);font-size:1rem;line-height:1.62}
+.commandBar{border:1px solid #dfe6f3;background:#fff;box-shadow:0 12px 30px rgba(8,20,43,.12)}
+.commandPrefix{color:#6657f5}.askButton{background:linear-gradient(120deg,#6657f5,#4f61e5);color:#fff}
+.exampleStrip button,.recent button{border:1px solid #dfe6f3;border-radius:999px;background:#fff;color:#53627f}
+.trustRow{color:#c6d4ee}
+.result{border:1px solid #dfe6f3;border-radius:20px;background:#fff;color:#101a34;box-shadow:0 12px 30px rgba(8,20,43,.06)}
+.result:hover{border-color:rgba(102,87,245,.32);box-shadow:0 18px 38px rgba(8,20,43,.1)}
+.resultTitleRow,.resultTitleRow h3{color:#101a34}.resultDescription{color:#64718a}
+.price{color:#08142b}.shopBadge,.stockPill{background:#e9fbf8;color:#087d85}
+.outlineButton{background:#fff;border:1px solid #dfe6f3;color:#3157d5}.fillButton{background:#6657f5;color:#fff}
+.responseStage,.introCard,.emptyStage,.errorStage{border-color:#dfe6f3;background:#fff;color:#101a34;box-shadow:0 12px 30px rgba(8,20,43,.05)}
+.responseCopy,.answerMain p,.introCard p{color:#64718a}
+@media(max-width:700px){.hero{border-radius:23px}.heroLead{font-size:.95rem}.result{border-radius:16px}}

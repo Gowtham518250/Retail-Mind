@@ -598,3 +598,23 @@
 .resetStepDone { border-color:rgba(40,201,187,.24); background:#e9fbf8; color:#087d85; }
 @media(max-width:420px) { .resetFlowIntro { padding:12px; } .resetFlowHeading h3 { font-size:1.35rem; } .resetFlowHeading p { font-size:.78rem; } .resetStep { font-size:.62rem; padding:8px 3px; } }
 @media(prefers-reduced-motion:reduce) { .resetProgressFill { transition:none; } }
+
+
+/* Auth screens aligned to the reference board */
+.authMain{min-height:100svh;background:#f7f9ff}
+.authContainer{grid-template-columns:minmax(0,1.05fr) minmax(370px,.95fr);gap:14px;max-width:1500px}
+.heroShowcase{min-height:calc(100svh - 24px);border-radius:27px;background:radial-gradient(circle at 78% 48%,rgba(102,87,245,.3),transparent 29%),radial-gradient(circle at 23% 88%,rgba(40,201,187,.16),transparent 32%),linear-gradient(138deg,#111e40,#08142b 70%,#17183c)!important}
+.heroTitle{max-width:9.5ch;font-size:clamp(3.3rem,5.6vw,5.7rem);line-height:.9}
+.heroGradientText{background:linear-gradient(95deg,#8feee0,#b1baff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.brandPill{color:#8feee0;border-color:rgba(143,238,224,.18)}
+.featureItem{background:rgba(255,255,255,.055);border-color:rgba(143,238,224,.14)}
+.featureIconWrap{background:#28c9bb;color:#08142b}
+.authCard{width:min(100%,560px);padding:clamp(26px,3vw,42px);border-radius:25px;box-shadow:0 22px 60px rgba(8,20,43,.12)}
+.authTitle{font-size:clamp(2.25rem,3.5vw,3.2rem)}
+.modeTabs{background:#eff2fc;border-color:#e0e7f6}.modeTabActive{color:#fff}.modeIndicator{background:#6657f5}
+.input{background:#f8faff;border-color:#e0e7f6}.input:focus{border-color:#6657f5;box-shadow:0 0 0 3px rgba(102,87,245,.11)}
+.submitBtn{background:linear-gradient(115deg,#6657f5,#4e5fe5);box-shadow:0 10px 23px rgba(102,87,245,.20)}
+.submitBtn:not(:disabled):hover{background:#3157d5}
+.passwordStrengthTrack{background:#e3e8f5}.passwordStrengthFill[data-strength="strong"]{background:#28c9bb}
+@media(max-width:900px){.authContainer{width:min(100%,820px)}.heroShowcase{min-height:0}.authScene{height:200px}}
+@media(max-width:760px){.authMain{padding:7px}.heroShowcase{padding:22px 17px 8px;border-radius:23px}.heroTitle{max-width:10ch;font-size:clamp(2.75rem,12vw,4rem)}.authCard{padding:22px 18px}}
