@@ -2155,6 +2155,19 @@ def match_online_order_payment_from_notification(
     A low-confidence or ambiguous notification is never marked as paid.
     """
     shop_id = int(current_user["user_id"])
+
+    # Serialize payment matching for this shop. The order row locks below protect
+    # a selected order; this owner-row lock also prevents the same UPI reference
+    # from being applied concurrently to two different orders in the same shop.
+    locked_owner = (
+        db.query(User.id)
+        .filter(User.id == shop_id)
+        .with_for_update()
+        .first()
+    )
+    if locked_owner is None:
+        raise HTTPException(status_code=404, detail="Shop owner account not found.")
+
     reference = data.payment_reference.strip()
     if (
         data.decision.strip().upper() != "CONFIRMED"
@@ -2276,6 +2289,22 @@ def match_online_order_payment_from_notification(
             "duplicate": True,
             "order_id": order.id,
             "payment_status": "PAID",
+        }
+
+    # A transaction reference may settle at most one order per shop. Reject a
+    # reused reference for a different order, even if the amounts happen to
+    # match. The owner-row lock above makes this check serializable per shop.
+    reused_reference_order = db.query(OnlineOrder.id).filter(
+        OnlineOrder.shop_id == shop_id,
+        OnlineOrder.payment_reference == reference,
+        OnlineOrder.payment_status == "PAID",
+        OnlineOrder.id != order.id,
+    ).first()
+    if reused_reference_order is not None:
+        return {
+            "matched": False,
+            "requires_manual_review": True,
+            "reason": "This transaction reference was already recorded on another order.",
         }
 
     order.payment_status = "PAID"
