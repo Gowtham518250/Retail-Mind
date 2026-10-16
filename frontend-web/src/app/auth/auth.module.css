@@ -627,3 +627,53 @@
 .resetFlowArt span{font-size:.48rem;font-weight:950;letter-spacing:.1em;color:#3157d5}
 .resetFlowHeading{flex:1;min-width:0}
 @media(max-width:420px){.resetFlowArt{flex-basis:48px;width:48px;height:54px}.resetFlowArt svg{width:21px;height:21px}.resetFlowArt span{font-size:.42rem}}
+
+
+/* Three-panel recovery board matching the provided Forgot Password / OTP screen. */
+.authContainerReset{width:min(1500px,100%)!important;min-height:calc(100svh - 24px)!important;grid-template-columns:minmax(0,1fr)!important;align-items:center!important;gap:0!important}
+.authContainerReset .heroShowcase{display:none!important}
+.authCardReset{width:100%!important;max-width:1450px!important;margin:0 auto!important;padding:clamp(18px,2.4vw,32px)!important;border:1px solid #dfe6f3!important;border-radius:25px!important;background:#fff!important;color:#101a34!important;box-shadow:0 20px 58px rgba(8,20,43,.12)!important}
+.authCardReset::before{display:none!important}
+.authCardReset .cardGlowBar{background:linear-gradient(90deg,#6657f5,#28c9bb)!important}
+.authCardReset .cardHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}
+.authCardReset .authTitle{margin:0;color:#08142b!important;font-size:clamp(1.6rem,3vw,2.35rem)!important;text-align:left}
+.authCardReset .authSubtitle{max-width:48ch;margin:5px 0 0;color:#64718a!important;text-align:left;font-size:.78rem!important}
+.resetBackLink{display:inline-flex;align-items:center;gap:5px;order:2;flex:none;padding:7px 9px;border:1px solid #dfe6f3;border-radius:9px;background:#f8faff;color:#3157d5;font-size:.69rem;font-weight:850;cursor:pointer;white-space:nowrap}
+.resetBackLink svg{transform:rotate(180deg)}
+.resetBoard{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;align-items:stretch;width:100%}
+.resetStageCard{position:relative;display:flex;min-width:0;flex-direction:column;padding:17px;border:1px solid #e0e7f4;border-radius:17px;background:#fff;box-shadow:0 8px 22px rgba(8,20,43,.035);transition:border-color .18s,box-shadow .18s}
+.resetStageCard::before{content:'';position:absolute;top:0;left:15px;right:15px;height:3px;border-radius:0 0 5px 5px;background:#e6eaf5}
+.resetStageActive{border-color:rgba(102,87,245,.5);box-shadow:0 12px 28px rgba(102,87,245,.09)}
+.resetStageActive::before{background:linear-gradient(90deg,#6657f5,#28c9bb)}
+.resetStageComplete{border-color:#cbeee5;background:linear-gradient(180deg,#fbfffe,#fff)}
+.resetStageComplete::before{background:#28c9bb}
+.resetStageIllustration{position:relative;isolation:isolate;width:100%;height:102px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;overflow:hidden;margin-bottom:12px;border:1px solid #e6eaff;border-radius:14px;background:radial-gradient(circle at 50% 5%,rgba(102,87,245,.14),transparent 45%),linear-gradient(145deg,#f6f8ff,#edf8ff);color:#6657f5}
+.resetStageIllustration::before{content:'';position:absolute;z-index:-1;left:calc(50% - 23px);top:18px;width:46px;height:46px;border-radius:14px;background:rgba(255,255,255,.9);box-shadow:0 8px 20px rgba(102,87,245,.12)}
+.resetStageIllustration svg{width:25px;height:25px;filter:drop-shadow(0 4px 4px rgba(102,87,245,.12))}
+.resetStageIllustration span{color:#5552ce;font-size:.48rem;font-weight:950;letter-spacing:.13em}
+.resetStageBadge{margin-bottom:7px;color:#6657f5;font-size:.56rem;font-weight:950;letter-spacing:.1em}
+.resetStageCard h3{color:#101a34;font:900 clamp(1.05rem,1.35vw,1.3rem)/1.04 var(--font-display);letter-spacing:-.025em}
+.resetStageCard>p{min-height:38px;margin:7px 0 12px;color:#64718a;font-size:.7rem;line-height:1.48}
+.resetEmail{overflow-wrap:anywhere;color:#273d78}
+.resetStageForm{display:grid;gap:9px;min-width:0;margin-top:auto}
+.resetStageForm .label{display:block;margin:0;color:#53627f;font-size:.65rem;font-weight:900}
+.resetStageForm .inputWrap{display:flex;align-items:center;min-width:0;min-height:39px;gap:7px;padding:0 9px;border:1px solid #dfe6f3;border-radius:10px;background:#f8faff;color:#7c8ba5}
+.resetStageForm .inputWrap:focus-within{border-color:#6657f5;box-shadow:0 0 0 3px rgba(102,87,245,.1)}
+.resetStageForm .inputIcon{flex:none;width:15px;height:15px}
+.resetStageForm .input{width:100%;min-width:0;min-height:37px;padding:0;border:0;outline:0;background:transparent;color:#101a34;font-size:.68rem}
+.resetStageForm .input::placeholder{color:#98a3b7}
+.resetStageForm .eyeBtn{width:27px;height:27px;flex:none;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:#63728e;cursor:pointer}
+.resetStageForm .submitBtn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:39px;margin-top:4px;padding:0 10px;border:0;border-radius:10px;background:linear-gradient(110deg,#6657f5,#4f61e5);color:#fff;font-size:.69rem;font-weight:900;box-shadow:0 7px 17px rgba(102,87,245,.18)}
+.resetStageForm .submitBtn:hover:not(:disabled){background:#4f43d7}
+.resetStageForm .submitBtn:disabled{opacity:.48;cursor:not-allowed;box-shadow:none}
+.resetResend{justify-self:start;padding:0;border:0;background:transparent;color:#5144db;font-size:.64rem;font-weight:850;cursor:pointer}
+.resetResend:disabled{color:#8791a7;cursor:not-allowed}
+.resetStageState{display:inline-flex;align-items:center;gap:5px;margin-top:10px;color:#0a8b7e;font-size:.64rem;font-weight:850}
+.resetStageState svg{flex:none}
+.resetMiniStrength{height:4px;overflow:hidden;border-radius:99px;background:#e5eafa}
+.resetMiniStrength>span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#28c9bb,#6657f5);transition:width .2s}
+.authCardReset .switchRow{display:flex;justify-content:flex-start;margin-top:13px;color:#64718a}
+.authCardReset .switchAction{font-size:.72rem;color:#4f43d7}
+@media(max-width:900px){.resetBoard{grid-template-columns:repeat(2,minmax(0,1fr))}.resetStageCard:last-child{grid-column:1/-1}.resetStageCard:last-child .resetStageForm{max-width:none}}
+@media(max-width:620px){.authMain{padding:8px!important}.authContainerReset{min-height:auto!important}.authCardReset{padding:16px 12px!important;border-radius:19px!important}.authCardReset .cardHeader{flex-direction:column;gap:8px}.resetBackLink{order:0}.authCardReset .authTitle{font-size:1.65rem!important}.resetBoard{grid-template-columns:minmax(0,1fr);gap:10px}.resetStageCard:last-child{grid-column:auto}.resetStageCard{padding:14px;border-radius:14px}.resetStageIllustration{height:78px;margin-bottom:10px}.resetStageIllustration::before{top:8px;width:39px;height:39px;left:calc(50% - 19px)}.resetStageIllustration svg{width:22px;height:22px}.resetStageCard>p{min-height:0;margin-bottom:10px}.resetStageForm{gap:8px}.resetStageForm .submitBtn{min-height:42px}}
+@media(prefers-reduced-motion:reduce){.resetStageCard,.resetMiniStrength>span{transition:none}}
