@@ -124,62 +124,38 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
 
   const logo = shop?.shop_logo_url ? (shop.shop_logo_url.startsWith('http') ? shop.shop_logo_url : API_BASE + shop.shop_logo_url) : '';
   const rating = Number(shop?.rating || 0);
+  const productCover = products.find((product) => typeof product.image_url === 'string' && product.image_url.trim())?.image_url || '';
+  const bannerImage = productCover ? (productCover.startsWith('http') ? productCover : API_BASE + (productCover.startsWith('/') ? productCover : '/' + productCover)) : '';
 
   return (
     <div className={styles.page}>
-      {/* ───────── shop hero ───────── */}
-      <section className={styles.hero}>
-        <div className={styles.heroBg} aria-hidden="true" />
-        <div className={styles.grain} aria-hidden="true" />
-
-        <div className={styles.heroCopy}>
-          <motion.div className={styles.identity} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
-            <div className={styles.avatar}>
-              {logo ? <img src={logo} alt={(shop?.shop_name || 'Shop') + ' profile'} /> : <Store size={32} strokeWidth={1.6} />}
+      {/* Shop banner: compact like the supplied storefront screen */}
+      <section
+        className={styles.storeBanner}
+        style={bannerImage ? { backgroundImage: 'linear-gradient(90deg, rgba(7,20,45,.94) 0%, rgba(7,20,45,.76) 48%, rgba(7,20,45,.38) 100%), url("' + bannerImage + '")' } : undefined}
+      >
+        <Link href="/" className={styles.storeBannerBack}><ArrowLeft size={15} /> Marketplace</Link>
+        <div className={styles.storeBannerContent}>
+          <div className={styles.storeBannerAvatar}>
+            {logo ? <img src={logo} alt="" /> : <Store size={25} />}
+          </div>
+          <div className={styles.storeBannerInfo}>
+            <div className={styles.storeBannerMeta}>
+              <span className={styles.storeBannerLive}><i /> Shop storefront</span>
+              <span className={styles.storeBannerRating}><Star size={12} fill="currentColor" /> {rating > 0 ? rating.toFixed(1) : 'New'} · {Number(shop?.rating_count || 0)} reviews</span>
             </div>
-            <div>
-              <div className={styles.type}>{shop?.shop_type || 'Local storefront'}</div>
-              <div className={styles.ratingRow}>
-                <StarRating value={rating} />
-                <b>{rating > 0 ? rating.toFixed(1) : 'New'}</b>
-                <span>{Number(shop?.rating_count || 0)} reviews</span>
-              </div>
+            <h1>{shop?.shop_name || 'Local Store'}</h1>
+            <p>{shop?.shop_tagline || shop?.shop_description || 'Browse the products listed by this neighbourhood shop.'}</p>
+            <div className={styles.storeBannerDetails}>
+              {(shop?.shop_city || shop?.shop_address) && <span><MapPin size={13} /> {shop.shop_city || shop.shop_address}</span>}
+              <span><PackageCheck size={13} /> {products.length} products listed</span>
+              {shop?.shop_phone && <span><Phone size={13} /> {shop.shop_phone}</span>}
             </div>
-          </motion.div>
-
-          <h1 className={styles.title}><Words text={shop?.shop_name || 'Retail Mind Storefront'} base={0.1} /></h1>
-
-          <motion.p className={styles.tagline} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5, ease: EASE }}>
-            {shop?.shop_tagline || shop?.shop_description || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
-          </motion.p>
-
-          <motion.div className={styles.metaRow} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.65 }}>
-            {shop?.shop_phone && <span><Phone size={15} /> {shop.shop_phone}</span>}
-            {(shop?.shop_city || shop?.shop_address) && <span><MapPin size={15} /> {shop.shop_city || shop.shop_address}</span>}
-            {shop?.shop_website && <span><Globe size={15} /> {shop.shop_website}</span>}
-          </motion.div>
-
-          <motion.div className={styles.stats} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.75, duration: 0.6, ease: EASE }}>
-            <span><PackageCheck size={17} /> {products.length} products</span>
-            <span><ShieldCheck size={17} /> Customer-only order access</span>
-            <span><Sparkles size={17} /> Shop-provided product details</span>
-            {(shop?.online_setup_fee || 0) > 0 && <span><b className={styles.rupee}>₹</b> Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>}
-          </motion.div>
-
-          <motion.div className={styles.ctas} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, duration: 0.6, ease: EASE }}>
-            <Link href="#products" className={styles.ctaMain}>Shop now <ArrowRight size={18} /></Link>
-            <Link href="/orders" className={styles.ctaGhost}>My orders</Link>
-          </motion.div>
-          <p className={styles.note}>Browse freely · Sign in only when you checkout</p>
-        </div>
-
-        <div className={styles.stage}>
-          <div className={styles.stageGlow} aria-hidden="true" />
-          <HeroScene3D lite className={styles.canvas} />
-          <motion.div className={styles.floatChip} animate={{ y: [0, -9, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
-            <span className={styles.floatIcon}><PackageCheck size={16} /></span>
-            <span><b>{loading ? 'Loading shelves…' : `${products.length} products`}</b><small>Availability shown per item</small></span>
-          </motion.div>
+          </div>
+          <div className={styles.storeBannerActions}>
+            <Link href="#products" className={styles.storeBannerShopNow}>Shop now <ArrowRight size={15} /></Link>
+            <Link href="/orders" className={styles.storeBannerOrders}>Orders</Link>
+          </div>
         </div>
       </section>
 
