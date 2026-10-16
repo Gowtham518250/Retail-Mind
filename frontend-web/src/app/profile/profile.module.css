@@ -426,3 +426,50 @@
 .navCard:hover{border-color:rgba(102,87,245,.35);box-shadow:0 18px 40px rgba(8,20,43,.1)}
 .navCardTitle{color:#08142b}.navCardDesc{color:#64718a}.navCardIcon{background:#edf1ff;color:#6657f5}
 @media(max-width:700px){.profilePage{padding-top:15px}.container{width:calc(100% - 18px)}.profileHeaderCard{align-items:flex-start;flex-direction:column}.logoutBtn{align-self:stretch;justify-content:center}.bentoNavGrid{grid-template-columns:minmax(0,1fr)}}
+
+
+/* Profile dashboard follows the reference: vertical account menu + profile content. */
+.profilePage{padding:20px 0 104px!important;background:#f7f9ff!important;color:#101a34!important}
+.container{width:min(calc(100% - 28px),1240px)!important}
+.profileLayout{display:grid;grid-template-columns:230px minmax(0,1fr);align-items:start;gap:17px}
+.profileSidebar{position:sticky;top:84px;min-width:0;overflow:hidden;padding:17px 12px 12px;border:1px solid #dfe6f3;border-radius:18px;background:#fff;box-shadow:0 10px 26px rgba(8,20,43,.05)}
+.profileSidebarHeading{display:flex;align-items:center;gap:10px;padding:5px 7px 16px;border-bottom:1px solid #eef1f8}
+.profileSidebarAvatar{width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:50%;background:linear-gradient(145deg,#111e40,#6657f5);color:#fff;font:900 1.2rem var(--font-display)}
+.profileSidebarHeading strong{display:block;color:#101a34;font-size:.87rem;font-weight:900}
+.profileSidebarHeading span{display:block;margin-top:3px;color:#7b88a0;font-size:.65rem}
+.profileMenu{display:grid;gap:4px;margin-top:12px}
+.profileMenuLink,.profileMenuActive,.profileMenuLogout{display:flex;align-items:center;gap:9px;min-height:38px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:#53627f;font-size:.75rem;font-weight:800;text-align:left;text-decoration:none;cursor:pointer}
+.profileMenuLink:hover,.profileMenuActive{background:#edf1ff;color:#4f43d7}
+.profileMenuActive{box-shadow:inset 3px 0 #6657f5}
+.profileMenuLogout{margin-top:5px;border-top:1px solid #edf0f7;border-radius:0;color:#bd3555}
+.profileMenuLogout:hover{background:#fff1f4}
+.profileSidebarFoot{margin-top:14px;padding:11px 8px 2px;border-top:1px solid #edf0f7;color:#8290a7;font-size:.63rem;line-height:1.55}
+.profileContent{display:grid;gap:14px;min-width:0}
+.profileDetailsHeader{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 22px;border:1px solid #dfe6f3;border-radius:18px;background:#fff;box-shadow:0 10px 26px rgba(8,20,43,.045)}
+.profileOverline,.profilePanelHeading>div>span{color:#6657f5;font-size:.63rem;font-weight:950;letter-spacing:.13em}
+.profileDetailsHeader h1{margin-top:5px;color:#08142b;font:900 clamp(1.7rem,3vw,2.25rem)/.98 var(--font-display);letter-spacing:-.03em}
+.profileDetailsHeader p{margin-top:5px;color:#64718a;font-size:.76rem;line-height:1.5}
+.profileContactRow{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:11px;color:#53627f;font-size:.69rem}
+.profileContactRow span{display:inline-flex;align-items:center;gap:5px}.profileContactRow svg{color:#6657f5}
+.profileVerified{display:inline-flex;align-items:center;gap:6px;flex:none;padding:7px 9px;border-radius:999px;background:#e9fbf8;color:#087d85;font-size:.66rem;font-weight:900}
+.profilePanelHeading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}
+.profilePanelHeading h2{margin-top:4px;color:#08142b;font:900 1.3rem/.98 var(--font-display)}
+.profileContent .accountDetailsCard,.savedAddressPanel{padding:19px;border:1px solid #dfe6f3;border-radius:18px;background:#fff;box-shadow:0 10px 26px rgba(8,20,43,.045)}
+.profileContent .detailsGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.profileContent .detailBox{min-width:0;min-height:78px;padding:11px;border:1px solid #e2e8f4;border-radius:12px;background:#f9fbff}
+.profileContent .detailLabel{color:#8290a7;font-size:.65rem;font-weight:800}
+.profileContent .detailValue{display:block;margin-top:6px;overflow-wrap:anywhere;color:#101a34;font-size:.75rem;font-weight:800;line-height:1.4}
+.savedAddressPanel{min-width:0}
+.profileAddressDefault{flex:none;padding:6px 8px;border-radius:999px;background:#edf1ff;color:#4f43d7;font-size:.62rem;font-weight:900}
+.profileAddressCard{display:flex;align-items:flex-start;gap:11px;padding:13px;border:1px solid #e1e7f4;border-radius:13px;background:#f9fbff}
+.profileAddressIcon{width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:10px;background:#edf1ff;color:#6657f5}
+.profileAddressText{display:grid;gap:4px;min-width:0}
+.profileAddressText strong{color:#101a34;font-size:.8rem;font-weight:900}
+.profileAddressText p,.profileAddressText span{color:#64718a;font-size:.71rem;line-height:1.45;overflow-wrap:anywhere}
+.profileAddressNote{margin-top:9px;color:#8a96ab;font-size:.63rem;line-height:1.45}
+.profileSecurityRow{display:flex;align-items:center;gap:10px;min-width:0}
+.profileSecurityIcon{width:36px;height:36px;display:grid;place-items:center;flex:none;border-radius:10px;background:#e9fbf8;color:#087d85}
+.profileSecurityRow>div{flex:1;min-width:0}.profileSecurityRow strong{color:#101a34;font-size:.75rem}.profileSecurityRow p{margin-top:3px;color:#64718a;font-size:.67rem;line-height:1.45}
+.profileSecurityLink{display:inline-flex;align-items:center;gap:4px;flex:none;color:#4f43d7;font-size:.65rem;font-weight:900;text-decoration:none}
+@media(max-width:860px){.profileLayout{grid-template-columns:200px minmax(0,1fr);gap:11px}.profileSidebar{top:76px}.profileContent .detailsGrid{grid-template-columns:minmax(0,1fr)}.profileDetailsHeader{padding:17px}.profileVerified{font-size:.59rem}}
+@media(max-width:650px){.profilePage{padding-top:10px!important}.container{width:calc(100% - 16px)!important}.profileLayout{grid-template-columns:minmax(0,1fr);gap:10px}.profileSidebar{position:relative;top:auto;padding:12px 10px;border-radius:15px}.profileSidebarHeading{padding:3px 4px 10px}.profileSidebarAvatar{width:35px;height:35px}.profileMenu{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin-top:8px}.profileMenuLink,.profileMenuActive,.profileMenuLogout{min-height:35px;gap:6px;padding:0 7px;font-size:.67rem}.profileMenuLogout{margin-top:0;border-top:0}.profileSidebarFoot{display:none}.profileDetailsHeader{padding:15px;align-items:flex-start;flex-direction:column}.profileDetailsHeader h1{font-size:1.7rem}.profileVerified{align-self:flex-start}.profileContent .accountDetailsCard,.savedAddressPanel{padding:14px}.profileContent .detailsGrid{grid-template-columns:minmax(0,1fr)}.profileSecurityRow{align-items:flex-start;flex-wrap:wrap}.profileSecurityLink{margin-left:46px}}
