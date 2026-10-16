@@ -202,9 +202,10 @@ def check_rate_limit(request: Request):
         key = f"retail_mind:security:rate:{bucket}:{_security_ip_key(ip)}"
         try:
             current_count = int(redis_client.incr(key))
-            if current_count == 1:
-                # Keep the fixed-window counter slightly longer than one window.
-                redis_client.expire(key, window * 2)
+            # Refresh TTL on every hit so a transient EXPIRE failure on the first
+            # increment cannot leave a permanent counter behind. The bucket is
+            # part of the key, so this does not merge adjacent windows.
+            redis_client.expire(key, window * 2)
             if current_count > RATE_LIMIT_CALLS:
                 raise HTTPException(
                     status_code=429,
