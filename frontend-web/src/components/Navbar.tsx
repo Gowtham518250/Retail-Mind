@@ -40,7 +40,8 @@ export default function Navbar() {
   if (pathname === '/auth') return null;
 
   const desktopLinks = [
-    { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles, show: true },
+    { href: '/shops', label: 'Shops', icon: Store, show: true },
+    { href: '/ai-shopping', label: 'AI Shopping', icon: Sparkles, show: true },
     { href: '/smart-shop', label: 'Smart Hub', icon: Trophy, show: signedIn },
     { href: '/orders', label: 'Orders', icon: Package, show: signedIn },
     { href: '/profile', label: customerName ? customerName.split(' ')[0] : 'Account', icon: User, show: signedIn },
@@ -49,7 +50,7 @@ export default function Navbar() {
 
   const mobileNavItems = [
     { href: '/', label: 'Home', icon: Home },
-    { href: '/#shops', label: 'Shops', icon: Store },
+    { href: '/shops', label: 'Shops', icon: Store },
     { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles },
     { href: signedIn ? '/orders' : '/auth', label: 'Orders', icon: Package },
     { href: signedIn ? '/profile' : '/auth', label: 'Account', icon: User },
@@ -129,6 +130,7 @@ export default function Navbar() {
       {/* Compact cart shortcut on small screens; opens the same live cart drawer. */}
       {itemCount > 0 &&
         (pathname === '/' ||
+          pathname === '/shops' ||
           pathname === '/smart-shop' ||
           pathname === '/ai-shopping' ||
           /^\/shop\/\d+$/.test(pathname)) && (

@@ -618,3 +618,12 @@
 .passwordStrengthTrack{background:#e3e8f5}.passwordStrengthFill[data-strength="strong"]{background:#28c9bb}
 @media(max-width:900px){.authContainer{width:min(100%,820px)}.heroShowcase{min-height:0}.authScene{height:200px}}
 @media(max-width:760px){.authMain{padding:7px}.heroShowcase{padding:22px 17px 8px;border-radius:23px}.heroTitle{max-width:10ch;font-size:clamp(2.75rem,12vw,4rem)}.authCard{padding:22px 18px}}
+
+
+/* Password recovery stages get their own simple illustration tile, matching the board. */
+.resetFlowIntro{align-items:center!important}
+.resetFlowArt{position:relative;isolation:isolate;display:flex;flex:0 0 58px;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:58px;height:64px;overflow:hidden;border:1px solid rgba(102,87,245,.16);border-radius:15px;background:radial-gradient(circle at 80% 10%,rgba(40,201,187,.2),transparent 35%),linear-gradient(145deg,#edf1ff,#f6fbff);color:#6657f5}
+.resetFlowArt::before{content:'';position:absolute;z-index:-1;left:7px;right:7px;bottom:6px;height:5px;border-radius:99px;background:linear-gradient(90deg,#6657f5,#28c9bb);opacity:.7}
+.resetFlowArt span{font-size:.48rem;font-weight:950;letter-spacing:.1em;color:#3157d5}
+.resetFlowHeading{flex:1;min-width:0}
+@media(max-width:420px){.resetFlowArt{flex-basis:48px;width:48px;height:54px}.resetFlowArt svg{width:21px;height:21px}.resetFlowArt span{font-size:.42rem}}

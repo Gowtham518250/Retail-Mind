@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   Zap,
   Truck,
+  Smartphone,
+  KeyRound,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import HeroScene3D from '../../components/HeroScene3D';
@@ -584,6 +586,10 @@ export default function AuthPage() {
                 transition={{ duration: 0.25 }}
               >
                 <section className={styles.resetFlowIntro} aria-label="Password reset progress">
+                  <div className={styles.resetFlowArt} aria-hidden="true">
+                    {resetStep === 'request' ? <Mail size={25} /> : resetStep === 'verify' ? <Smartphone size={25} /> : <KeyRound size={25} />}
+                    <span>{resetStep === 'request' ? 'EMAIL' : resetStep === 'verify' ? 'OTP' : 'SECURE'}</span>
+                  </div>
                   <div className={styles.resetFlowHeading}>
                     <span className={styles.resetFlowEyebrow}>SECURE ACCOUNT RECOVERY</span>
                     <h3>

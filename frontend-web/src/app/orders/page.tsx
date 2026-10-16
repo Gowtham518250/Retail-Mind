@@ -29,6 +29,8 @@ interface OrderItem {
   product_id: number;
   product_name?: string;
   name?: string;
+  image_url?: string | null;
+  product_image_url?: string | null;
   quantity: number;
   unit_price?: number;
   price?: number;
@@ -165,6 +167,12 @@ function formatDate(value?: string | null) {
   });
 }
 
+function resolveOrderImage(value?: string | null) {
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return API_BASE + (value.startsWith('/') ? value : '/' + value);
+}
+
 function activeReturnRequest(order: Order) {
   const status = String(order.return_request?.status || '').toUpperCase();
   return Boolean(
@@ -258,6 +266,7 @@ export default function MyOrdersPage() {
     'ALL' | 'ACTIVE' | 'DELIVERED' | 'RETURNED' | 'CANCELLED'
   >('ALL');
   const [query, setQuery] = useState('');
+  const [periodFilter, setPeriodFilter] = useState<'ALL' | '30D' | '90D'>('ALL');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
   const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
@@ -742,29 +751,35 @@ export default function MyOrdersPage() {
 
   const visibleOrders = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const now = Date.now();
+    const periodMs = periodFilter === '30D'
+      ? 30 * 24 * 60 * 60 * 1000
+      : periodFilter === '90D'
+        ? 90 * 24 * 60 * 60 * 1000
+        : null;
 
     return orders.filter((order) => {
       const filterMatch =
         filter === 'ALL' ||
-        (filter === 'ACTIVE' &&
-          !TERMINAL_STATUSES.includes(order.status)) ||
+        (filter === 'ACTIVE' && !TERMINAL_STATUSES.includes(order.status)) ||
         (filter === 'DELIVERED' && order.status === 'DELIVERED') ||
         (filter === 'RETURNED' && activeReturnRequest(order)) ||
-        (filter === 'CANCELLED' &&
-          ['CANCELLED', 'REJECTED'].includes(order.status));
+        (filter === 'CANCELLED' && ['CANCELLED', 'REJECTED'].includes(order.status));
 
       const queryMatch =
         !q ||
         String(order.order_id).includes(q) ||
         order.items.some((item) =>
-          String(item.product_name || item.name || '')
-            .toLowerCase()
-            .includes(q),
+          String(item.product_name || item.name || '').toLowerCase().includes(q),
         );
 
-      return filterMatch && queryMatch;
+      const createdAt = new Date(order.created_at).getTime();
+      const dateMatch = !periodMs ||
+        (Number.isFinite(createdAt) && now - createdAt >= 0 && now - createdAt <= periodMs);
+
+      return filterMatch && queryMatch && dateMatch;
     });
-  }, [orders, filter, query]);
+  }, [orders, filter, query, periodFilter]);
 
   const toggleOrder = async (orderId: number) => {
     const willOpen = !expandedOrders.has(orderId);
@@ -977,29 +992,42 @@ export default function MyOrdersPage() {
             <div>
               <div className="orders-fk-brand-title">My Orders</div>
               <div className="orders-fk-brand-subtitle">
-                Track every purchase in one place
+                Track, manage and review your orders
               </div>
             </div>
           </div>
 
-          <div className="orders-fk-live">
-            <span
-              className={
-                'orders-fk-live-dot ' + (liveConnected ? '' : 'offline')
-              }
-            />
-            <Wifi size={15} />
-            {liveConnected ? 'Live updates' : 'Reconnecting'}
+          <div className="orders-fk-top-actions">
+            <label className="orders-fk-search">
+              <Search size={17} />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search orders…"
+                aria-label="Search orders"
+              />
+            </label>
+            <label className="orders-fk-period">
+              <span className="sr-only">Filter orders by date</span>
+              <select
+                value={periodFilter}
+                onChange={(event) => setPeriodFilter(event.target.value as 'ALL' | '30D' | '90D')}
+                aria-label="Filter orders by date"
+              >
+                <option value="ALL">All time</option>
+                <option value="30D">Last 30 days</option>
+                <option value="90D">Last 90 days</option>
+              </select>
+              <ChevronDown size={14} aria-hidden="true" />
+            </label>
             <button
               className="orders-fk-refresh"
               onClick={() => void fetchOrders(true)}
               disabled={refreshing}
-              title="Refresh orders"
+              title={liveConnected ? 'Live updates connected. Refresh orders' : 'Refresh orders'}
+              aria-label="Refresh orders"
             >
-              <RefreshCw
-                size={15}
-                className={refreshing ? 'spin' : ''}
-              />
+              <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
             </button>
           </div>
         </header>
@@ -1038,11 +1066,11 @@ export default function MyOrdersPage() {
             aria-label="Order filters"
           >
             {([
-              ['ALL', 'All orders'],
-              ['ACTIVE', 'Active'],
-              ['DELIVERED', 'Delivered'],
-              ['RETURNED', 'Returned'],
-              ['CANCELLED', 'Cancelled'],
+              ['ALL', 'All (' + orders.length + ')'],
+              ['ACTIVE', 'Active (' + activeCount + ')'],
+              ['DELIVERED', 'Completed (' + deliveredCount + ')'],
+              ['CANCELLED', 'Cancelled (' + cancelledCount + ')'],
+              ['RETURNED', 'Returned (' + returnedCount + ')'],
             ] as const).map(([value, label]) => (
               <button
                 key={value}
@@ -1056,15 +1084,7 @@ export default function MyOrdersPage() {
             ))}
           </div>
 
-          <label className="orders-fk-search">
-            <Search size={17} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search order number or product"
-              aria-label="Search orders"
-            />
-          </label>
+
         </section>
 
         {lastUpdated && !loading && (
@@ -1201,7 +1221,15 @@ export default function MyOrdersPage() {
 
                     <div className="orders-fk-item-preview">
                       <div className="orders-fk-product-icon">
-                        <Package size={24} />
+                        {resolveOrderImage(firstItem?.image_url || firstItem?.product_image_url) ? (
+                          <img
+                            src={resolveOrderImage(firstItem?.image_url || firstItem?.product_image_url)}
+                            alt=""
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Package size={24} />
+                        )}
                       </div>
                       <div className="orders-fk-item-copy">
                         <strong>{firstName}</strong>
