@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Package,
   MapPin,
@@ -22,6 +22,9 @@ import {
   Ban,
   RotateCcw,
   Sparkles,
+  Store,
+  X,
+  AlertCircle,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 
@@ -62,6 +65,8 @@ interface Order {
   payment_status?: string;
   payment_reference?: string | null;
   total_amount: number;
+  subtotal?: number;
+  online_setup_fee?: number;
   delivery_address: string;
   items: OrderItem[];
   created_at: string;
@@ -128,6 +133,19 @@ const STATUS_META: Record<
 const TERMINAL_STATUSES = ['DELIVERED', 'REJECTED', 'CANCELLED', 'RETURNED'];
 const REVERSIBLE_STATUSES = ['PENDING', 'ACCEPTED'];
 
+type OrderFilter = 'ALL' | 'PENDING' | 'ACCEPTED' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED' | 'REJECTED';
+
+const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
+  { value: 'ALL', label: 'All orders' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'ACCEPTED', label: 'Accepted' },
+  { value: 'DISPATCHED', label: 'Dispatched' },
+  { value: 'DELIVERED', label: 'Delivered' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'RETURNED', label: 'Returned' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
 function getCustomerSyncCursorKey(token: string): string | null {
   try {
     // The JWT subject is used only to namespace local cursor storage. The API
@@ -158,13 +176,15 @@ function formatCurrency(value: number) {
 
 function formatDate(value?: string | null) {
   if (!value) return '—';
-  return new Date(value).toLocaleString('en-IN', {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  });
+  }).format(date);
 }
 
 function resolveOrderImage(value?: string | null) {
@@ -191,66 +211,55 @@ function returnLabel(order: Order) {
 }
 
 function OrderTimeline({ status }: { status: string }) {
-  const current = statusIndex(status);
-  const terminal = !STATUS_STEPS.includes(status as (typeof STATUS_STEPS)[number]);
+  const normalized = String(status || '').toUpperCase();
+  const current = statusIndex(normalized);
+  const terminal = !STATUS_STEPS.includes(normalized as (typeof STATUS_STEPS)[number]);
+
   if (terminal) {
-    const meta = STATUS_META[status] || STATUS_META.REJECTED;
-    const Icon = meta.icon;
+    const meta = STATUS_META[normalized];
+    const Icon = meta?.icon || CircleDot;
     return (
-      <div className="rejected-banner">
-        <Icon size={17} />
+      <div className={'rejected-banner ' + normalized.toLowerCase()} role="status">
+        <Icon size={18} aria-hidden="true" />
         <div>
-          <strong>{meta.label}</strong>
-          <span>{meta.description}</span>
+          <strong>{meta?.label || 'Status update'}</strong>
+          <span>{meta?.description || 'The shop has updated this order.'}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="order-timeline">
+    <div className="order-timeline" role="list" aria-label="Order progress">
       {STATUS_STEPS.map((step, index) => {
         const meta = STATUS_META[step];
         const Icon = meta.icon;
         const completed = current >= index;
         const active = current === index;
-
         return (
-          <div className="timeline-step" key={step}>
+          <div
+            className={'timeline-step ' + (completed ? 'complete ' : '') + (active ? 'active' : '')}
+            key={step}
+            role="listitem"
+            aria-current={active ? 'step' : undefined}
+          >
             <div
-              className={
-                'timeline-node ' +
-                (completed ? 'completed ' : '') +
-                (active ? 'active' : '')
-              }
-              style={
-                completed
-                  ? { borderColor: meta.tone, color: meta.tone }
-                  : undefined
-              }
+              className={'timeline-node ' + (completed ? 'completed ' : '') + (active ? 'active' : '')}
+              style={completed ? { borderColor: meta.tone, color: meta.tone } : undefined}
+              aria-hidden="true"
             >
               {completed ? <Icon size={15} /> : <CircleDot size={12} />}
             </div>
-
             <div className="timeline-copy">
               <div className="timeline-label">{meta.label}</div>
-              {active && (
-                <div className="timeline-description">{meta.description}</div>
-              )}
+              {active && <div className="timeline-description">{meta.description}</div>}
             </div>
-
             {index < STATUS_STEPS.length - 1 && (
-              <div
-                className={
-                  'timeline-line ' +
-                  (current > index ? 'filled' : '')
-                }
-              />
+              <div className={'timeline-line ' + (current > index ? 'filled' : '')} aria-hidden="true" />
             )}
           </div>
         );
       })}
-
     </div>
   );
 }
@@ -260,22 +269,27 @@ export default function MyOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
-  const [filter, setFilter] = useState<
-    'ALL' | 'ACTIVE' | 'DELIVERED' | 'RETURNED' | 'CANCELLED'
-  >('ALL');
+  const [filter, setFilter] = useState<OrderFilter>('ALL');
   const [query, setQuery] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'ALL' | '30D' | '90D'>('ALL');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [trackingOrders, setTrackingOrders] = useState<Set<number>>(new Set());
   const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
   const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
+  const [cancelCandidate, setCancelCandidate] = useState<Order | null>(null);
+  const [cancelDialogError, setCancelDialogError] = useState('');
+  const cancelConfirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cancelDialogRef = useRef<HTMLElement | null>(null);
+  const cancelTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const ordersRequestIdRef = useRef(0);
+  const ordersRevisionRef = useRef(0);
   const [reviewingOrderId, setReviewingOrderId] = useState<number | null>(null);
+  const [reviewSubmittingId, setReviewSubmittingId] = useState<number | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
-  const [deliveryByOrder, setDeliveryByOrder] = useState<Record<number, any>>({});
-  const [deliveryLoadingId, setDeliveryLoadingId] = useState<number | null>(null);
   const customerCursorKeyRef = useRef<string | null>(null);
   const customerFeedSupportedRef = useRef<boolean | null>(null);
   const customerFeedProbeAfterRef = useRef(0);
@@ -286,13 +300,16 @@ export default function MyOrdersPage() {
   const fetchOrders = useCallback(
     async (silent = false): Promise<boolean> => {
       const token = localStorage.getItem('customerToken');
-
       if (!token) {
+        setLoading(false);
         router.push('/auth');
         return false;
       }
 
+      const requestId = ++ordersRequestIdRef.current;
+      const revisionAtStart = ordersRevisionRef.current;
       if (silent) setRefreshing(true);
+      else setLoading(true);
 
       try {
         const response = await fetch(API_BASE + '/store/my-orders', {
@@ -300,6 +317,7 @@ export default function MyOrdersPage() {
           cache: 'no-store',
         });
 
+        if (requestId !== ordersRequestIdRef.current) return false;
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) {
             localStorage.removeItem('customerToken');
@@ -310,16 +328,24 @@ export default function MyOrdersPage() {
         }
 
         const data = await response.json();
+        if (requestId !== ordersRequestIdRef.current || revisionAtStart !== ordersRevisionRef.current) {
+          return false;
+        }
+
         setOrders(Array.isArray(data.orders) ? data.orders : []);
         setError('');
         setLastUpdated(new Date());
         return true;
-      } catch (err: any) {
-        setError(err?.message || 'Unable to refresh orders right now.');
+      } catch (err: unknown) {
+        if (requestId === ordersRequestIdRef.current && revisionAtStart === ordersRevisionRef.current) {
+          setError(err instanceof Error ? err.message : 'Unable to refresh orders right now.');
+        }
         return false;
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (requestId === ordersRequestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [router],
