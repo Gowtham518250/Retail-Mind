@@ -313,73 +313,93 @@ export default function OrderSuccessClientPage() {
 
   if (!order) return null;
 
-
   return (
-    <div className="container" style={{ padding: '28px 20px 90px', maxWidth: 780 }}>
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="success-card"
-      >
-        <div className="success-icon-wrap"><CheckCircle2 size={56} strokeWidth={1.5} /></div>
-        <h1 className="success-title">Order placed successfully!</h1>
-        <p className="success-sub">
-          Thank you, {order.customer_name.split(' ')[0]}. {order.shop_name} has received your order.
-        </p>
+    <main className="success-page">
+      <div className="success-layout">
+        <motion.section
+          className="success-card success-confirmation-card"
+          initial={{ opacity: 0, y: 18, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+        >
+          <div className="success-icon-wrap"><CheckCircle2 size={56} strokeWidth={1.5} /></div>
+          <span className="success-eyebrow">RETAIL MIND · ORDER CONFIRMATION</span>
+          <h1 className="success-title">Order placed successfully!</h1>
+          <p className="success-sub">
+            Thank you, {order.customer_name.split(' ')[0]}. {order.shop_name} has received your order.
+          </p>
 
-        <div className="success-meta-row">
-          <div className="success-meta-pill"><span>Order ID</span><strong>#{order.order_id}</strong></div>
-          <div className="success-meta-pill"><span>Order status</span><strong>{(liveStatus || order.status).replaceAll('_', ' ')}</strong></div>
-          <div className="success-meta-pill"><span>Payment method</span><strong>{order.payment_method === 'COD' ? 'Cash on Delivery' : order.payment_method}</strong></div>
-        </div>
+          <div className="success-meta-row">
+            <div className="success-meta-pill"><span>Order ID</span><strong>#{order.order_id}</strong></div>
+            <div className="success-meta-pill"><span>Order status</span><strong>{(liveStatus || order.status).replaceAll('_', ' ')}</strong></div>
+            <div className="success-meta-pill"><span>Payment method</span><strong>{order.payment_method === 'COD' ? 'Cash on Delivery' : order.payment_method}</strong></div>
+          </div>
 
-        <div className="timeline-refresh-row">
-          <span>Live order status</span>
-          <button onClick={refreshStatus} disabled={isRefreshing} aria-label="Refresh status">
-            <RefreshCw size={13} className={isRefreshing ? 'spin' : ''} />
-          </button>
-        </div>
-        {trackingError && <div className="cart-banner error">{trackingError}</div>}
-        <div className="order-timeline">
-          {STAGES.map((stage, index) => {
-            const Icon = stage.icon;
-            const reached = index <= activeStageIndex;
-            return (
-              <div key={stage.key} className={`timeline-step ${reached ? 'active' : 'pending'}`}>
-                <div className="timeline-dot"><Icon size={16} /></div>
-                <span>{stage.label}</span>
-                {index < STAGES.length - 1 && <div className="timeline-line" />}
+          <div className="success-confirmation-footer">
+            <div><span>ORDER TOTAL</span><strong>₹{order.total_amount.toFixed(2)}</strong></div>
+            <span>Order updates are available from My Orders.</span>
+          </div>
+          <div className="success-actions">
+            <button className="hero-cta" onClick={() => router.push('/orders')}>
+              <Truck size={16} /> My Orders
+            </button>
+            <button className="store-link-btn" onClick={() => router.push(`/shop/${shopId}`)}>
+              <ShoppingBag size={16} /> Continue Shopping
+            </button>
+          </div>
+        </motion.section>
+
+        <motion.aside
+          className="success-tracking-card"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.06 }}
+        >
+          <div className="success-tracking-heading">
+            <div><span>LIVE ORDER STATUS</span><h2>Order Tracking</h2></div>
+            <button onClick={refreshStatus} disabled={isRefreshing} aria-label="Refresh order status">
+              <RefreshCw size={14} className={isRefreshing ? 'spin' : ''} />
+            </button>
+          </div>
+          <div className="success-tracking-current">
+            <span className="success-tracking-dot" />
+            <div><small>Current status</small><strong>{(liveStatus || order.status).replaceAll('_', ' ')}</strong></div>
+            <span className="success-tracking-order">#{order.order_id}</span>
+          </div>
+          {trackingError && <div className="cart-banner error">{trackingError}</div>}
+          <div className="order-timeline">
+            {STAGES.map((stage, index) => {
+              const Icon = stage.icon;
+              const reached = index <= activeStageIndex;
+              return (
+                <div key={stage.key} className={`timeline-step ${reached ? 'active' : 'pending'}`}>
+                  <div className="timeline-dot"><Icon size={16} /></div>
+                  <span>{stage.label}</span>
+                  {index < STAGES.length - 1 && <div className="timeline-line" />}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="success-details-grid">
+            <div className="success-detail-card">
+              <h3><MapPin size={15} /> Delivering to</h3>
+              <p>{order.customer_name}</p>
+              <p className="muted">{order.delivery_address}</p>
+              <p className="muted"><Phone size={12} /> {order.phone}</p>
+            </div>
+            <div className="success-detail-card">
+              <h3><ShoppingBag size={15} /> Items ({order.items.length})</h3>
+              <div className="success-line-items">
+                {order.items.map((item, index) => (
+                  <p key={index} className="muted"><span>{item.name} × {item.quantity}</span><strong>₹{(item.price * item.quantity).toFixed(2)}</strong></p>
+                ))}
               </div>
-            );
-          })}
-        </div>
-
-        <div className="success-details-grid">
-          <div className="success-detail-card">
-            <h3><MapPin size={15} /> Delivering to</h3>
-            <p>{order.customer_name}</p>
-            <p className="muted">{order.delivery_address}</p>
-            <p className="muted"><Phone size={12} /> {order.phone}</p>
+              <p className="success-total">Total: ₹{order.total_amount.toFixed(2)}</p>
+            </div>
           </div>
-          <div className="success-detail-card">
-            <h3><ShoppingBag size={15} /> Items ({order.items.length})</h3>
-            {order.items.map((item, i) => (
-              <p key={i} className="muted">{item.name} × {item.quantity} — ₹{(item.price * item.quantity).toFixed(2)}</p>
-            ))}
-            <p className="success-total">Total: ₹{order.total_amount.toFixed(2)}</p>
-          </div>
-        </div>
-
-        <div className="success-actions">
-          <button className="hero-cta" onClick={() => router.push(`/shop/${shopId}`)}>
-            <ShoppingBag size={16} /> Continue shopping
-          </button>
-          <button className="store-link-btn" onClick={() => window.print()}>
-            <Clock size={16} /> Print order summary
-          </button>
-        </div>
-      </motion.div>
-    </div>
+        </motion.aside>
+      </div>
+    </main>
   );
 }
