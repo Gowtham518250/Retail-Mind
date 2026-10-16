@@ -46,7 +46,10 @@ function ShopCoverImage({ shop, priority }: { shop: Shop; priority: boolean }) {
   const logo = assetUrl(shop.logo_url || shop.shop_logo_url);
 
   useEffect(() => {
-    if (priority) return;
+    if (priority) {
+      setNearViewport(true);
+      return;
+    }
     const node = hostRef.current;
     if (!node || typeof IntersectionObserver === 'undefined') {
       setNearViewport(true);
