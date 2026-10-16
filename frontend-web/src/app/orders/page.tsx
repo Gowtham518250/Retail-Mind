@@ -1546,7 +1546,7 @@ export default function MyOrdersPage() {
                             <strong>Items in this order</strong>
                             <span>{order.items.length} {order.items.length === 1 ? 'item' : 'items'}</span>
                           </div>
-                          {order.items.map((item, idx) => {}
+                          {order.items.map((item, idx) => {
                             const name =
                               item.product_name ||
                               item.name ||
@@ -1611,6 +1611,90 @@ export default function MyOrdersPage() {
           </>
         )}
       </div>
+
+      <AnimatePresence>
+        {cancelCandidate && (
+          <motion.div
+            className="orders-fk-modal-backdrop"
+            role="presentation"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && cancelingOrderId === null) {
+                setCancelCandidate(null);
+                setCancelDialogError('');
+              }
+            }}
+          >
+            <motion.section
+              className="orders-fk-cancel-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="orders-fk-cancel-title"
+              aria-describedby="orders-fk-cancel-description"
+              ref={cancelDialogRef}
+              tabIndex={-1}
+              initial={{ opacity: 0, y: 14, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.99 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="orders-fk-dialog-close"
+                onClick={() => {
+                  if (cancelingOrderId === null) {
+                    setCancelCandidate(null);
+                    setCancelDialogError('');
+                  }
+                }}
+                aria-label="Close cancellation dialog"
+                disabled={cancelingOrderId !== null}
+              >
+                <X size={17} />
+              </button>
+              <span className="orders-fk-dialog-eyebrow">ORDER CANCELLATION</span>
+              <div className="orders-fk-dialog-icon"><AlertCircle size={22} /></div>
+              <h2 id="orders-fk-cancel-title">Cancel Order #{cancelCandidate.order_id}?</h2>
+              <p id="orders-fk-cancel-description">
+                The shop will be notified and reserved stock will be released only if the server accepts cancellation.
+                Only pending or accepted orders are eligible.
+              </p>
+              {String(cancelCandidate.payment_status || '').toUpperCase() === 'PAID' && (
+                <div className="orders-fk-refund-note">
+                  This order is marked as paid. Cancellation is not an automatic refund; the shop may need to follow up on the refund.
+                </div>
+              )}
+              {cancelDialogError && <div className="orders-fk-dialog-error" role="alert">{cancelDialogError}</div>}
+              <div className="orders-fk-dialog-actions">
+                <button
+                  type="button"
+                  className="orders-fk-dialog-keep"
+                  onClick={() => {
+                    setCancelCandidate(null);
+                    setCancelDialogError('');
+                  }}
+                  disabled={cancelingOrderId !== null}
+                >
+                  Keep order
+                </button>
+                <button
+                  type="button"
+                  className="orders-fk-dialog-confirm"
+                  ref={cancelConfirmButtonRef}
+                  onClick={() => void confirmCancelOrder()}
+                  disabled={cancelingOrderId !== null}
+                >
+                  {cancelingOrderId === cancelCandidate.order_id ? 'Cancelling…' : 'Confirm cancellation'}
+                  {cancelingOrderId === cancelCandidate.order_id ? <RefreshCw size={15} className="spin" /> : <Ban size={15} />}
+                </button>
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
