@@ -278,7 +278,7 @@ export default function AuthPage() {
                 <ShoppingBag size={20} />
               </div>
               <div className={styles.featureContent}>
-                <strong>Genuine Local Catalogs</strong>
+                <strong>Local Storefront Listings</strong>
                 <span>Browse product details and stock information when provided</span>
               </div>
             </div>
@@ -288,7 +288,7 @@ export default function AuthPage() {
                 <Truck size={20} />
               </div>
               <div className={styles.featureContent}>
-                <strong>Swift Local Dispatch</strong>
+                <strong>Shop Fulfilment Details</strong>
                 <span>Review the delivery information each shop provides</span>
               </div>
             </div>
@@ -298,7 +298,7 @@ export default function AuthPage() {
                 <ShieldCheck size={20} />
               </div>
               <div className={styles.featureContent}>
-                <strong>Safe &amp; Transparent Checkout</strong>
+                <strong>Clear Checkout Options</strong>
                 <span>Use the checkout options shown for each shop, then follow supported order updates</span>
               </div>
             </div>
