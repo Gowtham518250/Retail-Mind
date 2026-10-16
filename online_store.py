@@ -1771,6 +1771,7 @@ def place_guest_order(
         "status": "PENDING",
         "payment_method": order.payment_method,
         "payment_status": order.payment_status,
+        "payment_confirmation_source": order.payment_confirmation_source,
     }
 
 
@@ -2509,6 +2510,7 @@ def get_incoming_orders(
             "status": order.order_status,
             "payment_method": order.payment_method or "COD",
             "payment_status": order.payment_status or "COD_DUE",
+            "payment_confirmation_source": order.payment_confirmation_source,
             "payment_reference": order.payment_reference,
             "total_amount": float(order.total_amount or 0),
             "delivery_address": order.delivery_address,
