@@ -450,7 +450,6 @@ export default function AuthPage() {
                       type="button"
                       className={styles.eyeBtn}
                       onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
                       aria-label="Toggle password visibility"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -551,7 +550,6 @@ export default function AuthPage() {
                       type="button"
                       className={styles.eyeBtn}
                       onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
                       aria-label="Toggle password visibility"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
