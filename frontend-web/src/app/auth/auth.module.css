@@ -907,3 +907,6 @@
 @media (prefers-reduced-motion: reduce) {
   .orb1, .orb2, .heroShowcase, .authCard { animation: none !important; transition: none !important; }
 }
+
+.forgotLink { appearance: none; padding: 0; border: 0; background: transparent; text-align: left; }
+.forgotLink:focus-visible { outline: 3px solid rgba(102, 87, 245, .35); outline-offset: 3px; border-radius: 4px; }
