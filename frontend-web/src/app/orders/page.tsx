@@ -297,6 +297,39 @@ export default function MyOrdersPage() {
   const seenRealtimeEventIdsRef = useRef<Set<string>>(new Set());
   const router = useRouter();
 
+  useEffect(() => {
+    if (!cancelCandidate) {
+      if (cancelTriggerRef.current?.isConnected) cancelTriggerRef.current.focus();
+      cancelTriggerRef.current = null;
+      return;
+    }
+
+    cancelConfirmButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && cancelingOrderId === null) {
+        setCancelCandidate(null);
+        setCancelDialogError('');
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = cancelDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cancelCandidate, cancelingOrderId]);
+
   const fetchOrders = useCallback(
     async (silent = false): Promise<boolean> => {
       const token = localStorage.getItem('customerToken');
@@ -526,6 +559,7 @@ export default function MyOrdersPage() {
         // A failed snapshot must never advance the cursor. The same durable
         // events are retried on the next wake-up instead of being skipped.
         if (requiresOrderRefresh) {
+          ordersRevisionRef.current += 1;
           const refreshed = await fetchOrders(true);
           if (!refreshed) return;
         }
@@ -613,6 +647,7 @@ export default function MyOrdersPage() {
             const eventId = String(event?.event_id || '');
 
             if (event?.type === 'order.status_changed') {
+              ordersRevisionRef.current += 1;
               const orderId = Number(event.order_id);
               const nextStatus = String(event.status || '').toUpperCase();
 
@@ -634,6 +669,7 @@ export default function MyOrdersPage() {
               setLastUpdated(new Date());
               markRealtimeEventSeen(eventId);
             } else if (event?.type === 'order.payment_confirmed') {
+              ordersRevisionRef.current += 1;
               const orderId = Number(event.order_id);
               setOrders((current) =>
                 current.map((order) =>
@@ -651,6 +687,7 @@ export default function MyOrdersPage() {
               setLastUpdated(new Date());
               markRealtimeEventSeen(eventId);
             } else if (event?.type === 'order.created') {
+              ordersRevisionRef.current += 1;
               const refreshed = await fetchOrders(true);
               if (refreshed) markRealtimeEventSeen(eventId);
             }
@@ -745,34 +782,17 @@ export default function MyOrdersPage() {
   }, [fetchOrders, router]);
 
   const activeCount = useMemo(
-    () => orders.filter((order) => !TERMINAL_STATUSES.includes(order.status)).length,
-    [orders],
-  );
-
-  const returnedCount = useMemo(
-    () => orders.filter((order) => activeReturnRequest(order)).length,
+    () => orders.filter((order) => ['PENDING', 'ACCEPTED', 'DISPATCHED'].includes(order.status)).length,
     [orders],
   );
 
   const cancelledCount = useMemo(
-    () => orders.filter((order) => ['CANCELLED', 'REJECTED'].includes(order.status)).length,
+    () => orders.filter((order) => order.status === 'CANCELLED').length,
     [orders],
   );
 
   const deliveredCount = useMemo(
     () => orders.filter((order) => order.status === 'DELIVERED').length,
-    [orders],
-  );
-
-  const totalSpent = useMemo(
-    () =>
-      orders.reduce(
-        (sum, order) =>
-          ['CANCELLED', 'REJECTED', 'RETURNED'].includes(order.status)
-            ? sum
-            : sum + Number(order.total_amount || 0),
-        0,
-      ),
     [orders],
   );
 
@@ -786,16 +806,12 @@ export default function MyOrdersPage() {
         : null;
 
     return orders.filter((order) => {
-      const filterMatch =
-        filter === 'ALL' ||
-        (filter === 'ACTIVE' && !TERMINAL_STATUSES.includes(order.status)) ||
-        (filter === 'DELIVERED' && order.status === 'DELIVERED') ||
-        (filter === 'RETURNED' && activeReturnRequest(order)) ||
-        (filter === 'CANCELLED' && ['CANCELLED', 'REJECTED'].includes(order.status));
-
+      const filterMatch = filter === 'ALL' || order.status === filter;
       const queryMatch =
         !q ||
         String(order.order_id).includes(q) ||
+        String(order.shop_name || '').toLowerCase().includes(q) ||
+        String(order.delivery_address || '').toLowerCase().includes(q) ||
         order.items.some((item) =>
           String(item.product_name || item.name || '').toLowerCase().includes(q),
         );
@@ -803,10 +819,15 @@ export default function MyOrdersPage() {
       const createdAt = new Date(order.created_at).getTime();
       const dateMatch = !periodMs ||
         (Number.isFinite(createdAt) && now - createdAt >= 0 && now - createdAt <= periodMs);
-
       return filterMatch && queryMatch && dateMatch;
     });
   }, [orders, filter, query, periodFilter]);
+
+  const clearOrderFilters = () => {
+    setFilter('ALL');
+    setQuery('');
+    setPeriodFilter('ALL');
+  };
 
   const toggleTracking = (orderId: number) => {
     setTrackingOrders((current) => {
@@ -817,88 +838,84 @@ export default function MyOrdersPage() {
     });
   };
 
-  const toggleOrder = async (orderId: number) => {
-    const willOpen = !expandedOrders.has(orderId);
+  const toggleOrder = (orderId: number) => {
     setExpandedOrders((current) => {
       const next = new Set(current);
       if (next.has(orderId)) next.delete(orderId);
       else next.add(orderId);
       return next;
     });
-
-    if (!willOpen || deliveryByOrder[orderId] || deliveryLoadingId === orderId) {
-      return;
-    }
-
-    const token = localStorage.getItem('customerToken');
-    if (!token) {
-      router.push('/auth');
-      return;
-    }
-
-    setDeliveryLoadingId(orderId);
-    try {
-      const response = await fetch(
-        API_BASE + '/store/orders/' + orderId + '/delivery',
-        {
-          headers: { Authorization: 'Bearer ' + token },
-          cache: 'no-store',
-        },
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setDeliveryByOrder((current) => ({ ...current, [orderId]: data }));
-      }
-    } catch {
-      // The main order timeline remains authoritative.
-    } finally {
-      setDeliveryLoadingId(null);
-    }
   };
-  const cancelOrder = async (order: Order) => {
-    const canCancel =
-      order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status);
-    if (!canCancel || cancelingOrderId !== null) return;
 
-    const confirmed = window.confirm(
-      'Cancel Order #' +
-        order.order_id +
-        '? Reserved stock will be released and the online order will be closed.',
-    );
-    if (!confirmed) return;
+  const requestCancelOrder = (order: Order, trigger?: HTMLButtonElement) => {
+    const canCancel = order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status);
+    if (!canCancel || cancelingOrderId !== null) return;
+    cancelTriggerRef.current = trigger || null;
+    setCancelDialogError('');
+    setCancelCandidate(order);
+  };
+
+  const confirmCancelOrder = async () => {
+    const order = cancelCandidate;
+    if (!order || cancelingOrderId !== null) return;
+
+    const canCancel = order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status);
+    if (!canCancel) {
+      setCancelDialogError('This order is no longer eligible for cancellation. Refresh your order history.');
+      return;
+    }
 
     const token = localStorage.getItem('customerToken');
     if (!token) {
+      setCancelCandidate(null);
       router.push('/auth');
       return;
     }
 
     setCancelingOrderId(order.order_id);
+    setCancelDialogError('');
     try {
-      const response = await fetch(
-        API_BASE + '/store/order/' + order.order_id + '/cancel',
-        {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + token },
-          cache: 'no-store',
-        },
-      );
+      const response = await fetch(API_BASE + '/store/order/' + order.order_id + '/cancel', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        cache: 'no-store',
+      });
       const data = await response.json().catch(() => ({}));
 
       if (response.status === 401 || response.status === 403) {
         localStorage.removeItem('customerToken');
+        setCancelCandidate(null);
         router.push('/auth');
         return;
       }
-
       if (!response.ok) {
         throw new Error(data?.detail || 'Unable to cancel this order.');
       }
 
-      setError('Order #' + order.order_id + ' was cancelled successfully.');
+      const serverStatus = String(data?.status || '').toUpperCase();
+      if (serverStatus !== 'CANCELLED') {
+        throw new Error('The server did not confirm cancellation. Refresh your order history before retrying.');
+      }
+
+      ordersRevisionRef.current += 1;
+      setOrders((current) =>
+        current.map((existing) =>
+          existing.order_id === order.order_id
+            ? {
+                ...existing,
+                status: serverStatus,
+                can_cancel: false,
+                payment_status: data?.payment_status || existing.payment_status,
+              }
+            : existing,
+        ),
+      );
+      setNotice(data?.message || ('Cancellation confirmed for Order #' + order.order_id + '.'));
+      setError('');
+      setCancelCandidate(null);
       await fetchOrders(true);
-    } catch (err: any) {
-      setError(err?.message || 'Unable to cancel this order.');
+    } catch (err: unknown) {
+      setCancelDialogError(err instanceof Error ? err.message : 'Unable to cancel this order.');
     } finally {
       setCancelingOrderId(null);
     }
@@ -947,11 +964,10 @@ export default function MyOrdersPage() {
         );
       }
 
-      setError(
-        'Return request submitted for Order #' +
-          order.order_id +
-          '. The shop will review it.',
-      );
+      ordersRevisionRef.current += 1;
+      setNotice('Return request submitted for Order #' + order.order_id + '. The shop will review it.');
+      setError('');
+      await fetchOrders(true);
     } catch (err: any) {
       setError(err?.message || 'Unable to submit the return request.');
     } finally {
@@ -974,6 +990,7 @@ export default function MyOrdersPage() {
       return;
     }
 
+    setReviewSubmittingId(order.order_id);
     try {
       const response = await fetch(
         API_BASE + '/store/order/' + order.order_id + '/rating',
@@ -1001,13 +1018,17 @@ export default function MyOrdersPage() {
         throw new Error(data?.detail || 'Unable to save your review.');
       }
 
-      setError('Thanks! Your verified review is now visible on the shop.');
+      ordersRevisionRef.current += 1;
+      setNotice('Thanks! Your verified review is now visible on the shop.');
+      setError('');
       setReviewingOrderId(null);
       setReviewComment('');
       setReviewRating(5);
       await fetchOrders(true);
     } catch (err: any) {
       setError(err?.message || 'Unable to save your review.');
+    } finally {
+      setReviewSubmittingId(null);
     }
   };
 
