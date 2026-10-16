@@ -266,3 +266,15 @@ export default function ShopDiscoveryPage() {
                   </Link>
                 );
               })}
+            </div>
+          )}
+        </section>
+
+        <footer className={styles.footer}>
+          <Link href="/">Retail Mind <span>· Back to marketplace</span></Link>
+          <span>Shop details and availability are shown as provided by each shop.</span>
+        </footer>
+      </div>
+    </main>
+  );
+}
