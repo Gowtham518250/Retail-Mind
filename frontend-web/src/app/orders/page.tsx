@@ -1038,30 +1038,37 @@ export default function MyOrdersPage() {
     <div className="orders-fk-page">
       <div className="orders-fk-shell">
         <header className="orders-fk-topbar">
-          <div className="orders-fk-brand">
-            <button
-              className="orders-fk-back"
-              onClick={() => router.back()}
-              aria-label="Go back"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <div className="orders-fk-brand-title">My Orders</div>
-              <div className="orders-fk-brand-subtitle">
-                Track, manage and review your orders
+          <div className="orders-fk-header-row">
+            <div className="orders-fk-brand">
+              <button
+                className="orders-fk-back"
+                type="button"
+                onClick={() => router.push('/')}
+                aria-label="Back to shopping"
+                title="Back to shopping"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div className="orders-fk-heading">
+                <div className="orders-fk-eyebrow">RETAIL MIND / CUSTOMER ACCOUNT</div>
+                <h1 className="orders-fk-brand-title">Your Orders</h1>
+                <p className="orders-fk-brand-subtitle">Every order, every update, all in one place.</p>
               </div>
+            </div>
+            <div className={'orders-fk-live ' + (liveConnected ? 'connected' : 'offline')} role="status" aria-live="polite">
+              <span className={'orders-fk-live-dot' + (liveConnected ? '' : ' offline')} aria-hidden="true" />
+              <span>{liveConnected ? 'Live updates connected' : 'Reconnecting to live updates'}</span>
             </div>
           </div>
 
           <div className="orders-fk-top-actions">
             <label className="orders-fk-search">
-              <Search size={17} />
+              <Search size={17} aria-hidden="true" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search orders…"
-                aria-label="Search orders"
+                placeholder="Search order, shop or product"
+                aria-label="Search orders by number, shop, product or delivery address"
               />
             </label>
             <label className="orders-fk-period">
@@ -1079,69 +1086,86 @@ export default function MyOrdersPage() {
             </label>
             <button
               className="orders-fk-refresh"
+              type="button"
               onClick={() => void fetchOrders(true)}
               disabled={refreshing}
               title={liveConnected ? 'Live updates connected. Refresh orders' : 'Refresh orders'}
               aria-label="Refresh orders"
             >
-              <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
+              <RefreshCw size={15} className={refreshing ? 'spin' : ''} aria-hidden="true" />
             </button>
           </div>
         </header>
 
-        <section className="orders-fk-stats">
-          <div className="orders-fk-stat">
-            <span>Total orders</span>
-            <strong>{orders.length}</strong>
+        {notice && (
+          <div className="orders-fk-notice" role="status" aria-live="polite">
+            <CheckCircle2 size={17} aria-hidden="true" />
+            <span>{notice}</span>
+            <button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={16} /></button>
           </div>
-          <div className="orders-fk-stat">
-            <span>In progress</span>
-            <strong>{activeCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Delivered</span>
-            <strong>{deliveredCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Returned</span>
-            <strong>{returnedCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Cancelled</span>
-            <strong>{cancelledCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Net spent</span>
-            <strong>{formatCurrency(totalSpent)}</strong>
-          </div>
-        </section>
+        )}
 
-        <section className="orders-fk-toolbar">
-          <div
-            className="orders-fk-tabs"
-            role="tablist"
-            aria-label="Order filters"
-          >
-            {([
-              ['ALL', 'All (' + orders.length + ')'],
-              ['ACTIVE', 'Active (' + activeCount + ')'],
-              ['DELIVERED', 'Completed (' + deliveredCount + ')'],
-              ['CANCELLED', 'Cancelled (' + cancelledCount + ')'],
-              ['RETURNED', 'Returned (' + returnedCount + ')'],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                className={
-                  'orders-fk-tab ' + (filter === value ? 'active' : '')
-                }
-                onClick={() => setFilter(value)}
-              >
-                {label}
-              </button>
+        {loading ? (
+          <section className="orders-fk-stats orders-fk-stats-loading" aria-label="Loading order summary" aria-busy="true">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className="orders-fk-stat-skeleton" key={index}><span /><strong /></div>
             ))}
+          </section>
+        ) : error && orders.length === 0 ? null : (
+          <section className="orders-fk-stats" aria-label="Order summary">
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon"><ShoppingBag size={17} /></span><span>Total orders</span></div>
+              <strong>{orders.length}</strong>
+              <small>All time</small>
+            </div>
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon in-progress"><Clock size={17} /></span><span>In progress</span></div>
+              <strong>{activeCount}</strong>
+              <small>Pending, accepted or dispatched</small>
+            </div>
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon delivered"><CheckCircle2 size={17} /></span><span>Delivered</span></div>
+              <strong>{deliveredCount}</strong>
+              <small>Delivered orders</small>
+            </div>
+            <div className="orders-fk-stat">
+              <div className="orders-fk-stat-heading"><span className="orders-fk-stat-icon cancelled"><Ban size={17} /></span><span>Cancelled</span></div>
+              <strong>{cancelledCount}</strong>
+              <small>Cancellation confirmed by the server</small>
+            </div>
+          </section>
+        )}
+
+        <section className="orders-fk-history" aria-label="Order history">
+          <div className="orders-fk-history-heading">
+            <div>
+              <span className="orders-fk-eyebrow">ORDER HISTORY</span>
+              <h2>Everything in one place.</h2>
+              <p>Choose a status or search the details of an order from your account.</p>
+            </div>
+            <span className="orders-fk-result-count">{visibleOrders.length} of {orders.length} orders</span>
           </div>
-
-
+          <div className="orders-fk-toolbar">
+            <div className="orders-fk-tabs" role="group" aria-label="Filter orders by status">
+              {ORDER_FILTERS.map(({ value, label }) => {
+                const count = value === 'ALL'
+                  ? orders.length
+                  : orders.filter((order) => order.status === value).length;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={'orders-fk-tab ' + (filter === value ? 'active' : '')}
+                    onClick={() => setFilter(value)}
+                    aria-pressed={filter === value}
+                  >
+                    <span>{label}</span>
+                    <span className="orders-fk-tab-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
         {lastUpdated && !loading && (
