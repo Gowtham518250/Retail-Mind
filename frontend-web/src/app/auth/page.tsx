@@ -431,9 +431,9 @@ export default function AuthPage() {
                 <div className={styles.fieldGroup}>
                   <div className={styles.labelRow}>
                     <label className={styles.label}>Password</label>
-                    <span className={styles.forgotLink} onClick={() => switchView('reset')}>
+                    <button type="button" className={styles.forgotLink} onClick={() => switchView('reset')}>
                       Forgot Password?
-                    </span>
+                    </button>
                   </div>
                   <div className={styles.inputWrap}>
                     <Lock size={17} className={styles.inputIcon} />
