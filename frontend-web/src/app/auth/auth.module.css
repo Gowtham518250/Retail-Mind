@@ -677,3 +677,8 @@
 @media(max-width:900px){.resetBoard{grid-template-columns:repeat(2,minmax(0,1fr))}.resetStageCard:last-child{grid-column:1/-1}.resetStageCard:last-child .resetStageForm{max-width:none}}
 @media(max-width:620px){.authMain{padding:8px!important}.authContainerReset{min-height:auto!important}.authCardReset{padding:16px 12px!important;border-radius:19px!important}.authCardReset .cardHeader{flex-direction:column;gap:8px}.resetBackLink{order:0}.authCardReset .authTitle{font-size:1.65rem!important}.resetBoard{grid-template-columns:minmax(0,1fr);gap:10px}.resetStageCard:last-child{grid-column:auto}.resetStageCard{padding:14px;border-radius:14px}.resetStageIllustration{height:78px;margin-bottom:10px}.resetStageIllustration::before{top:8px;width:39px;height:39px;left:calc(50% - 19px)}.resetStageIllustration svg{width:22px;height:22px}.resetStageCard>p{min-height:0;margin-bottom:10px}.resetStageForm{gap:8px}.resetStageForm .submitBtn{min-height:42px}}
 @media(prefers-reduced-motion:reduce){.resetStageCard,.resetMiniStrength>span{transition:none}}
+
+.authCardReset .cardHeadingCopy{flex:1;min-width:0}
+.authCardReset .cardHeader{align-items:flex-start}
+.authCardReset .cardHeadingCopy .authTitle,.authCardReset .cardHeadingCopy .authSubtitle{text-align:left}
+@media(max-width:620px){.authCardReset .cardHeader{align-items:stretch}.authCardReset .cardHeadingCopy{order:1}.authCardReset .resetBackLink{align-self:flex-start}}
