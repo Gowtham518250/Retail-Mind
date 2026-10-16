@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   ShoppingBag,
   Package,
@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   ArrowRight,
   Store,
+  X,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import styles from './profile.module.css';
@@ -34,6 +35,7 @@ export default function ProfilePage() {
   const [customer, setCustomer] = useState<CustomerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -74,6 +76,20 @@ export default function ProfilePage() {
 
     loadCustomer();
   }, [router]);
+
+  useEffect(() => {
+    if (!logoutConfirmOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLogoutConfirmOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [logoutConfirmOpen]);
 
   const handleLogout = () => {
     localStorage.removeItem('customerToken');
@@ -159,7 +175,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <button type="button" onClick={handleLogout} className={styles.logoutBtn}>
+          <button type="button" onClick={() => setLogoutConfirmOpen(true)} className={styles.logoutBtn}>
             <LogOut size={16} />
             <span>Sign Out</span>
           </button>
@@ -246,6 +262,64 @@ export default function ProfilePage() {
           </Link>
         </div>
       </div>
+
+      <AnimatePresence>
+        {logoutConfirmOpen && (
+          <motion.div
+            className={styles.logoutOverlay}
+            role="presentation"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setLogoutConfirmOpen(false);
+            }}
+          >
+            <motion.section
+              className={styles.logoutDialog}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="logout-dialog-title"
+              aria-describedby="logout-dialog-description"
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.18 }}
+            >
+              <button
+                type="button"
+                className={styles.logoutDialogClose}
+                onClick={() => setLogoutConfirmOpen(false)}
+                aria-label="Close sign-out confirmation"
+              >
+                <X size={18} />
+              </button>
+              <div className={styles.logoutDialogIcon}><LogOut size={25} /></div>
+              <span className={styles.logoutDialogEyebrow}>ACCOUNT SESSION</span>
+              <h2 id="logout-dialog-title">Sign out of Retail Mind?</h2>
+              <p id="logout-dialog-description">
+                You’ll be signed out on this device. Your orders remain saved to your customer account, and you can sign in again anytime.
+              </p>
+              <div className={styles.logoutDialogActions}>
+                <button
+                  type="button"
+                  className={styles.logoutCancelBtn}
+                  onClick={() => setLogoutConfirmOpen(false)}
+                >
+                  Stay signed in
+                </button>
+                <button
+                  type="button"
+                  className={styles.logoutConfirmBtn}
+                  onClick={handleLogout}
+                >
+                  <LogOut size={16} /> Sign out
+                </button>
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
