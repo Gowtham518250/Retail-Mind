@@ -3,7 +3,7 @@ UPI Ledger Service
 Track detected UPI events separately from confirmed collections.
 Only CONFIRM records contribute to collected-payment totals.
 """
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -172,8 +172,10 @@ class UpiLedgerService:
     @staticmethod
     def get_monthly_upi_report(db: Session, shop_id: int, year: int, month: int) -> dict:
         """Report confirmed collections separately from pending, failed, and refunds."""
-        start_date = date(year, month, 1)
-        end_date = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        # Use datetimes for DateTime column comparisons so database drivers
+        # do not need to coerce a date-only bound into a timestamp.
+        start_date = datetime(year, month, 1)
+        end_date = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
 
         confirmed_total = _status_total(
             db, shop_id, UpiStatus.CONFIRM,
