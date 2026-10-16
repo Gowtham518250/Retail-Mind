@@ -64,3 +64,30 @@ def test_cod_delivery_records_payment_in_the_delivery_transaction():
     assert "commit_transaction=False" in source
     assert "pending_payment_events.extend(payment_result.get(\"events\", []))" in source
     assert "cod_payment_key" in source
+
+
+def test_payment_notification_match_serializes_shop_and_rejects_reused_reference():
+    import inspect
+
+    from online_store import match_online_order_payment_from_notification
+
+    source = inspect.getsource(match_online_order_payment_from_notification)
+    # Serialize owner-shop reconciliation so different orders cannot race a reused ref.
+    assert "db.query(User.id)" in source
+    assert ".with_for_update()" in source
+    assert "OnlineOrder.payment_reference == reference" in source
+    assert "OnlineOrder.id != order.id" in source
+    assert "This transaction reference was already recorded on another order." in source
+    assert '"requires_manual_review": True' in source
+
+
+def test_notification_match_source_is_persisted_and_exposed():
+    import inspect
+
+    from models import OnlineOrder
+    from online_store import match_online_order_payment_from_notification
+
+    assert hasattr(OnlineOrder, "payment_confirmation_source")
+    source = inspect.getsource(match_online_order_payment_from_notification)
+    assert 'order.payment_confirmation_source = "OWNER_DEVICE_NOTIFICATION_MATCH"' in source
+    assert '"payment_confirmation_source": order.payment_confirmation_source' in source

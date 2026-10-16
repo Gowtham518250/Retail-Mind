@@ -236,6 +236,7 @@ try:
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'COD'",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(24) NOT NULL DEFAULT 'COD_DUE'",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(128)",
+        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmation_source VARCHAR(50)",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_detection_key VARCHAR(128)",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmed_at TIMESTAMP",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_online_order_shop_payment_key ON online_orders(shop_id, payment_detection_key)",
