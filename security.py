@@ -176,12 +176,18 @@ def _get_security_redis_client():
     url = os.getenv("REDIS_URL", "").strip()
     if not url:
         return None
-    _security_redis_client = redis_module.Redis.from_url(
-        url,
-        decode_responses=True,
-        socket_connect_timeout=0.2,
-        socket_timeout=0.2,
-    )
+    try:
+        _security_redis_client = redis_module.Redis.from_url(
+            url,
+            decode_responses=True,
+            socket_connect_timeout=0.2,
+            socket_timeout=0.2,
+        )
+    except Exception as exc:
+        # A malformed/missing Redis endpoint should not make authentication
+        # routes unavailable; callers will use the bounded in-memory fallback.
+        logger.warning("Unable to configure shared security limiter (%s)", type(exc).__name__)
+        return None
     return _security_redis_client
 
 
@@ -240,7 +246,8 @@ def check_login_lockout(ip: str):
                     status_code=429,
                     detail=f"Too many failed login attempts. Try again in {secs_remaining} seconds.",
                 )
-            return
+            # Also honor any local lockout created while Redis was unavailable.
+            # Successful authentication clears local and shared state together.
         except HTTPException:
             raise
         except Exception as exc:
