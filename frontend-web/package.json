@@ -8,6 +8,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "@types/three": "^0.170.0",
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.42.2",
