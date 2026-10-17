@@ -128,7 +128,7 @@ export default function MarketplaceShell() {
   const router = useRouter();
   const shouldReduceMotion = Boolean(useReducedMotion());
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<ResultMode>('all');
+  const [mode, setMode] = useState<ResultMode>('products');
   const [shops, setShops] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<FeaturedProduct[]>([]);
@@ -351,10 +351,17 @@ export default function MarketplaceShell() {
   const copyOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.2]);
 
   const searchModes: { id: ResultMode; label: string; icon?: React.ReactNode }[] = [
-    { id: 'all', label: 'Everything' },
-    { id: 'shops', label: 'Shops', icon: <Store size={14} /> },
     { id: 'products', label: 'Products', icon: <Boxes size={14} /> },
+    { id: 'shops', label: 'Shops', icon: <Store size={14} /> },
+    { id: 'all', label: 'Everything' },
   ];
+  const resultsRef = useRef<HTMLElement>(null);
+
+  const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void performSearch(mode, query, true);
+    resultsRef.current?.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'start' });
+  };
 
   return (
     <div className={styles.page} data-experience="marketplace">
@@ -376,36 +383,40 @@ export default function MarketplaceShell() {
           </h1>
 
           <motion.p className={styles.lead} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.9, ease: EASE }}>
-            Discover online-enabled shops, compare products across stores, and use AI to find the right value — all from one connected marketplace.
+            Search a product across local shops, check its price and availability, or ask AI to help you find the right fit.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 1.05, ease: EASE }}>
-            <div className={styles.search}>
+            <form className={styles.search} onSubmit={submitSearch} role="search" aria-label="Search local products">
               <Search size={20} className={styles.searchIcon} />
               <input
+                type="search"
+                inputMode="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => { if (event.key === 'Enter') void performSearch(mode, query, true); }}
-                placeholder="Search products, shops or categories"
-                aria-label="Search products, shops or categories"
+                placeholder="Search products, e.g. milk or bread"
+                aria-label="Search products in local shops"
               />
-              <button onClick={() => void performSearch(mode, query, true)} disabled={searching}>
-                {searching ? 'Finding…' : 'Explore'} <ArrowRight size={16} />
+              <button type="submit" disabled={searching}>
+                {searching ? 'Searching…' : 'Search'} <ArrowRight size={16} />
               </button>
-            </div>
+            </form>
+            <p className={styles.searchHint}>Search across local stores, then compare price and availability.</p>
 
             <div className={styles.modes} role="group" aria-label="Search scope">
               {searchModes.map((m) => (
                 <button
+                  type="button"
                   key={m.id}
                   className={mode === m.id ? styles.modeOn : styles.mode}
+                  aria-pressed={mode === m.id}
                   onClick={() => { setMode(m.id); void performSearch(m.id, query, true); }}
                 >
                   {mode === m.id && <motion.span layoutId="modePill" className={styles.modePill} transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                   <span className={styles.modeLabel}>{m.icon}{m.label}</span>
                 </button>
               ))}
-              <button className={styles.modeAi} onClick={performAiSearch}><Bot size={14} /> Ask AI</button>
+              <button type="button" className={styles.modeAi} onClick={performAiSearch}><Bot size={14} /> Ask AI</button>
             </div>
           </motion.div>
 
@@ -566,10 +577,10 @@ export default function MarketplaceShell() {
       )}
 
       {/* ───────── RESULTS ───────── */}
-      <section className={styles.section} id="shops">
+      <section className={`${styles.section} ${styles.results}`} id="shops" ref={resultsRef}>
         {loading ? (
           <>
-            <div className={styles.head}><div><div className={styles.kicker}>Discover</div><h2 className={styles.h2}>Loading nearby shops</h2></div></div>
+            <div className={styles.head}><div><div className={styles.kicker}>Discover</div><h2 className={styles.h2}>Loading local products</h2></div></div>
             <div className={styles.grid}>{Array.from({ length: 8 }).map((_, i) => <div className={styles.skeleton} key={i} />)}</div>
           </>
         ) : aiResults.length ? (
@@ -627,7 +638,53 @@ export default function MarketplaceShell() {
             )}
 
             {!shops.length && !products.length && (
-              <div className={styles.empty}><span><Search size={24} /></span><strong>No matches yet</strong><p>Try a broader shop, category or product keyword.</p></div>
+              <div className={styles.empty}>
+                <span><Search size={24} /></span>
+                <strong>{mode === 'products' ? 'No products match yet' : mode === 'shops' ? 'No shops match yet' : 'No matches yet'}</strong>
+                <p>{mode === 'products'
+                  ? 'Try another product name, or choose Shops to browse local stores.'
+                  : 'Try a broader shop, category or product keyword.'}</p>
+              </div>
+            )}
+          </>
+        ) : mode === 'products' ? (
+          <>
+            <div className={styles.head}>
+              <div>
+                <div className={styles.kicker}><Boxes size={12} /> Shop local products</div>
+                <h2 className={styles.h2}>Popular products nearby</h2>
+                <p className={styles.sub}>Compare products from local shops. Search above to find something specific.</p>
+              </div>
+              <span className={styles.count}>{showcaseProducts.length} {showcaseProducts.length === 1 ? 'product' : 'products'}</span>
+            </div>
+            {filteredFeaturedProducts.length ? (
+              <div className={styles.list}>
+                {filteredFeaturedProducts.map((product, index) => (
+                  <Reveal key={`${product.shop_id}-${product.product_id}`} delay={Math.min(index, 8) * 0.03}>
+                    <ProductRow
+                      href={'/shop/' + product.shop_id + '/product/' + product.product_id}
+                      icon
+                      title={product.product_name}
+                      shop={product.shop_name}
+                      price={product.price}
+                      meta={<>{Number(product.stock_available ?? 0) > 0 ? 'In stock' : 'Check availability'}{product.category ? ' · ' + product.category : ''}</>}
+                    />
+                  </Reveal>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.empty}>
+                <span><Boxes size={24} /></span>
+                <strong>No products are listed yet</strong>
+                <p>Browse local shops now, or check back as stores add their products.</p>
+                <button
+                  type="button"
+                  className={styles.emptyRetry}
+                  onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}
+                >
+                  Browse shops
+                </button>
+              </div>
             )}
           </>
         ) : (
