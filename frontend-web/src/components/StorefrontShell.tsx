@@ -54,7 +54,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
   const shouldReduceMotion = Boolean(useReducedMotion());
   const [products, setProducts] = useState<ShopProduct[]>(initialData?.products || []);
   const [shop, setShop] = useState<ShopResponse | null>(initialData);
-  const [loading, setLoading] = useState(!initialData);
+  const [loading, setLoading] = useState(!initialData?.products?.length);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'featured' | 'price-low' | 'price-high' | 'discount'>('featured');
@@ -64,21 +64,27 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
   const { addToCart, cartItems } = useCart();
 
   useEffect(() => {
-    if (initialData && reloadCount === 0) return;
     const controller = new AbortController();
     let cancelled = false;
     const loadShop = async () => {
-      setLoading(true);
+      setLoading(!initialData?.products?.length);
       setError('');
       try {
-        const res = await fetch(`${API_BASE}/store/shops/${shopId}/products`, {
+        const res = await fetch(`/api/marketplace/shops/${shopId}/products`, {
           signal: controller.signal,
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
         });
-        if (!res.ok) throw new Error('Unable to load this shop right now.');
-        const data = await res.json();
+        const data = await res.json() as Partial<ShopResponse> & { detail?: string };
+        if (!res.ok) {
+          throw new Error(data.detail || 'Unable to load this shop right now.');
+        }
+        if (typeof data.shop_name !== 'string' || !Array.isArray(data.products)) {
+          throw new Error('The shop returned an unexpected response. Please try again.');
+        }
         if (cancelled) return;
-        setShop(data);
-        setProducts(data.products || []);
+        setShop(data as ShopResponse);
+        setProducts(data.products);
       } catch (err: any) {
         if (cancelled) return;
         setError(err instanceof TypeError
