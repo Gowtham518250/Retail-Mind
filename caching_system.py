@@ -19,6 +19,8 @@ from fastapi import APIRouter, Depends
 logger = logging.getLogger(__name__)
 
 from security import get_current_user
+from db import get_db
+from sqlalchemy.orm import Session
 
 
 class CacheManager:
@@ -271,9 +273,6 @@ class CacheWarmer:
             logger.error(f"Analytics cache warming failed: {e}")
             return False
 
-
-from db import get_db
-from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/cache", tags=["Cache Management"])
 
