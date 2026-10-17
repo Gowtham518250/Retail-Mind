@@ -198,15 +198,26 @@ def _new_otp() -> str:
     return f"{secrets.randbelow(900000) + 100000:06d}"
 
 
-def _delete_pending_otps(db: Session, user_id: int, purpose: str) -> None:
+def _expire_pending_otps(db: Session, user_id: int, purpose: str) -> None:
+    """Invalidate earlier OTPs but retain recent issuance records for throttling."""
+    now = datetime.utcnow()
     db.query(PasswordReset).filter(
         PasswordReset.user_id == user_id,
         PasswordReset.description == purpose,
+        PasswordReset.created_at < now - timedelta(days=30),
     ).delete(synchronize_session=False)
+    db.query(PasswordReset).filter(
+        PasswordReset.user_id == user_id,
+        PasswordReset.description == purpose,
+        PasswordReset.expires_at > now,
+    ).update(
+        {"expires_at": now},
+        synchronize_session=False,
+    )
 
 
 def _store_db_otp(db: Session, user_id: int, otp: str, purpose: str, minutes: int = 10) -> None:
-    _delete_pending_otps(db, user_id, purpose)
+    _expire_pending_otps(db, user_id, purpose)
     db.add(
         PasswordReset(
             user_id=user_id,
@@ -218,12 +229,34 @@ def _store_db_otp(db: Session, user_id: int, otp: str, purpose: str, minutes: in
 
 
 def _find_db_otp(db: Session, user_id: int, otp: str, purpose: str):
-    return db.query(PasswordReset).filter(
+    """Verify the newest active user-scoped OTP and persist invalid attempts."""
+    record = db.query(PasswordReset).filter(
         PasswordReset.user_id == user_id,
         PasswordReset.description == purpose,
-        PasswordReset.token_hash == _hash_otp(otp),
         PasswordReset.expires_at > datetime.utcnow(),
     ).order_by(PasswordReset.id.desc()).first()
+    if not record:
+        return None
+
+    if record.attempts >= 5:
+        db.delete(record)
+        db.commit()
+        return None
+
+    supplied_hash = _hash_otp(otp)
+    if not secrets.compare_digest(record.token_hash, supplied_hash):
+        record.attempts += 1
+        if record.attempts >= 5:
+            db.delete(record)
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to persist owner OTP attempt")
+            raise HTTPException(status_code=500, detail="Unable to verify owner OTP")
+        return None
+
+    return record
 
 
 otp_cache = {}
@@ -447,6 +480,18 @@ def send_owner_otp(
     normalized_email = (user.email or "").strip().lower()
     if not normalized_email:
         raise HTTPException(status_code=400, detail="Owner account has no registered email")
+
+    now = datetime.utcnow()
+    recent_count = db.query(PasswordReset).filter(
+        PasswordReset.user_id == user.id,
+        PasswordReset.description == OWNER_VERIFICATION_OTP_PURPOSE,
+        PasswordReset.created_at >= now - timedelta(minutes=10),
+    ).count()
+    if recent_count >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="Owner OTP request limit reached. Please try again later.",
+        )
 
     otp_code = _new_otp()
     _store_db_otp(
