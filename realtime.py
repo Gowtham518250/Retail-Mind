@@ -23,7 +23,8 @@ from typing import Any, Dict, Optional
 import redis
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 
 from security import (
     ALGORITHM,
