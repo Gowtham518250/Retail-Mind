@@ -36,39 +36,24 @@ def test_render_host_is_normalized_with_sslmode():
     assert parsed.hostname == "dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com"
     assert "sslmode=require" in parsed.query
 
-def test_neon_statement_timeout_is_set_after_connection_not_at_startup(monkeypatch):
+def test_neon_statement_timeout_is_set_transaction_locally(monkeypatch):
     from db import _set_postgres_statement_timeout
 
     monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "30000")
 
-    class FakeCursor:
-        def __init__(self):
-            self.calls = []
-            self.closed = False
-
-        def execute(self, statement, params):
-            self.calls.append((statement, params))
-
-        def close(self):
-            self.closed = True
-
     class FakeConnection:
         def __init__(self):
-            self.created_cursor = FakeCursor()
+            self.statements = []
 
-        def cursor(self):
-            return self.created_cursor
+        def exec_driver_sql(self, statement):
+            self.statements.append(statement)
 
     connection = FakeConnection()
-    _set_postgres_statement_timeout(connection, None)
+    _set_postgres_statement_timeout(connection)
 
-    assert connection.created_cursor.calls == [
-        (
-            "SELECT set_config('statement_timeout', %s, false)",
-            ("30000ms",),
-        )
+    assert connection.statements == [
+        "SET LOCAL statement_timeout = '30000ms'"
     ]
-    assert connection.created_cursor.closed is True
 
 
 def test_neon_statement_timeout_can_be_disabled(monkeypatch):
@@ -77,8 +62,8 @@ def test_neon_statement_timeout_can_be_disabled(monkeypatch):
     monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "0")
 
     class FakeConnection:
-        def cursor(self):
-            raise AssertionError("No cursor should be opened when timeout is disabled")
+        def exec_driver_sql(self, statement):
+            raise AssertionError("No SQL should run when timeout is disabled")
 
-    _set_postgres_statement_timeout(FakeConnection(), None)
+    _set_postgres_statement_timeout(FakeConnection())
 
