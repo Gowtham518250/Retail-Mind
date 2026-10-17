@@ -9,7 +9,7 @@ const baseUrl = (__ENV.BASE_URL || "").replace(/\/$/, "");
 const targetPath = __ENV.TARGET_PATH || "/health/live";
 const vus = Number.parseInt(__ENV.VUS || "10", 10);
 const duration = __ENV.DURATION || "1m";
-const thinkTime = Number.parseFloat(__ENV.THINK_TIME_SECONDS || "1");
+const thinkTime = Number.parseFloat(__ENV.THINK_TIME_SECONDS || "10");
 
 export const options = {
   scenarios: {
