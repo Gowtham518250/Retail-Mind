@@ -53,20 +53,51 @@ def build_allowed_origins(
     allowed_hosts: list[str],
     extra_origins: str = "",
 ) -> list[str]:
-    """Build exact browser origins from the allowed hosts and extra origins."""
+    """Build validated, exact origins; public production origins must use HTTPS."""
     origins: list[str] = []
-    for host in allowed_hosts:
-        if host in {"localhost", "127.0.0.1"}:
+    local_hosts = {"localhost", "127.0.0.1"}
+
+    for raw_host in allowed_hosts:
+        host = _hostname(raw_host)
+        if not host:
+            continue
+        if host in local_hosts:
             candidates = [f"http://{host}:3000", f"http://{host}:8000"]
         else:
-            candidates = [f"https://{host}", f"http://{host}"]
+            # Avoid allowing cleartext HTTP origins to call the production API.
+            candidates = [f"https://{host}"]
         for origin in candidates:
             if origin not in origins:
                 origins.append(origin)
 
-    for origin in extra_origins.split(","):
-        origin = origin.strip()
-        if origin and origin not in origins:
+    for raw_origin in extra_origins.split(","):
+        candidate = raw_origin.strip()
+        if not candidate or candidate == "*":
+            continue
+
+        parsed = urlsplit(candidate)
+        if parsed.scheme not in {"https", "http"} or not parsed.hostname:
+            continue
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            continue
+        if parsed.path not in {"", "/"}:
+            continue
+
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        if parsed.scheme == "http" and hostname not in local_hosts:
+            continue
+
+        # Rebuild from parsed components to reject origin strings containing
+        # paths, credentials, wildcards, queries, or fragments.
+        try:
+            port = parsed.port
+        except ValueError:
+            continue
+        origin = f"{parsed.scheme}://{hostname}"
+        if port is not None:
+            origin = f"{origin}:{port}"
+
+        if origin not in origins:
             origins.append(origin)
 
     return origins
