@@ -103,3 +103,16 @@ def test_explicit_route_limit_is_enforced_in_local_fallback(monkeypatch):
     assert limiter.is_allowed("192.0.2.21", "verify-otp", 2, 120) == (True, 1)
     assert limiter.is_allowed("192.0.2.21", "verify-otp", 2, 120) == (True, 0)
     assert limiter.is_allowed("192.0.2.21", "verify-otp", 2, 120) == (False, 0)
+
+
+
+def test_redis_failure_reason_is_safe_and_actionable():
+    assert rl._redis_failure_reason(
+        OSError("Error 111 connecting to redis.internal:6379. Connection refused.")
+    ) == "connection_refused"
+    assert rl._redis_failure_reason(
+        OSError("Temporary failure in name resolution")
+    ) == "dns_failure"
+    assert rl._redis_failure_reason(
+        OSError("Operation timed out")
+    ) == "timeout"
