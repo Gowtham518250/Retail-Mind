@@ -57,6 +57,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
+          pytest -q tests/test_performance_middleware.py
           pytest -q tests/test_realtime.py
           pytest -q tests/test_durable_sync.py
           pytest -q tests/test_ai_query_history_contract.py
