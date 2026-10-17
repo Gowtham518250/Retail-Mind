@@ -153,6 +153,10 @@ catalog_path.write_text(
     encoding="utf-8",
 )
 
+# Remove the build-only Hugging Face cache from the release artifact; the required
+# model files have already been copied into model_assets/ above.
+shutil.rmtree(CACHE, ignore_errors=True)
+
 print(
     f"Built FAISS index with {len(documents)} chunks in {index_dir}; "
     f"saved {len(table_catalog)} complete tables to {catalog_path}"
