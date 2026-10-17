@@ -81,4 +81,4 @@ def test_neon_statement_timeout_can_be_disabled(monkeypatch):
             raise AssertionError("No cursor should be opened when timeout is disabled")
 
     _set_postgres_statement_timeout(FakeConnection(), None)
-\n
+
