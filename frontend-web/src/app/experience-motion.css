@@ -499,13 +499,6 @@
   animation: rm-hero-breathe 4.5s ease-in-out infinite;
 }
 
-[data-experience="auth"] {
-  background:
-    radial-gradient(ellipse at 12% 12%, rgba(216, 237, 145, 0.16), transparent 34%),
-    radial-gradient(ellipse at 88% 18%, rgba(241, 106, 69, 0.14), transparent 30%),
-    linear-gradient(135deg, #102c20 0%, #173b2b 48%, #0b2419 100%) !important;
-}
-
 .page-transition:has([data-experience="auth"]) {
   padding-bottom: 0 !important;
   animation: none !important;
@@ -546,57 +539,6 @@
   display: none;
 }
 
-[data-experience="auth"] [class*="authCard"] {
-  border-color: rgba(245, 241, 221, 0.2);
-  box-shadow:
-    0 32px 84px rgba(0, 0, 0, 0.42),
-    0 0 60px rgba(216, 237, 145, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
-}
-
-[data-experience="auth"] [class*="heroGradientText"],
-[data-experience="auth"] [class*="brandPill"],
-[data-experience="auth"] [class*="forgotLink"],
-[data-experience="auth"] [class*="modeTabActive"] {
-  color: var(--rm-lime);
-}
-
-[data-experience="auth"] [class*="heroGradientText"] {
-  background: linear-gradient(120deg, var(--rm-lime), #65d39a 58%, #f4a477);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-[data-experience="auth"] [class*="cardGlowBar"] {
-  background: linear-gradient(90deg, var(--rm-lime), #5fc890, var(--rm-orange));
-}
-
-[data-experience="auth"] [class*="submitBtn"] {
-  color: #fffdf7;
-  background: linear-gradient(110deg, #1b6848, #31865d 58%, #4a9b69);
-  box-shadow:
-    0 12px 30px rgba(18, 79, 52, 0.35),
-    0 0 26px rgba(216, 237, 145, 0.12);
-}
-
-[data-experience="auth"] [class*="submitBtn"]:hover:not(:disabled) {
-  background: linear-gradient(110deg, #205f43, #398f61 58%, #64a66d);
-  box-shadow:
-    0 17px 36px rgba(18, 79, 52, 0.42),
-    0 0 32px rgba(216, 237, 145, 0.18);
-}
-
-[data-experience="auth"] [class*="featureIconWrap"] {
-  color: var(--rm-lime);
-  background: linear-gradient(135deg, rgba(216, 237, 145, 0.19), rgba(95, 200, 144, 0.15));
-}
-
-[data-experience="auth"] [class*="modeIndicator"] {
-  background: linear-gradient(90deg, var(--rm-lime), #5fc890);
-  box-shadow: 0 0 14px rgba(216, 237, 145, 0.54);
-}
-
 [data-experience="auth"] [class*="orb1"],
 [data-experience="auth"] [class*="orb2"],
 [data-experience="auth"] [class*="orb3"],
@@ -628,6 +570,92 @@
   border-color: rgba(241, 106, 69, 0.26);
   transform: rotateX(68deg) rotateZ(22deg);
   animation-direction: reverse;
+}
+
+.success-route {
+  margin: 20px 0;
+  padding: 15px 17px 17px;
+  border: 1px solid rgba(36, 91, 66, .12);
+  border-radius: 16px;
+  background: linear-gradient(120deg, rgba(216, 237, 145, .14), rgba(255, 253, 247, .8));
+}
+
+.success-route-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #68756a;
+  font-size: .72rem;
+  font-weight: 750;
+}
+
+.success-route-labels span:nth-child(2) {
+  color: #245b42;
+  text-align: center;
+}
+
+.success-route-track {
+  position: relative;
+  height: 34px;
+  margin: 13px 17px 0;
+}
+
+.success-route-track::before {
+  position: absolute;
+  top: 15px;
+  right: 0;
+  left: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: #e6e5d9;
+  content: '';
+}
+
+.success-route-progress {
+  position: absolute;
+  top: 15px;
+  left: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #245b42, #75aa64);
+}
+
+.success-route-origin,
+.success-route-destination,
+.success-route-parcel {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #d9e3d0;
+  border-radius: 50%;
+  background: #fffdf7;
+  color: #245b42;
+}
+
+.success-route-origin { left: 0; transform: translateX(-50%); }
+.success-route-destination { right: 0; transform: translateX(50%); }
+
+.success-route-parcel {
+  left: 0;
+  border-color: #245b42;
+  background: #245b42;
+  box-shadow: 0 5px 13px rgba(23, 62, 45, .22);
+  color: #fffdf7;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 600px) {
+  .success-route { padding: 13px 12px 14px; }
+  .success-route-labels { font-size: .65rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .success-route-parcel,
+  .success-route-progress { transition: none; }
 }
 
 [data-experience="auth"] [class*="orb3"] {

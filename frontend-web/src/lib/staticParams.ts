@@ -13,7 +13,10 @@ export async function getKnownShopIds(timeoutMs = 8000): Promise<string[]> {
       cache: 'no-store',
       signal: controller.signal,
     });
-    if (!res.ok) return configuredShopIds();
+    if (!res.ok) {
+      console.error(`Could not discover shops for static generation (HTTP ${res.status}); using configured shop IDs.`);
+      return configuredShopIds();
+    }
 
     const data = await res.json();
     const shops = Array.isArray(data?.shops) ? data.shops : [];
@@ -22,7 +25,8 @@ export async function getKnownShopIds(timeoutMs = 8000): Promise<string[]> {
       .filter(Boolean);
 
     return ids.length > 0 ? ids : configuredShopIds();
-  } catch {
+  } catch (error) {
+    console.error('Could not discover shops for static generation; using configured shop IDs.', error);
     return configuredShopIds();
   } finally {
     clearTimeout(timer);

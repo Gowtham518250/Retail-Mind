@@ -1,10 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { AnimatePresence, motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { Check, Package2, Plus, ShoppingBag } from 'lucide-react';
+import { useState } from 'react';
 import type { ShopProduct } from '../lib/types';
+import { flyProductToCart } from '../lib/cartFlight';
 import Tilt3D from './Tilt3D';
 import styles from './ProductCard.module.css';
 
@@ -13,10 +16,12 @@ interface ProductCardProps {
   shopId: number;
   inCartCount: number;
   justAdded: boolean;
-  onAddToCart: (product: ShopProduct) => void;
+  onAddToCart: (product: ShopProduct) => boolean;
 }
 
 export default function ProductCard({ product, shopId, inCartCount, justAdded, onAddToCart }: ProductCardProps) {
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const [flyingToCart, setFlyingToCart] = useState(false);
   const discount = product.original_price && product.original_price > product.price
     ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
     : product.discount_pct || 0;
@@ -26,8 +31,20 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
   const lowStock = !isOutOfStock && stock !== undefined && stock <= 5;
   const href = `/shop/${shopId}/product/${product.id}`;
 
-  const handleAdd = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleAdd = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (flyingToCart) return;
+    setFlyingToCart(true);
     const rect = event.currentTarget.getBoundingClientRect();
+    const source = event.currentTarget.closest('article')?.querySelector<HTMLElement>(`.${styles.media}`) || event.currentTarget;
+    try {
+      await flyProductToCart(source, product.image_url);
+    } catch (error) {
+      console.error('Could not animate product into the cart.', error);
+    } finally {
+      setFlyingToCart(false);
+    }
+    const added = onAddToCart(product);
+    if (!added) return;
     confetti({
       particleCount: 26,
       spread: 70,
@@ -49,15 +66,17 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     <Tilt3D className={styles.wrap} max={7} lift={8}>
       <article className={styles.card}>
         <Link href={href} className={styles.media} aria-label={`View ${product.name}`}>
-          {product.image_url ? (
-            <img
+          {product.image_url && failedImageUrl !== product.image_url ? (
+            <Image
               src={product.image_url}
               alt={product.name}
               width={480}
               height={480}
+              sizes="(max-width: 640px) 92vw, (max-width: 1000px) 45vw, 300px"
               loading="lazy"
               decoding="async"
               className={styles.image}
+              onError={() => setFailedImageUrl(product.image_url || null)}
             />
           ) : (
             <div className={styles.placeholder}>
@@ -89,7 +108,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
               type="button"
               className={`${styles.add} ${state === 'added' ? styles.added : ''}`}
               onClick={handleAdd}
-              disabled={isOutOfStock}
+              disabled={isOutOfStock || flyingToCart}
               whileTap={{ scale: 0.94 }}
               aria-label={`Add ${product.name} to cart`}
             >
@@ -97,12 +116,15 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
                 <motion.span
                   key={state}
                   className={styles.addInner}
+                  aria-live="polite"
+                  aria-atomic="true"
                   initial={{ y: 14, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   exit={{ y: -14, opacity: 0 }}
                   transition={{ duration: 0.18 }}
                 >
                   {isOutOfStock ? 'Unavailable'
+                    : flyingToCart ? 'Adding…'
                     : state === 'added' ? <><Check size={16} strokeWidth={3} /> Added</>
                     : state === 'incart' ? <><Plus size={16} strokeWidth={3} /> In cart · {inCartCount}</>
                     : <><ShoppingBag size={16} /> Add</>}

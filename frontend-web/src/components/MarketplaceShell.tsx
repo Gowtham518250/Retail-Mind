@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap } from 'lucide-react';
@@ -80,7 +81,7 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
             <span className={styles.shopInitial} aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
             <span className={styles.liveTag}><i /> Online</span>
             <div className={styles.shopTile}>
-              {logo ? <img src={logo} alt={shop.shop_name + ' logo'} width={64} height={64} loading="lazy" decoding="async" /> : <Store size={34} strokeWidth={1.6} />}
+              {logo ? <Image src={logo} alt={shop.shop_name + ' logo'} width={64} height={64} sizes="64px" loading="lazy" decoding="async" /> : <Store size={34} strokeWidth={1.6} />}
             </div>
             <span className={styles.shopOrbOne} aria-hidden="true" />
             <span className={styles.shopOrbTwo} aria-hidden="true" />

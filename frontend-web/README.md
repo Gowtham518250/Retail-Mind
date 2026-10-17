@@ -21,6 +21,14 @@ not the incoming request Host header. The current fallback is
 `https://retail-mind-web.onrender.com`; confirm that this is the deployed
 customer website before launch.
 
+The public `/shops` directory is server-rendered when shop data is available,
+then keeps its existing client-side search and filters. Product and shop
+catalogue images use the Next.js image optimizer with responsive sizes and
+lazy-loading for below-the-fold content. Adding a product animates its image
+into the cart; the order-confirmation route animates the parcel along the
+backend-reported order status. Both animations respect reduced-motion
+preferences.
+
 To enable Google Search Console verification, set
 `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` to the real HTML-tag verification token.
 Submit `https://<your-customer-domain>/sitemap.xml` after deployment. No GA4

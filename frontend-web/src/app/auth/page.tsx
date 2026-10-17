@@ -245,12 +245,12 @@ export default function AuthPage() {
         <section className={styles.heroShowcase} aria-label="Shop local with RetailMind">
           <div className={styles.brandPill}><Sparkles size={15} /> RetailMind Customer Hub</div>
           <h1 className={styles.heroTitle}>
-            Discover &amp; Order
+            Shop Local.
             <br />
-            From <span className={styles.heroGradientText}>Your Local Stores.</span>
+            Live <span className={styles.heroGradientText}>better.</span>
           </h1>
           <p className={styles.heroSubtitle}>
-            Enjoy verified neighborhood shops, real-time stock availability, fast local delivery, and AI-guided shopping assistance.
+            Find nearby shops, discover local favorites, and get your order delivered.
           </p>
           <div className={styles.featureList}>
             <div className={styles.featureItem}>

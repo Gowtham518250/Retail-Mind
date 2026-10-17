@@ -5,9 +5,6 @@ import './globals.css';
 import './storefront-polish.css';
 import './premium-v3.css';
 import './retail-redesign.css';
-import './customer-premium.css';
-import './theme.css';
-import './reference-design.css';
 import './experience-motion.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
@@ -24,7 +21,6 @@ export const metadata: Metadata = {
   },
   applicationName: 'Retail Mind',
   description: FALLBACK_DESCRIPTION,
-  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,
@@ -51,7 +47,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: '#08142b',
+  themeColor: '#143b2c',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -81,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Getting things ready…</div>}>{children}</Suspense>
           </main>
           <footer className="site-footer">
+            <Link href="/shops">Browse shops</Link>
             <Link href="/privacy">Privacy information</Link>
           </footer>
           <CartDrawer />

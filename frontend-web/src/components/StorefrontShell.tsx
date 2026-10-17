@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store, X } from 'lucide-react';
@@ -134,9 +135,10 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
   }, [activeCategory, products, search, sortBy]);
 
   const handleAddToCart = (product: ShopProduct) => {
-    if (!addToCart({ ...product, shop_id: shopId })) return;
+    if (!addToCart({ ...product, shop_id: shopId })) return false;
     setJustAddedId(product.id);
     window.setTimeout(() => setJustAddedId(null), 1200);
+    return true;
   };
 
   const logo = shop?.shop_logo_url ? (shop.shop_logo_url.startsWith('http') ? shop.shop_logo_url : API_BASE + shop.shop_logo_url) : '';
@@ -152,7 +154,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
         <div className={styles.heroCopy}>
           <motion.div className={styles.identity} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
             <div className={styles.avatar}>
-              {logo ? <img src={logo} alt={(shop?.shop_name || 'Shop') + ' logo'} width={76} height={76} fetchPriority="high" decoding="async" /> : <Store size={32} strokeWidth={1.6} />}
+              {logo ? <Image src={logo} alt={(shop?.shop_name || 'Shop') + ' logo'} width={76} height={76} sizes="76px" fetchPriority="high" decoding="async" /> : <Store size={32} strokeWidth={1.6} />}
             </div>
             <div>
               <div className={styles.type}><span className={styles.pulse} /> {shop?.shop_type || 'Local storefront'} · Online</div>

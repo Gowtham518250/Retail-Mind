@@ -9,6 +9,8 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: absoluteSiteUrl('/'), changeFrequency: 'daily', priority: 1 },
+    { url: absoluteSiteUrl('/shops'), changeFrequency: 'daily', priority: 0.9 },
+    { url: absoluteSiteUrl('/ai-shopping'), changeFrequency: 'weekly', priority: 0.7 },
     { url: absoluteSiteUrl('/privacy'), changeFrequency: 'yearly', priority: 0.2 },
   ];
   const shops = await getPublicShops();
@@ -23,7 +25,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         next: { revalidate: 900 },
         signal: AbortSignal.timeout(8000),
       });
-      if (!response.ok) return [];
+      if (!response.ok) {
+        console.error(`Could not load products for shop ${shop.shop_id} for sitemap generation (HTTP ${response.status}).`);
+        return [];
+      }
       const data = await response.json();
       return (Array.isArray(data.products) ? data.products : []).map((product: ShopProduct) => ({
         url: absoluteSiteUrl(`/shop/${shop.shop_id}/product/${product.id}`),

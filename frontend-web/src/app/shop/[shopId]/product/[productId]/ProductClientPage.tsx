@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShoppingCart, Sparkles, Package2, Truck, ShieldCheck, CheckCircle2, Star, Minus, Plus } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { API_BASE } from '../../../../../lib/api';
+import { flyProductToCart } from '../../../../../lib/cartFlight';
 import { useCart } from '../../../../../context/CartContext';
 import type { ShopProduct } from '../../../../../lib/types';
 import JsonLd from '../../../../../components/JsonLd';
@@ -29,6 +31,7 @@ export default function ProductClientPage({
   const [loadError, setLoadError] = useState('');
   const [reloadCount, setReloadCount] = useState(0);
   const [added, setAdded] = useState(false);
+  const [flyingToCart, setFlyingToCart] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [reviews, setReviews] = useState<
     Array<{ id: number; customer_name: string; rating: number; comment?: string | null; created_at?: string | null }>
@@ -130,11 +133,25 @@ export default function ProductClientPage({
   const isOutOfStock = stockAvailable !== undefined && stockAvailable <= 0;
   const maxQuantity = stockAvailable === undefined ? 99 : Math.max(0, stockAvailable);
 
-  const handleAdd = () => {
-    if (isOutOfStock) return;
-    if (!addToCart({ ...product, shop_id: shopId }, quantity)) return;
-    setAdded(true);
-    window.setTimeout(() => setAdded(false), 1300);
+  const handleAdd = async () => {
+    if (isOutOfStock || flyingToCart) return;
+    const source = document.querySelector<HTMLElement>('.product-image-frame');
+    if (!source) return;
+    setFlyingToCart(true);
+    try {
+      await flyProductToCart(source, product.image_url);
+      if (!addToCart({ ...product, shop_id: shopId }, quantity)) return;
+      setAdded(true);
+      window.setTimeout(() => setAdded(false), 1300);
+    } catch (error) {
+      console.error('Could not add the product using the cart animation.', error);
+      if (addToCart({ ...product, shop_id: shopId }, quantity)) {
+        setAdded(true);
+        window.setTimeout(() => setAdded(false), 1300);
+      }
+    } finally {
+      setFlyingToCart(false);
+    }
   };
 
   return (
@@ -181,11 +198,12 @@ export default function ProductClientPage({
           </motion.div>
           <motion.div className="product-image-frame" animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -9, 0], rotateZ: [-1, 1, -1] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}>
             {product.image_url && failedImageUrl !== product.image_url
-              ? <img
+              ? <Image
                   src={product.image_url}
                   alt={product.name}
                   width={720}
                   height={720}
+                  sizes="(max-width: 600px) 78vw, (max-width: 900px) 60vw, 430px"
                   loading="eager"
                   fetchPriority="high"
                   decoding="async"
@@ -250,8 +268,8 @@ export default function ProductClientPage({
           )}
 
           <div className="product-actions">
-            <button className="store-cart-btn" onClick={handleAdd} disabled={isOutOfStock}>
-              <ShoppingCart size={17} /> {isOutOfStock ? 'Unavailable' : added ? `Added ${quantity} to cart` : 'Add to cart'}
+            <button className="store-cart-btn" onClick={handleAdd} disabled={isOutOfStock || flyingToCart}>
+              <ShoppingCart size={17} /> {isOutOfStock ? 'Unavailable' : flyingToCart ? 'Adding…' : added ? `Added ${quantity} to cart` : 'Add to cart'}
             </button>
             <Link href="/orders" className="store-link-btn">View orders</Link>
           </div>
@@ -330,8 +348,8 @@ export default function ProductClientPage({
             <span>Total</span>
             <strong>₹{(product.price * quantity).toFixed(2)}</strong>
           </div>
-          <button type="button" className="store-cart-btn" onClick={handleAdd}>
-            <ShoppingCart size={17} /> {added ? 'Added' : 'Add'}
+          <button type="button" className="store-cart-btn" onClick={handleAdd} disabled={flyingToCart}>
+            <ShoppingCart size={17} /> {flyingToCart ? 'Adding…' : added ? 'Added' : 'Add'}
           </button>
         </div>
       )}

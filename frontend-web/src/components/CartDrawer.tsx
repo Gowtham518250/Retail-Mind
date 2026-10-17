@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { AnimatePresence, motion, useSpring, useTransform } from 'framer-motion';
 import { ArrowRight, Loader2, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
@@ -147,7 +148,7 @@ export default function CartDrawer() {
                       >
                         <div className={styles.thumb}>
                           {item.product.image_url
-                            ? <img src={item.product.image_url} alt="" />
+                            ? <Image src={item.product.image_url} alt="" width={74} height={74} sizes="74px" loading="lazy" />
                             : <span>{item.product.name.trim().charAt(0).toUpperCase()}</span>}
                         </div>
                         <div className={styles.info}>

@@ -171,3 +171,16 @@
 .empty{color:#64718a}.empty strong{color:#101a34}.emptyBag{background:#e9efff;color:#6657f5;box-shadow:7px 8px 0 #d8dfff}
 @media(max-width:520px){.drawer{inset:0;width:100vw;max-height:100dvh;border-radius:0}.head{padding:calc(13px + env(safe-area-inset-top)) 14px 12px}.scroll{padding:10px}.item{grid-template-columns:52px minmax(0,1fr) 64px;gap:8px;padding:8px}.thumb{width:52px;height:52px}.qty button{width:25px;height:26px}.qty span{min-width:20px}.foot{padding:12px 14px calc(12px + env(safe-area-inset-bottom))}.total b{font-size:1.9rem}}
 @media(prefers-reduced-motion:reduce){.drawer,.checkout,.close,.qty button,.remove{transition:none}}
+
+/* Retain the storefront palette while keeping the drawer usable on narrow screens. */
+.overlay { background: rgba(16, 34, 24, .48); }
+.drawer { border-color: rgba(36, 91, 66, .16); background: var(--rm-paper, #f7f4e9); color: var(--rm-ink, #182820); }
+.head { background: linear-gradient(120deg, #245b42, #143b2c); color: #fffdf7; }
+.headIcon { background: var(--rm-lime, #d8ed91); color: var(--rm-green-deep, #143b2c); }
+.count { background: var(--rm-orange, #f16a45); color: #fff; }
+.close:hover, .qty button:hover { background: var(--rm-orange, #f16a45); color: #fff; }
+.line { color: var(--rm-green-deep, #143b2c); }
+.keep { background: var(--rm-green-deep, #143b2c); color: #fffdf7; }
+.keep:hover, .checkout:hover { background: var(--rm-green, #245b42); }
+.checkout { background: var(--rm-orange, #f16a45); box-shadow: 0 10px 24px rgba(241, 106, 69, .2); }
+.checkout:hover { box-shadow: 0 14px 28px rgba(36, 91, 66, .24); }

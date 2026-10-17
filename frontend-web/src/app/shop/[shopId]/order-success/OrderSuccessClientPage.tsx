@@ -369,6 +369,31 @@ export default function OrderSuccessClientPage() {
           </button>
         </div>
         {trackingError && <div className="cart-banner error">{trackingError}</div>}
+        <section className="success-route" aria-label="Order journey">
+          <div className="success-route-labels">
+            <span>Local shop</span>
+            <span aria-live="polite">{STAGES[activeStageIndex]?.label || 'Order placed'}</span>
+            <span>Your door</span>
+          </div>
+          <div className="success-route-track" aria-hidden="true">
+            <span className="success-route-origin"><ShoppingBag size={15} /></span>
+            <span className="success-route-destination"><Home size={15} /></span>
+            <motion.span
+              className="success-route-progress"
+              initial={{ width: '0%' }}
+              animate={{ width: `${(activeStageIndex / (STAGES.length - 1)) * 100}%` }}
+              transition={{ duration: 0.8, ease: [0.2, 0.75, 0.25, 1] }}
+            />
+            <motion.span
+              className="success-route-parcel"
+              initial={{ left: '0%' }}
+              animate={{ left: `${(activeStageIndex / (STAGES.length - 1)) * 100}%` }}
+              transition={{ type: 'spring', stiffness: 90, damping: 18 }}
+            >
+              <Package size={17} />
+            </motion.span>
+          </div>
+        </section>
         <div className="order-timeline">
           {STAGES.map((stage, index) => {
             const Icon = stage.icon;

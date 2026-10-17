@@ -568,3 +568,30 @@
 .profileSecurityLink{display:inline-flex;align-items:center;gap:4px;flex:none;color:#4f43d7;font-size:.65rem;font-weight:900;text-decoration:none}
 @media(max-width:860px){.profileLayout{grid-template-columns:200px minmax(0,1fr);gap:11px}.profileSidebar{top:76px}.profileContent .detailsGrid{grid-template-columns:minmax(0,1fr)}.profileDetailsHeader{padding:17px}.profileVerified{font-size:.59rem}}
 @media(max-width:650px){.profilePage{padding-top:10px!important}.container{width:calc(100% - 16px)!important}.profileLayout{grid-template-columns:minmax(0,1fr);gap:10px}.profileSidebar{position:relative;top:auto;padding:12px 10px;border-radius:15px}.profileSidebarHeading{padding:3px 4px 10px}.profileSidebarAvatar{width:35px;height:35px}.profileMenu{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin-top:8px}.profileMenuLink,.profileMenuActive,.profileMenuLogout{min-height:35px;gap:6px;padding:0 7px;font-size:.67rem}.profileMenuLogout{margin-top:0;border-top:0}.profileSidebarFoot{display:none}.profileDetailsHeader{padding:15px;align-items:flex-start;flex-direction:column}.profileDetailsHeader h1{font-size:1.7rem}.profileVerified{align-self:flex-start}.profileContent .accountDetailsCard,.savedAddressPanel{padding:14px}.profileContent .detailsGrid{grid-template-columns:minmax(0,1fr)}.profileSecurityRow{align-items:flex-start;flex-wrap:wrap}.profileSecurityLink{margin-left:46px}}
+
+/* Keep the post-merge account additions visually aligned with the storefront. */
+.profilePage { background: radial-gradient(circle at 8% 0%, rgba(216, 237, 145, .22), transparent 30%), linear-gradient(180deg, var(--rm-paper, #f7f4e9), #f3f0e6) !important; color: var(--rm-ink, #182820) !important; }
+.profileHeaderCard, .accountDetailsCard, .profileSidebar, .profileDetailsHeader, .savedAddressPanel {
+  border-color: var(--rm-line, #e5e0d1);
+  background-color: var(--rm-paper-2, #fffdf7);
+}
+.headerGlowLine { background: linear-gradient(90deg, var(--rm-green, #245b42), var(--rm-lime, #d8ed91), var(--rm-orange, #f16a45)); }
+.avatarAura { background: radial-gradient(circle, var(--rm-lime, #d8ed91), rgba(241, 106, 69, .2)); }
+.avatarInner, .profileSidebarAvatar { background: linear-gradient(145deg, #245b42, #143b2c); color: var(--rm-lime, #d8ed91); }
+.userName, .profileSidebarHeading strong, .profileDetailsHeader h1, .profilePanelHeading h2, .detailValue, .profileAddressText strong { color: var(--rm-green-deep, #143b2c); }
+.roleBadge, .profileAddressDefault, .profileMenuActive { border-color: rgba(36, 91, 66, .16); background: var(--rm-green-light, #e5efdf); color: var(--rm-green-deep, #143b2c); }
+.logoutBtn, .logoutConfirmBtn { background: var(--rm-orange, #f16a45); color: #fff; }
+.logoutBtn:hover, .logoutConfirmBtn:hover { background: var(--rm-green, #245b42); }
+.cardSectionTitle, .profileMenuActive { color: var(--rm-green-deep, #143b2c); }
+.navCardTitle { color: var(--rm-green-deep, #143b2c); }
+.navCardIcon, .profileAddressIcon { background: var(--rm-green-light, #e5efdf); color: var(--rm-green, #245b42); }
+.profileMenuLink:hover, .profileMenuActive { background: var(--rm-green-light, #e5efdf); }
+.profileMenuActive { box-shadow: inset 3px 0 var(--rm-green, #245b42); }
+.profileOverline, .profilePanelHeading > div > span { color: var(--rm-orange, #f16a45); }
+.profileSecurityIcon { background: var(--rm-green-light, #e5efdf); color: var(--rm-green, #245b42); }
+.profileSecurityLink { color: var(--rm-green, #245b42); }
+.logoutDialog { border-color: rgba(36, 91, 66, .18); background: linear-gradient(160deg, #fffdf7, #f7f4e9); }
+.logoutDialogIcon { border-color: rgba(36, 91, 66, .15); background: var(--rm-green-light, #e5efdf); color: var(--rm-green, #245b42); }
+.logoutDialogEyebrow { color: var(--rm-orange, #f16a45); }
+.logoutDialog h2 { color: var(--rm-green-deep, #143b2c); }
+.logoutDialogClose:hover { border-color: var(--rm-green, #245b42); color: var(--rm-green, #245b42); }

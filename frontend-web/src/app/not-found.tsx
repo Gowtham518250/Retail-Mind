@@ -13,7 +13,11 @@ export default function NotFound() {
         <p className="section-eyebrow">404 · Page not found</p>
         <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', marginBlock: 12 }}>That page isn’t on our shelves.</h1>
         <p className="muted">The link may be outdated, or the page may no longer be available.</p>
-        <Link href="/" className="hero-cta" style={{ display: 'inline-flex', marginTop: 20 }}>Back to the marketplace</Link>
+        <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 10, marginTop: 20 }}>
+          <Link href="/" className="hero-cta">Back to the marketplace</Link>
+          <Link href="/shops" className="store-link-btn">Browse local shops</Link>
+          <Link href="/ai-shopping" className="store-link-btn">Try AI shopping</Link>
+        </div>
       </section>
     </main>
   );
