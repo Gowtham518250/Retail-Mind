@@ -36,6 +36,32 @@ from security import (
 
 logger = logging.getLogger(__name__)
 
+
+def _redis_failure_reason(error: Exception) -> str:
+    """Return a safe, allowlisted Redis error category for logs."""
+    if isinstance(error, redis.exceptions.AuthenticationError):
+        return "authentication_failed"
+    if isinstance(error, (redis.exceptions.TimeoutError, asyncio.TimeoutError)):
+        return "timeout"
+    message = str(error).lower()
+    if any(term in message for term in (
+        "error -2 connecting",
+        "error -3 connecting",
+        "name or service not known",
+        "temporary failure in name resolution",
+        "no address associated with hostname",
+        "getaddrinfo failed",
+    )):
+        return "dns_failure"
+    if "connection refused" in message:
+        return "connection_refused"
+    if any(term in message for term in ("certificate verify failed", "ssl:", "tls")):
+        return "tls_failure"
+    if "timed out" in message or "timeout" in message:
+        return "timeout"
+    return "connection_error"
+
+
 router = APIRouter(prefix="/api/ws", tags=["Realtime"])
 
 REDIS_URL = os.getenv("REDIS_URL")
@@ -264,7 +290,12 @@ class _RedisEventBridge:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.warning("Realtime Redis subscriber disconnected: %s", exc)
+                logger.warning(
+                    "Realtime Redis subscriber disconnected "
+                    "(error_type=%s, reason=%s)",
+                    type(exc).__name__,
+                    _redis_failure_reason(exc),
+                )
                 await asyncio.sleep(2)
             finally:
                 if pubsub is not None:
@@ -320,10 +351,12 @@ def publish_realtime_event(event: Dict[str, Any]) -> bool:
         return True
     except Exception as exc:
         logger.error(
-            "Realtime publish failed type=%s event_id=%s: %s",
+            "Realtime publish failed type=%s event_id=%s "
+            "(error_type=%s, reason=%s)",
             payload.get("type"),
             payload.get("event_id"),
-            exc,
+            type(exc).__name__,
+            _redis_failure_reason(exc),
         )
         return False
 
