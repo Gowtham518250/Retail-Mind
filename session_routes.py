@@ -6,6 +6,7 @@ from typing import Optional
 from db import get_db
 from session_service import SessionService
 from models import User
+from security import get_current_user
 
 router = APIRouter(prefix="/api/session", tags=["Session Management"])
 
@@ -108,16 +109,20 @@ def logout(req: LogoutRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout-all")
-def logout_all_devices(user_id: int = Body(..., embed=True), db: Session = Depends(get_db)):
-    """Logs the user out of all devices for security."""
-    count = SessionService.logout_all_devices(db, user_id)
+def logout_all_devices(user_id: int = Body(..., embed=True), current_user: int = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Logs the authenticated user out of all devices; never trust a caller-supplied identity."""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot manage sessions for another user")
+    count = SessionService.logout_all_devices(db, current_user)
     return {"status": f"Logged out from {count} devices"}
 
 
 @router.get("/active/{user_id}")
-def get_active_sessions(user_id: int, db: Session = Depends(get_db)):
-    """Returns a list of all active sessions for the user."""
-    return {"sessions": SessionService.get_active_sessions(db, user_id)}
+def get_active_sessions(user_id: int, current_user: int = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Returns active sessions for the authenticated user only."""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot view sessions for another user")
+    return {"sessions": SessionService.get_active_sessions(db, current_user)}
 
 
 class OfflineData(BaseModel):
@@ -127,12 +132,16 @@ class OfflineData(BaseModel):
 
 
 @router.post("/offline/queue")
-def sync_offline_data(req: OfflineData, db: Session = Depends(get_db)):
-    """Queues offline generated data into the DB for processing."""
-    return SessionService.queue_offline_data(db, req.user_id, req.data_type, req.payload)
+def sync_offline_data(req: OfflineData, current_user: int = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Queues offline data only for the authenticated user."""
+    if req.user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot queue data for another user")
+    return SessionService.queue_offline_data(db, current_user, req.data_type, req.payload)
 
 
 @router.post("/offline/sync")
-def sync_all_offline_data(user_id: int = Body(..., embed=True), db: Session = Depends(get_db)):
-    """Synchronizes all offline data queued for the user."""
-    return SessionService.sync_offline_queue(db, user_id)
+def sync_all_offline_data(user_id: int = Body(..., embed=True), current_user: int = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Synchronizes offline data for the authenticated user only."""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot sync data for another user")
+    return SessionService.sync_offline_queue(db, current_user)

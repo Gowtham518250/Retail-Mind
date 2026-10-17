@@ -19,6 +19,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from db import get_db
+from distributed_job_lock import run_with_advisory_lock
 from models import Worker, User
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
@@ -255,14 +256,33 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
         db.close()
 
 
+# A fixed PostgreSQL transaction-level advisory lock prevents every API
+# replica/worker from simultaneously executing the same periodic reconciliation.
+_ATTENDANCE_AUTO_CHECKOUT_LOCK_ID = 7435812051047
+
+
+def _run_attendance_auto_checkout_once(log_summary=False):
+    """Run one reconciliation only when this process acquires the shared lock."""
+    ran = run_with_advisory_lock(
+        lambda: _auto_checkout_expired_shifts(log_summary=log_summary),
+        lock_id=_ATTENDANCE_AUTO_CHECKOUT_LOCK_ID,
+    )
+    if not ran and log_summary:
+        print(
+            "[ATTENDANCE] initial reconciliation skipped; another replica may hold the lock",
+            flush=True,
+        )
+    return ran
+
+
 def _start_attendance_auto_checkout():
-    """Run an immediate reconciliation and then check for expired shifts."""
-    _auto_checkout_expired_shifts(log_summary=True)
+    """Run an immediate reconciliation and start a lock-coordinated poller."""
+    _run_attendance_auto_checkout_once(log_summary=True)
 
     def loop():
         while True:
             time_module.sleep(30)
-            _auto_checkout_expired_shifts()
+            _run_attendance_auto_checkout_once()
 
     thread = threading.Thread(
         target=loop,
@@ -270,7 +290,33 @@ def _start_attendance_auto_checkout():
         daemon=True,
     )
     thread.start()
-    print("[ATTENDANCE] automatic shift checkout worker started", flush=True)
+    print("[ATTENDANCE] lock-coordinated auto-checkout worker started", flush=True)
+
+def _run_database_migrations() -> None:
+    """Apply all versioned schema migrations before startup patches query tables.
+
+    Render services can have a dashboard-configured start command that bypasses
+    render.yaml. Running Alembic here guarantees a fresh database is initialized
+    even when the service starts with `python production_boot.py` directly.
+    Migration execution is idempotent once the database is at the current head.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).resolve().parent
+    config_path = root / "alembic.ini"
+    migrations_path = root / "alembic"
+    if not config_path.is_file() or not migrations_path.is_dir():
+        raise RuntimeError(
+            "Database migrations cannot run: alembic.ini or the alembic directory is missing."
+        )
+
+    config = Config(str(config_path))
+    config.set_main_option("script_location", str(migrations_path))
+    print("[DB] Applying Alembic migrations to head before startup...", flush=True)
+    command.upgrade(config, "head")
+    print("[DB] Alembic migrations completed successfully.", flush=True)
+
 
 def _ensure_online_order_status_enum():
     """Keep production PostgreSQL enum values aligned with the online-order state machine."""
@@ -846,6 +892,10 @@ def _patch_routes():
     return app_module.api
 
 if __name__ == "__main__":
+    # Run migrations before compatibility helpers issue SQL against application tables.
+    # This also covers Render services whose dashboard start command is simply
+    # `python production_boot.py` and bypasses render.yaml.
+    _run_database_migrations()
     _ensure_online_order_status_enum()
     _ensure_sales_reference_order_id()
     _ensure_online_delivery_payment_trigger()

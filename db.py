@@ -1,5 +1,5 @@
 from urllib.parse import quote_plus, urlparse, urlunparse
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
@@ -7,8 +7,36 @@ import os
 import logging
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
+from db_pool_config import pool_options_from_env, log_pool_budget
 
 logger = logging.getLogger(__name__)
+
+def _statement_timeout_ms() -> int:
+    """Return the configured PostgreSQL statement timeout in milliseconds."""
+    try:
+        return max(0, int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000")))
+    except (TypeError, ValueError):
+        logger.warning("Invalid DB_STATEMENT_TIMEOUT_MS; using 30000ms")
+        return 30000
+
+
+def _set_postgres_statement_timeout(connection) -> None:
+    """Apply a per-transaction timeout without a libpq startup parameter.
+
+    Neon poolers reject statement_timeout in connection startup options, and
+    transaction pooling can reassign a backend between client transactions.
+    SET LOCAL applies only to the active transaction, so it works with pooled
+    endpoints and is reset automatically at transaction end.
+    """
+    timeout_ms = _statement_timeout_ms()
+    if timeout_ms <= 0:
+        return
+
+    # timeout_ms is parsed and constrained to a non-negative integer above.
+    connection.exec_driver_sql(
+        f"SET LOCAL statement_timeout = '{timeout_ms}ms'"
+    )
+
 
 def normalize_database_url(url: str) -> str:
     """
@@ -74,6 +102,11 @@ else:
 # Render/Railway typically provides 'DATABASE_URL' automatically
 database_url = os.getenv("DATABASE_URL")
 
+# Pool limits are per process. Keep defaults conservative and let deployment
+# configuration increase them only after checking the provider connection budget.
+pool_options = pool_options_from_env(os.environ)
+log_pool_budget(os.environ, pool_options)
+
 if database_url:
     database_url = normalize_database_url(database_url)
     print(f" Using provided DATABASE_URL for PostgreSQL connection.")
@@ -82,15 +115,13 @@ if database_url:
         future=True,
         poolclass=QueuePool,
         pool_pre_ping=True,  # Test connection before using
-        pool_size=25,         # 🚀 PERFORMANCE: Increased from 10 to 25 for better concurrency
-        max_overflow=40,      # 🚀 PERFORMANCE: Increased from 20 to 40 for peak loads
-        pool_timeout=30,      # Timeout for getting connection from pool
-        pool_recycle=3600,    # 🚀 PERFORMANCE: Increased to 1 hour to reduce connection churn
-        pool_reset_on_return='commit',  # Reset connection state on return
+        **pool_options,
+        pool_reset_on_return='rollback',  # Reset connection state on return
         echo=False,
+        # Do not pass statement_timeout as a libpq startup option: Neon pooler
+        # endpoints reject it. SET LOCAL is applied at each transaction start.
         connect_args={
             'connect_timeout': 10,
-            'options': '-c statement_timeout=30000'  # 30 second statement timeout
         }
     )
 else:
@@ -123,16 +154,12 @@ else:
             future=True,
             poolclass=QueuePool,
             pool_pre_ping=True,
-            pool_size=10,
-            max_overflow=20,
-            pool_timeout=30,
-            pool_recycle=1800,
-            pool_reset_on_return='commit',
+            **pool_options,
+            pool_reset_on_return='rollback',
             echo=False,
             # Add additional connection validation
             connect_args={
                 'connect_timeout': 10,
-                'options': '-c statement_timeout=30000'
             }
         )
     except Exception as e:
@@ -140,6 +167,12 @@ else:
         safe_error = str(e).replace(db_password, "***") if db_password else str(e)
         print(f"Database connection failed: {safe_error}")
         raise
+
+# Preserve the 30-second query guard without sending statement_timeout in the
+# connection startup packet (incompatible with Neon pooled connection URLs).
+# SET LOCAL runs at transaction start and is safe with transaction pooling.
+if engine.dialect.name == "postgresql":
+    event.listen(engine, "begin", _set_postgres_statement_timeout)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 sessionLocal = SessionLocal # Alias for legacy imports

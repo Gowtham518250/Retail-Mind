@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response
 import os
 import time
 import logging
@@ -108,6 +108,7 @@ from observability_service import router as observability_router
 from operations_routes import router as operations_router
 from realtime import router as realtime_router
 from durable_sync import router as durable_sync_router
+from health_routes import router as health_router
 
 # DB initialization
 from db import engine, get_db
@@ -236,6 +237,7 @@ try:
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'COD'",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(24) NOT NULL DEFAULT 'COD_DUE'",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(128)",
+        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmation_source VARCHAR(50)",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_detection_key VARCHAR(128)",
         "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmed_at TIMESTAMP",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_online_order_shop_payment_key ON online_orders(shop_id, payment_detection_key)",
@@ -267,17 +269,17 @@ except Exception as migration_err:
 # SECURITY MIDDLEWARE
 # ========================
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,retail-mind-vkbp.onrender.com,retail-mind-web.onrender.com").split(",")
+from host_validation import build_allowed_hosts, build_allowed_origins
 
-# CORS needs full origins (scheme + host) — browsers send e.g. "https://example.com"
-# as the Origin header, which never matches a bare hostname like "example.com".
-# Build proper origins from ALLOWED_HOSTS, plus explicit extra origins (e.g. the
-# deployed static frontend, which may live on a different domain than the API).
-_extra_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-ALLOWED_ORIGINS = [
-    origin for host in ALLOWED_HOSTS
-    for origin in ([f"https://{host}", f"http://{host}"] if host not in ("localhost", "127.0.0.1") else [f"http://{host}:3000", f"http://{host}:8000"])
-] + [o.strip() for o in _extra_origins if o.strip()]
+# Render can assign a new onrender.com hostname when a service is recreated.
+# Keep explicit ALLOWED_HOSTS restrictions, but always add Render's authoritative
+# RENDER_EXTERNAL_HOSTNAME (or hostname parsed from RENDER_EXTERNAL_URL). This
+# prevents TrustedHostMiddleware from rejecting the service's own URL with 400.
+ALLOWED_HOSTS = build_allowed_hosts(os.environ)
+ALLOWED_ORIGINS = build_allowed_origins(
+    ALLOWED_HOSTS,
+    os.getenv("ALLOWED_ORIGINS", ""),
+)
 
 # 1. CORS — Restrict to known origins only (no wildcard *)
 api.add_middleware(
@@ -437,6 +439,7 @@ api.include_router(observability_router, tags=["Observability"])
 api.include_router(operations_router, prefix="/api", tags=["Operations"])
 api.include_router(realtime_router)
 api.include_router(durable_sync_router)
+api.include_router(health_router)
 
 # 🚀 PERFORMANCE: Setup performance monitoring middleware
 setup_performance_middleware(api)
@@ -444,8 +447,13 @@ setup_performance_middleware(api)
 # ========================
 # ROOT & HEALTH ENDPOINTS
 # ========================
-@api.get("/", tags=["System"])
+@api.api_route("/", methods=["GET", "HEAD"], tags=["System"])
 async def root(request: Request):
+    # Render and other platform probes may issue HEAD / before GET /. Return
+    # a body-less success response so that probe traffic does not get a 405.
+    if request.method == "HEAD":
+        return Response(status_code=200, headers={"Cache-Control": "no-store"})
+
     shop_id = request.query_params.get("shop_id")
     if shop_id:
         web_out_index = os.path.join(os.path.dirname(__file__), "frontend-web", "out", "index.html")

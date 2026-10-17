@@ -1169,6 +1169,8 @@ class OnlineOrder(Base):
     payment_method = Column(String(20), nullable=False, default="COD", server_default="COD")
     payment_status = Column(String(24), nullable=False, default="COD_DUE", server_default="COD_DUE")
     payment_reference = Column(String(128), nullable=True)
+    # Records that a PAID state came from owner-device notification matching, not a provider webhook.
+    payment_confirmation_source = Column(String(50), nullable=True)
     payment_detection_key = Column(String(128), nullable=True)
     payment_confirmed_at = Column(DateTime, nullable=True)
     # Snapshot of the online-only setup fee applied to this order.

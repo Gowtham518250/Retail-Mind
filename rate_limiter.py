@@ -1,40 +1,112 @@
-import time
+import logging
 import os
+import threading
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from functools import wraps
+
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 import redis
 
-global USE_REDIS
+logger = logging.getLogger("retail_mind.rate_limiter")
 
 REDIS_URL = os.getenv("REDIS_URL")
+REDIS_RETRY_INTERVAL_SECONDS = 30
+try:
+    REDIS_RETRY_INTERVAL_SECONDS = max(
+        5, int(os.getenv("REDIS_RETRY_INTERVAL_SECONDS", "30"))
+    )
+except (TypeError, ValueError):
+    logger.warning("Invalid REDIS_RETRY_INTERVAL_SECONDS; using 30 seconds")
 
-# 🛡️ FIX: this used to `raise ValueError(...)` here if REDIS_URL wasn't set,
-# which crashed the entire app at import time (auth_routes.py imports this
-# module directly) — a missing Redis config took down the whole backend
-# instead of just disabling distributed rate limiting. The try/except below
-# already implements a correct graceful fallback to in-memory rate limiting;
-# it just needs to actually run instead of being pre-empted by the raise.
-# Also stopped logging REDIS_URL — the format is redis://user:password@host,
-# so this was writing the Redis password to plaintext logs on every restart.
 USE_REDIS = False
+redis_client = None
+_next_redis_retry_at = 0.0
+_redis_retry_lock = threading.Lock()
+
+# Redis Lua makes the first request start the fixed window. A later request
+# increments the counter without moving the expiry, so active traffic cannot
+# keep a rate-limit key alive indefinitely.
+_REDIS_FIXED_WINDOW_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+return count
+"""
+
+
+def _new_redis_client():
+    """Build a Redis client with bounded connection and read timeouts."""
+    return redis.from_url(
+        REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=2,
+        socket_timeout=2,
+    )
+
+
+def _mark_redis_unavailable(error, operation: str) -> None:
+    """Use local limits temporarily and retry Redis after a bounded delay."""
+    global USE_REDIS, _next_redis_retry_at
+    USE_REDIS = False
+    _next_redis_retry_at = time.monotonic() + REDIS_RETRY_INTERVAL_SECONDS
+    # Never log REDIS_URL or full connection exceptions: they may contain
+    # credentials. The exception type is enough to diagnose fallback mode.
+    logger.warning(
+        "Redis %s unavailable; using in-memory rate limiting (error_type=%s)",
+        operation,
+        type(error).__name__,
+    )
+
+
+def _redis_available() -> bool:
+    """Return whether Redis is ready, retrying after transient startup failures."""
+    global USE_REDIS, redis_client, _next_redis_retry_at
+    if not REDIS_URL or not REDIS_URL.strip():
+        return False
+    if USE_REDIS:
+        return True
+    if time.monotonic() < _next_redis_retry_at:
+        return False
+
+    # Avoid a connection storm when multiple requests arrive after an outage.
+    if not _redis_retry_lock.acquire(blocking=False):
+        return False
+    try:
+        if USE_REDIS:
+            return True
+        now = time.monotonic()
+        if now < _next_redis_retry_at:
+            return False
+        _next_redis_retry_at = now + REDIS_RETRY_INTERVAL_SECONDS
+        try:
+            if redis_client is None:
+                redis_client = _new_redis_client()
+            redis_client.ping()
+            USE_REDIS = True
+            logger.info("Redis connected; distributed rate limiting is enabled")
+            return True
+        except Exception as error:
+            _mark_redis_unavailable(error, "reconnect")
+            return False
+    finally:
+        _redis_retry_lock.release()
+
+
+# Probe once at startup. If DNS/Redis is temporarily unavailable, the first
+# retry will happen after REDIS_RETRY_INTERVAL_SECONDS instead of disabling
+# distributed rate limiting until the next process restart.
 if REDIS_URL:
     try:
-        redis_client = redis.from_url(
-            REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=5
-        )
-        # Test Redis connection
+        redis_client = _new_redis_client()
         redis_client.ping()
         USE_REDIS = True
-        print("✅ Using Redis for distributed rate limiting")
-    except Exception as e:
-        print(f"⚠️ Redis not available, falling back to in-memory rate limiting: {e}")
-        USE_REDIS = False
+        logger.info("Redis connected; distributed rate limiting is enabled")
+    except Exception as error:
+        _mark_redis_unavailable(error, "startup")
 
 class RateLimiter:
     """
@@ -80,29 +152,21 @@ class RateLimiter:
         now = time.time()
         max_requests = self.limits.get(endpoint, self.limits['default'])
         
-        # Use Redis if available (distributed rate limiting)
-        if USE_REDIS:
+        # Prefer shared Redis counters, but keep serving requests if Redis is
+        # unavailable. The Lua script increments and assigns expiry atomically.
+        if _redis_available():
             try:
                 key = self._get_redis_key(ip, endpoint)
-                # Use Redis pipeline to get and increment atomically
-                with redis_client.pipeline() as pipe:
-                    # Get current count
-                    pipe.multi()
-                    pipe.incr(key)
-                    pipe.expire(key, self.window)
-                    results = pipe.execute()
-                
-                current_count = results[0]
-                
+                current_count = int(
+                    redis_client.eval(
+                        _REDIS_FIXED_WINDOW_SCRIPT, 1, key, self.window
+                    )
+                )
                 if current_count <= max_requests:
-                    remaining = max_requests - current_count
-                    return True, remaining
-                else:
-                    return False, 0
-            except Exception as e:
-                print(f"⚠️ Redis rate limiting failed, falling back to in-memory: {e}")
-                # Fall back to in-memory
-                USE_REDIS = False
+                    return True, max_requests - current_count
+                return False, 0
+            except Exception as error:
+                _mark_redis_unavailable(error, "request counter")
         
         # In-memory fallback
         timestamps = self.requests[ip][endpoint]
@@ -123,16 +187,17 @@ class RateLimiter:
         """Get remaining requests for this IP and endpoint"""
         max_requests = self.limits.get(endpoint, self.limits['default'])
         
-        # Use Redis if available
-        if USE_REDIS:
+        # Read the shared counter whenever Redis is healthy. A connection
+        # failure disables it temporarily and schedules a later retry.
+        if _redis_available():
             try:
                 key = self._get_redis_key(ip, endpoint)
                 current_count = redis_client.get(key)
                 if current_count:
                     return max(0, max_requests - int(current_count))
                 return max_requests
-            except Exception:
-                pass
+            except Exception as error:
+                _mark_redis_unavailable(error, "remaining-count lookup")
         
         # In-memory fallback
         now = time.time()
@@ -145,7 +210,7 @@ class RateLimiter:
     def cleanup_old_requests(self):
         """Clean up old request timestamps to prevent memory bloat"""
         # Redis handles TTL automatically, no cleanup needed
-        if USE_REDIS:
+        if _redis_available():
             return
             
         # In-memory cleanup

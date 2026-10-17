@@ -5,6 +5,9 @@ import './globals.css';
 import './storefront-polish.css';
 import './premium-v3.css';
 import './retail-redesign.css';
+import './customer-premium.css';
+import './theme.css';
+import './reference-design.css';
 import './experience-motion.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
@@ -48,7 +51,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: '#0f5b47',
+  themeColor: '#08142b',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',

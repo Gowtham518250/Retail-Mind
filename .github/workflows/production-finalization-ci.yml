@@ -44,15 +44,49 @@ jobs:
           pip install pytest
       - name: Compile production modules
         run: |
-          python -m py_compile             app.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py retail_intelligence.py tools/ai_query_eval.py tools/staging_config.py tools/run_staging_ai_eval.py
+          python -m py_compile             app.py             db_pool_config.py             distributed_job_lock.py             health_routes.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py retail_intelligence.py tools/ai_query_eval.py tools/staging_config.py tools/run_staging_ai_eval.py
       - name: Validate Alembic migration graph
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^032_restore_sales_journal_event_time')"
+          count="$(echo "$heads" | grep -c '^035_ensure_online_customers_schema')"
           test "$count" -eq 1
-          head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
+          head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
+      - name: Apply migrations to an empty test database
+        run: |
+          alembic upgrade head
+          python - <<'PY'
+          import os
+          from sqlalchemy import create_engine, inspect
+
+          engine = create_engine(os.environ["DATABASE_URL"])
+          inspector = inspect(engine)
+          tables = set(inspector.get_table_names())
+          required_tables = {
+              "user_details",
+              "sales",
+              "products",
+              "customers",
+              "invoices",
+              "invoice_line_items",
+              "payments",
+              "online_orders",
+              "online_customers",
+              "online_order_delivery_otps",
+              "shop_reviews",
+              "workers",
+          }
+          missing = sorted(required_tables - tables)
+          if missing:
+              raise SystemExit(f"Fresh schema is missing required tables: {missing}")
+
+          sales_columns = {item["name"] for item in inspector.get_columns("sales")}
+          if "reference_order_id" not in sales_columns:
+              raise SystemExit("Fresh sales schema is missing reference_order_id")
+
+          print("Fresh database migration smoke test passed.")
+          PY
       - name: Run focused production tests
         env:
           PYTHONPATH: .
@@ -71,6 +105,8 @@ jobs:
           pytest -q tests/test_inventory_upload_ai_contract.py
           pytest -q tests/test_purchase_order_recommendations_contract.py
           pytest -q tests/test_order_idempotency_contract.py
+          pytest -q tests/test_security_distributed_rate_limit.py
+          pytest -q tests/test_rate_limiter_redis_recovery.py
           pytest -q tests/test_invoice_replay_guard.py
           pytest -q tests/test_purchase_order_receiving.py
           pytest -q tests/test_payment_contract.py
@@ -80,6 +116,12 @@ jobs:
           pytest -q tests/test_bank_reconciliation_contract.py
           pytest -q tests/test_financial_integrity.py
           pytest -q tests/test_product_image_contract.py
+          pytest -q tests/test_render_host_validation.py
+          pytest -q tests/test_root_head_probe.py
+          pytest -q tests/test_db_pool_config.py
+          pytest -q tests/test_health_routes.py
+          pytest -q tests/test_cache_manager_resilience.py
+          pytest -q tests/test_distributed_job_lock.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
           pytest -q tests/test_query_retrieval_optimization.py
           pytest -q tests/test_query_safety.py

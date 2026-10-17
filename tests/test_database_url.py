@@ -35,3 +35,35 @@ def test_render_host_is_normalized_with_sslmode():
     assert parsed.scheme == "postgresql"
     assert parsed.hostname == "dpg-d8pnbg4m0tmc73b2ff7g-a.oregon-postgres.render.com"
     assert "sslmode=require" in parsed.query
+
+def test_neon_statement_timeout_is_set_transaction_locally(monkeypatch):
+    from db import _set_postgres_statement_timeout
+
+    monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "30000")
+
+    class FakeConnection:
+        def __init__(self):
+            self.statements = []
+
+        def exec_driver_sql(self, statement):
+            self.statements.append(statement)
+
+    connection = FakeConnection()
+    _set_postgres_statement_timeout(connection)
+
+    assert connection.statements == [
+        "SET LOCAL statement_timeout = '30000ms'"
+    ]
+
+
+def test_neon_statement_timeout_can_be_disabled(monkeypatch):
+    from db import _set_postgres_statement_timeout
+
+    monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "0")
+
+    class FakeConnection:
+        def exec_driver_sql(self, statement):
+            raise AssertionError("No SQL should run when timeout is disabled")
+
+    _set_postgres_statement_timeout(FakeConnection())
+

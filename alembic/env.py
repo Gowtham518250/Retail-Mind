@@ -97,6 +97,13 @@ def run_migrations_online() -> None:
                 ))
                 connection.commit()
 
+        # Inspection above can start an implicit transaction (notably the
+        # SELECT from alembic_version on an empty database). Commit that
+        # bootstrap transaction before Alembic starts its DDL transaction;
+        # otherwise closing the connection can roll back the fresh schema.
+        if connection.in_transaction():
+            connection.commit()
+
         context.configure(
             connection=connection,
             target_metadata=target_metadata
