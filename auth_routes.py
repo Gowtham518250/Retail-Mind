@@ -380,14 +380,16 @@ def verify_otp(
 
 
 @router.post("/reset-worker-pin")
+@rate_limit_endpoint(max_requests=5, window_seconds=60)
 def reset_worker_pin(
-    request: ResetWorkerPinRequest,
+    pin_request: ResetWorkerPinRequest,
+    request: Request,
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Reset a worker attendance PIN after owner-email OTP verification."""
-    normalized_email = request.email.strip().lower()
-    new_pin = request.new_pin.strip()
+    normalized_email = pin_request.email.strip().lower()
+    new_pin = pin_request.new_pin.strip()
 
     if not __import__("re").fullmatch(r"\d{4}", new_pin):
         raise HTTPException(status_code=400, detail="Worker PIN must be exactly 4 digits")
@@ -405,14 +407,14 @@ def reset_worker_pin(
     record = _find_db_otp(
         db,
         user_id=user.id,
-        otp=request.otp,
+        otp=pin_request.otp,
         purpose=OWNER_VERIFICATION_OTP_PURPOSE,
     )
     if not record:
         raise HTTPException(status_code=400, detail="Invalid or expired owner verification OTP")
 
     worker = db.query(Worker).filter(
-        Worker.id == request.worker_id,
+        Worker.id == pin_request.worker_id,
         Worker.shopkeeper_id == current_user,
     ).first()
     if not worker:
@@ -433,8 +435,10 @@ def reset_worker_pin(
 
 
 @router.post("/send-owner-otp")
+@rate_limit_endpoint(max_requests=3, window_seconds=60)
 def send_owner_otp(
-    request: OwnerOTPRequest,
+    otp_request: OwnerOTPRequest,
+    request: Request,
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -456,7 +460,7 @@ def send_owner_otp(
 
     subject, body = EmailNotificationService.send_otp_template(
         otp_code,
-        request.purpose or "Owner Verification",
+        otp_request.purpose or "Owner Verification",
     )
 
     try:
@@ -485,12 +489,14 @@ def send_owner_otp(
 
 
 @router.post("/verify-owner-otp")
+@rate_limit_endpoint(max_requests=8, window_seconds=60)
 def verify_owner_otp(
-    request: VerifyOTPRequest,
+    otp_request: VerifyOTPRequest,
+    request: Request,
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    normalized_email = request.email.strip().lower()
+    normalized_email = otp_request.email.strip().lower()
     user = db.query(User).filter(User.id == current_user).first()
     if not user:
         raise HTTPException(status_code=401, detail="Authenticated user not found")
@@ -501,7 +507,7 @@ def verify_owner_otp(
     record = _find_db_otp(
         db,
         user_id=user.id,
-        otp=request.otp,
+        otp=otp_request.otp,
         purpose=OWNER_VERIFICATION_OTP_PURPOSE,
     )
     if not record:
