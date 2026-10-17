@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from models import User, ShopProfile, Worker
+from models import User, ShopProfile, Worker, EmailOtpChallenge
 from security import hash_password, verify_password, create_access_token, create_refresh_token, ROLE_OWNER, VALID_ROLES, get_current_user, check_login_lockout, record_login_failure, record_login_success
 from email_notifications import EmailNotificationService
 from rate_limiter import rate_limit_endpoint, get_client_ip, ip_rate_limiter
@@ -230,26 +230,63 @@ otp_cache = {}
 
 
 @router.post("/send-otp")
+@rate_limit_endpoint(max_requests=3, window_seconds=60)
 def send_otp(
-    request: SendOTPRequest,
+    otp_request: SendOTPRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    normalized_email = request.email.strip().lower()
-    if not normalized_email:
-        raise HTTPException(status_code=400, detail="Email is required")
+    normalized_email = otp_request.email.strip().lower()
+    if not normalized_email or len(normalized_email) > 255:
+        raise HTTPException(status_code=400, detail="Valid email is required")
 
-    otp_code = _new_otp()
-    otp_cache[normalized_email] = {
-        "otp_hash": _hash_otp(otp_code),
-        "expires_at": time.time() + 600,
-    }
+    purpose = (otp_request.purpose or "Verification").strip() or "Verification"
+    purpose = purpose[:64]
+    now = datetime.utcnow()
 
-    subject, body = EmailNotificationService.send_otp_template(
-        otp_code,
-        request.purpose or "Verification",
+    # Enforce per-email send limits as well as per-IP decorator limits. This
+    # prevents distributed IPs from repeatedly mailing the same recipient.
+    recent_count = db.query(EmailOtpChallenge).filter(
+        EmailOtpChallenge.email == normalized_email,
+        EmailOtpChallenge.purpose == purpose,
+        EmailOtpChallenge.created_at >= now - timedelta(minutes=10),
+    ).count()
+    if recent_count >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="OTP request limit reached. Please try again later.",
+        )
+
+    # Consume any outstanding challenge for this same email + purpose before
+    # creating a new one; the latest issued code is the only usable code.
+    db.query(EmailOtpChallenge).filter(
+        EmailOtpChallenge.email == normalized_email,
+        EmailOtpChallenge.purpose == purpose,
+        EmailOtpChallenge.used_at.is_(None),
+    ).update(
+        {"used_at": now},
+        synchronize_session=False,
     )
 
+    otp_code = _new_otp()
+    challenge = EmailOtpChallenge(
+        email=normalized_email,
+        purpose=purpose,
+        otp_hash=_hash_otp(otp_code),
+        expires_at=now + timedelta(minutes=10),
+        attempts=0,
+    )
+    db.add(challenge)
+    try:
+        db.commit()
+        db.refresh(challenge)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to persist email OTP challenge")
+        raise HTTPException(status_code=500, detail="Unable to create OTP challenge")
+
+    subject, body = EmailNotificationService.send_otp_template(otp_code, purpose)
     try:
         success = EmailNotificationService.send_email(
             recipient_email=normalized_email,
@@ -257,40 +294,88 @@ def send_otp(
             body=body,
         )
         if not success:
-            otp_cache.pop(normalized_email, None)
+            db.query(EmailOtpChallenge).filter(
+                EmailOtpChallenge.id == challenge.id
+            ).update({"used_at": datetime.utcnow()}, synchronize_session=False)
+            db.commit()
             raise HTTPException(
-                status_code=500,
-                detail="Failed to send OTP email. Check backend email configuration.",
+                status_code=503,
+                detail="OTP delivery is currently unavailable. Please try again later.",
             )
-        logger.info("Backend OTP sent successfully to %s", normalized_email)
+        # Do not emit the email address or OTP into application logs.
+        logger.info("Backend email OTP sent successfully")
         return {"msg": "OTP sent successfully"}
     except HTTPException:
         raise
-    except Exception as e:
-        otp_cache.pop(normalized_email, None)
-        logger.exception("Failed while sending OTP email: %s", e)
+    except Exception:
+        db.rollback()
+        logger.exception("Email OTP delivery failed")
+        try:
+            db.query(EmailOtpChallenge).filter(
+                EmailOtpChallenge.id == challenge.id
+            ).update({"used_at": datetime.utcnow()}, synchronize_session=False)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.error("Failed to invalidate undelivered email OTP challenge")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to send OTP email. Check backend email configuration.",
+            status_code=503,
+            detail="OTP delivery is currently unavailable. Please try again later.",
         )
 
 
 @router.post("/verify-otp")
-def verify_otp(request: VerifyOTPRequest):
-    normalized_email = request.email.strip().lower()
-    record = otp_cache.get(normalized_email)
+@rate_limit_endpoint(max_requests=8, window_seconds=60)
+def verify_otp(
+    otp_request: VerifyOTPRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    normalized_email = otp_request.email.strip().lower()
+    if not normalized_email or len(normalized_email) > 255:
+        raise HTTPException(status_code=400, detail="Valid email is required")
+
+    now = datetime.utcnow()
+    record = db.query(EmailOtpChallenge).filter(
+        EmailOtpChallenge.email == normalized_email,
+        EmailOtpChallenge.used_at.is_(None),
+        EmailOtpChallenge.expires_at > now,
+    ).order_by(EmailOtpChallenge.created_at.desc(), EmailOtpChallenge.id.desc()).first()
 
     if not record:
         raise HTTPException(status_code=400, detail="OTP not requested or expired")
 
-    if time.time() > record["expires_at"]:
-        otp_cache.pop(normalized_email, None)
-        raise HTTPException(status_code=400, detail="OTP expired")
+    if record.attempts >= 5:
+        record.used_at = now
+        db.commit()
+        raise HTTPException(status_code=400, detail="OTP attempt limit exceeded. Request a new OTP.")
 
-    if record["otp_hash"] != _hash_otp(request.otp):
+    supplied_otp = otp_request.otp.strip()
+    is_valid_format = bool(__import__("re").fullmatch(r"\d{6}", supplied_otp))
+    matches = is_valid_format and secrets.compare_digest(
+        record.otp_hash,
+        _hash_otp(supplied_otp),
+    )
+    if not matches:
+        record.attempts += 1
+        if record.attempts >= 5:
+            record.used_at = now
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to persist email OTP attempt")
+            raise HTTPException(status_code=500, detail="Unable to verify OTP")
         raise HTTPException(status_code=400, detail="Invalid OTP")
 
-    otp_cache.pop(normalized_email, None)
+    record.used_at = now
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to consume email OTP challenge")
+        raise HTTPException(status_code=500, detail="Unable to verify OTP")
+
     return {"msg": "OTP verified successfully"}
 
 
