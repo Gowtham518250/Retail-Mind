@@ -19,6 +19,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from db import get_db
+from distributed_job_lock import run_with_advisory_lock
 from models import Worker, User
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
@@ -255,14 +256,33 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
         db.close()
 
 
+# A fixed PostgreSQL transaction-level advisory lock prevents every API
+# replica/worker from simultaneously executing the same periodic reconciliation.
+_ATTENDANCE_AUTO_CHECKOUT_LOCK_ID = 7435812051047
+
+
+def _run_attendance_auto_checkout_once(log_summary=False):
+    """Run one reconciliation only when this process acquires the shared lock."""
+    ran = run_with_advisory_lock(
+        lambda: _auto_checkout_expired_shifts(log_summary=log_summary),
+        lock_id=_ATTENDANCE_AUTO_CHECKOUT_LOCK_ID,
+    )
+    if not ran and log_summary:
+        print(
+            "[ATTENDANCE] initial reconciliation skipped; another replica may hold the lock",
+            flush=True,
+        )
+    return ran
+
+
 def _start_attendance_auto_checkout():
-    """Run an immediate reconciliation and then check for expired shifts."""
-    _auto_checkout_expired_shifts(log_summary=True)
+    """Run an immediate reconciliation and start a lock-coordinated poller."""
+    _run_attendance_auto_checkout_once(log_summary=True)
 
     def loop():
         while True:
             time_module.sleep(30)
-            _auto_checkout_expired_shifts()
+            _run_attendance_auto_checkout_once()
 
     thread = threading.Thread(
         target=loop,
@@ -270,7 +290,7 @@ def _start_attendance_auto_checkout():
         daemon=True,
     )
     thread.start()
-    print("[ATTENDANCE] automatic shift checkout worker started", flush=True)
+    print("[ATTENDANCE] lock-coordinated auto-checkout worker started", flush=True)
 
 def _run_database_migrations() -> None:
     """Apply all versioned schema migrations before startup patches query tables.

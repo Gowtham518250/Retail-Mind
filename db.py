@@ -7,6 +7,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
+from db_pool_config import pool_options_from_env, log_pool_budget
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,11 @@ else:
 # Render/Railway typically provides 'DATABASE_URL' automatically
 database_url = os.getenv("DATABASE_URL")
 
+# Pool limits are per process. Keep defaults conservative and let deployment
+# configuration increase them only after checking the provider connection budget.
+pool_options = pool_options_from_env(os.environ)
+log_pool_budget(os.environ, pool_options)
+
 if database_url:
     database_url = normalize_database_url(database_url)
     print(f" Using provided DATABASE_URL for PostgreSQL connection.")
@@ -109,11 +115,8 @@ if database_url:
         future=True,
         poolclass=QueuePool,
         pool_pre_ping=True,  # Test connection before using
-        pool_size=25,         # 🚀 PERFORMANCE: Increased from 10 to 25 for better concurrency
-        max_overflow=40,      # 🚀 PERFORMANCE: Increased from 20 to 40 for peak loads
-        pool_timeout=30,      # Timeout for getting connection from pool
-        pool_recycle=3600,    # 🚀 PERFORMANCE: Increased to 1 hour to reduce connection churn
-        pool_reset_on_return='commit',  # Reset connection state on return
+        **pool_options,
+        pool_reset_on_return='rollback',  # Reset connection state on return
         echo=False,
         # Do not pass statement_timeout as a libpq startup option: Neon pooler
         # endpoints reject it. SET LOCAL is applied at each transaction start.
@@ -151,11 +154,8 @@ else:
             future=True,
             poolclass=QueuePool,
             pool_pre_ping=True,
-            pool_size=10,
-            max_overflow=20,
-            pool_timeout=30,
-            pool_recycle=1800,
-            pool_reset_on_return='commit',
+            **pool_options,
+            pool_reset_on_return='rollback',
             echo=False,
             # Add additional connection validation
             connect_args={
