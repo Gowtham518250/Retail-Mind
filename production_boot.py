@@ -272,6 +272,32 @@ def _start_attendance_auto_checkout():
     thread.start()
     print("[ATTENDANCE] automatic shift checkout worker started", flush=True)
 
+def _run_database_migrations() -> None:
+    """Apply all versioned schema migrations before startup patches query tables.
+
+    Render services can have a dashboard-configured start command that bypasses
+    render.yaml. Running Alembic here guarantees a fresh database is initialized
+    even when the service starts with `python production_boot.py` directly.
+    Migration execution is idempotent once the database is at the current head.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).resolve().parent
+    config_path = root / "alembic.ini"
+    migrations_path = root / "alembic"
+    if not config_path.is_file() or not migrations_path.is_dir():
+        raise RuntimeError(
+            "Database migrations cannot run: alembic.ini or the alembic directory is missing."
+        )
+
+    config = Config(str(config_path))
+    config.set_main_option("script_location", str(migrations_path))
+    print("[DB] Applying Alembic migrations to head before startup...", flush=True)
+    command.upgrade(config, "head")
+    print("[DB] Alembic migrations completed successfully.", flush=True)
+
+
 def _ensure_online_order_status_enum():
     """Keep production PostgreSQL enum values aligned with the online-order state machine."""
     from db import engine
@@ -846,6 +872,10 @@ def _patch_routes():
     return app_module.api
 
 if __name__ == "__main__":
+    # Run migrations before compatibility helpers issue SQL against application tables.
+    # This also covers Render services whose dashboard start command is simply
+    # `python production_boot.py` and bypasses render.yaml.
+    _run_database_migrations()
     _ensure_online_order_status_enum()
     _ensure_sales_reference_order_id()
     _ensure_online_delivery_payment_trigger()
