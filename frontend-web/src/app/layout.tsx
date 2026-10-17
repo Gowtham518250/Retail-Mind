@@ -72,17 +72,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             name: SITE_NAME,
             url: SITE_URL,
           }} />
-          <NativeAppPerformance />
-          <Navbar />
-          <NavigationProgress />
-          <main className="page-transition">
-            <Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Getting things ready…</div>}>{children}</Suspense>
-          </main>
-          <footer className="site-footer">
-            <Link href="/shops">Browse shops</Link>
-            <Link href="/privacy">Privacy information</Link>
-          </footer>
-          <CartDrawer />
+          <NativeAppPerformance>
+            <Navbar />
+            <NavigationProgress />
+            <main className="page-transition">
+              <Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Getting things ready…</div>}>{children}</Suspense>
+            </main>
+            <footer className="site-footer">
+              <Link href="/shops">Browse shops</Link>
+              <Link href="/privacy">Privacy information</Link>
+            </footer>
+            <CartDrawer />
+          </NativeAppPerformance>
         </CartProvider>
       </body>
     </html>

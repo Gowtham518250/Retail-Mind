@@ -719,24 +719,23 @@ html[data-native-app] {
   scroll-behavior: auto;
 }
 
+html[data-native-app] *,
+html[data-native-app] *::before,
+html[data-native-app] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 html[data-native-app] body {
   background-attachment: scroll;
 }
 
 html[data-native-app] .page-transition {
   animation: none;
-}
-
-html[data-native-app] [data-experience]::before,
-html[data-native-app] [data-experience]::after,
-html[data-native-app] [data-experience] > section:first-of-type::after,
-html[data-native-app] [data-experience="auth"] [class*="orb"]::after,
-html[data-native-app] [data-experience="profile"] [class*="orb"]::after,
-html[data-native-app] .hero3d-fallback-bag,
-html[data-native-app] .hero3d-fallback-shadow,
-html[data-native-app] .hero3d-fallback-orbit {
-  animation: none;
-  transition: none;
 }
 
 html[data-native-app] [data-experience="marketplace"] [class*="stageGlow"],
