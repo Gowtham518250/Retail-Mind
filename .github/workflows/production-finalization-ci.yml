@@ -49,10 +49,44 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\n' "$heads" | grep -c '^033_add_payment_confirmation_source')"
+          count="$(echo "$heads" | grep -c '^035_ensure_online_customers_schema')"
           test "$count" -eq 1
-          head_count="$(printf '%s\n' "$heads" | grep -c '(head)')"
+          head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
+      - name: Apply migrations to an empty test database
+        run: |
+          alembic upgrade head
+          python - <<'PY'
+          import os
+          from sqlalchemy import create_engine, inspect
+
+          engine = create_engine(os.environ["DATABASE_URL"])
+          inspector = inspect(engine)
+          tables = set(inspector.get_table_names())
+          required_tables = {
+              "user_details",
+              "sales",
+              "products",
+              "customers",
+              "invoices",
+              "invoice_line_items",
+              "payments",
+              "online_orders",
+              "online_customers",
+              "online_order_delivery_otps",
+              "shop_reviews",
+              "workers",
+          }
+          missing = sorted(required_tables - tables)
+          if missing:
+              raise SystemExit(f"Fresh schema is missing required tables: {missing}")
+
+          sales_columns = {item["name"] for item in inspector.get_columns("sales")}
+          if "reference_order_id" not in sales_columns:
+              raise SystemExit("Fresh sales schema is missing reference_order_id")
+
+          print("Fresh database migration smoke test passed.")
+          PY
       - name: Run focused production tests
         env:
           PYTHONPATH: .

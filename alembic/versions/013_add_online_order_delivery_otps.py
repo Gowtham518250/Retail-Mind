@@ -16,6 +16,32 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Fresh installs create online_customers here because later migrations
+    # attach delivery OTPs, shop reviews, returns, and loyalty to that table.
+    # Older production databases may already have created it outside Alembic.
+    bind = op.get_bind()
+    tables = set(sa.inspect(bind).get_table_names())
+    if "online_customers" not in tables:
+        op.create_table(
+            "online_customers",
+            sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
+            sa.Column("user_name", sa.String(length=100), nullable=False),
+            sa.Column("email", sa.String(length=100), nullable=True),
+            sa.Column("phone", sa.String(length=20), nullable=True),
+            sa.Column("city", sa.String(length=100), nullable=True),
+            sa.Column("address", sa.Text(), nullable=True),
+            sa.Column("password", sa.String(length=100), nullable=False),
+            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+            sa.Column("created_at", sa.DateTime(), server_default=sa.func.now()),
+            sa.UniqueConstraint("email", name="uq_online_customers_email"),
+        )
+        op.create_index(
+            "ix_online_customers_phone",
+            "online_customers",
+            ["phone"],
+            unique=True,
+        )
+
     op.create_table(
         "online_order_delivery_otps",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
