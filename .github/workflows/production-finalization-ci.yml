@@ -44,7 +44,7 @@ jobs:
           pip install pytest
       - name: Compile production modules
         run: |
-          python -m py_compile             app.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py retail_intelligence.py tools/ai_query_eval.py tools/staging_config.py tools/run_staging_ai_eval.py
+          python -m py_compile             app.py             db_pool_config.py             health_routes.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py retail_intelligence.py tools/ai_query_eval.py tools/staging_config.py tools/run_staging_ai_eval.py
       - name: Validate Alembic migration graph
         run: |
           heads="$(alembic heads)"
@@ -118,6 +118,8 @@ jobs:
           pytest -q tests/test_product_image_contract.py
           pytest -q tests/test_render_host_validation.py
           pytest -q tests/test_root_head_probe.py
+          pytest -q tests/test_db_pool_config.py
+          pytest -q tests/test_health_routes.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
           pytest -q tests/test_query_retrieval_optimization.py
           pytest -q tests/test_query_safety.py
