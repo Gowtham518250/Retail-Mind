@@ -15,25 +15,56 @@ depends_on = None
 def upgrade():
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        # Keep legacy labels readable while adding normalized receipt statuses.
-        op.execute("ALTER TYPE purchase_order_status ADD VALUE IF NOT EXISTS 'ORDERED'")
-        op.execute("ALTER TYPE purchase_order_status ADD VALUE IF NOT EXISTS 'PENDING'")
-        op.execute("ALTER TYPE purchase_order_status ADD VALUE IF NOT EXISTS 'PARTIALLY_RECEIVED'")
-        op.execute("ALTER TYPE purchase_order_status ADD VALUE IF NOT EXISTS 'RECEIVED'")
+        # The initial schema calls this enum 'po_status', while some adopted
+        # production schemas call it 'purchase_order_status'. Resolve the type
+        # actually used by purchase_orders.status rather than assuming one name.
+        enum_name = bind.execute(sa.text("""
+            SELECT udt_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'purchase_orders'
+              AND column_name = 'status'
+        """)).scalar()
+        allowed_enum_names = {"po_status", "purchase_order_status"}
+        if enum_name in allowed_enum_names:
+            for label in ("ORDERED", "PENDING", "PARTIALLY_RECEIVED", "RECEIVED"):
+                op.execute(
+                    sa.text(
+                        f"ALTER TYPE {enum_name} ADD VALUE IF NOT EXISTS '{label}'"
+                    )
+                )
 
-    op.add_column("purchase_orders", sa.Column("idempotency_key", sa.String(length=128), nullable=True))
-    op.create_index(
-        "uq_purchase_order_shop_idempotency",
-        "purchase_orders",
-        ["shop_id", "idempotency_key"],
-        unique=True,
-        postgresql_where=sa.text("idempotency_key IS NOT NULL"),
-        sqlite_where=sa.text("idempotency_key IS NOT NULL"),
-    )
+    bind = op.get_bind()
+    existing_columns = {
+        column["name"] for column in sa.inspect(bind).get_columns("purchase_orders")
+    }
+    if "idempotency_key" not in existing_columns:
+        op.add_column(
+            "purchase_orders",
+            sa.Column("idempotency_key", sa.String(length=128), nullable=True),
+        )
+
+    existing_indexes = {
+        index["name"] for index in sa.inspect(bind).get_indexes("purchase_orders")
+    }
+    if "uq_purchase_order_shop_idempotency" not in existing_indexes:
+        op.create_index(
+            "uq_purchase_order_shop_idempotency",
+            "purchase_orders",
+            ["shop_id", "idempotency_key"],
+            unique=True,
+            postgresql_where=sa.text("idempotency_key IS NOT NULL"),
+            sqlite_where=sa.text("idempotency_key IS NOT NULL"),
+        )
 
 
 def downgrade():
-    op.drop_index("uq_purchase_order_shop_idempotency", table_name="purchase_orders")
-    op.drop_column("purchase_orders", "idempotency_key")
+    bind = op.get_bind()
+    indexes = {index["name"] for index in sa.inspect(bind).get_indexes("purchase_orders")}
+    if "uq_purchase_order_shop_idempotency" in indexes:
+        op.drop_index("uq_purchase_order_shop_idempotency", table_name="purchase_orders")
+    columns = {column["name"] for column in sa.inspect(bind).get_columns("purchase_orders")}
+    if "idempotency_key" in columns:
+        op.drop_column("purchase_orders", "idempotency_key")
     # PostgreSQL enum values are intentionally retained on downgrade to avoid
-    # invalidating persisted status rows; they can be removed only by rebuilding the type.
+    # invalidating persisted status rows.
