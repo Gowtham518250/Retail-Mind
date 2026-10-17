@@ -14,7 +14,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
-    "next": "16.2.6",
+    "next": "16.3.8",
     "react": "^19",
     "react-dom": "^19",
     "shadcn": "^4.8.0",
@@ -32,7 +32,13 @@
   },
   "pnpm": {
     "overrides": {
-      "hono": "4.12.25"
+      "hono": "4.12.25",
+      "postcss": "8.5.23",
+      "postcss-selector-parser": "7.1.6",
+      "proxy-addr": "2.0.8",
+      "qs": "6.16.0",
+      "sharp": "0.35.5",
+      "source-map-js": "1.2.2"
     }
   }
 }
