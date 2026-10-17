@@ -2,6 +2,12 @@ import os
 
 os.environ.setdefault("SECRET_KEY", "ci-realtime-secret-key-for-tests-only-1234567890")
 
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
+
+import realtime
 from realtime import (
     _RealtimeConnection,
     _RealtimeManager,
@@ -103,3 +109,35 @@ def test_customer_does_not_receive_shop_inventory_events():
             "new_stock": 4,
         },
     )
+
+
+
+def test_websocket_auth_ticket_is_sent_in_first_frame_not_query(monkeypatch):
+    async def fake_redis_start():
+        return None
+
+    monkeypatch.setattr(realtime.redis_event_bridge, "start", fake_redis_start)
+    monkeypatch.setattr(realtime, "realtime_manager", _RealtimeManager())
+
+    app = FastAPI()
+    app.include_router(realtime.router)
+    ticket = create_realtime_ticket(user_id=42, role=ROLE_CUSTOMER, shop_id=0)
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/api/ws/live/42/0") as websocket:
+            websocket.send_json({"action": "authenticate", "ticket": ticket})
+            ready = websocket.receive_json()
+            assert ready["type"] == "realtime.ready"
+            assert ready["role"] == ROLE_CUSTOMER
+
+
+def test_websocket_rejects_missing_first_frame_authentication(monkeypatch):
+    app = FastAPI()
+    app.include_router(realtime.router)
+
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/api/ws/live/42/0") as websocket:
+                websocket.send_json({"action": "subscribe"})
+
+    assert exc_info.value.code == 1008
