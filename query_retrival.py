@@ -60,42 +60,55 @@ def _is_groq_rate_limit_error(exc: Exception) -> bool:
     return status == 429 or type(exc).__name__ == "RateLimitError" or "rate_limit_exceeded" in code or "429 too many requests" in message or "output tokens per minute" in message
 
 # CPU-only embedding runtime for small Render instances.
-# Uses the same all-MiniLM-L6-v2 model family as the existing FAISS index,
-# but runs inference with ONNX Runtime instead of PyTorch.
+# Model assets are packaged at build time; importing this API module does not
+# make network requests or initialize an ONNX session before the port binds.
+import threading
 import numpy as np
 import onnxruntime as ort
-
-# Configure Hugging Face before importing huggingface_hub so Render never
-# falls back to the non-writable /app cache, including Xet.
-MODEL_CACHE = Path("/tmp/.cache/huggingface")
-MODEL_CACHE.mkdir(parents=True, exist_ok=True)
-os.environ["HF_HOME"] = str(MODEL_CACHE)
-os.environ["HF_XET_CACHE"] = str(MODEL_CACHE / "xet")
-os.environ["HF_HUB_CACHE"] = str(MODEL_CACHE / "hub")
-os.environ["HF_HUB_DISABLE_XET"] = "1"
-
-from huggingface_hub import hf_hub_download
 from tokenizers import Tokenizer
 
-MODEL_REPO = "Xenova/all-MiniLM-L6-v2"
+MODEL_ASSETS_DIR = BASE_DIR / "model_assets"
+TOKENIZER_PATH = MODEL_ASSETS_DIR / "tokenizer.json"
+MODEL_PATH = MODEL_ASSETS_DIR / "model.onnx"
 
-TOKENIZER_PATH = hf_hub_download(
-    repo_id=MODEL_REPO,
-    filename="tokenizer.json",
-    cache_dir=str(MODEL_CACHE),
-)
-MODEL_PATH = hf_hub_download(
-    repo_id=MODEL_REPO,
-    filename="onnx/model.onnx",
-    cache_dir=str(MODEL_CACHE),
-)
+_TOKENIZER = None
+_SESSION = None
+_EMBEDDING_RUNTIME_LOCK = threading.Lock()
 
-_TOKENIZER = Tokenizer.from_file(TOKENIZER_PATH)
-_TOKENIZER.enable_truncation(max_length=256)
-_SESSION = ort.InferenceSession(
-    MODEL_PATH,
-    providers=["CPUExecutionProvider"],
-)
+
+def _get_embedding_runtime():
+    """Load the packaged CPU embedding model only when a query needs it."""
+    global _TOKENIZER, _SESSION
+    if _TOKENIZER is not None and _SESSION is not None:
+        return _TOKENIZER, _SESSION
+
+    with _EMBEDDING_RUNTIME_LOCK:
+        if _TOKENIZER is not None and _SESSION is not None:
+            return _TOKENIZER, _SESSION
+
+        missing = [
+            str(path)
+            for path in (TOKENIZER_PATH, MODEL_PATH)
+            if not path.is_file()
+        ]
+        if missing:
+            raise RuntimeError(
+                "Local query-embedding assets are missing: "
+                + ", ".join(missing)
+                + ". Run python build_faiss_index.py during the build; "
+                "runtime downloads are intentionally disabled."
+            )
+
+        tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH))
+        tokenizer.enable_truncation(max_length=256)
+        session = ort.InferenceSession(
+            str(MODEL_PATH),
+            providers=["CPUExecutionProvider"],
+        )
+        _TOKENIZER = tokenizer
+        _SESSION = session
+        return _TOKENIZER, _SESSION
+
 
 def _repair_known_schema_aliases(sql: str) -> str:
     """Repair only schema aliases that are unambiguously known from our catalog.
@@ -435,13 +448,14 @@ class MiniLMONNXEmbeddings(Embeddings):
 
     @staticmethod
     def _embed(text: str) -> list[float]:
-        encoded = _TOKENIZER.encode(text)
+        tokenizer, session = _get_embedding_runtime()
+        encoded = tokenizer.encode(text)
         input_ids = np.asarray([encoded.ids], dtype=np.int64)
         attention_mask = np.asarray([encoded.attention_mask], dtype=np.int64)
         token_type_ids = np.asarray([encoded.type_ids], dtype=np.int64)
 
         inputs = {}
-        input_names = {item.name for item in _SESSION.get_inputs()}
+        input_names = {item.name for item in session.get_inputs()}
         if "input_ids" in input_names:
             inputs["input_ids"] = input_ids
         if "attention_mask" in input_names:
@@ -449,7 +463,7 @@ class MiniLMONNXEmbeddings(Embeddings):
         if "token_type_ids" in input_names:
             inputs["token_type_ids"] = token_type_ids
 
-        outputs = _SESSION.run(None, inputs)
+        outputs = session.run(None, inputs)
         token_embeddings = outputs[0]
 
         mask = attention_mask[..., None].astype(np.float32)
