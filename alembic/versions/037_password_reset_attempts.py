@@ -1,4 +1,4 @@
-"""Repair legacy password reset columns and add bounded OTP attempts.
+""""Repair legacy password reset columns and add bounded OTP attempts.
 
 Revision ID: 037_password_reset_attempts
 Revises: 036_email_otp_challenges
@@ -51,6 +51,15 @@ def upgrade() -> None:
                 sa.Integer(),
                 nullable=False,
                 server_default="0",
+            ),
+        ),
+        (
+            "created_at",
+            sa.Column(
+                "created_at",
+                sa.DateTime(),
+                nullable=True,
+                server_default=sa.func.now(),
             ),
         ),
     ]
