@@ -22,7 +22,7 @@ function getBackendBase(): string | null {
     ) {
       return null;
     }
-    return url.origin.replace(/\/+$/, '');
+    return url.origin;
   } catch {
     return null;
   }
