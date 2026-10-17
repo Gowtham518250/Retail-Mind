@@ -12,6 +12,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("SENDER_EMAIL", "test@example.com")
 os.environ.setdefault("SENDER_PASSWORD", "test-password")
+os.environ["ALLOWED_HOSTS"] = "testserver,localhost,127.0.0.1"
 
 from fastapi.testclient import TestClient
 
