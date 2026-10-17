@@ -60,6 +60,15 @@ def upgrade() -> None:
             ["email", "purpose", "created_at"],
             unique=False,
         )
+    if "uq_email_otp_one_active_per_email" not in indexes:
+        op.create_index(
+            "uq_email_otp_one_active_per_email",
+            "email_otp_challenges",
+            ["email"],
+            unique=True,
+            postgresql_where=sa.text("used_at IS NULL"),
+            sqlite_where=sa.text("used_at IS NULL"),
+        )
 
 
 def downgrade() -> None:
