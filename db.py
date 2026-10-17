@@ -19,25 +19,22 @@ def _statement_timeout_ms() -> int:
         return 30000
 
 
-def _set_postgres_statement_timeout(dbapi_connection, connection_record) -> None:
-    """Set statement_timeout after connect so Neon poolers accept the session.
+def _set_postgres_statement_timeout(connection) -> None:
+    """Apply a per-transaction timeout without a libpq startup parameter.
 
-    Neon transaction/session poolers reject statement_timeout when it is passed
-    as a libpq startup option. Use PostgreSQL set_config on the established
-    connection instead. Each newly opened pooled connection gets the timeout.
+    Neon poolers reject statement_timeout in connection startup options, and
+    transaction pooling can reassign a backend between client transactions.
+    SET LOCAL applies only to the active transaction, so it works with pooled
+    endpoints and is reset automatically at transaction end.
     """
     timeout_ms = _statement_timeout_ms()
     if timeout_ms <= 0:
         return
 
-    cursor = dbapi_connection.cursor()
-    try:
-        cursor.execute(
-            "SELECT set_config('statement_timeout', %s, false)",
-            (f"{timeout_ms}ms",),
-        )
-    finally:
-        cursor.close()
+    # timeout_ms is parsed and constrained to a non-negative integer above.
+    connection.exec_driver_sql(
+        f"SET LOCAL statement_timeout = '{timeout_ms}ms'"
+    )
 
 
 def normalize_database_url(url: str) -> str:
@@ -173,8 +170,9 @@ else:
 
 # Preserve the 30-second query guard without sending statement_timeout in the
 # connection startup packet (incompatible with Neon pooled connection URLs).
+# SET LOCAL runs at transaction start and is safe with transaction pooling.
 if engine.dialect.name == "postgresql":
-    event.listen(engine, "connect", _set_postgres_statement_timeout)
+    event.listen(engine, "begin", _set_postgres_statement_timeout)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 sessionLocal = SessionLocal # Alias for legacy imports
