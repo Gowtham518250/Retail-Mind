@@ -114,5 +114,8 @@ def test_redis_failure_reason_is_safe_and_actionable():
         OSError("Temporary failure in name resolution")
     ) == "dns_failure"
     assert rl._redis_failure_reason(
+        OSError("Error -2 connecting to red-example:6379. -2.")
+    ) == "dns_failure"
+    assert rl._redis_failure_reason(
         OSError("Operation timed out")
     ) == "timeout"
