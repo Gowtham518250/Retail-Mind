@@ -5,11 +5,56 @@ from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
 import os
 import logging
+import re
+import time
+from fastapi import HTTPException
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
 from db_pool_config import pool_options_from_env, log_pool_budget
 
 logger = logging.getLogger(__name__)
+
+
+def _slow_db_query_threshold_ms() -> int:
+    """Slow SQL logging threshold; log metadata only, never bound parameter values."""
+    try:
+        return min(10000, max(1, int(os.getenv("DB_SLOW_QUERY_THRESHOLD_MS", "150"))))
+    except (TypeError, ValueError):
+        return 150
+
+
+def _sql_statement_summary(statement: str) -> str:
+    """Return a low-sensitivity SQL summary without logging values or full SQL."""
+    normalized = " ".join(str(statement).split())
+    operation = normalized.split(" ", 1)[0].upper() if normalized else "UNKNOWN"
+    tables = re.findall(
+        r"\\b(?:FROM|JOIN|UPDATE|INTO)\\s+([\"A-Za-z_][\\w.$\"]*)",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    unique_tables = list(dict.fromkeys(table.strip('"') for table in tables))[:3]
+    if unique_tables:
+        return f"{operation} tables={','.join(unique_tables)}"
+    return operation
+
+
+def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    if context is not None:
+        context._retail_mind_sql_started_at = time.perf_counter()
+
+
+def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    started = getattr(context, "_retail_mind_sql_started_at", None)
+    if started is None:
+        return
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    if elapsed_ms >= _slow_db_query_threshold_ms():
+        logger.warning(
+            "SLOW DB STATEMENT duration_ms=%.2f summary=%s",
+            elapsed_ms,
+            _sql_statement_summary(statement),
+        )
+
 
 def _statement_timeout_ms() -> int:
     """Return the configured PostgreSQL statement timeout in milliseconds."""
@@ -174,27 +219,49 @@ else:
 if engine.dialect.name == "postgresql":
     event.listen(engine, "begin", _set_postgres_statement_timeout)
 
+# Record slow statement durations so endpoint latency can be split into SQL
+# execution vs. connection/setup/serialization time. Bound parameters are never logged.
+event.listen(engine, "before_cursor_execute", _before_cursor_execute)
+event.listen(engine, "after_cursor_execute", _after_cursor_execute)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 sessionLocal = SessionLocal # Alias for legacy imports
 Base = declarative_base()
 
 def get_db():
     """
-    Database session dependency with proper session management.
-    Ensures transactions are properly committed or rolled back.
+    Database session dependency with proper transaction cleanup.
+
+    Expected FastAPI HTTPException responses are rolled back without being
+    mislabeled as database errors. Slow commit timings are logged separately
+    from individual SQL statement timings.
     """
     db: Session = SessionLocal()
     try:
         yield db
-        # Commit if no exception occurred
+        pending_new = len(db.new)
+        pending_dirty = len(db.dirty)
+        pending_deleted = len(db.deleted)
+        commit_started = time.perf_counter()
         db.commit()
-    except Exception as e:
-        # Rollback on any exception
+        commit_ms = (time.perf_counter() - commit_started) * 1000
+        if commit_ms >= _slow_db_query_threshold_ms():
+            logger.warning(
+                "SLOW DB COMMIT duration_ms=%.2f new=%s dirty=%s deleted=%s",
+                commit_ms,
+                pending_new,
+                pending_dirty,
+                pending_deleted,
+            )
+    except HTTPException:
         db.rollback()
-        logger.error(f"Database session error, transaction rolled back: {e}")
+        logger.debug("Request returned an expected HTTP error; transaction rolled back")
+        raise
+    except Exception:
+        db.rollback()
+        logger.exception("Unexpected database/session failure; transaction rolled back")
         raise
     finally:
-        # Always close the session
         db.close()
 
 @contextmanager
