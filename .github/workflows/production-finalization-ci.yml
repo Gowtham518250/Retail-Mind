@@ -49,9 +49,9 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(printf '%s\\n' "$heads" | grep -c '^034_repair_missing_sales_table')"
+          count="$(echo "$heads" | grep -c '^034_repair_missing_sales_table')"
           test "$count" -eq 1
-          head_count="$(printf '%s\\n' "$heads" | grep -c '(head)')"
+          head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
       - name: Apply migrations to an empty test database
         run: |
