@@ -56,16 +56,19 @@ def _redis_failure_reason(error: Exception) -> str:
         return "timeout"
 
     message = str(error).lower()
+    # redis-py may abbreviate getaddrinfo failures as "Error -2 connecting ...".
+    if (
+        "error -2 connecting" in message
+        or "error -3 connecting" in message
+        or "name or service not known" in message
+        or "temporary failure in name resolution" in message
+        or "no address associated with hostname" in message
+        or "nodename nor servname" in message
+        or "getaddrinfo failed" in message
+    ):
+        return "dns_failure"
     if "connection refused" in message:
         return "connection_refused"
-    if any(term in message for term in (
-        "name or service not known",
-        "temporary failure in name resolution",
-        "no address associated with hostname",
-        "nodename nor servname",
-        "getaddrinfo failed",
-    )):
-        return "dns_failure"
     if any(term in message for term in ("certificate verify failed", "ssl:", "tls")):
         return "tls_failure"
     if "timed out" in message or "timeout" in message:
