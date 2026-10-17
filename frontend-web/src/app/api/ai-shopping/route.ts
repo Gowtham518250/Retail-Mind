@@ -1,32 +1,10 @@
 import { NextResponse } from 'next/server';
 
-function getBackendBase(): string | null {
-  const configured = (
-    process.env.RETAIL_MIND_BACKEND_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    ''
-  ).trim();
-  if (!configured) return null;
-
-  try {
-    const url = new URL(configured);
-    const localHost = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-    if (
-      !['https:', 'http:'].includes(url.protocol) ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      !['', '/'].includes(url.pathname) ||
-      (url.protocol === 'http:' && !localHost)
-    ) {
-      return null;
-    }
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
+const BACKEND_BASE = (
+  process.env.RETAIL_MIND_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'https://retail-mind-hpx3.onrender.com'
+).replace(/\/+$/, '');
 
 export const dynamic = 'force-dynamic';
 
@@ -50,24 +28,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const backendBase = getBackendBase();
-  if (!backendBase) {
-    return NextResponse.json(
-      {
-        available: false,
-        query: q,
-        recommendations: [],
-        detail: 'Shopping AI backend is not configured for this deployment.',
-        code: 'AI_BACKEND_NOT_CONFIGURED',
-      },
-      {
-        status: 503,
-        headers: { 'Cache-Control': 'no-store' },
-      },
-    );
-  }
-
-  const backendUrl = new URL('/store/customer-ai', backendBase);
+  const backendUrl = new URL('/store/customer-ai', BACKEND_BASE);
   backendUrl.searchParams.set('q', q);
   backendUrl.searchParams.set('limit', limit);
 

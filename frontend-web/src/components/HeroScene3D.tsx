@@ -98,37 +98,111 @@ export default function HeroScene3D({ lite = false, className }: Props) {
     rim.position.set(-3.6, -0.5, 2.2);
     const fill = new THREE.PointLight(PALETTE.yellow, 10, 12);
     fill.position.set(3.2, 2.2, -2);
-    scene.add(key, rim, fill);
+    const backRim = new THREE.PointLight(0x8ccc72, 18, 12);
+    backRim.position.set(1.8, 3.2, -3);
+    scene.add(key, rim, fill, backRim);
 
     const rig = new THREE.Group();
     scene.add(rig);
+
+    const orbitRings = [
+      new THREE.Mesh(
+        new THREE.TorusGeometry(2.5, 0.012, 8, 144),
+        new THREE.MeshBasicMaterial({
+          color: PALETTE.yellow,
+          transparent: true,
+          opacity: 0.28,
+          depthWrite: false,
+        }),
+      ),
+      new THREE.Mesh(
+        new THREE.TorusGeometry(2.85, 0.009, 8, 144),
+        new THREE.MeshBasicMaterial({
+          color: PALETTE.cream,
+          transparent: true,
+          opacity: 0.18,
+          depthWrite: false,
+        }),
+      ),
+    ];
+    orbitRings[0].rotation.set(1.18, -0.3, -0.2);
+    orbitRings[1].rotation.set(0.82, 0.42, 0.28);
+    orbitRings[1].scale.set(1, 0.76, 1);
+    rig.add(...orbitRings);
 
     /* ---------- hero bag ---------- */
     const bag = new THREE.Group();
     rig.add(bag);
 
-    const paper = new THREE.MeshPhysicalMaterial({ color: PALETTE.paper, roughness: 0.6, clearcoat: 0.25, clearcoatRoughness: 0.5 });
+    const paper = new THREE.MeshPhysicalMaterial({ color: 0xe6d1a9, roughness: 0.7, clearcoat: 0.16, clearcoatRoughness: 0.62 });
     const greenMat = new THREE.MeshStandardMaterial({ color: PALETTE.green, roughness: 0.45 });
     const orangeMat = new THREE.MeshPhysicalMaterial({ color: PALETTE.orange, roughness: 0.35, clearcoat: 0.6 });
     const yellowMat = new THREE.MeshPhysicalMaterial({ color: PALETTE.yellow, roughness: 0.4, clearcoat: 0.4 });
     const creamMat = new THREE.MeshStandardMaterial({ color: PALETTE.cream, roughness: 0.5 });
     const goldMat = new THREE.MeshStandardMaterial({ color: 0xe9b949, roughness: 0.25, metalness: 0.9 });
 
-    const body = new THREE.Mesh(new RoundedBoxGeometry(1.8, 2.2, 1, 6, 0.14), paper);
+    const bagShape = new THREE.Shape();
+    bagShape.moveTo(-0.82, -1.06);
+    bagShape.lineTo(0.82, -1.06);
+    bagShape.lineTo(1.02, 1.02);
+    bagShape.lineTo(-1.02, 1.02);
+    bagShape.closePath();
+    const bagGeometry = new THREE.ExtrudeGeometry(bagShape, {
+      depth: 0.82,
+      bevelEnabled: true,
+      bevelSegments: 4,
+      steps: 1,
+      bevelSize: 0.055,
+      bevelThickness: 0.055,
+      curveSegments: 8,
+    });
+    bagGeometry.translate(0, 0, -0.41);
+    const body = new THREE.Mesh(bagGeometry, paper);
     bag.add(body);
 
-    const band = new THREE.Mesh(new RoundedBoxGeometry(1.84, 0.46, 1.04, 4, 0.09), greenMat);
-    band.position.y = -0.62;
+    const innerTop = new THREE.Mesh(
+      new RoundedBoxGeometry(1.9, 0.09, 0.72, 4, 0.035),
+      new THREE.MeshStandardMaterial({ color: 0x4a3828, roughness: 0.9 }),
+    );
+    innerTop.position.set(0, 0.99, 0);
+    bag.add(innerTop);
+
+    const band = new THREE.Mesh(new RoundedBoxGeometry(1.82, 0.42, 0.91, 4, 0.09), greenMat);
+    band.position.set(0, -0.62, 0.035);
     bag.add(band);
 
-    const badge = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 48), orangeMat);
-    badge.rotation.x = Math.PI / 2;
-    badge.position.set(0, 0.34, 0.52);
-    bag.add(badge);
-    const badgeInner = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 32), yellowMat);
-    badgeInner.rotation.x = Math.PI / 2;
-    badgeInner.position.set(0, 0.34, 0.545);
-    bag.add(badgeInner);
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 512;
+    labelCanvas.height = 256;
+    const labelContext = labelCanvas.getContext('2d');
+    if (labelContext) {
+      labelContext.fillStyle = '#f7f1df';
+      labelContext.beginPath();
+      labelContext.roundRect(18, 18, 476, 220, 30);
+      labelContext.fill();
+      labelContext.fillStyle = '#245b42';
+      labelContext.fillRect(46, 52, 10, 152);
+      labelContext.font = '700 38px Arial, sans-serif';
+      labelContext.letterSpacing = '5px';
+      labelContext.fillText('RETAIL', 82, 112);
+      labelContext.fillText('MIND', 82, 164);
+      labelContext.fillStyle = '#e8541e';
+      labelContext.beginPath();
+      labelContext.arc(420, 130, 22, 0, Math.PI * 2);
+      labelContext.fill();
+    }
+    const labelTexture = new THREE.CanvasTexture(labelCanvas);
+    labelTexture.colorSpace = THREE.SRGBColorSpace;
+    const label = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.88, 0.44),
+      new THREE.MeshStandardMaterial({
+        map: labelTexture,
+        roughness: 0.72,
+        transparent: true,
+      }),
+    );
+    label.position.set(0, 0.18, 0.52);
+    bag.add(label);
 
     const handleGeo = new THREE.TorusGeometry(0.46, 0.05, 16, 48, Math.PI);
     [-0.24, 0.24].forEach((z) => {
@@ -142,24 +216,44 @@ export default function HeroScene3D({ lite = false, className }: Props) {
     baguette.position.set(-0.36, 1.35, -0.05);
     baguette.rotation.z = 0.32;
     bag.add(baguette);
-    const greens = new THREE.Mesh(new THREE.IcosahedronGeometry(0.36, 1), new THREE.MeshStandardMaterial({ color: 0x6f9f4a, roughness: 0.6, flatShading: true }));
-    greens.position.set(0.38, 1.22, 0.05);
+    const greens = new THREE.Group();
+    const leafMaterial = new THREE.MeshStandardMaterial({ color: 0x6f9f4a, roughness: 0.58, flatShading: true });
+    for (let i = 0; i < 7; i++) {
+      const leaf = new THREE.Mesh(
+        new THREE.SphereGeometry(0.21, 14, 10),
+        leafMaterial,
+      );
+      const angle = (i / 7) * Math.PI * 2;
+      leaf.position.set(Math.cos(angle) * 0.2, Math.sin(angle) * 0.12 + 0.08, Math.sin(angle) * 0.16);
+      leaf.scale.set(0.72, 1.35, 0.58);
+      leaf.rotation.z = angle;
+      greens.add(leaf);
+    }
+    greens.position.set(0.42, 1.24, 0.08);
     bag.add(greens);
     const tomato = new THREE.Mesh(new THREE.SphereGeometry(0.27, 32, 24), orangeMat);
     tomato.position.set(0.02, 1.12, 0.28);
     bag.add(tomato);
+    const lemon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.23, 28, 20),
+      new THREE.MeshPhysicalMaterial({ color: 0xf3ca4f, roughness: 0.36, clearcoat: 0.4 }),
+    );
+    lemon.scale.set(1.35, 0.82, 0.88);
+    lemon.position.set(0.48, 1.12, 0.34);
+    lemon.rotation.z = -0.3;
+    bag.add(lemon);
 
     bag.position.y = -0.1;
-    bag.scale.setScalar(1.2);
+    bag.scale.setScalar(1.3);
 
     /* ---------- soft ground shadow ---------- */
     const shadowTex = softShadowTexture();
     const shadow = new THREE.Mesh(
-      new THREE.PlaneGeometry(4.2, 4.2),
+      new THREE.PlaneGeometry(5.2, 5.2),
       new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 0.55 }),
     );
     shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = -1.85;
+    shadow.position.y = -1.9;
     rig.add(shadow);
 
     /* ---------- orbiting products ---------- */
@@ -173,16 +267,39 @@ export default function HeroScene3D({ lite = false, className }: Props) {
     const crate = new THREE.Mesh(new RoundedBoxGeometry(0.72, 0.72, 0.72, 4, 0.09), yellowMat);
     const can = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.7, 32), new THREE.MeshStandardMaterial({ color: PALETTE.green, roughness: 0.3, metalness: 0.35 }));
     const donut = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.13, 20, 48), creamMat);
-    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 48), goldMat);
+    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.065, 48), goldMat);
     const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.38, 0), new THREE.MeshPhysicalMaterial({ color: PALETTE.cream, roughness: 0.15, metalness: 0.1, clearcoat: 1 }));
-
-    addOrbiter(orange, { radius: 3.1, speed: 0.34, phase: 0.2, lift: 0.9, bob: 1.1, spin: new THREE.Vector3(0.2, 0.5, 0) });
-    addOrbiter(crate, { radius: 3.4, speed: 0.28, phase: 2.3, lift: -0.6, bob: 0.8, spin: new THREE.Vector3(0.4, 0.6, 0.2) });
-    addOrbiter(coin, { radius: 2.8, speed: 0.4, phase: 4.1, lift: 1.5, bob: 1.4, spin: new THREE.Vector3(0.1, 1.4, 0) });
-    addOrbiter(can, { radius: 3.3, speed: 0.31, phase: 5.2, lift: -1.1, bob: 1.0, spin: new THREE.Vector3(0.6, 0.2, 0.3) });
+    const orbiterItems = lite
+      ? [
+          [orange, 2.35, 0.9, 0.2, 0.22],
+          [crate, 2.55, -0.65, 2.3, 0.16],
+          [coin, 2.2, 1.5, 4.1, 0.26],
+          [can, 2.5, -1.05, 5.2, 0.18],
+        ] as const
+      : [
+          [orange, 3.1, 0.9, 0.2, 0.3],
+          [crate, 3.4, -0.6, 2.3, 0.22],
+          [coin, 2.8, 1.5, 4.1, 0.34],
+          [can, 3.3, -1.1, 5.2, 0.25],
+        ] as const;
+    orbiterItems.forEach(([mesh, radius, lift, phase, bob], index) => {
+      addOrbiter(mesh, {
+        radius,
+        speed: [0.34, 0.28, 0.4, 0.31][index],
+        phase,
+        lift,
+        bob,
+        spin: [
+          new THREE.Vector3(0.2, 0.5, 0),
+          new THREE.Vector3(0.4, 0.6, 0.2),
+          new THREE.Vector3(0.1, 1.4, 0),
+          new THREE.Vector3(0.6, 0.2, 0.3),
+        ][index],
+      });
+    });
     if (!lite) {
-      addOrbiter(donut, { radius: 3.0, speed: 0.37, phase: 3.2, lift: 0.1, bob: 0.9, spin: new THREE.Vector3(0.7, 0.4, 0) });
-      addOrbiter(gem, { radius: 3.6, speed: 0.25, phase: 1.2, lift: 1.9, bob: 1.2, spin: new THREE.Vector3(0.3, 0.9, 0.4) });
+      addOrbiter(donut, { radius: 3.0, speed: 0.37, phase: 3.2, lift: 0.1, bob: 0.26, spin: new THREE.Vector3(0.7, 0.4, 0) });
+      addOrbiter(gem, { radius: 3.6, speed: 0.25, phase: 1.2, lift: 1.9, bob: 0.32, spin: new THREE.Vector3(0.3, 0.9, 0.4) });
     }
     coin.rotation.x = Math.PI / 2;
 
@@ -240,8 +357,9 @@ export default function HeroScene3D({ lite = false, className }: Props) {
       // keep the whole composition visible on narrow / short canvases
       const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.position.z;
       const halfW = halfH * camera.aspect;
-      const fit = Math.min(1.08, halfW / 3.9, halfH / 2.9);
-      rig.scale.setScalar(Math.max(fit, 0.42));
+      const fit = Math.min(1.08, halfW / (lite ? 2.55 : 3.15), halfH / 2.75);
+      rig.scale.setScalar(Math.max(fit, 0.5));
+      rig.position.x = lite ? 0.12 : 0.24;
       camera.updateProjectionMatrix();
     };
     resize();
@@ -265,25 +383,30 @@ export default function HeroScene3D({ lite = false, className }: Props) {
       pointer.y += (pointer.ty - pointer.y) * 0.06;
       impulse *= 0.94;
 
-      rig.rotation.y = pointer.x * 0.35;
-      rig.rotation.x = pointer.y * 0.12 + scrollShift * 0.35;
-      rig.position.y = -scrollShift * 0.9;
+      rig.rotation.y = pointer.x * 0.58 + Math.sin(t * 0.16) * 0.045;
+      rig.rotation.x = pointer.y * 0.24 + scrollShift * 0.35;
+      rig.position.x = (lite ? 0.12 : 0.24) + pointer.x * 0.24;
+      rig.position.y = -scrollShift * 0.9 + Math.sin(t * 0.72) * 0.07;
 
-      bag.rotation.y = Math.sin(t * 0.55) * 0.55 + pointer.x * 0.25 + impulse * Math.sin(t * 9) * 0.25;
-      bag.rotation.z = Math.sin(t * 0.8) * 0.04;
-      bag.position.y = -0.1 + Math.sin(t * 1.1) * 0.1;
-      shadow.scale.setScalar(1 - Math.sin(t * 1.1) * 0.04);
-      baguette.rotation.z = 0.32 + Math.sin(t * 1.3) * 0.04;
-      greens.rotation.y = t * 0.6;
+      bag.rotation.y = Math.sin(t * 0.55) * 0.72 + pointer.x * 0.34 + impulse * Math.sin(t * 9) * 0.3;
+      bag.rotation.x = Math.sin(t * 0.47) * 0.075;
+      bag.rotation.z = Math.sin(t * 0.8) * 0.075;
+      bag.position.y = -0.1 + Math.sin(t * 1.1) * 0.2;
+      shadow.scale.setScalar(1 - Math.sin(t * 1.1) * 0.09);
+      orbitRings[0].rotation.y = t * 0.11;
+      orbitRings[1].rotation.z = -t * 0.07;
+      baguette.rotation.z = 0.32 + Math.sin(t * 1.3) * 0.055;
+      greens.rotation.y = t * 0.72;
 
       const boost = 1 + impulse * 2.2;
       orbiters.forEach((o) => {
         const a = t * o.speed * boost + o.phase;
         o.mesh.position.set(
           Math.cos(a) * o.radius,
-          o.lift + Math.sin(t * 0.9 + o.phase) * 0.28 * o.bob,
-          Math.sin(a) * o.radius * 0.55,
+          o.lift + Math.sin(t * 0.9 + o.phase) * (lite ? 0.72 : 0.62) * o.bob,
+          Math.sin(a) * o.radius * 0.72,
         );
+        o.mesh.scale.setScalar(1 + Math.sin(t * 1.4 + o.phase) * 0.045);
         o.mesh.rotation.x += o.spin.x * dt * boost;
         o.mesh.rotation.y += o.spin.y * dt * boost;
         o.mesh.rotation.z += o.spin.z * dt * boost;
@@ -337,6 +460,7 @@ export default function HeroScene3D({ lite = false, className }: Props) {
         else mat?.dispose?.();
       });
       shadowTex.dispose();
+      labelTexture.dispose();
       envTarget.dispose();
       pmrem.dispose();
       renderer.dispose();
@@ -345,5 +469,25 @@ export default function HeroScene3D({ lite = false, className }: Props) {
     };
   }, [lite]);
 
-  return <div ref={hostRef} className={className} />;
+  return (
+    <div ref={hostRef} className={className}>
+      <div className="hero3d-fallback" aria-hidden="true">
+        <div className="hero3d-fallback-orbit hero3d-fallback-orbit-a" />
+        <div className="hero3d-fallback-orbit hero3d-fallback-orbit-b" />
+        <div className="hero3d-fallback-shadow" />
+        <div className="hero3d-fallback-bag">
+          <span className="hero3d-fallback-handle" />
+          <span className="hero3d-fallback-produce hero3d-fallback-produce-a" />
+          <span className="hero3d-fallback-produce hero3d-fallback-produce-b" />
+          <span className="hero3d-fallback-produce hero3d-fallback-produce-c" />
+          <span className="hero3d-fallback-label">RETAIL<br />MIND</span>
+          <span className="hero3d-fallback-band" />
+        </div>
+        <span className="hero3d-fallback-item hero3d-fallback-item-a" />
+        <span className="hero3d-fallback-item hero3d-fallback-item-b" />
+        <span className="hero3d-fallback-item hero3d-fallback-item-c" />
+        <span className="hero3d-fallback-item hero3d-fallback-item-d" />
+      </div>
+    </div>
+  );
 }

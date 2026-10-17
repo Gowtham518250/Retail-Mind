@@ -21,7 +21,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import styles from './page.module.css';
 
 type Recommendation = {
@@ -53,6 +53,7 @@ function metric(value: number, suffix = '') {
 }
 
 export default function AiShoppingPage() {
+  const shouldReduceMotion = Boolean(useReducedMotion());
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -129,7 +130,7 @@ export default function AiShoppingPage() {
   }
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-experience="ai-shopping">
       <div className={styles.noise} />
       <div className={styles.gridFloor} />
       <div className={styles.ambient + ' ' + styles.ambientOne} />
@@ -233,12 +234,12 @@ export default function AiShoppingPage() {
 
               <motion.div
                 className={styles.retailPod}
-                animate={{
+                animate={shouldReduceMotion ? { y: 0, rotateY: 0, rotateZ: 0 } : {
                   y: [0, -10, 0],
                   rotateY: [-5, 5, -5],
                   rotateZ: [-2, 1, -2],
                 }}
-                transition={{ duration: 6.2, repeat: Infinity, ease: 'easeInOut' }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 6.2, repeat: Infinity, ease: 'easeInOut' }}
               >
                 <div className={styles.retailPodTop}>
                   <span>RETAIL MIND</span>
@@ -253,8 +254,8 @@ export default function AiShoppingPage() {
 
               <motion.div
                 className={styles.productPod + ' ' + styles.productPodA}
-                animate={{ y: [0, -7, 0], rotateZ: [-3, 1, -3] }}
-                transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
+                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -10, 0], rotateZ: [-3, 1, -3] }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
               >
                 <span>01</span>
                 <Package size={24} />
@@ -263,8 +264,8 @@ export default function AiShoppingPage() {
 
               <motion.div
                 className={styles.productPod + ' ' + styles.productPodB}
-                animate={{ y: [0, 8, 0], rotateZ: [3, -1, 3] }}
-                transition={{ duration: 5.3, repeat: Infinity, ease: 'easeInOut', delay: .4 }}
+                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, 11, 0], rotateZ: [3, -1, 3] }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.3, repeat: Infinity, ease: 'easeInOut', delay: .4 }}
               >
                 <span>02</span>
                 <Star size={22} fill="currentColor" />
@@ -273,8 +274,8 @@ export default function AiShoppingPage() {
 
               <motion.div
                 className={styles.productPod + ' ' + styles.productPodC}
-                animate={{ y: [0, -6, 0], rotateZ: [2, -1, 2] }}
-                transition={{ duration: 5.1, repeat: Infinity, ease: 'easeInOut', delay: .8 }}
+                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -9, 0], rotateZ: [2, -1, 2] }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.1, repeat: Infinity, ease: 'easeInOut', delay: .8 }}
               >
                 <span>03</span>
                 <Sparkles size={22} />

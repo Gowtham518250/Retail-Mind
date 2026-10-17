@@ -3,17 +3,19 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, ShoppingBag, User, Package, LogIn, Sparkles, Trophy, Store, Home } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { ShoppingBag, User, Package, LogIn, Sparkles, Trophy, Store, Home } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import styles from './Navbar.module.css';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { toggleCart, itemCount, cartTotal } = useCart();
+  const { toggleCart, itemCount } = useCart();
+  const shouldReduceMotion = Boolean(useReducedMotion());
   const [signedIn, setSignedIn] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [scrolled, setScrolled] = useState(false);
+  const [hash, setHash] = useState('');
 
   useEffect(() => {
     const syncAuth = () => {
@@ -37,11 +39,21 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  useEffect(() => {
+    const syncHash = () => setHash(window.location.hash);
+    syncHash();
+    window.addEventListener('hashchange', syncHash);
+    window.addEventListener('popstate', syncHash);
+    return () => {
+      window.removeEventListener('hashchange', syncHash);
+      window.removeEventListener('popstate', syncHash);
+    };
+  }, []);
+
   if (pathname === '/auth') return null;
 
   const desktopLinks = [
-    { href: '/shops', label: 'Shops', icon: Store, show: true },
-    { href: '/ai-shopping', label: 'AI Shopping', icon: Sparkles, show: true },
+    { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles, show: true },
     { href: '/smart-shop', label: 'Smart Hub', icon: Trophy, show: signedIn },
     { href: '/orders', label: 'Orders', icon: Package, show: signedIn },
     { href: '/profile', label: customerName ? customerName.split(' ')[0] : 'Account', icon: User, show: signedIn },
@@ -50,10 +62,11 @@ export default function Navbar() {
 
   const mobileNavItems = [
     { href: '/', label: 'Home', icon: Home },
-    { href: '/shops', label: 'Shops', icon: Store },
+    { href: '/#shops', label: 'Shops', icon: Store },
     { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles },
-    { href: signedIn ? '/orders' : '/auth', label: 'Orders', icon: Package },
-    { href: signedIn ? '/profile' : '/auth', label: 'Account', icon: User },
+    { href: signedIn ? '/orders' : '/auth?next=%2Forders', label: 'Orders', icon: Package },
+    ...(signedIn ? [{ href: '/smart-shop', label: 'Smart Hub', icon: Trophy }] : []),
+    { href: signedIn ? '/profile' : '/auth?next=%2Fprofile', label: 'Account', icon: User },
   ];
 
   return (
@@ -61,7 +74,7 @@ export default function Navbar() {
       <header className={styles.wrap}>
         <motion.nav
           className={`${styles.nav} ${scrolled ? styles.scrolled : ''}`}
-          initial={{ y: -40, opacity: 0 }}
+          initial={shouldReduceMotion ? false : { y: -40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 220, damping: 24 }}
           aria-label="Customer Primary Navigation"
@@ -83,7 +96,7 @@ export default function Navbar() {
                   aria-label={label}
                   aria-current={active ? 'page' : undefined}
                 >
-                  {active && (
+                  {active && !shouldReduceMotion && (
                     <motion.span
                       layoutId="navActive"
                       className={styles.activePill}
@@ -113,9 +126,9 @@ export default function Navbar() {
                     key={itemCount}
                     className={styles.badge}
                     aria-live="polite"
-                    initial={{ scale: 0.3, y: 8, opacity: 0 }}
+                    initial={shouldReduceMotion ? false : { scale: 0.3, y: 8, opacity: 0 }}
                     animate={{ scale: 1, y: 0, opacity: 1 }}
-                    exit={{ scale: 0.3, y: -8, opacity: 0 }}
+                    exit={shouldReduceMotion ? undefined : { scale: 0.3, y: -8, opacity: 0 }}
                     transition={{ type: 'spring', stiffness: 520, damping: 18 }}
                   >
                     {itemCount}
@@ -127,44 +140,25 @@ export default function Navbar() {
         </motion.nav>
       </header>
 
-      {/* Compact cart shortcut on small screens; opens the same live cart drawer. */}
-      {itemCount > 0 &&
-        (pathname === '/' ||
-          pathname === '/shops' ||
-          pathname === '/smart-shop' ||
-          pathname === '/ai-shopping' ||
-          /^\/shop\/\d+$/.test(pathname)) && (
-          <button
-            type="button"
-            className={styles.mobileCartBar}
-            onClick={toggleCart}
-            aria-label={'Open cart with ' + itemCount + ' items'}
-          >
-            <span className={styles.mobileCartBarInfo}>
-              <span className={styles.mobileCartBarIcon}><ShoppingBag size={18} /></span>
-              <span className={styles.mobileCartBarLabels}>
-                <strong>{itemCount} {itemCount === 1 ? 'item' : 'items'}</strong>
-                <small>In your cart</small>
-              </span>
-            </span>
-            <span className={styles.mobileCartBarSubtotal}>
-              <small>Subtotal</small>
-              <strong>₹{cartTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
-            </span>
-            <span className={styles.mobileCartBarAction}>View cart <ArrowRight size={16} /></span>
-          </button>
-        )}
-
       {/* ── Mobile Bottom Navigation Bar (Customer Only) ── */}
       <nav className={styles.mobileBottomNav} aria-label="Mobile Navigation">
-        <div className={styles.bottomNavTrack}>
+        <div className={`${styles.bottomNavTrack} ${signedIn ? styles.bottomNavTrackSignedIn : ''}`}>
           {mobileNavItems.map(({ href, label, icon: Icon }) => {
-            const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+            const active = label === 'Shops'
+              ? pathname.startsWith('/shop') || (pathname === '/' && hash === '#shops')
+              : href === '/'
+                ? pathname === '/' && hash !== '#shops'
+                : pathname === href || pathname.startsWith(href + '/');
             return (
               <Link
                 key={label + href}
                 href={href}
                 className={`${styles.bottomNavItem} ${active ? styles.bottomNavItemActive : ''}`}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => {
+                  if (label === 'Shops') setHash('#shops');
+                  else if (label === 'Home') setHash('');
+                }}
               >
                 <div className={styles.bottomNavIconWrap}>
                   <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />

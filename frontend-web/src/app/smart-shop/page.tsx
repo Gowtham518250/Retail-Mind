@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   ChevronRight,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
 
@@ -80,6 +80,7 @@ function initials(name: string) {
 
 export default function SmartShopPage() {
   const router = useRouter();
+  const shouldReduceMotion = Boolean(useReducedMotion());
   const [buyAgain, setBuyAgain] = useState<BuyAgain[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loyalty, setLoyalty] = useState<Loyalty | null>(null);
@@ -165,7 +166,7 @@ export default function SmartShopPage() {
   const returnCount = returns.length;
 
   return (
-    <main className="smart3d-page">
+    <main className="smart3d-page" data-experience="smart-hub">
       <div className="smart3d-bg smart3d-bg-a" />
       <div className="smart3d-bg smart3d-bg-b" />
       <div className="smart3d-grid-floor" />
@@ -220,12 +221,12 @@ export default function SmartShopPage() {
 
             <motion.div
               className="smart3d-core"
-              animate={{
+              animate={shouldReduceMotion ? { y: 0, rotateX: 0, rotateY: 0 } : {
                 y: [0, -12, 0],
                 rotateX: [-3, 3, -3],
                 rotateY: [5, -5, 5],
               }}
-              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 6, repeat: Infinity, ease: 'easeInOut' }}
             >
               <div className="smart3d-core-inner">
                 <Bot size={42} />
@@ -235,8 +236,8 @@ export default function SmartShopPage() {
 
             <motion.div
               className="smart3d-float smart3d-float-a"
-              animate={{ y: [0, -9, 0], rotateZ: [-2, 1, -2] }}
-              transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -12, 0], rotateZ: [-2, 1, -2] }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
             >
               <Trophy size={15} />
               <div><strong>{loyalty?.points_balance ?? 0}</strong><span>points</span></div>
@@ -244,8 +245,8 @@ export default function SmartShopPage() {
 
             <motion.div
               className="smart3d-float smart3d-float-b"
-              animate={{ y: [0, 8, 0], rotateZ: [2, -1, 2] }}
-              transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut', delay: .4 }}
+              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, 11, 0], rotateZ: [2, -1, 2] }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.8, repeat: Infinity, ease: 'easeInOut', delay: .4 }}
             >
               <Heart size={15} />
               <div><strong>{recommendations.length}</strong><span>smart picks</span></div>
@@ -253,8 +254,8 @@ export default function SmartShopPage() {
 
             <motion.div
               className="smart3d-float smart3d-float-c"
-              animate={{ y: [0, -6, 0], rotateZ: [1, -1, 1] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: .8 }}
+              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -9, 0], rotateZ: [1, -1, 1] }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 5, repeat: Infinity, ease: 'easeInOut', delay: .8 }}
             >
               <RotateCcw size={15} />
               <div><strong>{returnCount}</strong><span>returns</span></div>

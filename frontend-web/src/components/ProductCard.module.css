@@ -7,19 +7,31 @@
   --muted: var(--rm-muted, #6a6052);
   display: flex; flex-direction: column; height: 100%; overflow: hidden; border-radius: 28px;
   background: var(--rm-paper-2, #fffdf7); border: 1.5px solid var(--line);
-  box-shadow: 0 2px 0 rgba(8, 20, 43, .035), 0 14px 34px rgba(33, 54, 104, .07);
+  box-shadow: 0 2px 0 rgba(24, 40, 32, .04), 0 14px 34px rgba(60, 45, 20, .08);
   transition: border-color .3s, box-shadow .4s cubic-bezier(.2, .75, .25, 1);
 }
-.wrap:hover .card { border-color: var(--deep); box-shadow: 0 28px 56px rgba(33, 54, 104, .16); }
+.wrap:hover .card { border-color: var(--deep); box-shadow: 0 28px 56px rgba(60, 45, 20, .2); }
 
-.media { position: relative; display: block; aspect-ratio: 1 / .86; overflow: hidden; background: linear-gradient(145deg, #eff3ff, #e1e8fb); }
+.media { position: relative; display: block; aspect-ratio: 1 / .86; overflow: hidden; background: linear-gradient(145deg, #f6efdd, #eadfc6); }
+.media::after {
+  content: '';
+  position: absolute;
+  inset: -45% -60%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .36) 50%, transparent 60%);
+  transform: translateX(-42%) rotate(12deg);
+  transition: transform .85s cubic-bezier(.2, .75, .25, 1), opacity .25s ease;
+}
 .image { width: 100%; height: 100%; object-fit: cover; transition: transform .9s cubic-bezier(.2, .75, .25, 1); }
 .wrap:hover .image { transform: scale(1.1) rotate(.6deg); }
+.wrap:hover .media::after { opacity: 1; transform: translateX(42%) rotate(12deg); }
 .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--rm-green, #2b4436); }
 .initial { position: absolute; font: 800 13rem/1 var(--font-display); opacity: .09; }
 .badges { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
 .badge { padding: 5px 11px; border-radius: 999px; font: 800 .7rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; }
-.sale { background: var(--orange); color: #fff; box-shadow: 0 6px 14px rgba(102, 87, 245, .28); }
+.sale { background: var(--orange); color: #fff; box-shadow: 0 6px 14px rgba(232, 84, 30, .4); }
 .low { background: var(--yellow); color: var(--deep); }
 .out { background: var(--deep); color: var(--rm-paper, #fbf6ec); }
 
@@ -38,22 +50,11 @@
   transition: background .25s, box-shadow .25s, transform .25s cubic-bezier(.2, .75, .25, 1);
 }
 .add:hover:not(:disabled) { background: var(--orange); box-shadow: 0 10px 22px rgba(232, 84, 30, .4); transform: translateY(-2px); }
-.add:disabled { background: #dce3f2; color: #66728a; cursor: not-allowed; }
+.add:disabled { background: #cfc6b2; color: #7d7462; cursor: not-allowed; }
 .addInner { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
 .added, .added:hover:not(:disabled) { background: #2f7d4f; box-shadow: 0 10px 22px rgba(47, 125, 79, .35); }
 
-
-/* Product cards: light card, clear photo and violet add button */
-.wrap{min-width:0;height:100%}
-.card{height:100%;overflow:hidden;border:1px solid #dfe6f3!important;border-radius:19px!important;background:#fff!important;color:#101a34!important;box-shadow:0 10px 28px rgba(8,20,43,.06)!important;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
-.card:hover{border-color:rgba(102,87,245,.35)!important;box-shadow:0 18px 38px rgba(8,20,43,.11)!important;transform:translateY(-3px)}
-.media{background:linear-gradient(145deg,#f5f7ff,#e8f7fb)!important}
-.image{object-fit:contain;mix-blend-mode:multiply}
-.placeholder{background:linear-gradient(145deg,#edf1ff,#e5fbf9)!important;color:#6657f5!important}
-.body{background:#fff!important;color:#101a34!important}
-.category{color:#6657f5!important}.title{color:#101a34!important;font-weight:850!important}
-.desc{color:#64718a!important}
-.price{color:#08142b!important;font-weight:900!important}
-.add{background:linear-gradient(120deg,#6657f5,#4f61e5)!important;color:#fff!important;border-radius:11px!important}
-.add:hover{background:#3157d5!important}.added{background:#28c9bb!important;color:#08142b!important}
-@media(max-width:520px){.media{min-height:120px}.body{padding:12px!important}.title{font-size:.95rem!important}.add{min-height:37px}}
+@media (prefers-reduced-motion: reduce) {
+  .media::after, .image { transition: none; }
+  .wrap:hover .image { transform: none; }
+}

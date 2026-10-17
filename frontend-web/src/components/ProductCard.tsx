@@ -22,9 +22,8 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     : product.discount_pct || 0;
 
   const stock = product.stock_available;
-  const stockUnconfirmed = stock === undefined || stock === null || !Number.isFinite(Number(stock));
-  const isOutOfStock = !stockUnconfirmed && Number(stock) <= 0;
-  const lowStock = !isOutOfStock && !stockUnconfirmed && Number(stock) <= 5;
+  const isOutOfStock = stock !== undefined && stock <= 0;
+  const lowStock = !isOutOfStock && stock !== undefined && stock <= 5;
   const href = `/shop/${shopId}/product/${product.id}`;
 
   const handleAdd = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -51,7 +50,15 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
       <article className={styles.card}>
         <Link href={href} className={styles.media} aria-label={`View ${product.name}`}>
           {product.image_url ? (
-            <img src={product.image_url} alt={product.name} loading="lazy" className={styles.image} />
+            <img
+              src={product.image_url}
+              alt={product.name}
+              width={480}
+              height={480}
+              loading="lazy"
+              decoding="async"
+              className={styles.image}
+            />
           ) : (
             <div className={styles.placeholder}>
               <span className={styles.initial} aria-hidden="true">{product.name.trim().charAt(0).toUpperCase()}</span>
@@ -61,15 +68,14 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
           <div className={styles.badges}>
             {discount > 0 && <span className={`${styles.badge} ${styles.sale}`}>{discount}% off</span>}
             {isOutOfStock && <span className={`${styles.badge} ${styles.out}`}>Sold out</span>}
-            {stockUnconfirmed && <span className={`${styles.badge} ${styles.out}`}>Stock unconfirmed</span>}
             {lowStock && <span className={`${styles.badge} ${styles.low}`}>Only {stock} left</span>}
           </div>
         </Link>
 
         <div className={styles.body}>
-          {product.category && <span className={styles.category}>{product.category}</span>}
+          <span className={styles.category}>{product.category || 'Featured'}</span>
           <h3 className={styles.title}><Link href={href}>{product.name}</Link></h3>
-          {product.description && <p className={styles.desc}>{product.description}</p>}
+          <p className={styles.desc}>{product.description || 'Freshly curated for your daily essentials.'}</p>
 
           <div className={styles.buy}>
             <div className={styles.priceBox}>
@@ -80,9 +86,10 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
             </div>
 
             <motion.button
+              type="button"
               className={`${styles.add} ${state === 'added' ? styles.added : ''}`}
               onClick={handleAdd}
-              disabled={isOutOfStock || stockUnconfirmed}
+              disabled={isOutOfStock}
               whileTap={{ scale: 0.94 }}
               aria-label={`Add ${product.name} to cart`}
             >
@@ -96,7 +103,6 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
                   transition={{ duration: 0.18 }}
                 >
                   {isOutOfStock ? 'Unavailable'
-                    : stockUnconfirmed ? 'Stock unconfirmed'
                     : state === 'added' ? <><Check size={16} strokeWidth={3} /> Added</>
                     : state === 'incart' ? <><Plus size={16} strokeWidth={3} /> In cart · {inCartCount}</>
                     : <><ShoppingBag size={16} /> Add</>}

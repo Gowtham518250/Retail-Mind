@@ -4,18 +4,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, MapPin, Home, Banknote,
-  ShieldCheck, Loader2, AlertCircle, ShoppingBag, UserRound, LockKeyhole,
+  ArrowLeft, MapPin, Home, Banknote, Phone, ClipboardList,
+  ShieldCheck, Loader2, AlertCircle, ShoppingBag, UserRound, LockKeyhole, Minus, Plus,
   LocateFixed, CheckCircle2, Sparkles,
 } from 'lucide-react';
 import { useCart } from '../../../../context/CartContext';
 import { API_BASE } from '../../../../lib/api';
+import type { PlacedOrder } from '../../../../lib/types';
 
 interface FormState {
   city: string;
   pincode: string;
   address: string;
   landmark: string;
+  phone: string;
+  orderNotes: string;
 }
 
 interface CustomerProfile {
@@ -28,14 +31,14 @@ interface CustomerProfile {
 }
 
 const initialForm: FormState = {
-  city: '', pincode: '', address: '', landmark: '',
+  city: '', pincode: '', address: '', landmark: '', phone: '', orderNotes: '',
 };
 
 export default function CheckoutClientPage() {
   const params = useParams();
   const router = useRouter();
-  const shopId = Number(params?.shopId || 0);
-  const { cartItems, cartTotal, clearCart } = useCart();
+  const shopId = Number(params?.shopId || 8);
+  const { cartItems, cartTotal, clearCart, updateQuantity } = useCart();
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
@@ -46,15 +49,18 @@ export default function CheckoutClientPage() {
   const [locationSuccess, setLocationSuccess] = useState('');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [shopSettingsLoading, setShopSettingsLoading] = useState(true);
+  const [shopSettingsError, setShopSettingsError] = useState('');
+  const [shopSettingsRetry, setShopSettingsRetry] = useState(0);
   const [onlineSetupFee, setOnlineSetupFee] = useState(0);
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [minOrder, setMinOrder] = useState(0);
   const [offerDelivery, setOfferDelivery] = useState(true);
-  const [acceptCod, setAcceptCod] = useState(false);
+  const [acceptCod, setAcceptCod] = useState(true);
   const [acceptOnline, setAcceptOnline] = useState(false);
-  const [shopSettingsLoading, setShopSettingsLoading] = useState(true);
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponValidatedSubtotal, setCouponValidatedSubtotal] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
 
@@ -72,13 +78,20 @@ export default function CheckoutClientPage() {
     + onlineSetupFee;
 
   useEffect(() => {
-    let cancelled = false;
-    if (!Number.isSafeInteger(shopId) || shopId <= 0) {
-      setSubmitError('This shop link is invalid. Choose a shop from the marketplace.');
-      setAuthChecking(false);
-      router.replace('/');
-      return;
+    if (couponDiscount > 0 && couponValidatedSubtotal !== cartTotal) {
+      setCouponDiscount(0);
+      setCouponMessage('Cart changed. Apply the coupon again to update your discount.');
     }
+  }, [cartTotal, couponDiscount, couponValidatedSubtotal]);
+
+  const changeCartQuantity = (productId: number, delta: number) => {
+    updateQuantity(productId, delta);
+    setSubmitError('');
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
 
     const requireCustomer = async () => {
       const token = localStorage.getItem('customerToken');
@@ -91,6 +104,7 @@ export default function CheckoutClientPage() {
         const res = await fetch(`${API_BASE}/store/customer/me`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
+          signal: controller.signal,
         });
 
         if (res.status === 401 || res.status === 403) {
@@ -114,6 +128,7 @@ export default function CheckoutClientPage() {
           ...prev,
           city: profile.city || '',
           address: profile.address || '',
+          phone: profile.phone || '',
         }));
       } catch (error: any) {
         if (!cancelled) {
@@ -128,39 +143,61 @@ export default function CheckoutClientPage() {
 
     void requireCustomer();
 
-    void fetch(API_BASE + '/store/shops/' + shopId + '/products?limit=1', {
-      cache: 'no-store',
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Shop settings request failed.');
-        const data = await res.json();
-        if (!cancelled) {
-          setOnlineSetupFee(Math.max(0, Number(data.online_setup_fee || 0)));
-          setDeliveryFee(Math.max(0, Number(data.delivery_fee || 0)));
-          setMinOrder(Math.max(0, Number(data.min_order || 0)));
-          setOfferDelivery(data.offer_delivery !== false);
-          setAcceptCod(data.accept_cod === true);
-          setAcceptOnline(data.accept_online === true);
-          setShopSettingsLoading(false);
+    const loadShopSettings = async () => {
+      setShopSettingsLoading(true);
+      setShopSettingsError('');
+      try {
+        const response = await fetch(
+          API_BASE + '/store/shops/' + shopId + '/products?limit=1',
+          { cache: 'no-store', signal: controller.signal },
+        );
+        if (!response.ok) {
+          throw new Error(`Unable to load shop checkout details (${response.status}).`);
         }
-      })
-      .catch(() => {
+        const data = await response.json();
+        if (cancelled) return;
+        setOnlineSetupFee(Math.max(0, Number(data.online_setup_fee || 0)));
+        setDeliveryFee(Math.max(0, Number(data.delivery_fee || 0)));
+        setMinOrder(Math.max(0, Number(data.min_order || 0)));
+        setOfferDelivery(data.offer_delivery !== false);
+        setAcceptCod(data.accept_cod !== false);
+        setAcceptOnline(data.accept_online === true);
+      } catch (error) {
         if (!cancelled) {
-          setShopSettingsLoading(false);
-          setSubmitError('We could not verify this shop’s checkout settings. Reload this page before placing an order.');
+          setShopSettingsError(error instanceof TypeError
+            ? 'We couldn’t load this shop’s delivery and payment details. Check your connection and try again.'
+            : error instanceof Error
+              ? error.message
+              : 'Unable to load shop checkout details.');
         }
-      });
+      } finally {
+        if (!cancelled) setShopSettingsLoading(false);
+      }
+    };
+
+    void loadShopSettings();
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [router, shopId]);
+  }, [router, shopId, shopSettingsRetry]);
 
-  const combinedAddress = useMemo(() => (
+  const shippingAddress = useMemo(() => (
     [form.address, form.landmark ? `Landmark: ${form.landmark}` : '', form.city, form.pincode]
       .filter(Boolean)
       .join(', ')
   ), [form.address, form.landmark, form.city, form.pincode]);
+
+  // Existing API persists delivery_address on the order, so order-specific
+  // contact details remain attached to the order without a database migration.
+  const combinedAddress = useMemo(() => (
+    [
+      shippingAddress,
+      form.phone.trim() ? `Contact phone: ${form.phone.trim()}` : '',
+      form.orderNotes.trim() ? `Order notes: ${form.orderNotes.trim()}` : '',
+    ].filter(Boolean).join(' | ')
+  ), [shippingAddress, form.phone, form.orderNotes]);
 
   const setField = (key: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -220,14 +257,12 @@ export default function CheckoutClientPage() {
 
   const validate = () => {
     const next: Partial<Record<keyof FormState, string>> = {};
-    if (shopSettingsLoading) {
-      setSubmitError('Please wait while we verify this shop’s checkout settings.');
+    if (shopSettingsLoading || shopSettingsError) {
+      setSubmitError(shopSettingsError || 'Loading this shop’s checkout details. Please wait.');
       return false;
     }
-    if (!acceptCod) {
-      setSubmitError(acceptOnline
-        ? 'Online payment is not integrated yet. This shop cannot accept a website order until Cash on Delivery is enabled.'
-        : 'This shop has not enabled a supported checkout payment method.');
+    if (!acceptCod && !acceptOnline) {
+      setSubmitError('This shop has not enabled a payment method yet.');
       return false;
     }
     if (minOrder > 0 && cartTotal < minOrder) {
@@ -242,6 +277,7 @@ export default function CheckoutClientPage() {
       if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
       if (form.address.trim().length < 5) next.address = 'Enter your full address';
     }
+    if (!/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10-digit mobile number';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -251,6 +287,7 @@ export default function CheckoutClientPage() {
     if (!code) {
       setCouponMessage('Enter a coupon code.');
       setCouponDiscount(0);
+      setCouponValidatedSubtotal(0);
       return;
     }
     setCouponLoading(true);
@@ -264,9 +301,11 @@ export default function CheckoutClientPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Coupon could not be applied.');
       setCouponDiscount(Number(data.discount || 0));
+      setCouponValidatedSubtotal(cartTotal);
       setCouponMessage(data.message || 'Coupon applied.');
     } catch (error: any) {
       setCouponDiscount(0);
+      setCouponValidatedSubtotal(0);
       setCouponMessage(error?.message || 'Coupon could not be applied.');
     } finally {
       setCouponLoading(false);
@@ -274,16 +313,7 @@ export default function CheckoutClientPage() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!customer || !cartItems.length) return;
-    if (cartItems.some((item) => Number(item.product.shop_id) !== shopId)) {
-      setSubmitError('Your cart contains an item from another shop. Return to that shop and check out its cart separately.');
-      return;
-    }
-    if (cartItems.some((item) => item.product.stock_available !== undefined && Number(item.product.stock_available) <= 0)) {
-      setSubmitError('Your cart contains an out-of-stock item. Remove it before placing this order.');
-      return;
-    }
-    if (!validate()) return;
+    if (!customer || !cartItems.length || !validate()) return;
 
     const token = localStorage.getItem('customerToken');
     if (!token) {
@@ -330,6 +360,25 @@ export default function CheckoutClientPage() {
         throw new Error(data.detail || data.message || 'Could not place your order. Please try again.');
       }
 
+      const placedOrder: PlacedOrder = {
+        order_id: data.order_id,
+        shop_name: data.shop_name,
+        total_amount: Number(data.total_amount || grandTotal),
+        status: data.status || 'PENDING',
+        payment_method: 'COD',
+        customer_name: customer.name,
+        phone: form.phone.trim(),
+        delivery_address: combinedAddress,
+        order_notes: form.orderNotes.trim() || undefined,
+        items: cartItems.map((item) => ({
+          name: item.product.name,
+          quantity: item.quantity,
+          price: item.product.price,
+        })),
+        placed_at: new Date().toISOString(),
+      };
+
+      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
       sessionStorage.removeItem(checkoutSessionKey);
       clearCart();
       router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
@@ -342,7 +391,7 @@ export default function CheckoutClientPage() {
 
   if (authChecking) {
     return (
-      <div className="container" style={{ padding: '72px 20px' }}>
+      <div className="container" data-experience="checkout" style={{ padding: '72px 20px' }}>
         <div className="checkout-auth-gate">
           <div className="checkout-auth-icon"><LockKeyhole size={24} /></div>
           <h1>Secure checkout</h1>
@@ -354,7 +403,7 @@ export default function CheckoutClientPage() {
 
   if (!customer) {
     return (
-      <div className="container" style={{ padding: '48px 20px' }}>
+      <div className="container" data-experience="checkout" style={{ padding: '48px 20px' }}>
         <div className="store-empty-state">
           {submitError || 'Please sign in to continue to checkout.'}
         </div>
@@ -369,7 +418,7 @@ export default function CheckoutClientPage() {
 
   if (!cartItems.length) {
     return (
-      <div className="container" style={{ padding: '48px 20px' }}>
+      <div className="container" data-experience="checkout" style={{ padding: '48px 20px' }}>
         <div className="store-empty-state">Your cart is empty. Add a few products before checking out.</div>
         <div style={{ marginTop: 18 }}>
           <button className="hero-cta" onClick={() => router.push(`/shop/${shopId}`)}>
@@ -381,18 +430,10 @@ export default function CheckoutClientPage() {
   }
 
   return (
-    <div className="container" style={{ padding: '28px 20px 90px' }}>
+    <div className="container" data-experience="checkout" style={{ padding: '28px 20px 90px' }}>
       <button className="hero-cta" style={{ width: 'fit-content', marginBottom: 20 }} onClick={() => router.push(`/shop/${shopId}`)}>
         <ArrowLeft size={16} /> Back to shop
       </button>
-
-      <div className="checkout-stepper" aria-label="Checkout progress">
-        <div className="checkout-step is-complete"><span>1</span><b>Address</b></div>
-        <span className="checkout-step-line" aria-hidden="true" />
-        <div className="checkout-step is-active" aria-current="step"><span>2</span><b>Review</b></div>
-        <span className="checkout-step-line" aria-hidden="true" />
-        <div className="checkout-step"><span>3</span><b>Confirm</b></div>
-      </div>
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="checkout-grid">
         <div className="checkout-main">
@@ -448,6 +489,36 @@ export default function CheckoutClientPage() {
             </div>
           </section>
 
+          <section className="checkout-card checkout-contact-card">
+            <h2 className="checkout-card-title"><Phone size={18} /> Contact details for this order</h2>
+            <p className="checkout-section-description">Confirm how the shop can reach you about this delivery. Your number and note will be saved with this order.</p>
+            <div className="checkout-field">
+              <label><Phone size={14} /> Mobile number <span className="field-optional">(required)</span></label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={setField('phone')}
+                placeholder="10-digit mobile number"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                maxLength={10}
+                aria-invalid={Boolean(errors.phone)}
+              />
+              {errors.phone && <span className="field-error">{errors.phone}</span>}
+            </div>
+            <div className="checkout-field">
+              <label><ClipboardList size={14} /> Order details / delivery instructions <span className="field-optional">(optional)</span></label>
+              <textarea
+                value={form.orderNotes}
+                onChange={setField('orderNotes')}
+                placeholder="For example: call before arriving, leave with the security guard, or add a note for the shop."
+                rows={3}
+                maxLength={300}
+              />
+              <div className="checkout-notes-meta">{form.orderNotes.length}/300 characters</div>
+            </div>
+          </section>
+
           <section className="checkout-card">
             <h2 className="checkout-card-title"><Banknote size={18} /> Payment method</h2>
             <div className="payment-options">
@@ -464,8 +535,8 @@ export default function CheckoutClientPage() {
                 <div className="payment-option" aria-label="Online payment configured">
                   <ShieldCheck size={20} />
                   <div>
-                    <strong>Online payment unavailable</strong>
-                    <span>Online checkout is not integrated in this storefront. Use Cash on Delivery when the shop supports it.</span>
+                    <strong>Online payment configured</strong>
+                    <span>Payment processing requires a verified payment provider connection.</span>
                   </div>
                 </div>
               )}
@@ -478,22 +549,69 @@ export default function CheckoutClientPage() {
           <div className="summary-items">
             {cartItems.map((item) => (
               <div key={item.product.id} className="summary-item">
-                <span>{item.product.name} <em>×{item.quantity}</em></span>
-                <span>₹{(item.product.price * item.quantity).toFixed(2)}</span>
+                <div className="summary-item-info">
+                  <span>{item.product.name}</span>
+                  <span>₹{item.product.price.toFixed(2)} each</span>
+                </div>
+                <div className="summary-item-controls" aria-label={`Quantity for ${item.product.name}`}>
+                  <button
+                    type="button"
+                    onClick={() => changeCartQuantity(item.product.id, -1)}
+                    aria-label={item.quantity === 1
+                      ? `Remove ${item.product.name} from your order`
+                      : `Remove one ${item.product.name}`}
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <output aria-live="polite">{item.quantity}</output>
+                  <button
+                    type="button"
+                    onClick={() => changeCartQuantity(item.product.id, 1)}
+                    disabled={item.product.stock_available !== undefined && item.quantity >= item.product.stock_available}
+                    aria-label={`Add one ${item.product.name}`}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                <strong className="summary-item-total">₹{(item.product.price * item.quantity).toFixed(2)}</strong>
               </div>
             ))}
           </div>
           <div className="summary-row"><span>Subtotal</span><span>₹{cartTotal.toFixed(2)}</span></div>
           <div className="summary-row">
             <span>Delivery</span>
-            <span>{!offerDelivery ? 'Not offered' : deliveryFee === 0 ? 'FREE' : '₹' + deliveryFee.toFixed(2)}</span>
+            <span>{shopSettingsLoading
+              ? 'Loading…'
+              : shopSettingsError
+                ? 'Unavailable'
+                : !offerDelivery
+                  ? 'Not offered'
+                  : deliveryFee === 0
+                    ? 'FREE'
+                    : '₹' + deliveryFee.toFixed(2)}</span>
           </div>
           <div className="summary-row">
             <span>Online setup / service</span>
-            <span>₹{onlineSetupFee.toFixed(2)}</span>
+            <span>{shopSettingsLoading ? 'Loading…' : shopSettingsError ? 'Unavailable' : '₹' + onlineSetupFee.toFixed(2)}</span>
           </div>
+          {shopSettingsLoading && (
+            <div className="checkout-trust" role="status">Loading this shop’s delivery and payment details…</div>
+          )}
+          {shopSettingsError && (
+            <div className="cart-banner error" role="alert">
+              <AlertCircle size={15} />
+              <span>{shopSettingsError}</span>
+              <button type="button" onClick={() => setShopSettingsRetry((count) => count + 1)}>
+                Retry
+              </button>
+            </div>
+          )}
           {minOrder > 0 && (
-            <div className="checkout-trust">Minimum online order: ₹{minOrder.toFixed(2)}</div>
+            <div className="checkout-trust">
+              {cartTotal < minOrder
+                ? `Add ₹${(minOrder - cartTotal).toFixed(2)} more to meet this shop’s ₹${minOrder.toFixed(2)} minimum order.`
+                : `Shop minimum order of ₹${minOrder.toFixed(2)} met.`}
+            </div>
           )}
           <div className="checkout-coupon">
             <div className="checkout-coupon-heading"><span className="checkout-coupon-icon"><Sparkles size={15} /></span><span><strong>Have a shop coupon?</strong><small>Enter a code shared by this shopkeeper to unlock your discount.</small></span></div>
@@ -516,12 +634,40 @@ export default function CheckoutClientPage() {
           <div className="summary-row muted"><span>GST</span><span>Included</span></div>
           <div className="summary-row total"><span>Total</span><span>₹{grandTotal.toFixed(2)}</span></div>
           {submitError && <div className="cart-banner error"><AlertCircle size={15} /> {submitError}</div>}
-          <button className="place-order-btn" onClick={handlePlaceOrder} disabled={isSubmitting}>
-            {isSubmitting ? <><Loader2 size={16} className="spin" /> Placing order…</> : 'Place Order'}
+          <button
+            className="place-order-btn"
+            onClick={handlePlaceOrder}
+            disabled={isSubmitting || shopSettingsLoading || Boolean(shopSettingsError)}
+            aria-busy={isSubmitting || shopSettingsLoading}
+          >
+            {isSubmitting
+              ? <><Loader2 size={16} className="spin" /> Placing order…</>
+              : shopSettingsLoading
+                ? 'Loading details…'
+                : 'Place Order'}
           </button>
           <div className="checkout-trust"><ShieldCheck size={14} /> Secure account checkout · Your order will appear in My Orders</div>
         </aside>
       </motion.div>
+      <div className="checkout-mobile-action">
+        <div className="checkout-mobile-total">
+          <span>{shopSettingsLoading ? 'Loading total' : shopSettingsError ? 'Total unavailable' : 'Order total'}</span>
+          <strong>{shopSettingsLoading || shopSettingsError ? '—' : `₹${grandTotal.toFixed(2)}`}</strong>
+        </div>
+        <button
+          type="button"
+          className="place-order-btn"
+          onClick={handlePlaceOrder}
+          disabled={isSubmitting || shopSettingsLoading || Boolean(shopSettingsError)}
+          aria-busy={isSubmitting || shopSettingsLoading}
+        >
+          {isSubmitting
+            ? <><Loader2 size={16} className="spin" /> Placing order…</>
+            : shopSettingsLoading
+              ? 'Loading…'
+              : 'Place order'}
+        </button>
+      </div>
     </div>
   );
 }

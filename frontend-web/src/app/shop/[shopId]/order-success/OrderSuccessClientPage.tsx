@@ -17,13 +17,24 @@ const STAGES = [
   { key: 'DELIVERED', label: 'Delivered', icon: Home },
 ];
 
-type StoredOrder = PlacedOrder & { tracking_token?: string };
+type StoredOrder = PlacedOrder & { tracking_token?: string; order_notes?: string };
+
+function readDeliveryDetails(value: string) {
+  const raw = String(value || '');
+  const phone = raw.match(/(?:^|\s\|\s)Contact phone:\s*(\d{10})/i)?.[1] || '';
+  const orderNotes = raw.match(/(?:^|\s\|\s)Order notes:\s*([\s\S]*)$/i)?.[1]?.trim() || '';
+  const address = raw
+    .replace(/\s*\|\s*Contact phone:\s*\d{10}/i, '')
+    .replace(/\s*\|\s*Order notes:[\s\S]*$/i, '')
+    .trim();
+  return { address, phone, orderNotes };
+}
 
 export default function OrderSuccessClientPage() {
   const params = useParams();
   const search = useSearchParams();
   const router = useRouter();
-  const shopId = Number(params?.shopId || 0);
+  const shopId = Number(params?.shopId || 8);
   const orderId = search?.get('orderId');
 
   const [order, setOrder] = useState<StoredOrder | null>(null);
@@ -36,7 +47,7 @@ export default function OrderSuccessClientPage() {
     let cancelled = false;
 
     const loadOrder = async () => {
-      if (!Number.isSafeInteger(shopId) || shopId <= 0 || !orderId || !/^\d+$/.test(orderId)) {
+      if (!orderId) {
         setNotFound(true);
         return;
       }
@@ -72,30 +83,37 @@ export default function OrderSuccessClientPage() {
 
         if (cancelled) return;
 
-        const serverOrderId = Number(data.order_id);
-        const serverTotal = Number(data.total_amount);
-        const serverStatus = String(data.status || '').trim().toUpperCase();
-        if (!Number.isSafeInteger(serverOrderId) || serverOrderId !== Number(orderId) || !Number.isFinite(serverTotal) || !serverStatus || !Array.isArray(data.items)) {
-          throw new Error('The server returned incomplete order details. Open My Orders to confirm the saved order.');
+        const stored = sessionStorage.getItem(`order:${orderId}`);
+        let storedOrder: Partial<StoredOrder> = {};
+        if (stored) {
+          try {
+            storedOrder = JSON.parse(stored);
+          } catch {
+            storedOrder = {};
+          }
         }
 
+        const deliveryDetails = readDeliveryDetails(data.delivery_address || storedOrder.delivery_address || '');
         setOrder({
-          order_id: serverOrderId,
-          shop_name: data.shop_name || (data.shop_id ? `Shop #${data.shop_id}` : 'Shop details unavailable'),
-          total_amount: serverTotal,
-          status: serverStatus,
-          payment_method: data.payment_method === 'UPI' || data.payment_method === 'CARD' ? data.payment_method : 'COD',
-          customer_name: data.customer_name || 'Customer',
-          phone: data.customer_phone || '',
-          delivery_address: data.delivery_address || '',
-          items: data.items.map((item: any) => ({
-            name: item.product_name || item.name || (item.product_id ? `Product #${item.product_id}` : 'Product details unavailable'),
-            quantity: Number(item.quantity ?? 0),
-            price: Number(item.unit_price ?? item.price ?? 0),
-          })),
-          placed_at: data.created_at || '',
+          order_id: Number(data.order_id),
+          shop_name: data.shop_name || storedOrder.shop_name || `Shop #${data.shop_id}`,
+          total_amount: Number(data.total_amount || 0),
+          status: data.status || 'PENDING',
+          payment_method: 'COD',
+          customer_name: data.customer_name || storedOrder.customer_name || 'Customer',
+          phone: deliveryDetails.phone || storedOrder.phone || data.customer_phone || '',
+          delivery_address: deliveryDetails.address || data.delivery_address || storedOrder.delivery_address || '',
+          order_notes: deliveryDetails.orderNotes || storedOrder.order_notes || '',
+          items: Array.isArray(data.items)
+            ? data.items.map((item: any) => ({
+                name: item.product_name || item.name || `Product #${item.product_id}`,
+                quantity: Number(item.quantity || 0),
+                price: Number(item.unit_price ?? item.price ?? 0),
+              }))
+            : storedOrder.items || [],
+          placed_at: data.created_at || storedOrder.placed_at || new Date().toISOString(),
         });
-        setLiveStatus(serverStatus);
+        setLiveStatus(String(data.status || 'PENDING').toUpperCase());
       } catch (error: any) {
         if (!cancelled) {
           setTrackingError(error?.message || 'Unable to load order status right now.');
@@ -112,7 +130,7 @@ export default function OrderSuccessClientPage() {
 
   useEffect(() => {
     if (!order) return;
-    confetti({ particleCount: 160, spread: 75, origin: { y: 0.4 }, colors: ['#6366f1', '#22d3ee', '#facc15'] });
+    confetti({ particleCount: 160, spread: 75, origin: { y: 0.4 }, colors: ['#d8ed91', '#5fc890', '#f16a45'], disableForReducedMotion: true });
   }, [order]);
 
   const refreshStatus = async () => {
@@ -141,12 +159,17 @@ export default function OrderSuccessClientPage() {
         throw new Error(data.detail || 'Unable to refresh order status right now.');
       }
       setLiveStatus(String(data.status || 'PENDING').toUpperCase());
-      setOrder((current) => current ? {
+      setOrder((current) => {
+        if (!current) return current;
+        const deliveryDetails = readDeliveryDetails(data.delivery_address || current.delivery_address || '');
+        return {
         ...current,
         shop_name: data.shop_name || current.shop_name,
         status: data.status || current.status,
         total_amount: Number(data.total_amount ?? current.total_amount),
-        delivery_address: data.delivery_address || current.delivery_address,
+        phone: deliveryDetails.phone || current.phone || data.customer_phone || '',
+        delivery_address: deliveryDetails.address || current.delivery_address,
+        order_notes: deliveryDetails.orderNotes || current.order_notes || '',
         items: Array.isArray(data.items)
           ? data.items.map((item: any) => ({
               name: item.product_name || item.name || `Product #${item.product_id}`,
@@ -154,7 +177,8 @@ export default function OrderSuccessClientPage() {
               price: Number(item.unit_price ?? item.price ?? 0),
             }))
           : current.items,
-      } : current);
+        };
+      });
     } catch (error: any) {
       setTrackingError(error.message || 'Unable to refresh order status right now.');
     } finally {
@@ -214,31 +238,24 @@ export default function OrderSuccessClientPage() {
           .replace(/^https:/, 'wss:')
           .replace(/^http:/, 'ws:');
 
-        // Keep short-lived realtime tickets out of access-log URLs.
         const wsUrl =
           wsBase +
           '/api/ws/live/' +
           encodeURIComponent(ticketData.user_id) +
           '/' +
-          encodeURIComponent(ticketData.shop_id);
+          encodeURIComponent(ticketData.shop_id) +
+          '?ticket=' +
+          encodeURIComponent(ticketData.token);
 
         socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
-          if (!socket) return;
-          socket.send(JSON.stringify({
-            action: 'authenticate',
-            ticket: ticketData.token,
-          }));
+          reconnectDelayMs = 1000;
         };
 
         socket.onmessage = (message) => {
           try {
             const event = JSON.parse(message.data);
-            if (event?.type === 'realtime.ready') {
-              reconnectDelayMs = 1000;
-              return;
-            }
             if (
               event?.type === 'order.status_changed' &&
               Number(event.order_id) === Number(order.order_id)
@@ -307,7 +324,7 @@ export default function OrderSuccessClientPage() {
 
   if (notFound) {
     return (
-      <div className="container" style={{ padding: '48px 20px' }}>
+      <div className="container" data-experience="order-success" style={{ padding: '48px 20px' }}>
         <div className="store-empty-state">We couldn't find that order. It may have already been viewed.</div>
         <div style={{ marginTop: 18 }}>
           <button className="hero-cta" onClick={() => router.push(`/shop/${shopId}`)}>
@@ -320,93 +337,78 @@ export default function OrderSuccessClientPage() {
 
   if (!order) return null;
 
+  const placedDate = new Date(order.placed_at);
+  const estStart = new Date(placedDate.getTime() + 45 * 60 * 1000);
+  const estEnd = new Date(placedDate.getTime() + 90 * 60 * 1000);
+  const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
   return (
-    <main className="success-page">
-      <div className="success-layout">
-        <motion.section
-          className="success-card success-confirmation-card"
-          initial={{ opacity: 0, y: 18, scale: 0.99 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
-        >
-          <div className="success-icon-wrap"><CheckCircle2 size={56} strokeWidth={1.5} /></div>
-          <span className="success-eyebrow">RETAIL MIND · ORDER CONFIRMATION</span>
-          <h1 className="success-title">Order placed successfully!</h1>
-          <p className="success-sub">
-            Thank you, {order.customer_name.split(' ')[0]}. {order.shop_name} has received your order.
-          </p>
+    <div className="container" data-experience="order-success" style={{ padding: '28px 20px 90px', maxWidth: 780 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="success-card"
+      >
+        <div className="success-icon-wrap"><CheckCircle2 size={56} strokeWidth={1.5} /></div>
+        <h1 className="success-title">Order placed successfully!</h1>
+        <p className="success-sub">
+          Thank you, {order.customer_name.split(' ')[0]}. {order.shop_name} has received your order.
+        </p>
 
-          <div className="success-meta-row">
-            <div className="success-meta-pill"><span>Order ID</span><strong>#{order.order_id}</strong></div>
-            <div className="success-meta-pill"><span>Order status</span><strong>{(liveStatus || order.status).replaceAll('_', ' ')}</strong></div>
-            <div className="success-meta-pill"><span>Payment method</span><strong>{order.payment_method === 'COD' ? 'Cash on Delivery' : order.payment_method}</strong></div>
-          </div>
+        <div className="success-meta-row">
+          <div className="success-meta-pill"><span>Order ID</span><strong>#{order.order_id}</strong></div>
+          <div className="success-meta-pill"><span>Estimated delivery</span><strong>{fmt(estStart)} – {fmt(estEnd)}</strong></div>
+          <div className="success-meta-pill"><span>Payment</span><strong>Cash on Delivery</strong></div>
+        </div>
 
-          <div className="success-confirmation-footer">
-            <div><span>ORDER TOTAL</span><strong>₹{order.total_amount.toFixed(2)}</strong></div>
-            <span>Order updates are available from My Orders.</span>
-          </div>
-          <div className="success-actions">
-            <button className="hero-cta" onClick={() => router.push('/orders')}>
-              <Truck size={16} /> My Orders
-            </button>
-            <button className="store-link-btn" onClick={() => router.push(`/shop/${shopId}`)}>
-              <ShoppingBag size={16} /> Continue Shopping
-            </button>
-          </div>
-        </motion.section>
-
-        <motion.aside
-          className="success-tracking-card"
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.06 }}
-        >
-          <div className="success-tracking-heading">
-            <div><span>LIVE ORDER STATUS</span><h2>Order Tracking</h2></div>
-            <button onClick={refreshStatus} disabled={isRefreshing} aria-label="Refresh order status">
-              <RefreshCw size={14} className={isRefreshing ? 'spin' : ''} />
-            </button>
-          </div>
-          <div className="success-tracking-current">
-            <span className="success-tracking-dot" />
-            <div><small>Current status</small><strong>{(liveStatus || order.status).replaceAll('_', ' ')}</strong></div>
-            <span className="success-tracking-order">#{order.order_id}</span>
-          </div>
-          {trackingError && <div className="cart-banner error">{trackingError}</div>}
-          <div className="order-timeline">
-            {STAGES.map((stage, index) => {
-              const Icon = stage.icon;
-              const reached = index <= activeStageIndex;
-              return (
-                <div key={stage.key} className={`timeline-step ${reached ? 'active' : 'pending'}`}>
-                  <div className="timeline-dot"><Icon size={16} /></div>
-                  <span>{stage.label}</span>
-                  {index < STAGES.length - 1 && <div className="timeline-line" />}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="success-details-grid">
-            <div className="success-detail-card">
-              <h3><MapPin size={15} /> Delivering to</h3>
-              <p>{order.customer_name}</p>
-              <p className="muted">{order.delivery_address}</p>
-              <p className="muted"><Phone size={12} /> {order.phone}</p>
-            </div>
-            <div className="success-detail-card">
-              <h3><ShoppingBag size={15} /> Items ({order.items.length})</h3>
-              <div className="success-line-items">
-                {order.items.map((item, index) => (
-                  <p key={index} className="muted"><span>{item.name} × {item.quantity}</span><strong>₹{(item.price * item.quantity).toFixed(2)}</strong></p>
-                ))}
+        <div className="timeline-refresh-row">
+          <span>Live order status</span>
+          <button onClick={refreshStatus} disabled={isRefreshing} aria-label="Refresh status">
+            <RefreshCw size={13} className={isRefreshing ? 'spin' : ''} />
+          </button>
+        </div>
+        {trackingError && <div className="cart-banner error">{trackingError}</div>}
+        <div className="order-timeline">
+          {STAGES.map((stage, index) => {
+            const Icon = stage.icon;
+            const reached = index <= activeStageIndex;
+            return (
+              <div key={stage.key} className={`timeline-step ${reached ? 'active' : 'pending'}`}>
+                <div className="timeline-dot"><Icon size={16} /></div>
+                <span>{stage.label}</span>
+                {index < STAGES.length - 1 && <div className="timeline-line" />}
               </div>
-              <p className="success-total">Total: ₹{order.total_amount.toFixed(2)}</p>
-            </div>
+            );
+          })}
+        </div>
+
+        <div className="success-details-grid">
+          <div className="success-detail-card">
+            <h3><MapPin size={15} /> Delivering to</h3>
+            <p>{order.customer_name}</p>
+            <p className="muted">{order.delivery_address}</p>
+            <p className="muted"><Phone size={12} /> {order.phone || 'No contact number added'}</p>
+            {order.order_notes && <p className="muted"><strong>Order instructions:</strong> {order.order_notes}</p>}
           </div>
-        </motion.aside>
-      </div>
-    </main>
+          <div className="success-detail-card">
+            <h3><ShoppingBag size={15} /> Items ({order.items.length})</h3>
+            {order.items.map((item, i) => (
+              <p key={i} className="muted">{item.name} × {item.quantity} — ₹{(item.price * item.quantity).toFixed(2)}</p>
+            ))}
+            <p className="success-total">Total: ₹{order.total_amount.toFixed(2)}</p>
+          </div>
+        </div>
+
+        <div className="success-actions">
+          <button className="hero-cta" onClick={() => router.push(`/shop/${shopId}`)}>
+            <ShoppingBag size={16} /> Continue shopping
+          </button>
+          <button className="store-link-btn" onClick={() => window.print()}>
+            <Clock size={16} /> Download invoice
+          </button>
+        </div>
+      </motion.div>
+    </div>
   );
 }

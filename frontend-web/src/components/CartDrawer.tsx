@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { usePathname, useParams, useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useSpring, useTransform } from 'framer-motion';
-import { ArrowRight, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
+import { ArrowRight, Loader2, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import styles from './CartDrawer.module.css';
 
@@ -15,13 +15,29 @@ function Money({ value }: { value: number }) {
 }
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, updateQuantity, removeFromCart, cartTotal, cartMessage, clearCartMessage, setCartMessage } = useCart();
+  const {
+    cartItems,
+    isCartOpen,
+    cartNotice,
+    canReplaceCart,
+    toggleCart,
+    updateQuantity,
+    removeFromCart,
+    replaceCartWithPendingProduct,
+    dismissCartNotice,
+    cartTotal,
+  } = useCart();
   const router = useRouter();
+  const pathname = usePathname();
   const params = useParams();
-  const shopId = Number(params?.shopId || 0);
+  const shopId = Number(params?.shopId || 8);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [openingCheckout, setOpeningCheckout] = useState(false);
   const count = cartItems.reduce((s, i) => s + i.quantity, 0);
-  const hasUnavailableItems = cartItems.some((item) => item.product.stock_available === undefined || item.product.stock_available === null || !Number.isFinite(Number(item.product.stock_available)) || Number(item.product.stock_available) <= 0);
+
+  useEffect(() => {
+    setOpeningCheckout(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!isCartOpen) return;
@@ -37,26 +53,16 @@ export default function CartDrawer() {
   }, [isCartOpen, toggleCart]);
 
   const handleCheckout = () => {
-    const cartShopId = Number(cartItems[0]?.product.shop_id ?? shopId);
-    if (!Number.isSafeInteger(cartShopId) || cartShopId <= 0 || cartItems.some((item) => Number(item.product.shop_id) !== cartShopId)) {
-      setCartMessage('We could not verify the shop for every item. Remove and re-add the affected item from its shop page.');
-      return;
-    }
-    if (hasUnavailableItems) {
-      setCartMessage('Your cart contains an item whose stock is unavailable or unconfirmed. Remove it or revisit the shop to refresh availability.');
-      return;
-    }
-
-    clearCartMessage();
-    toggleCart();
+    const cartShopId = cartItems[0]?.product.shop_id || shopId;
     const token = localStorage.getItem('customerToken');
+    const destination = token
+      ? `/shop/${cartShopId}/checkout`
+      : `/auth?next=${encodeURIComponent(`/shop/${cartShopId}/checkout`)}`;
 
-    if (!token) {
-      router.push(`/auth?next=${encodeURIComponent(`/shop/${cartShopId}/checkout`)}`);
-      return;
-    }
-
-    router.push(`/shop/${cartShopId}/checkout`);
+    toggleCart();
+    if (pathname === destination.split('?')[0]) return;
+    setOpeningCheckout(true);
+    router.push(destination);
   };
 
   return (
@@ -80,10 +86,11 @@ export default function CartDrawer() {
             aria-label="Shopping cart"
             role="dialog"
             aria-modal="true"
-            initial={{ x: '104%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '104%' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 34 }}
+            initial={{ x: '104%', rotateY: -14 }}
+            animate={{ x: 0, rotateY: 0 }}
+            exit={{ x: '104%', rotateY: -14 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+            style={{ transformPerspective: 1600, transformOrigin: 'right center' }}
           >
             <div className={styles.head}>
               <div className={styles.headLeft}>
@@ -96,13 +103,26 @@ export default function CartDrawer() {
               </button>
             </div>
 
-            {cartMessage && (
-              <div role="alert" style={{ margin: '0 18px 12px', padding: '11px 13px', border: '1px solid #f3b4be', borderRadius: 12, background: '#fff1f2', color: '#9f1239', fontSize: 13, lineHeight: 1.45, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span>{cartMessage}</span>
-                <button type="button" onClick={clearCartMessage} aria-label="Dismiss cart message" style={{ alignSelf: 'flex-start', fontWeight: 800 }}>×</button>
-              </div>
-            )}
             <div className={styles.scroll}>
+              {cartNotice && (
+                <div className={styles.notice} role="alert">
+                  <p>{cartNotice}</p>
+                  <div className={styles.noticeActions}>
+                    {canReplaceCart && (
+                      <button
+                        type="button"
+                        className={styles.noticePrimary}
+                        onClick={replaceCartWithPendingProduct}
+                      >
+                        Replace cart with this item
+                      </button>
+                    )}
+                    <button type="button" onClick={dismissCartNotice}>
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
               {cartItems.length === 0 ? (
                 <div className={styles.empty}>
                   <motion.div className={styles.emptyBag} animate={{ y: [0, -12, 0], rotate: [-4, 4, -4] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
@@ -140,7 +160,13 @@ export default function CartDrawer() {
                                 {item.quantity}
                               </motion.span>
                             </AnimatePresence>
-                            <button onClick={() => updateQuantity(item.product.id, 1)} aria-label="Increase quantity"><Plus size={14} /></button>
+                            <button
+                              onClick={() => updateQuantity(item.product.id, 1)}
+                              disabled={item.product.stock_available !== undefined && item.quantity >= item.product.stock_available}
+                              aria-label={`Increase ${item.product.name} quantity`}
+                            >
+                              <Plus size={14} />
+                            </button>
                           </div>
                         </div>
                         <div className={styles.side}>
@@ -169,9 +195,17 @@ export default function CartDrawer() {
                     <span>Subtotal</span>
                     <b><Money value={cartTotal} /></b>
                   </div>
-                  <p>Estimated subtotal. Final prices, stock and applicable charges are confirmed by the shop at checkout.</p>
-                  <button className={styles.checkout} onClick={handleCheckout} id="checkout-btn" disabled={hasUnavailableItems} aria-disabled={hasUnavailableItems} style={hasUnavailableItems ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}>
-                    Proceed to checkout <ArrowRight size={18} />
+                  <p>Taxes included. Delivery charges calculated at checkout.</p>
+                  <button
+                    className={styles.checkout}
+                    onClick={handleCheckout}
+                    disabled={openingCheckout}
+                    aria-busy={openingCheckout}
+                    id="checkout-btn"
+                  >
+                    {openingCheckout
+                      ? <><Loader2 size={18} className="spin" /> Opening checkout…</>
+                      : <>Proceed to checkout <ArrowRight size={18} /></>}
                   </button>
                 </motion.div>
               )}

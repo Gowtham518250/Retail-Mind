@@ -13,15 +13,11 @@ import {
   User,
   Mail,
   CheckCircle,
-  Sparkles,
   ShieldCheck,
-  Zap,
+  Sparkles,
   Truck,
-  Smartphone,
-  KeyRound,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
-import HeroScene3D from '../../components/HeroScene3D';
 import styles from './auth.module.css';
 
 type View = 'login' | 'register' | 'reset';
@@ -183,32 +179,25 @@ export default function AuthPage() {
       body: JSON.stringify({ email: email.trim() }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send OTP.');
-    if (data.success === false || data.email_sent === false) {
-      // Keep the response generic without telling strangers whether the address has an account.
-      setSuccess(data.message || 'If this email is eligible for password reset, a code may be sent. Check your inbox or try again later.');
-      return;
-    }
+    if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send the code.');
     setResetStep('verify');
     setResendCooldown(30);
-    setSuccess('A 6-digit OTP has been sent to your registered email address.');
+    setSuccess('A 6-digit code has been sent to your email.');
   };
 
-  const handleReset = async (e: React.FormEvent, forcedStep?: 'request' | 'verify' | 'password') => {
-    const activeStep = forcedStep || resetStep;
+  const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      if (activeStep !== resetStep) throw new Error('Complete the previous recovery step first.');
-      if (activeStep === 'request') {
+      if (resetStep === 'request') {
         await requestResetOtp();
         return;
       }
-      if (activeStep === 'verify') {
+      if (resetStep === 'verify') {
         if (!/^\d{6}$/.test(resetOtp)) {
-          throw new Error('Enter the 6-digit OTP from your email.');
+          throw new Error('Enter the 6-digit code from your email.');
         }
         const res = await fetch(`${API_BASE}/store/customer/verify-password-reset-otp`, {
           method: 'POST',
@@ -216,14 +205,14 @@ export default function AuthPage() {
           body: JSON.stringify({ email: email.trim(), otp: resetOtp.trim() }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || data.message || 'OTP verification failed.');
+        if (!res.ok) throw new Error(data.detail || data.message || 'Code verification failed.');
         setResetToken(data.reset_token || '');
         setResetStep('password');
-        setSuccess('OTP verified. Create your new password.');
+        setSuccess('Code verified. Create your new password.');
         return;
       }
       if (!resetToken) {
-        throw new Error('Reset authorization expired. Request a new OTP.');
+        throw new Error('Reset authorization expired. Request a new code.');
       }
       if (resetPassword.length < 8) {
         throw new Error('New password must be at least 8 characters long.');
@@ -248,106 +237,80 @@ export default function AuthPage() {
   };
 
   return (
-    <main className={styles.authMain}>
-      {/* 3D Ambient Orbs */}
+    <main className={styles.authMain} data-experience="auth">
       <div className={styles.orb1} />
       <div className={styles.orb2} />
-      <div className={styles.orb3} />
 
-      <div className={`${styles.authContainer} ${view === 'reset' ? styles.authContainerReset : ''}`}>
-        {view !== 'reset' && (
-          <>
-                  {/* Left Hero Showcase */}
-                  <motion.div
-                    className={styles.heroShowcase}
-                    initial={{ opacity: 0, x: -30 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.65 }}
-                  >
-                    <div className={styles.brandPill}>
-                      <Sparkles size={14} />
-                      <span>RetailMind Customer Hub</span>
-                    </div>
-          
-                    <h1 className={styles.heroTitle}>
-                      Welcome to{' '}
-                      <span className={styles.heroGradientText}>Retail Mind</span>
-                    </h1>
-          
-                    <p className={styles.heroSubtitle}>
-                      Shop from local stores, discover fresh products and find everyday essentials — delivered to your doorstep.
-                    </p>
-          
-                    <div className={styles.featureList}>
-                      <div className={styles.featureItem}>
-                        <div className={styles.featureIconWrap}>
-                          <ShoppingBag size={20} />
-                        </div>
-                        <div className={styles.featureContent}>
-                          <strong>Wide Range of Local Stores</strong>
-                          <span>Groceries, daily needs, fresh products and more</span>
-                        </div>
-                      </div>
-          
-                      <div className={styles.featureItem}>
-                        <div className={styles.featureIconWrap}>
-                          <Truck size={20} />
-                        </div>
-                        <div className={styles.featureContent}>
-                          <strong>Fast &amp; Reliable Delivery</strong>
-                          <span>Review local delivery options from nearby stores</span>
-                        </div>
-                      </div>
-          
-                      <div className={styles.featureItem}>
-                        <div className={styles.featureIconWrap}>
-                          <ShieldCheck size={20} />
-                        </div>
-                        <div className={styles.featureContent}>
-                          <strong>Safe &amp; Secure Shopping</strong>
-                          <span>Your customer account and order details stay protected</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className={styles.authScene} aria-label="Animated 3D shopping scene">
-                      <HeroScene3D lite className={styles.authSceneCanvas} />
-                    </div>
-                  </motion.div>
-          
-          
-          </>
-        )}
-        {/* Right Glass Card */}
+      <div className={styles.authContainer}>
+        <section className={styles.heroShowcase} aria-label="Shop local with RetailMind">
+          <div className={styles.brandPill}><Sparkles size={15} /> RetailMind Customer Hub</div>
+          <h1 className={styles.heroTitle}>
+            Discover &amp; Order
+            <br />
+            From <span className={styles.heroGradientText}>Your Local Stores.</span>
+          </h1>
+          <p className={styles.heroSubtitle}>
+            Enjoy verified neighborhood shops, real-time stock availability, fast local delivery, and AI-guided shopping assistance.
+          </p>
+          <div className={styles.featureList}>
+            <div className={styles.featureItem}>
+              <span className={styles.featureIconWrap}><ShoppingBag size={19} /></span>
+              <span className={styles.featureContent}>
+                <strong>Genuine local catalogs</strong>
+                <span>Browse live stock and clear prices from verified shops.</span>
+              </span>
+            </div>
+            <div className={styles.featureItem}>
+              <span className={styles.featureIconWrap}><Truck size={19} /></span>
+              <span className={styles.featureContent}>
+                <strong>Swift local dispatch</strong>
+                <span>Get delivery from nearby storefronts to your door.</span>
+              </span>
+            </div>
+            <div className={styles.featureItem}>
+              <span className={styles.featureIconWrap}><ShieldCheck size={19} /></span>
+              <span className={styles.featureContent}>
+                <strong>Safe, transparent checkout</strong>
+                <span>Pay by cash or UPI and follow your order updates.</span>
+              </span>
+            </div>
+          </div>
+        </section>
+
         <motion.div
-          className={`${styles.authCard} ${view === 'reset' ? styles.authCardReset : ''}`}
-          initial={{ opacity: 0, y: 25 }}
+          className={styles.authCard}
+          initial={{ opacity: 0 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, delay: 0.1 }}
+          transition={{ duration: 0.45, ease: [0.2, 0.75, 0.25, 1] }}
         >
           <div className={styles.cardGlowBar} />
 
+          <div className={styles.authBrand}>
+            <span className={styles.authBrandIcon}><ShoppingBag size={18} /></span>
+            <span>Retail<b>Mind</b></span>
+          </div>
+
           <div className={styles.cardHeader}>
-            <div className={styles.cardHeadingCopy}>
-              <h2 className={styles.authTitle}>
-                {view === 'login'
-                  ? 'Sign In to Shop'
-                  : view === 'register'
-                    ? 'Create Customer Account'
-                    : 'Forgot Password'}
-              </h2>
-              <p className={styles.authSubtitle}>
-                {view === 'login'
-                  ? 'Sign in to access your cart, tracked orders, and saved addresses'
-                  : view === 'register'
-                    ? 'Join RetailMind for instant local shopping and convenient checkout'
-                    : 'Reset your password using your email and 6-digit verification code.'}
-              </p>
-            </div>
-            {view === 'reset' && (
-              <button type="button" className={styles.resetBackLink} onClick={() => switchView('login')}>
-                <ArrowRight size={14} /> Back to Sign In
-              </button>
-            )}
+            <h2 className={styles.authTitle}>
+              {view === 'login'
+                ? 'Sign in to shop'
+                : view === 'register'
+                  ? 'Create account'
+                  : resetStep === 'password'
+                    ? 'Choose a new password'
+                    : 'Reset password'}
+            </h2>
+            <p className={styles.authSubtitle}>
+              {view === 'login'
+                ? 'Sign in to access your cart, orders, and saved addresses.'
+                : view === 'register'
+                  ? 'Create an account to start shopping with local stores.'
+                  : resetStep === 'request'
+                    ? 'Enter your email to receive a reset code.'
+                    : resetStep === 'verify'
+                      ? `Enter the 6-digit code sent to ${email}.`
+                      : 'Choose a password with at least 8 characters.'}
+            </p>
           </div>
 
           {/* Mode Tabs */}
@@ -400,7 +363,6 @@ export default function AuthPage() {
           </AnimatePresence>
 
           {/* ── FORMS ── */}
-          <AnimatePresence mode="wait">
             {/* ── Sign In ── */}
             {view === 'login' && (
               <motion.form
@@ -413,10 +375,11 @@ export default function AuthPage() {
                 transition={{ duration: 0.25 }}
               >
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Email Address</label>
+                  <label className={styles.label} htmlFor="customer-email">Email</label>
                   <div className={styles.inputWrap}>
                     <Mail size={17} className={styles.inputIcon} />
                     <input
+                      id="customer-email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -430,7 +393,7 @@ export default function AuthPage() {
 
                 <div className={styles.fieldGroup}>
                   <div className={styles.labelRow}>
-                    <label className={styles.label}>Password</label>
+                    <label className={styles.label} htmlFor="customer-password">Password</label>
                     <button type="button" className={styles.forgotLink} onClick={() => switchView('reset')}>
                       Forgot Password?
                     </button>
@@ -438,6 +401,7 @@ export default function AuthPage() {
                   <div className={styles.inputWrap}>
                     <Lock size={17} className={styles.inputIcon} />
                     <input
+                      id="customer-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -464,7 +428,7 @@ export default function AuthPage() {
                   disabled={loading}
                   className={styles.submitBtn}
                 >
-                  {loading ? <span className={styles.spinner} /> : <>Sign In to Shop <ArrowRight size={17} /></>}
+                  {loading ? <><span className={styles.spinner} /> Signing in…</> : <>Sign in <ArrowRight size={17} /></>}
                 </motion.button>
               </motion.form>
             )}
@@ -481,14 +445,15 @@ export default function AuthPage() {
                 transition={{ duration: 0.25 }}
               >
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Full Name</label>
+                  <label className={styles.label} htmlFor="customer-name">Name</label>
                   <div className={styles.inputWrap}>
                     <User size={17} className={styles.inputIcon} />
                     <input
+                      id="customer-name"
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="Your full name"
+                      placeholder="Your name"
                       className={styles.input}
                       required
                       minLength={2}
@@ -499,10 +464,11 @@ export default function AuthPage() {
 
                 <div className={styles.twoCols}>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email Address</label>
+                    <label className={styles.label} htmlFor="customer-email">Email</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
+                        id="customer-email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -515,14 +481,16 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Mobile Number</label>
+                    <label className={styles.label} htmlFor="customer-phone">Phone number</label>
                     <div className={styles.inputWrap}>
                       <Phone size={17} className={styles.inputIcon} />
                       <input
+                        id="customer-phone"
                         type="tel"
+                        inputMode="numeric"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="10-digit number"
+                        placeholder="10-digit phone number"
                         className={styles.input}
                         required
                         maxLength={10}
@@ -533,10 +501,11 @@ export default function AuthPage() {
                 </div>
 
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Password</label>
+                  <label className={styles.label} htmlFor="register-password">Password</label>
                   <div className={styles.inputWrap}>
                     <Lock size={17} className={styles.inputIcon} />
                     <input
+                      id="register-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -550,27 +519,11 @@ export default function AuthPage() {
                       type="button"
                       className={styles.eyeBtn}
                       onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
                       aria-label="Toggle password visibility"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
-                  </div>
-                  <div className={styles.passwordStrength} aria-live="polite">
-                    <div className={styles.passwordStrengthTrack}>
-                      <span
-                        className={styles.passwordStrengthFill}
-                        data-strength={password.length === 0 ? 'empty' : password.length < 6 ? 'weak' : password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) ? 'medium' : 'strong'}
-                      />
-                    </div>
-                    <small>
-                      {password.length === 0
-                        ? 'Use 8+ characters for a stronger password.'
-                        : password.length < 6
-                          ? 'Weak — add more characters.'
-                          : password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)
-                            ? 'Fair — add a number and uppercase letter.'
-                            : 'Strong password.'}
-                    </small>
                   </div>
                 </div>
 
@@ -581,145 +534,160 @@ export default function AuthPage() {
                   disabled={loading}
                   className={styles.submitBtn}
                 >
-                  {loading ? <span className={styles.spinner} /> : <>Create Customer Account <ArrowRight size={17} /></>}
+                  {loading ? <><span className={styles.spinner} /> Creating account…</> : <>Create account <ArrowRight size={17} /></>}
                 </motion.button>
               </motion.form>
             )}
 
             {/* ── Password Reset Flow ── */}
             {view === 'reset' && (
-              <motion.div
-                key="reset-board"
-                className={styles.resetBoard}
-                initial={{ opacity: 0, y: 10 }}
+              <motion.form
+                key="reset-form"
+                onSubmit={handleReset}
+                className={styles.form}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.22 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.25 }}
               >
-                <section className={styles.resetStageCard + ' ' + (resetStep === 'request' ? styles.resetStageActive : styles.resetStageComplete)}>
-                  <div className={styles.resetStageIllustration}><Mail size={27} /><span>EMAIL</span></div>
-                  <div className={styles.resetStageBadge}>01 · ACCOUNT RECOVERY</div>
-                  <h3>Reset your password</h3>
-                  <p>Enter your email address and we’ll send a 6 digit reset code.</p>
-                  <form onSubmit={(event) => void handleReset(event, 'request')} className={styles.resetStageForm}>
-                    <label className={styles.label}>Email Address</label>
+                {resetStep === 'request' && (
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.label} htmlFor="reset-email">Email</label>
                     <div className={styles.inputWrap}>
-                      <Mail size={16} className={styles.inputIcon} />
+                      <Mail size={17} className={styles.inputIcon} />
                       <input
+                        id="reset-email"
                         type="email"
                         value={email}
-                        onChange={(event) => setEmail(event.target.value)}
+                        onChange={(e) => setEmail(e.target.value)}
                         placeholder="you@example.com"
                         className={styles.input}
                         required
                         autoComplete="email"
                       />
                     </div>
-                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'request'}>
-                      {loading && resetStep === 'request' ? <span className={styles.spinner} /> : 'Send OTP'} <ArrowRight size={15} />
-                    </button>
-                  </form>
-                  {resetStep !== 'request' && <div className={styles.resetStageState}><CheckCircle size={13} /> OTP requested</div>}
-                </section>
+                  </div>
+                )}
 
-                <section className={styles.resetStageCard + ' ' + (resetStep === 'verify' ? styles.resetStageActive : resetStep === 'password' ? styles.resetStageComplete : '')}>
-                  <div className={styles.resetStageIllustration}><Smartphone size={27} /><span>OTP</span></div>
-                  <div className={styles.resetStageBadge}>02 · VERIFY IDENTITY</div>
-                  <h3>Enter the 6 digit OTP</h3>
-                  <p>Enter the verification code sent to <strong className={styles.resetEmail}>{email || 'your email address'}</strong>.</p>
-                  <form onSubmit={(event) => void handleReset(event, 'verify')} className={styles.resetStageForm}>
-                    <label className={styles.label}>Verification Code</label>
-                    <div className={styles.inputWrap}>
-                      <CheckCircle size={16} className={styles.inputIcon} />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={resetOtp}
-                        onChange={(event) => setResetOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                        placeholder="000000"
-                        maxLength={6}
-                        className={styles.input}
-                        required
-                        autoComplete="one-time-code"
-                      />
+                {resetStep === 'verify' && (
+                  <>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.label} htmlFor="reset-code">Verification code</label>
+                      <div className={styles.inputWrap}>
+                        <CheckCircle size={17} className={styles.inputIcon} />
+                        <input
+                          id="reset-code"
+                          type="text"
+                          inputMode="numeric"
+                          value={resetOtp}
+                          onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="000000"
+                          maxLength={6}
+                          className={styles.input}
+                          required
+                          autoComplete="one-time-code"
+                        />
+                      </div>
                     </div>
-                    <button type="button" className={styles.resetResend} onClick={() => void requestResetOtp().catch((err) => setError(err instanceof Error ? err.message : 'Unable to resend OTP.'))} disabled={resendCooldown > 0 || loading || resetStep !== 'verify'}>
-                      {resendCooldown > 0 ? 'Resend in ' + resendCooldown + 's' : 'Resend OTP'}
+                    <button
+                      type="button"
+                      className={styles.forgotLink}
+                      onClick={() => void requestResetOtp()}
+                      disabled={resendCooldown > 0 || loading}
+                      style={{ background: 'none', border: 'none', alignSelf: 'flex-start', padding: 0 }}
+                    >
+                      {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
                     </button>
-                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'verify'}>
-                      {loading && resetStep === 'verify' ? <span className={styles.spinner} /> : 'Verify OTP'} <ArrowRight size={15} />
-                    </button>
-                  </form>
-                  {resetStep === 'password' && <div className={styles.resetStageState}><CheckCircle size={13} /> Email verified</div>}
-                </section>
+                  </>
+                )}
 
-                <section className={styles.resetStageCard + ' ' + (resetStep === 'password' ? styles.resetStageActive : '')}>
-                  <div className={styles.resetStageIllustration}><KeyRound size={27} /><span>SECURE</span></div>
-                  <div className={styles.resetStageBadge}>03 · NEW PASSWORD</div>
-                  <h3>Create new password</h3>
-                  <p>Set a new password for your customer account.</p>
-                  <form onSubmit={(event) => void handleReset(event, 'password')} className={styles.resetStageForm}>
-                    <label className={styles.label}>New Password</label>
-                    <div className={styles.inputWrap}>
-                      <Lock size={16} className={styles.inputIcon} />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={resetPassword}
-                        onChange={(event) => setResetPassword(event.target.value)}
-                        placeholder="Enter new password"
-                        className={styles.input}
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                      />
-                      <button type="button" className={styles.eyeBtn} onClick={() => setShowPassword((value) => !value)} aria-label="Toggle password visibility">
-                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
+                {resetStep === 'password' && (
+                  <>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.label} htmlFor="reset-password">New password</label>
+                      <div className={styles.inputWrap}>
+                        <Lock size={17} className={styles.inputIcon} />
+                        <input
+                          id="reset-password"
+                          type={showPassword ? 'text' : 'password'}
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                          placeholder="Min. 8 characters"
+                          className={styles.input}
+                          required
+                          minLength={8}
+                        />
+                        <button
+                          type="button"
+                          className={styles.eyeBtn}
+                          onClick={() => setShowPassword(!showPassword)}
+                          tabIndex={-1}
+                          aria-label="Toggle password visibility"
+                        >
+                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
                     </div>
-                    <label className={styles.label}>Confirm New Password</label>
-                    <div className={styles.inputWrap}>
-                      <Lock size={16} className={styles.inputIcon} />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={resetPasswordConfirm}
-                        onChange={(event) => setResetPasswordConfirm(event.target.value)}
-                        placeholder="Confirm new password"
-                        className={styles.input}
-                        required
-                        minLength={8}
-                        autoComplete="new-password"
-                      />
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.label} htmlFor="confirm-reset-password">Confirm password</label>
+                      <div className={styles.inputWrap}>
+                        <Lock size={17} className={styles.inputIcon} />
+                        <input
+                          id="confirm-reset-password"
+                          type={showPassword ? 'text' : 'password'}
+                          value={resetPasswordConfirm}
+                          onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                          placeholder="Re-enter new password"
+                          className={styles.input}
+                          required
+                          minLength={8}
+                        />
+                      </div>
                     </div>
-                    <div className={styles.resetMiniStrength}><span style={{ width: Math.min(100, Math.round(resetPassword.length / 12 * 100)) + '%' }} /></div>
-                    <button className={styles.submitBtn} type="submit" disabled={loading || resetStep !== 'password'}>
-                      {loading && resetStep === 'password' ? <span className={styles.spinner} /> : 'Reset Password'} <ArrowRight size={15} />
-                    </button>
-                  </form>
-                </section>
-              </motion.div>
+                  </>
+                )}
+
+                <motion.button
+                  whileHover={{ scale: 1.015 }}
+                  whileTap={{ scale: 0.985 }}
+                  type="submit"
+                  disabled={loading}
+                  className={styles.submitBtn}
+                >
+                  {loading ? (
+                    <><span className={styles.spinner} /> {resetStep === 'request' ? 'Sending code…' : resetStep === 'verify' ? 'Verifying…' : 'Saving password…'}</>
+                  ) : resetStep === 'request' ? (
+                    'Send code'
+                  ) : resetStep === 'verify' ? (
+                    'Verify code'
+                  ) : (
+                    'Save password'
+                  )}
+                </motion.button>
+              </motion.form>
             )}
-          </AnimatePresence>
 
           {/* Footer switch */}
-          <div className={styles.switchRow}>
-            {view === 'reset' ? (
-              <span>Remember your password? <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>Back to Sign In</button></span>
-            ) : view === 'login' ? (
-              <span>
-                New customer?{' '}
-                <button type="button" className={styles.switchAction} onClick={() => switchView('register')}>
-                  Create an Account
-                </button>
-              </span>
-            ) : (
-              <span>
-                Already have an account?{' '}
-                <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>
-                  Sign In
-                </button>
-              </span>
-            )}
-          </div>
+          {view === 'reset' && (
+            <div className={styles.switchRow}>
+              <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>
+                ← Back to sign in
+              </button>
+            </div>
+          )}
+          {view !== 'reset' && (
+            <div className={styles.switchRow}>
+              <span>{view === 'login' ? 'New customer?' : 'Already a customer?'}</span>
+              <button
+                type="button"
+                className={styles.switchAction}
+                onClick={() => switchView(view === 'login' ? 'register' : 'login')}
+              >
+                {view === 'login' ? 'Create an account' : 'Sign in'}
+              </button>
+            </div>
+          )}
         </motion.div>
       </div>
     </main>
