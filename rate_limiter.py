@@ -48,6 +48,33 @@ def _new_redis_client():
     )
 
 
+def _redis_failure_reason(error: Exception) -> str:
+    """Classify Redis connectivity failures without logging connection secrets."""
+    if isinstance(error, redis.exceptions.AuthenticationError):
+        return "authentication_failed"
+    if isinstance(error, redis.exceptions.TimeoutError):
+        return "timeout"
+
+    message = str(error).lower()
+    if "connection refused" in message:
+        return "connection_refused"
+    if any(term in message for term in (
+        "name or service not known",
+        "temporary failure in name resolution",
+        "no address associated with hostname",
+        "nodename nor servname",
+        "getaddrinfo failed",
+    )):
+        return "dns_failure"
+    if any(term in message for term in ("certificate verify failed", "ssl:", "tls")):
+        return "tls_failure"
+    if "timed out" in message or "timeout" in message:
+        return "timeout"
+    if "wrongpass" in message or "no password is set" in message:
+        return "authentication_failed"
+    return "connection_error"
+
+
 def _mark_redis_unavailable(error, operation: str) -> None:
     """Use local limits temporarily and retry Redis after a bounded delay."""
     global USE_REDIS, _next_redis_retry_at
@@ -56,9 +83,11 @@ def _mark_redis_unavailable(error, operation: str) -> None:
     # Never log REDIS_URL or full connection exceptions: they may contain
     # credentials. The exception type is enough to diagnose fallback mode.
     logger.warning(
-        "Redis %s unavailable; using in-memory rate limiting (error_type=%s)",
+        "Redis %s unavailable; using in-memory rate limiting "
+        "(error_type=%s, reason=%s)",
         operation,
         type(error).__name__,
+        _redis_failure_reason(error),
     )
 
 
