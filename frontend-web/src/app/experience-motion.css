@@ -715,6 +715,36 @@
   to { transform: rotateX(68deg) rotateZ(338deg); }
 }
 
+html[data-native-app] {
+  scroll-behavior: auto;
+}
+
+html[data-native-app] body {
+  background-attachment: scroll;
+}
+
+html[data-native-app] .page-transition {
+  animation: none;
+}
+
+html[data-native-app] [data-experience]::before,
+html[data-native-app] [data-experience]::after,
+html[data-native-app] [data-experience] > section:first-of-type::after,
+html[data-native-app] [data-experience="auth"] [class*="orb"]::after,
+html[data-native-app] [data-experience="profile"] [class*="orb"]::after,
+html[data-native-app] .hero3d-fallback-bag,
+html[data-native-app] .hero3d-fallback-shadow,
+html[data-native-app] .hero3d-fallback-orbit {
+  animation: none;
+  transition: none;
+}
+
+html[data-native-app] [data-experience="marketplace"] [class*="stageGlow"],
+html[data-native-app] [data-experience="storefront"] [class*="stageGlow"],
+html[data-native-app] [data-experience="product"] .product-glow {
+  filter: none;
+}
+
 .product-quantity-row {
   display: flex;
   align-items: center;

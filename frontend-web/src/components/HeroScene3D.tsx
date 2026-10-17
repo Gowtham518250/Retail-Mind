@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -60,7 +61,7 @@ export default function HeroScene3D({ lite = false, className }: Props) {
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || Capacitor.isNativePlatform()) return;
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 

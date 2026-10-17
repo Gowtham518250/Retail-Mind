@@ -8,6 +8,7 @@ import './retail-redesign.css';
 import './experience-motion.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
+import NativeAppPerformance from '../components/NativeAppPerformance';
 import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
 import JsonLd from '../components/JsonLd';
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             name: SITE_NAME,
             url: SITE_URL,
           }} />
+          <NativeAppPerformance />
           <Navbar />
           <NavigationProgress />
           <main className="page-transition">
