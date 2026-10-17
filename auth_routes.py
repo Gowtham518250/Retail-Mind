@@ -16,7 +16,7 @@ import hashlib
 import secrets
 from datetime import timedelta
 from models import PasswordReset
-from jose import JWTError  # Required for refresh_token endpoint exception handling
+from jwt import InvalidTokenError as JWTError  # Preserve refresh-token validation handling
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
