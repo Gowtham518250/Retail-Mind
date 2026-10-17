@@ -214,24 +214,31 @@ export default function OrderSuccessClientPage() {
           .replace(/^https:/, 'wss:')
           .replace(/^http:/, 'ws:');
 
+        // Keep short-lived realtime tickets out of access-log URLs.
         const wsUrl =
           wsBase +
           '/api/ws/live/' +
           encodeURIComponent(ticketData.user_id) +
           '/' +
-          encodeURIComponent(ticketData.shop_id) +
-          '?ticket=' +
-          encodeURIComponent(ticketData.token);
+          encodeURIComponent(ticketData.shop_id);
 
         socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
-          reconnectDelayMs = 1000;
+          if (!socket) return;
+          socket.send(JSON.stringify({
+            action: 'authenticate',
+            ticket: ticketData.token,
+          }));
         };
 
         socket.onmessage = (message) => {
           try {
             const event = JSON.parse(message.data);
+            if (event?.type === 'realtime.ready') {
+              reconnectDelayMs = 1000;
+              return;
+            }
             if (
               event?.type === 'order.status_changed' &&
               Number(event.order_id) === Number(order.order_id)
