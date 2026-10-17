@@ -116,7 +116,7 @@ if database_url:
         poolclass=QueuePool,
         pool_pre_ping=True,  # Test connection before using
         **pool_options,
-        pool_reset_on_return='commit',  # Reset connection state on return
+        pool_reset_on_return='rollback',  # Reset connection state on return
         echo=False,
         # Do not pass statement_timeout as a libpq startup option: Neon pooler
         # endpoints reject it. SET LOCAL is applied at each transaction start.
@@ -155,7 +155,7 @@ else:
             poolclass=QueuePool,
             pool_pre_ping=True,
             **pool_options,
-            pool_reset_on_return='commit',
+            pool_reset_on_return='rollback',
             echo=False,
             # Add additional connection validation
             connect_args={
