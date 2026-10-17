@@ -36,6 +36,32 @@ from security import (
 
 logger = logging.getLogger(__name__)
 
+
+def _redis_failure_reason(error: Exception) -> str:
+    """Return a safe, allowlisted Redis error category for logs."""
+    if isinstance(error, redis.exceptions.AuthenticationError):
+        return "authentication_failed"
+    if isinstance(error, (redis.exceptions.TimeoutError, asyncio.TimeoutError)):
+        return "timeout"
+    message = str(error).lower()
+    if any(term in message for term in (
+        "error -2 connecting",
+        "error -3 connecting",
+        "name or service not known",
+        "temporary failure in name resolution",
+        "no address associated with hostname",
+        "getaddrinfo failed",
+    )):
+        return "dns_failure"
+    if "connection refused" in message:
+        return "connection_refused"
+    if any(term in message for term in ("certificate verify failed", "ssl:", "tls")):
+        return "tls_failure"
+    if "timed out" in message or "timeout" in message:
+        return "timeout"
+    return "connection_error"
+
+
 router = APIRouter(prefix="/api/ws", tags=["Realtime"])
 
 REDIS_URL = os.getenv("REDIS_URL")
@@ -264,7 +290,12 @@ class _RedisEventBridge:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                logger.warning("Realtime Redis subscriber disconnected: %s", exc)
+                logger.warning(
+                    "Realtime Redis subscriber disconnected "
+                    "(error_type=%s, reason=%s)",
+                    type(exc).__name__,
+                    _redis_failure_reason(exc),
+                )
                 await asyncio.sleep(2)
             finally:
                 if pubsub is not None:
@@ -320,10 +351,12 @@ def publish_realtime_event(event: Dict[str, Any]) -> bool:
         return True
     except Exception as exc:
         logger.error(
-            "Realtime publish failed type=%s event_id=%s: %s",
+            "Realtime publish failed type=%s event_id=%s "
+            "(error_type=%s, reason=%s)",
             payload.get("type"),
             payload.get("event_id"),
-            exc,
+            type(exc).__name__,
+            _redis_failure_reason(exc),
         )
         return False
 
@@ -333,11 +366,37 @@ async def realtime_socket(
     websocket: WebSocket,
     user_id: int,
     shop_id: int,
-    ticket: str = Query(...),
 ):
-    """Authenticated realtime socket used by the mobile app and customer web."""
+    """Authenticate realtime sockets using the first frame, never a URL token.
+
+    Query-string tickets are routinely copied into reverse-proxy/access logs.
+    The browser sends the short-lived ticket only after the WebSocket opens;
+    no events are delivered until that frame has been validated.
+    """
+    await websocket.accept()
+
     try:
-        payload = _decode_realtime_ticket(ticket)
+        auth_message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=1008, reason="Realtime authentication timed out")
+        return
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        await websocket.close(code=1008, reason="Realtime authentication required")
+        return
+
+    if (
+        not isinstance(auth_message, dict)
+        or str(auth_message.get("action", "")).strip().lower() != "authenticate"
+        or not isinstance(auth_message.get("ticket"), str)
+        or not auth_message["ticket"].strip()
+    ):
+        await websocket.close(code=1008, reason="Realtime authentication required")
+        return
+
+    try:
+        payload = _decode_realtime_ticket(auth_message["ticket"])
         token_user_id = int(payload["sub"])
         token_shop_id = int(payload.get("shop_id", 0))
         role = payload["role"]
@@ -346,21 +405,23 @@ async def realtime_socket(
             raise ValueError("Realtime ticket user mismatch")
         if token_shop_id != int(shop_id):
             raise ValueError("Realtime ticket shop mismatch")
-
         if role == ROLE_OWNER and shop_id != user_id:
             raise ValueError("Owner realtime scope mismatch")
         if role == ROLE_CUSTOMER and shop_id < 0:
             raise ValueError("Customer realtime scope mismatch")
-
-        await redis_event_bridge.start()
-    except (ValueError, RuntimeError) as exc:
-        await websocket.close(code=1008, reason=str(exc))
+    except (ValueError, TypeError, KeyError):
+        await websocket.close(code=1008, reason="Invalid realtime ticket")
         return
-    except Exception:
+
+    try:
+        await redis_event_bridge.start()
+    except Exception as exc:
+        logger.warning(
+            "Realtime connection unavailable (error_type=%s)",
+            type(exc).__name__,
+        )
         await websocket.close(code=1013, reason="Realtime service unavailable")
         return
-
-    await websocket.accept()
 
     connection = _RealtimeConnection(
         websocket=websocket,
@@ -383,6 +444,15 @@ async def realtime_socket(
     try:
         while True:
             message = await websocket.receive_json()
+            if not isinstance(message, dict):
+                await connection.send(
+                    {
+                        "type": "realtime.error",
+                        "code": "invalid_message",
+                        "message": "Expected a JSON object.",
+                    }
+                )
+                continue
             action = str(message.get("action", "")).strip().lower()
 
             if action == "ping":
@@ -393,9 +463,8 @@ async def realtime_socket(
                     }
                 )
             elif action == "subscribe":
-                # Subscription is currently implicit in the signed ticket.
-                # Keep this acknowledgement for backwards compatibility with
-                # the Flutter client, while ignoring client-supplied channels.
+                # Subscription is implicit in the signed ticket. Keep this
+                # acknowledgement for compatibility; ignore client channels.
                 await connection.send(
                     {
                         "type": "realtime.subscribed",
@@ -414,6 +483,6 @@ async def realtime_socket(
     except WebSocketDisconnect:
         pass
     except Exception as exc:
-        logger.debug("Realtime socket ended: %s", exc)
+        logger.debug("Realtime socket ended (error_type=%s)", type(exc).__name__)
     finally:
         await realtime_manager.disconnect(websocket)

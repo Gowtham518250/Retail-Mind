@@ -604,23 +604,29 @@ export default function MyOrdersPage() {
           '/api/ws/live/' +
           encodeURIComponent(ticketData.user_id) +
           '/' +
-          encodeURIComponent(ticketData.shop_id) +
-          '?ticket=' +
-          encodeURIComponent(ticketData.token);
+          encodeURIComponent(ticketData.shop_id);
 
         socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
-          if (stopped) return;
-          reconnectDelayMs = 1000;
-          setLiveConnected(true);
-          // Recover any event that was committed while the socket was down.
-          void pollCustomerChanges();
+          if (stopped || !socket) return;
+          // Keep the short-lived ticket out of URL/access logs.
+          socket.send(JSON.stringify({
+            action: 'authenticate',
+            ticket: ticketData.token,
+          }));
         };
 
         socket.onmessage = async (message) => {
           try {
             const event = JSON.parse(message.data);
+            if (event?.type === 'realtime.ready') {
+              reconnectDelayMs = 1000;
+              setLiveConnected(true);
+              // Recover events that were committed while the socket was down.
+              void pollCustomerChanges();
+              return;
+            }
             const eventId = String(event?.event_id || '');
 
             if (event?.type === 'order.status_changed') {
