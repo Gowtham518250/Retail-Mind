@@ -116,7 +116,7 @@ if database_url:
         pool_reset_on_return='commit',  # Reset connection state on return
         echo=False,
         # Do not pass statement_timeout as a libpq startup option: Neon pooler
-        # endpoints reject it. It is set with set_config after connection.
+        # endpoints reject it. SET LOCAL is applied at each transaction start.
         connect_args={
             'connect_timeout': 10,
         }
