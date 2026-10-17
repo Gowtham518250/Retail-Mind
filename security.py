@@ -96,26 +96,57 @@ def decode_token(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+def _validated_access_user_id(payload: dict) -> int:
+    """Validate the subject and reject refresh tokens at access-token boundaries."""
+    if payload.get("type") == "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token cannot be used as an access token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    raw_user_id = payload.get("sub")
+    try:
+        user_id = int(raw_user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token subject.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token subject.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user_id
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
 ) -> int:
-    """Extract and validate the current user from the Bearer token"""
+    """Extract a valid user ID from an access token (never a refresh token)."""
     payload = decode_token(credentials.credentials)
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Token payload missing user ID")
-    return int(user_id)
+    return _validated_access_user_id(payload)
+
 
 def get_current_user_dict(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
 ) -> dict:
-    """Extract and validate the current user from the Bearer token (Returns full dict)"""
+    """Validate access-token subject and role; never infer owner privileges."""
     payload = decode_token(credentials.credentials)
-    user_id = payload.get("sub")
-    role = payload.get("role", ROLE_OWNER)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Token payload missing user ID")
-    return {"user_id": int(user_id), "role": role, "payload": payload}
+    user_id = _validated_access_user_id(payload)
+    raw_role = payload.get("role")
+    role = raw_role.strip().upper() if isinstance(raw_role, str) else ""
+    if role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing token role.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {"user_id": user_id, "role": role, "payload": payload}
 
 # =====================
 # RBAC GUARDS
