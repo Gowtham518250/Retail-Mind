@@ -76,3 +76,30 @@ def test_redis_command_failure_falls_back_without_crashing(monkeypatch):
     assert remaining == limiter.limits["default"] - 1
     assert rl.USE_REDIS is False
     assert rl._next_redis_retry_at > 0
+
+
+def test_explicit_route_limit_and_window_are_enforced_by_redis(monkeypatch):
+    client = FakeRedis()
+    monkeypatch.setattr(rl, "REDIS_URL", "redis://localhost:6379")
+    monkeypatch.setattr(rl, "redis_client", client)
+    monkeypatch.setattr(rl, "USE_REDIS", True)
+    monkeypatch.setattr(rl, "_next_redis_retry_at", 0.0)
+    limiter = rl.RateLimiter()
+
+    assert limiter.is_allowed("192.0.2.20", "send-otp", 2, 30) == (True, 1)
+    assert limiter.is_allowed("192.0.2.20", "send-otp", 2, 30) == (True, 0)
+    assert limiter.is_allowed("192.0.2.20", "send-otp", 2, 30) == (False, 0)
+
+    key = "rate_limit:192.0.2.20:send-otp"
+    assert client.expiries[key] > time.monotonic()
+    assert client.expiries[key] <= time.monotonic() + 30.1
+
+
+def test_explicit_route_limit_is_enforced_in_local_fallback(monkeypatch):
+    monkeypatch.setattr(rl, "REDIS_URL", "")
+    monkeypatch.setattr(rl, "USE_REDIS", False)
+    limiter = rl.RateLimiter()
+
+    assert limiter.is_allowed("192.0.2.21", "verify-otp", 2, 120) == (True, 1)
+    assert limiter.is_allowed("192.0.2.21", "verify-otp", 2, 120) == (True, 0)
+    assert limiter.is_allowed("192.0.2.21", "verify-otp", 2, 120) == (False, 0)
