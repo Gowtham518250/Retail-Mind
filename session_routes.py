@@ -65,7 +65,14 @@ def refresh_token(req: RefreshRequest, db: Session = Depends(get_db)):
         if not user or not user.is_active:
             raise HTTPException(status_code=401, detail="User not found or inactive")
 
-        role = getattr(user, "user_type", None) or payload.get("role") or "OWNER"
+        # Database role is authoritative. Never preserve privileges from a stale
+        # refresh-token claim or silently promote an account with a missing role.
+        from security import VALID_ROLES
+
+        role = str(getattr(user, "user_type", None) or "").strip().upper()
+        if role not in VALID_ROLES:
+            raise HTTPException(status_code=401, detail="Account role is invalid.")
+
         new_access_token = create_access_token(
             data={
                 "sub": str(user.id),
