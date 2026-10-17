@@ -212,6 +212,7 @@ jobs:
           pytest -q tests/test_customer_otp_password_reset.py
           pytest -q tests/test_access_token_boundaries.py
           pytest -q tests/test_render_host_validation.py
+          pytest -q tests/test_performance_middleware.py
           pytest -q tests/test_generic_email_otp.py
           pytest -q tests/test_owner_otp_attempts.py
           pytest -q tests/test_security_distributed_rate_limit.py
