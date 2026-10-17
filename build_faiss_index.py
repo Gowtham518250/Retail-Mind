@@ -7,6 +7,7 @@ import onnxruntime as ort
 from huggingface_hub import hf_hub_download
 from tokenizers import Tokenizer
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_community.vectorstores import FAISS
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -132,7 +133,7 @@ def embed_one(value):
     pooled /= np.clip(np.linalg.norm(pooled, axis=1, keepdims=True), 1e-12, None)
     return pooled[0].astype(np.float32).tolist()
 
-class BuildEmbeddings:
+class BuildEmbeddings(Embeddings):
     def embed_documents(self, texts):
         return [embed_one(t) for t in texts]
     def embed_query(self, text):
