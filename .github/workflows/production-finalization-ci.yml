@@ -99,6 +99,7 @@ jobs:
           pytest -q tests/test_query_date_scope_contract.py
           pytest -q tests/test_customer_otp_password_reset.py
           pytest -q tests/test_access_token_boundaries.py
+          pytest -q tests/test_render_host_validation.py
           pytest -q tests/test_security_distributed_rate_limit.py
           pytest -q tests/test_growth_suite.py
           pytest -q tests/test_voice_query_contract.py
