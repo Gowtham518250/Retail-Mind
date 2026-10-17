@@ -14,6 +14,8 @@ Illustrative request rates:
 - SQLAlchemy pool size and overflow are environment-driven and conservative by default.
 - Pool connection ceilings are calculated across configured workers and instances; an optional DB_CONNECTION_BUDGET produces a warning if the configured ceiling is larger.
 - Dedicated /health/live and /health/ready endpoints separate process liveness from database readiness. Redis is not a readiness dependency because the current backend intentionally has an in-memory fallback.
+- Redis cache verifies connectivity, retries after temporary failures, bypasses caching safely when unavailable, avoids logging connection details, and uses incremental scans instead of Redis `KEYS` for pattern deletion.
+- Attendance auto-checkout uses a PostgreSQL transaction-scoped advisory lock to prevent every API replica from processing the same scheduled reconciliation.
 - A configurable k6 HTTP load-test script is supplied for controlled staging tests.
 - See this checklist before a high-traffic release.
 
