@@ -268,17 +268,17 @@ except Exception as migration_err:
 # SECURITY MIDDLEWARE
 # ========================
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,retail-mind-vkbp.onrender.com,retail-mind-web.onrender.com").split(",")
+from host_validation import build_allowed_hosts, build_allowed_origins
 
-# CORS needs full origins (scheme + host) — browsers send e.g. "https://example.com"
-# as the Origin header, which never matches a bare hostname like "example.com".
-# Build proper origins from ALLOWED_HOSTS, plus explicit extra origins (e.g. the
-# deployed static frontend, which may live on a different domain than the API).
-_extra_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-ALLOWED_ORIGINS = [
-    origin for host in ALLOWED_HOSTS
-    for origin in ([f"https://{host}", f"http://{host}"] if host not in ("localhost", "127.0.0.1") else [f"http://{host}:3000", f"http://{host}:8000"])
-] + [o.strip() for o in _extra_origins if o.strip()]
+# Render can assign a new onrender.com hostname when a service is recreated.
+# Keep explicit ALLOWED_HOSTS restrictions, but always add Render's authoritative
+# RENDER_EXTERNAL_HOSTNAME (or hostname parsed from RENDER_EXTERNAL_URL). This
+# prevents TrustedHostMiddleware from rejecting the service's own URL with 400.
+ALLOWED_HOSTS = build_allowed_hosts(os.environ)
+ALLOWED_ORIGINS = build_allowed_origins(
+    ALLOWED_HOSTS,
+    os.getenv("ALLOWED_ORIGINS", ""),
+)
 
 # 1. CORS — Restrict to known origins only (no wildcard *)
 api.add_middleware(
