@@ -1020,6 +1020,7 @@ class PasswordReset(Base):
     user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash = Column(String(128), nullable=False, index=True)
     expires_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, server_default=func.now())
 
     # Relationship for convenience
