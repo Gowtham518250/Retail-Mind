@@ -892,15 +892,38 @@ def _patch_routes():
     return app_module.api
 
 if __name__ == "__main__":
-    # Run migrations before compatibility helpers issue SQL against application tables.
-    # This also covers Render services whose dashboard start command is simply
-    # `python production_boot.py` and bypasses render.yaml.
+    boot_started = time_module.perf_counter()
+
+    stage_started = time_module.perf_counter()
+    # Versioned schema repairs complete before importing the API module.
     _run_database_migrations()
+    print(
+        f"[BOOT] Alembic migrations completed in {time_module.perf_counter() - stage_started:.2f}s",
+        flush=True,
+    )
+
+    stage_started = time_module.perf_counter()
     _ensure_online_order_status_enum()
     _ensure_sales_reference_order_id()
     _ensure_online_delivery_payment_trigger()
     _ensure_shift_table()
+    print(
+        f"[BOOT] Compatibility database setup completed in {time_module.perf_counter() - stage_started:.2f}s",
+        flush=True,
+    )
+
+    # app.py can now skip create_all/legacy ALTERs while it imports.
+    os.environ["RETAIL_MIND_BOOTSTRAP_COMPLETE"] = "1"
+    stage_started = time_module.perf_counter()
     api = _patch_routes()
+    print(
+        f"[BOOT] App import and route patch completed in {time_module.perf_counter() - stage_started:.2f}s",
+        flush=True,
+    )
+    print(
+        f"[BOOT] Total time before starting Uvicorn: {time_module.perf_counter() - boot_started:.2f}s",
+        flush=True,
+    )
     # The FastAPI startup hook starts the scheduler for both production_boot.py
     # and direct `uvicorn app:api` launches; do not start a duplicate thread here.
     import uvicorn
