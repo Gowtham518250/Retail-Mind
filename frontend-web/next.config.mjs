@@ -28,10 +28,9 @@ const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
-  // NOTE: The API proxy is removed.
-  // All API calls now use absolute URLs via src/lib/api.ts
-  // pointing to process.env.NEXT_PUBLIC_API_URL or the default
-  // https://retail-mind-vkbp.onrender.com
+  // Customer web requires NEXT_PUBLIC_API_URL at build time; backend URLs are
+  // environment-specific and must never silently fall back to production.
+
 };
 
 export default withPWA(nextConfig);
