@@ -17,7 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func, cast, Integer, text
-from sqlalchemy.orm import Session, joinedload, set_committed_value
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm.attributes import set_committed_value
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import logging
 from sqlalchemy.exc import IntegrityError
