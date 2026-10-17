@@ -215,6 +215,8 @@ jobs:
           pytest -q tests/test_render_host_validation.py
           pytest -q tests/test_root_head_probe.py
           pytest -q tests/test_db_pool_config.py
+          pytest -q tests/test_db_diagnostics.py
+          pytest -q tests/test_owner_order_analytics.py
           pytest -q tests/test_health_routes.py
           pytest -q tests/test_cache_manager_resilience.py
           pytest -q tests/test_distributed_job_lock.py

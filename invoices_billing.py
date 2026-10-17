@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func, cast, Integer, text
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, set_committed_value
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import logging
 from sqlalchemy.exc import IntegrityError
@@ -1266,9 +1266,15 @@ def get_invoices(
         if str(invoice.source or "").upper() == "ONLINE_ORDER":
             order = legacy_orders.get(legacy_order_ids.get(invoice.id))
             method = str(getattr(order, "payment_method", "COD") or "COD").upper()
-            invoice.payment_method = "ONLINE" if method in {"UPI", "ONLINE"} else "CASH"
+            # This is a response-only compatibility value. Do not dirty the ORM
+            # entity from a GET request and accidentally persist legacy inference.
+            set_committed_value(
+                invoice,
+                "payment_method",
+                "ONLINE" if method in {"UPI", "ONLINE"} else "CASH",
+            )
         else:
-            invoice.payment_method = "CASH"
+            set_committed_value(invoice, "payment_method", "CASH")
 
     return invoices
 
