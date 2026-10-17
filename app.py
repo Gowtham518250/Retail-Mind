@@ -108,6 +108,7 @@ from observability_service import router as observability_router
 from operations_routes import router as operations_router
 from realtime import router as realtime_router
 from durable_sync import router as durable_sync_router
+from health_routes import router as health_router
 
 # DB initialization
 from db import engine, get_db
@@ -438,6 +439,7 @@ api.include_router(observability_router, tags=["Observability"])
 api.include_router(operations_router, prefix="/api", tags=["Operations"])
 api.include_router(realtime_router)
 api.include_router(durable_sync_router)
+api.include_router(health_router)
 
 # 🚀 PERFORMANCE: Setup performance monitoring middleware
 setup_performance_middleware(api)
