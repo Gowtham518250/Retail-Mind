@@ -167,7 +167,7 @@ class RateLimiter:
                 key = self._get_redis_key(ip, endpoint)
                 current_count = int(
                     redis_client.eval(
-                        _REDIS_FIXED_WINDOW_SCRIPT, 1, key, self.window
+                        _REDIS_FIXED_WINDOW_SCRIPT, 1, key, route_window
                     )
                 )
                 if current_count <= route_limit:
@@ -302,7 +302,7 @@ def rate_limit_endpoint(
             if not allowed:
                 return JSONResponse(
                     status_code=429,
-                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {window_seconds} seconds."},
+                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {resolved_window} seconds."},
                     headers=headers
                 )
             
