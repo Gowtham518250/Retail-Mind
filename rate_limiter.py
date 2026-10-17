@@ -80,8 +80,8 @@ def _mark_redis_unavailable(error, operation: str) -> None:
     global USE_REDIS, _next_redis_retry_at
     USE_REDIS = False
     _next_redis_retry_at = time.monotonic() + REDIS_RETRY_INTERVAL_SECONDS
-    # Never log REDIS_URL or full connection exceptions: they may contain
-    # credentials. The exception type is enough to diagnose fallback mode.
+    # Never log REDIS_URL or raw exception messages: they may contain
+    # credentials. Emit only an allowlisted high-level failure category.
     logger.warning(
         "Redis %s unavailable; using in-memory rate limiting "
         "(error_type=%s, reason=%s)",
