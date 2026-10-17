@@ -1049,6 +1049,13 @@ class EmailOtpChallenge(Base):
             "purpose",
             "created_at",
         ),
+        Index(
+            "uq_email_otp_one_active_per_email",
+            "email",
+            unique=True,
+            postgresql_where=text("used_at IS NULL"),
+            sqlite_where=text("used_at IS NULL"),
+        ),
     )
 
 
