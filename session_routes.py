@@ -100,9 +100,33 @@ class LogoutRequest(BaseModel):
 
 
 @router.post("/logout")
-def logout(req: LogoutRequest, db: Session = Depends(get_db)):
-    """Logs the user out of the current device."""
-    success = SessionService.logout(db, req.access_token)
+def logout(
+    req: LogoutRequest,
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Log out only a token belonging to the authenticated user."""
+    from security import decode_token
+
+    token = (req.access_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing access token")
+
+    # The bearer dependency authenticates the caller; independently validate
+    # the body token before revoking it so a caller cannot log out another user.
+    payload = decode_token(token)
+    if payload.get("type") == "refresh":
+        raise HTTPException(status_code=400, detail="A refresh token cannot be logged out as an access session")
+    raw_subject = payload.get("sub")
+    try:
+        token_user_id = int(raw_subject)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+
+    if token_user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot log out another user's session")
+
+    success = SessionService.logout(db, token)
     if not success:
         return {"status": "Already logged out or invalid token"}
     return {"status": "Logged out successfully"}

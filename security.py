@@ -101,6 +101,8 @@ def get_current_user(
 ) -> int:
     """Extract and validate the current user from the Bearer token"""
     payload = decode_token(credentials.credentials)
+    if payload.get("type") == "refresh":
+        raise HTTPException(status_code=401, detail="Refresh tokens cannot authorize API requests")
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Token payload missing user ID")
@@ -111,6 +113,8 @@ def get_current_user_dict(
 ) -> dict:
     """Extract and validate the current user from the Bearer token (Returns full dict)"""
     payload = decode_token(credentials.credentials)
+    if payload.get("type") == "refresh":
+        raise HTTPException(status_code=401, detail="Refresh tokens cannot authorize API requests")
     user_id = payload.get("sub")
     role = payload.get("role", ROLE_OWNER)
     if not user_id:
