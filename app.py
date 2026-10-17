@@ -148,122 +148,132 @@ def _start_attendance_auto_checkout_on_startup():
         logger.exception("Attendance auto-checkout scheduler failed to initialize")
 
 # ========================
-# DB INIT ON STARTUP
+# LEGACY SCHEMA REPAIR (DEVELOPMENT / DIRECT ASGI ONLY)
 # ========================
-try:
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database connected successfully! All database tables initialized.")
-except Exception as e:
-    logger.warning(f"⚠️ Database initialization deferred: {e}")
+# Production uses production_boot.py, which runs versioned Alembic migrations
+# first. Do not issue dozens of DDL statements on every API module import.
+if os.getenv("RETAIL_MIND_BOOTSTRAP_COMPLETE", "").strip() != "1":
+    # ========================
+    # DB INIT ON STARTUP
+    # ========================
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database connected successfully! All database tables initialized.")
+    except Exception as e:
+        logger.warning(f"⚠️ Database initialization deferred: {e}")
 
-# ========================
-# SAFE COLUMN MIGRATIONS
-# Run ALTER TABLE for any columns added after initial DB creation.
-# Uses IF NOT EXISTS — safe to run on every startup, never crashes.
-# ========================
-try:
-    from sqlalchemy import text
-    from db import sessionLocal
-    _db = sessionLocal()
-    safe_migrations = [
-        # user_details table — new columns added after initial deploy
-        "ALTER TABLE user_details ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(255)",
-        "ALTER TABLE user_details ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
-        # invoices table — due_date made nullable
-        "ALTER TABLE invoices ALTER COLUMN due_date DROP NOT NULL",
-        # invoice offline_id index
-        "CREATE INDEX IF NOT EXISTS ix_invoices_offline_id ON invoices(offline_id)",
-        # products — purchase_price added later
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(10,2) DEFAULT 0",
-        # Product imagery — repair legacy production databases even when the Render service does not run Alembic.
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT",
-        # customers — state/postal_code added later
-        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS state VARCHAR(50)",
-        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)",
-        # shop_profiles — ensure table schema matches current model
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_tagline VARCHAR(500)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_description TEXT",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_type VARCHAR(100) DEFAULT 'General'",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS email VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS website VARCHAR(200)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_base64 TEXT",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_content_type VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS latitude FLOAT",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS longitude FLOAT",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS address TEXT",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS address_line1 VARCHAR(200)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(200)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS location VARCHAR(300)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS state VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS postal_code VARCHAR(10)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS upi_ids TEXT",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_categories TEXT",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS is_online_store_enabled BOOLEAN DEFAULT FALSE",
-        # Marketplace ratings — added after older production databases were initialized.
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_score FLOAT NOT NULL DEFAULT 0",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_count INTEGER NOT NULL DEFAULT 0",
-        # Online-only store configuration — source of truth for owner/customer flows.
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_min_order NUMERIC(10,2) NOT NULL DEFAULT 0",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_delivery BOOLEAN NOT NULL DEFAULT TRUE",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_pickup BOOLEAN NOT NULL DEFAULT TRUE",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_cod BOOLEAN NOT NULL DEFAULT TRUE",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_online BOOLEAN NOT NULL DEFAULT FALSE",
+    # ========================
+    # SAFE COLUMN MIGRATIONS
+    # Run ALTER TABLE for any columns added after initial DB creation.
+    # Uses IF NOT EXISTS — safe to run on every startup, never crashes.
+    # ========================
+    try:
+        from sqlalchemy import text
+        from db import sessionLocal
+        _db = sessionLocal()
+        safe_migrations = [
+            # user_details table — new columns added after initial deploy
+            "ALTER TABLE user_details ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(255)",
+            "ALTER TABLE user_details ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+            # invoices table — due_date made nullable
+            "ALTER TABLE invoices ALTER COLUMN due_date DROP NOT NULL",
+            # invoice offline_id index
+            "CREATE INDEX IF NOT EXISTS ix_invoices_offline_id ON invoices(offline_id)",
+            # products — purchase_price added later
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(10,2) DEFAULT 0",
+            # Product imagery — repair legacy production databases even when the Render service does not run Alembic.
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT",
+            # customers — state/postal_code added later
+            "ALTER TABLE customers ADD COLUMN IF NOT EXISTS state VARCHAR(50)",
+            "ALTER TABLE customers ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)",
+            # shop_profiles — ensure table schema matches current model
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_tagline VARCHAR(500)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_description TEXT",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_type VARCHAR(100) DEFAULT 'General'",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS email VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS website VARCHAR(200)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_base64 TEXT",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_content_type VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS latitude FLOAT",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS longitude FLOAT",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS address TEXT",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS address_line1 VARCHAR(200)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(200)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS location VARCHAR(300)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS state VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS postal_code VARCHAR(10)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS upi_ids TEXT",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS shop_categories TEXT",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS is_online_store_enabled BOOLEAN DEFAULT FALSE",
+            # Marketplace ratings — added after older production databases were initialized.
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_score FLOAT NOT NULL DEFAULT 0",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS rating_count INTEGER NOT NULL DEFAULT 0",
+            # Online-only store configuration — source of truth for owner/customer flows.
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_min_order NUMERIC(10,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_delivery BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_offer_pickup BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_cod BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS online_accept_online BOOLEAN NOT NULL DEFAULT FALSE",
 
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS pan_number VARCHAR(50)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS registration_number VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS contact_person_name VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS contact_person_phone VARCHAR(20)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS contact_person_email VARCHAR(100)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS color_primary VARCHAR(20)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS color_secondary VARCHAR(20)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_file_path VARCHAR(500)",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_version INTEGER DEFAULT 0",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
-        "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
-        "UPDATE shop_profiles SET is_active = TRUE WHERE is_active IS NULL",
-        # online_customers — extra fields for delivery
-        "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
-        "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
-        "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS address TEXT",
-        # online_orders — payment tracking must exist before customer-order queries run.
-        # Safe defaults keep legacy orders unpaid; notification-confirmed UPI is never assumed paid.
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'COD'",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(24) NOT NULL DEFAULT 'COD_DUE'",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(128)",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmation_source VARCHAR(50)",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_detection_key VARCHAR(128)",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmed_at TIMESTAMP",
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_online_order_shop_payment_key ON online_orders(shop_id, payment_detection_key)",
-        # online_orders — idempotent checkout retries
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
-        "CREATE INDEX IF NOT EXISTS ix_online_orders_idempotency_key ON online_orders(idempotency_key)",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS branch_id INTEGER",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50)",
-        "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0",
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS branch_id INTEGER",
-        "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS branch_id INTEGER",
-        "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS branch_id INTEGER",
-        "ALTER TABLE shop_expenses ADD COLUMN IF NOT EXISTS branch_id INTEGER",
-    ]
-    for migration_sql in safe_migrations:
-        try:
-            _db.execute(text(migration_sql))
-            _db.commit()
-        except Exception as col_err:
-            _db.rollback()
-            logger.warning(f"Migration skipped (non-critical): {col_err}")
-    _db.close()
-    logger.info("✅ Safe column migrations applied successfully.")
-except Exception as migration_err:
-    logger.error(f"❌ Migration block failed: {migration_err}")
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS pan_number VARCHAR(50)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS registration_number VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS contact_person_name VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS contact_person_phone VARCHAR(20)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS contact_person_email VARCHAR(100)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS color_primary VARCHAR(20)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS color_secondary VARCHAR(20)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_file_path VARCHAR(500)",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS logo_version INTEGER DEFAULT 0",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
+            "ALTER TABLE shop_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+            "UPDATE shop_profiles SET is_active = TRUE WHERE is_active IS NULL",
+            # online_customers — extra fields for delivery
+            "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+            "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
+            "ALTER TABLE online_customers ADD COLUMN IF NOT EXISTS address TEXT",
+            # online_orders — payment tracking must exist before customer-order queries run.
+            # Safe defaults keep legacy orders unpaid; notification-confirmed UPI is never assumed paid.
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20) NOT NULL DEFAULT 'COD'",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(24) NOT NULL DEFAULT 'COD_DUE'",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(128)",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmation_source VARCHAR(50)",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_detection_key VARCHAR(128)",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS payment_confirmed_at TIMESTAMP",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_online_order_shop_payment_key ON online_orders(shop_id, payment_detection_key)",
+            # online_orders — idempotent checkout retries
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128)",
+            "CREATE INDEX IF NOT EXISTS ix_online_orders_idempotency_key ON online_orders(idempotency_key)",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS online_setup_fee NUMERIC(10,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(50)",
+            "ALTER TABLE online_orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+            "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+            "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+            "ALTER TABLE shop_expenses ADD COLUMN IF NOT EXISTS branch_id INTEGER",
+        ]
+        for migration_sql in safe_migrations:
+            try:
+                _db.execute(text(migration_sql))
+                _db.commit()
+            except Exception as col_err:
+                _db.rollback()
+                logger.warning(f"Migration skipped (non-critical): {col_err}")
+        _db.close()
+        logger.info("✅ Safe column migrations applied successfully.")
+    except Exception as migration_err:
+        logger.error(f"❌ Migration block failed: {migration_err}")
+
+
+else:
+    logger.info("Alembic bootstrap completed; skipping import-time schema DDL")
 
 # ========================
 # SECURITY MIDDLEWARE
