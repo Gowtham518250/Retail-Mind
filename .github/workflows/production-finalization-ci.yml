@@ -46,6 +46,34 @@ jobs:
             --recursive
             .
 
+  refresh-lockfiles:
+    name: Refresh vulnerable npm lockfiles (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [frontend, frontend-web]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Refresh semver-compatible dependency resolutions
+        working-directory: ${{ matrix.project }}
+        shell: bash
+        run: |
+          npm audit fix --package-lock-only --ignore-scripts || true
+          npm install --package-lock-only --ignore-scripts
+      - name: Upload refreshed lockfile for review
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.project }}-patched-lockfile
+          path: ${{ matrix.project }}/package-lock.json
+          if-no-files-found: error
+          retention-days: 3
+
   python-dependency-audit:
     name: Python dependency audit
     runs-on: ubuntu-latest
