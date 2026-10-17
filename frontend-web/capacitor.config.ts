@@ -5,9 +5,8 @@ const config: CapacitorConfig = {
   appName: 'RetailMind',
   webDir: 'out',
   server: {
-    // Set to the deployed customer website; the retail API URL is configured separately.
-    url: process.env.CAPACITOR_SERVER_URL || undefined,
-    cleartext: true,
+    url: process.env.CAPACITOR_SERVER_URL || 'https://retail-mind-1.onrender.com',
+    cleartext: false,
     androidScheme: 'https',
   },
 };

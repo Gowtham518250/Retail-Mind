@@ -61,15 +61,21 @@ setting to include `https://retail-mind-1.onrender.com`.
 
 ## Android app
 
-The Capacitor shell loads the deployed web app, so set `CAPACITOR_SERVER_URL` to
-the public HTTPS URL before syncing or building Android. Static export is not
-configured because the customer app uses server route handlers.
+The Capacitor Android shell loads the deployed customer app at
+`https://retail-mind-1.onrender.com` by default. It uses the live HTTPS site,
+including its server-rendered pages and API routes, so an internet connection is
+required. Set `CAPACITOR_SERVER_URL` only when building against a different
+customer deployment; do not point it at the retail API.
 
 ```bash
+npm run build
 npx cap sync android
-npx cap open android
+cd android
+gradlew.bat assembleDebug
 ```
 
-Keep `CAPACITOR_SERVER_URL` pointed at the customer web deployment and
-`RETAIL_MIND_BACKEND_URL` pointed at the retail API deployment. Do not use the
-backend URL as the Capacitor server URL.
+Install the debug package from
+`android/app/build/outputs/apk/debug/app-debug.apk`. For Google Play, create a
+signed Android App Bundle (`bundleRelease`) in Android Studio using a protected
+release keystore; never commit the keystore or signing credentials. Android
+builds require a configured JDK and Android SDK.
