@@ -49,7 +49,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(echo "$heads" | grep -c '^034_repair_missing_sales_table')"
+          count="$(echo "$heads" | grep -c '^035_ensure_online_customers_schema')"
           test "$count" -eq 1
           head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
@@ -72,6 +72,9 @@ jobs:
               "invoice_line_items",
               "payments",
               "online_orders",
+              "online_customers",
+              "online_order_delivery_otps",
+              "shop_reviews",
               "workers",
           }
           missing = sorted(required_tables - tables)
