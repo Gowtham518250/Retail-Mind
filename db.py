@@ -1,5 +1,5 @@
 from urllib.parse import quote_plus, urlparse, urlunparse
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
@@ -9,6 +9,36 @@ from dotenv import load_dotenv
 from sqlalchemy.engine import URL
 
 logger = logging.getLogger(__name__)
+
+def _statement_timeout_ms() -> int:
+    """Return the configured PostgreSQL statement timeout in milliseconds."""
+    try:
+        return max(0, int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000")))
+    except (TypeError, ValueError):
+        logger.warning("Invalid DB_STATEMENT_TIMEOUT_MS; using 30000ms")
+        return 30000
+
+
+def _set_postgres_statement_timeout(dbapi_connection, connection_record) -> None:
+    """Set statement_timeout after connect so Neon poolers accept the session.
+
+    Neon transaction/session poolers reject statement_timeout when it is passed
+    as a libpq startup option. Use PostgreSQL set_config on the established
+    connection instead. Each newly opened pooled connection gets the timeout.
+    """
+    timeout_ms = _statement_timeout_ms()
+    if timeout_ms <= 0:
+        return
+
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute(
+            "SELECT set_config('statement_timeout', %s, false)",
+            (f"{timeout_ms}ms",),
+        )
+    finally:
+        cursor.close()
+
 
 def normalize_database_url(url: str) -> str:
     """
@@ -88,9 +118,10 @@ if database_url:
         pool_recycle=3600,    # 🚀 PERFORMANCE: Increased to 1 hour to reduce connection churn
         pool_reset_on_return='commit',  # Reset connection state on return
         echo=False,
+        # Do not pass statement_timeout as a libpq startup option: Neon pooler
+        # endpoints reject it. It is set with set_config after connection.
         connect_args={
             'connect_timeout': 10,
-            'options': '-c statement_timeout=30000'  # 30 second statement timeout
         }
     )
 else:
@@ -132,7 +163,6 @@ else:
             # Add additional connection validation
             connect_args={
                 'connect_timeout': 10,
-                'options': '-c statement_timeout=30000'
             }
         )
     except Exception as e:
@@ -140,6 +170,11 @@ else:
         safe_error = str(e).replace(db_password, "***") if db_password else str(e)
         print(f"Database connection failed: {safe_error}")
         raise
+
+# Preserve the 30-second query guard without sending statement_timeout in the
+# connection startup packet (incompatible with Neon pooled connection URLs).
+if engine.dialect.name == "postgresql":
+    event.listen(engine, "connect", _set_postgres_statement_timeout)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 sessionLocal = SessionLocal # Alias for legacy imports
