@@ -68,6 +68,8 @@ VUS=10 DURATION=1m \
 k6 run tests/load/k6_api_load.js
 ```
 
+The script defaults to a 10-second think time per virtual user. Use `THINK_TIME_SECONDS=30` for a lighter read pattern or a smaller value for a more intense traffic profile.
+
 For a representative, safe read-only endpoint:
 
 ```bash
