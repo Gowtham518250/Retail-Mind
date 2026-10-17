@@ -166,7 +166,10 @@ class CacheManager:
         """Clear application cache keys using an incremental scan."""
         if not self._ensure_available():
             return False
-        return self.delete_pattern("")
+        self.delete_pattern("")
+        # delete_pattern returns a count for callers, while clear_all's public
+        # contract is boolean. Its failure path disables the cache manager.
+        return self.enabled
 
     def get_stats(self) -> dict:
         """Return cache stats without allocating a full key list."""
