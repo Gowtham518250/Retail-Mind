@@ -137,6 +137,9 @@ jobs:
 
   customer-web:
     runs-on: ubuntu-latest
+    env:
+      # Safe placeholder only for build-time validation; it is not a deployed target.
+      NEXT_PUBLIC_API_URL: https://api.invalid
     defaults:
       run:
         working-directory: frontend-web
