@@ -25,7 +25,7 @@ client = TestClient(api)
 
 
 def _sent_otp(body: str) -> str:
-    match = re.search(r"(?<!\\d)\\d{6}(?!\\d)", body)
+    match = re.search(r"(?<!\d)\d{6}(?!\d)", body)
     assert match is not None, "Expected a six-digit OTP in the fake email body"
     return match.group(0)
 
