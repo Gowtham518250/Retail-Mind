@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -172,9 +172,12 @@ jobs:
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Explain skipped staging test
+      - name: Require staging configuration
         if: steps.staging.outputs.enabled != 'true'
-        run: echo "::notice::Staging AI accuracy test skipped. Configure STAGING_BASE_URL, STAGING_TEST_EMAIL, and STAGING_TEST_PASSWORD Actions secrets to enable it."
+        shell: bash
+        run: |
+          echo "::error::Release validation requires STAGING_BASE_URL, STAGING_TEST_EMAIL, and STAGING_TEST_PASSWORD in GitHub Actions secrets. The staging AI evaluation cannot be skipped for this release workflow."
+          exit 1
       - name: Compare AI answers against canonical staging invoices
         if: steps.staging.outputs.enabled == 'true'
         run: |
