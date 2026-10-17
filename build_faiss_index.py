@@ -1,11 +1,13 @@
 import json
 import os
+import shutil
 from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 from huggingface_hub import hf_hub_download
 from tokenizers import Tokenizer
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_community.vectorstores import FAISS
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -89,11 +91,31 @@ def _load_schema_catalog():
 documents, table_catalog = _load_schema_catalog()
 
 repo_id = "Xenova/all-MiniLM-L6-v2"
-tokenizer_path = hf_hub_download(repo_id=repo_id, filename="tokenizer.json", cache_dir=str(CACHE))
-model_path = hf_hub_download(repo_id=repo_id, filename="onnx/model.onnx", cache_dir=str(CACHE))
-tokenizer = Tokenizer.from_file(tokenizer_path)
+MODEL_ASSETS_DIR = BASE_DIR / "model_assets"
+MODEL_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Download the model during the build, then package standalone copies inside
+# the deployment artifact. API startup must not depend on Hugging Face network
+# availability or a build-container cache being shared with the runtime.
+downloaded_tokenizer_path = hf_hub_download(
+    repo_id=repo_id,
+    filename="tokenizer.json",
+    cache_dir=str(CACHE),
+)
+downloaded_model_path = hf_hub_download(
+    repo_id=repo_id,
+    filename="onnx/model.onnx",
+    cache_dir=str(CACHE),
+)
+tokenizer_path = MODEL_ASSETS_DIR / "tokenizer.json"
+model_path = MODEL_ASSETS_DIR / "model.onnx"
+shutil.copy2(downloaded_tokenizer_path, tokenizer_path)
+shutil.copy2(downloaded_model_path, model_path)
+print(f"Packaged local embedding assets in {MODEL_ASSETS_DIR}", flush=True)
+
+tokenizer = Tokenizer.from_file(str(tokenizer_path))
 tokenizer.enable_truncation(max_length=256)
-session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
 input_names = {item.name for item in session.get_inputs()}
 
 def embed_one(value):
@@ -111,7 +133,7 @@ def embed_one(value):
     pooled /= np.clip(np.linalg.norm(pooled, axis=1, keepdims=True), 1e-12, None)
     return pooled[0].astype(np.float32).tolist()
 
-class BuildEmbeddings:
+class BuildEmbeddings(Embeddings):
     def embed_documents(self, texts):
         return [embed_one(t) for t in texts]
     def embed_query(self, text):
@@ -131,6 +153,10 @@ catalog_path.write_text(
     json.dumps(table_catalog, ensure_ascii=False),
     encoding="utf-8",
 )
+
+# Remove the build-only Hugging Face cache from the release artifact; the required
+# model files have already been copied into model_assets/ above.
+shutil.rmtree(CACHE, ignore_errors=True)
 
 print(
     f"Built FAISS index with {len(documents)} chunks in {index_dir}; "

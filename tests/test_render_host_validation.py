@@ -41,3 +41,29 @@ def test_local_origins_and_explicit_origins_are_preserved():
     assert "http://localhost:3000" in origins
     assert "http://127.0.0.1:8000" in origins
     assert "https://custom-frontend.example" in origins
+
+
+def test_public_origins_only_allow_https():
+    hosts = build_allowed_hosts({"ALLOWED_HOSTS": "api.example.com"})
+    origins = build_allowed_origins(hosts)
+
+    assert "https://api.example.com" in origins
+    assert "http://api.example.com" not in origins
+
+
+def test_explicit_origins_reject_wildcards_paths_and_cleartext_public_http():
+    hosts = build_allowed_hosts({"ALLOWED_HOSTS": "localhost"})
+    origins = build_allowed_origins(
+        hosts,
+        "*, https://good.example.com, https://bad.example.com/path, "
+        "http://insecure.example.com, https://user:pass@creds.example.com, "
+        "https://query.example.com/?x=1, http://localhost:5173",
+    )
+
+    assert "https://good.example.com" in origins
+    assert "http://localhost:5173" in origins
+    assert "*" not in origins
+    assert "https://bad.example.com" not in origins
+    assert "http://insecure.example.com" not in origins
+    assert "https://creds.example.com" not in origins
+    assert "https://query.example.com" not in origins

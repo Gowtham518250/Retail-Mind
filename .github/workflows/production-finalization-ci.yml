@@ -11,7 +11,97 @@ on:
       - "production-fix-2026-08-18-playstore"
       - "main"
 
+
+permissions:
+  contents: read
+
 jobs:
+  secret-scan:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  open-source-vulnerability-scan:
+    name: Open-source dependency scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Scan repository lockfiles and manifests
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.0
+        with:
+          scan-args: |-
+            --recursive
+            .
+
+  lockfile-integrity:
+    name: Verify lockfile consistency
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Verify root pnpm lockfile without modifying the branch
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+          pnpm install --lockfile-only --frozen-lockfile --ignore-scripts
+  python-dependency-audit:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install dependency auditor
+        run: python -m pip install --upgrade pip pip-audit
+      - name: Audit pinned production dependencies
+        run: pip-audit -r requirements.txt --progress-spinner off
+      - name: Audit pinned test dependencies
+        run: pip-audit -r requirements-dev.txt --progress-spinner off
+
+  node-dependency-audit:
+    name: Node dependency audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [frontend, frontend-web]
+    defaults:
+      run:
+        working-directory: ${{ matrix.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ${{ matrix.working-directory }}/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Fail on high or critical npm advisories
+        run: npm audit --audit-level=high
   backend:
     runs-on: ubuntu-latest
     services:
@@ -33,23 +123,23 @@ jobs:
       SECRET_KEY: ci-password-reset-secret-key-for-tests-only-1234567890
       GROQ_API_KEY: ci-groq-api-key-not-used-by-tests
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.10"
+          python-version: "3.11"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install -r requirements-dev.txt
       - name: Compile production modules
         run: |
-          python -m py_compile             app.py             db_pool_config.py             distributed_job_lock.py             health_routes.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py retail_intelligence.py tools/ai_query_eval.py tools/staging_config.py tools/run_staging_ai_eval.py
+          python -m py_compile             app.py             auth_routes.py session_routes.py security.py rate_limiter.py host_validation.py db_pool_config.py             distributed_job_lock.py             health_routes.py             models.py             durable_sync.py             query_retrival.py query_safety.py query_answering.py             speech_service/app.py             invoices_billing.py             inventory.py             inventory_sync_service.py             online_store.py             growth_suite.py             backup_recovery.py             realtime.py             audit_logging.py             production_boot.py purchase_orders.py retail_intelligence.py tools/ai_query_eval.py tools/staging_config.py tools/run_staging_ai_eval.py
       - name: Validate Alembic migration graph
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(echo "$heads" | grep -c '^035_ensure_online_customers_schema')"
+          count="$(echo "$heads" | grep -c '^038_legacy_startup_schema_repairs')"
           test "$count" -eq 1
           head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
@@ -74,6 +164,7 @@ jobs:
               "online_orders",
               "online_customers",
               "online_order_delivery_otps",
+              "email_otp_challenges",
               "shop_reviews",
               "workers",
           }
@@ -98,6 +189,12 @@ jobs:
           pytest -q tests/test_sales_analytics_regression.py
           pytest -q tests/test_query_date_scope_contract.py
           pytest -q tests/test_customer_otp_password_reset.py
+          pytest -q tests/test_access_token_boundaries.py
+          pytest -q tests/test_render_host_validation.py
+          pytest -q tests/test_performance_middleware.py
+          pytest -q tests/test_generic_email_otp.py
+          pytest -q tests/test_owner_otp_attempts.py
+          pytest -q tests/test_security_distributed_rate_limit.py
           pytest -q tests/test_growth_suite.py
           pytest -q tests/test_voice_query_contract.py
           pytest -q tests/test_product_discovery_contract.py
@@ -105,7 +202,6 @@ jobs:
           pytest -q tests/test_inventory_upload_ai_contract.py
           pytest -q tests/test_purchase_order_recommendations_contract.py
           pytest -q tests/test_order_idempotency_contract.py
-          pytest -q tests/test_security_distributed_rate_limit.py
           pytest -q tests/test_rate_limiter_redis_recovery.py
           pytest -q tests/test_invoice_replay_guard.py
           pytest -q tests/test_purchase_order_receiving.py
@@ -132,12 +228,15 @@ jobs:
 
   customer-web:
     runs-on: ubuntu-latest
+    env:
+      # Safe placeholder only for build-time validation; it is not a deployed target.
+      NEXT_PUBLIC_API_URL: https://api.invalid
     defaults:
       run:
         working-directory: frontend-web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -156,8 +255,8 @@ jobs:
       STAGING_TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}
       STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install read-only evaluator dependencies
@@ -171,9 +270,12 @@ jobs:
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Explain skipped staging test
+      - name: Require staging configuration
         if: steps.staging.outputs.enabled != 'true'
-        run: echo "::notice::Staging AI accuracy test skipped. Configure STAGING_BASE_URL, STAGING_TEST_EMAIL, and STAGING_TEST_PASSWORD Actions secrets to enable it."
+        shell: bash
+        run: |
+          echo "::error::Release validation requires STAGING_BASE_URL, STAGING_TEST_EMAIL, and STAGING_TEST_PASSWORD in GitHub Actions secrets. The staging AI evaluation cannot be skipped for this release workflow."
+          exit 1
       - name: Compare AI answers against canonical staging invoices
         if: steps.staging.outputs.enabled == 'true'
         run: |
@@ -187,7 +289,7 @@ jobs:
             --min-source-recall 1.0
       - name: Upload sanitized staging evidence
         if: always() && steps.staging.outputs.enabled == 'true' && hashFiles('staging-ai-eval.json') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: staging-ai-evaluation
           path: staging-ai-eval.json

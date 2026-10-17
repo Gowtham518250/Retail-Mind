@@ -23,6 +23,36 @@ from db import get_db
 from sqlalchemy.orm import Session
 
 
+def _redis_failure_reason(error: Exception) -> str:
+    """Classify Redis connectivity failures without logging connection secrets."""
+    if isinstance(error, redis.exceptions.AuthenticationError):
+        return "authentication_failed"
+    if isinstance(error, redis.exceptions.TimeoutError):
+        return "timeout"
+
+    message = str(error).lower()
+    # redis-py may abbreviate getaddrinfo failures as "Error -2 connecting ...".
+    if (
+        "error -2 connecting" in message
+        or "error -3 connecting" in message
+        or "name or service not known" in message
+        or "temporary failure in name resolution" in message
+        or "no address associated with hostname" in message
+        or "nodename nor servname" in message
+        or "getaddrinfo failed" in message
+    ):
+        return "dns_failure"
+    if "connection refused" in message:
+        return "connection_refused"
+    if any(term in message for term in ("certificate verify failed", "ssl:", "tls")):
+        return "tls_failure"
+    if "timed out" in message or "timeout" in message:
+        return "timeout"
+    if "wrongpass" in message or "no password is set" in message:
+        return "authentication_failed"
+    return "connection_error"
+
+
 class CacheManager:
     """Redis cache with bounded connection retries and safe local fallback."""
 
@@ -59,9 +89,11 @@ class CacheManager:
         self._retry_after = time.monotonic() + self.retry_interval_seconds
         # Never include the URL or exception message: either may reveal details.
         logger.warning(
-            "Redis cache %s unavailable; bypassing cache (error_type=%s)",
+            "Redis cache %s unavailable; bypassing cache "
+            "(error_type=%s, reason=%s)",
             operation,
             type(error).__name__,
+            _redis_failure_reason(error),
         )
 
     def _ensure_available(self) -> bool:

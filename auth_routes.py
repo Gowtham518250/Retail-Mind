@@ -5,8 +5,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from models import User, ShopProfile, Worker
-from security import hash_password, verify_password, create_access_token, create_refresh_token, ROLE_OWNER, get_current_user, check_login_lockout, record_login_failure, record_login_success
+from models import User, ShopProfile, Worker, EmailOtpChallenge
+from security import hash_password, verify_password, create_access_token, create_refresh_token, ROLE_OWNER, VALID_ROLES, get_current_user, check_login_lockout, record_login_failure, record_login_success
 from email_notifications import EmailNotificationService
 from rate_limiter import rate_limit_endpoint, get_client_ip, ip_rate_limiter
 import random
@@ -16,7 +16,7 @@ import hashlib
 import secrets
 from datetime import timedelta
 from models import PasswordReset
-from jose import JWTError  # Required for refresh_token endpoint exception handling
+from jwt import InvalidTokenError as JWTError  # Preserve refresh-token validation handling
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -46,6 +46,12 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     from sqlalchemy import func
     from sqlalchemy.exc import SQLAlchemyError
 
+    # Public registration may choose only recognized application roles.
+    # Unknown roles must never become signed access-token claims.
+    requested_role = str(user.user_type or ROLE_OWNER).strip().upper()
+    if requested_role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Unsupported account role")
+
     # Check email uniqueness (case-insensitive) — return 409 Conflict
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
         raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
@@ -65,14 +71,14 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
                 user_name=user.username,
                 email=user.email.strip().lower(),  # Store email in lowercase for consistency
                 password=hashed_password,
-                user_type=user.user_type.upper() if user.user_type else "OWNER",
+                user_type=requested_role,
                 is_active=user.is_active if user.is_active is not None else True
             )
             db.add(new_user)
             db.flush()  # ensure new_user.id is populated
 
             # Auto-create Shop Profile only if they are an OWNER
-            if (new_user.user_type or user.user_type or "OWNER").upper() == "OWNER":
+            if new_user.user_type == ROLE_OWNER:
                 shop_name_value = user.shop_name.strip() if user.shop_name and user.shop_name.strip() else f"{user.username}'s Shop"
                 shop_profile = ShopProfile(shop_id=new_user.id, shop_name=shop_name_value)
                 db.add(shop_profile)
@@ -192,15 +198,26 @@ def _new_otp() -> str:
     return f"{secrets.randbelow(900000) + 100000:06d}"
 
 
-def _delete_pending_otps(db: Session, user_id: int, purpose: str) -> None:
+def _expire_pending_otps(db: Session, user_id: int, purpose: str) -> None:
+    """Invalidate earlier OTPs but retain recent issuance records for throttling."""
+    now = datetime.utcnow()
     db.query(PasswordReset).filter(
         PasswordReset.user_id == user_id,
         PasswordReset.description == purpose,
+        PasswordReset.created_at < now - timedelta(days=30),
     ).delete(synchronize_session=False)
+    db.query(PasswordReset).filter(
+        PasswordReset.user_id == user_id,
+        PasswordReset.description == purpose,
+        PasswordReset.expires_at > now,
+    ).update(
+        {"expires_at": now},
+        synchronize_session=False,
+    )
 
 
 def _store_db_otp(db: Session, user_id: int, otp: str, purpose: str, minutes: int = 10) -> None:
-    _delete_pending_otps(db, user_id, purpose)
+    _expire_pending_otps(db, user_id, purpose)
     db.add(
         PasswordReset(
             user_id=user_id,
@@ -212,38 +229,95 @@ def _store_db_otp(db: Session, user_id: int, otp: str, purpose: str, minutes: in
 
 
 def _find_db_otp(db: Session, user_id: int, otp: str, purpose: str):
-    return db.query(PasswordReset).filter(
+    """Verify the newest active user-scoped OTP and persist invalid attempts."""
+    record = db.query(PasswordReset).filter(
         PasswordReset.user_id == user_id,
         PasswordReset.description == purpose,
-        PasswordReset.token_hash == _hash_otp(otp),
         PasswordReset.expires_at > datetime.utcnow(),
     ).order_by(PasswordReset.id.desc()).first()
+    if not record:
+        return None
+
+    if record.attempts >= 5:
+        db.delete(record)
+        db.commit()
+        return None
+
+    supplied_hash = _hash_otp(otp)
+    if not secrets.compare_digest(record.token_hash, supplied_hash):
+        record.attempts += 1
+        if record.attempts >= 5:
+            db.delete(record)
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to persist owner OTP attempt")
+            raise HTTPException(status_code=500, detail="Unable to verify owner OTP")
+        return None
+
+    return record
 
 
 otp_cache = {}
 
 
 @router.post("/send-otp")
+@rate_limit_endpoint(max_requests=3, window_seconds=60)
 def send_otp(
-    request: SendOTPRequest,
+    otp_request: SendOTPRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    normalized_email = request.email.strip().lower()
-    if not normalized_email:
-        raise HTTPException(status_code=400, detail="Email is required")
+    normalized_email = otp_request.email.strip().lower()
+    if not normalized_email or len(normalized_email) > 255:
+        raise HTTPException(status_code=400, detail="Valid email is required")
 
-    otp_code = _new_otp()
-    otp_cache[normalized_email] = {
-        "otp_hash": _hash_otp(otp_code),
-        "expires_at": time.time() + 600,
-    }
+    purpose = (otp_request.purpose or "Verification").strip() or "Verification"
+    purpose = purpose[:64]
+    now = datetime.utcnow()
 
-    subject, body = EmailNotificationService.send_otp_template(
-        otp_code,
-        request.purpose or "Verification",
+    # Enforce per-email send limits as well as per-IP decorator limits. This
+    # prevents distributed IPs from repeatedly mailing the same recipient.
+    recent_count = db.query(EmailOtpChallenge).filter(
+        EmailOtpChallenge.email == normalized_email,
+        EmailOtpChallenge.created_at >= now - timedelta(minutes=10),
+    ).count()
+    if recent_count >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="OTP request limit reached. Please try again later.",
+        )
+
+    # Verification accepts email + OTP only, so there must be exactly one
+    # active challenge per email regardless of the email-template purpose.
+    db.query(EmailOtpChallenge).filter(
+        EmailOtpChallenge.email == normalized_email,
+        EmailOtpChallenge.used_at.is_(None),
+    ).update(
+        {"used_at": now},
+        synchronize_session=False,
     )
 
+    otp_code = _new_otp()
+    challenge = EmailOtpChallenge(
+        email=normalized_email,
+        purpose=purpose,
+        otp_hash=_hash_otp(otp_code),
+        expires_at=now + timedelta(minutes=10),
+        attempts=0,
+    )
+    db.add(challenge)
+    try:
+        db.commit()
+        db.refresh(challenge)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to persist email OTP challenge")
+        raise HTTPException(status_code=500, detail="Unable to create OTP challenge")
+
+    subject, body = EmailNotificationService.send_otp_template(otp_code, purpose)
     try:
         success = EmailNotificationService.send_email(
             recipient_email=normalized_email,
@@ -251,52 +325,102 @@ def send_otp(
             body=body,
         )
         if not success:
-            otp_cache.pop(normalized_email, None)
+            db.query(EmailOtpChallenge).filter(
+                EmailOtpChallenge.id == challenge.id
+            ).update({"used_at": datetime.utcnow()}, synchronize_session=False)
+            db.commit()
             raise HTTPException(
-                status_code=500,
-                detail="Failed to send OTP email. Check backend email configuration.",
+                status_code=503,
+                detail="OTP delivery is currently unavailable. Please try again later.",
             )
-        logger.info("Backend OTP sent successfully to %s", normalized_email)
+        # Do not emit the email address or OTP into application logs.
+        logger.info("Backend email OTP sent successfully")
         return {"msg": "OTP sent successfully"}
     except HTTPException:
         raise
-    except Exception as e:
-        otp_cache.pop(normalized_email, None)
-        logger.exception("Failed while sending OTP email: %s", e)
+    except Exception:
+        db.rollback()
+        logger.exception("Email OTP delivery failed")
+        try:
+            db.query(EmailOtpChallenge).filter(
+                EmailOtpChallenge.id == challenge.id
+            ).update({"used_at": datetime.utcnow()}, synchronize_session=False)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.error("Failed to invalidate undelivered email OTP challenge")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to send OTP email. Check backend email configuration.",
+            status_code=503,
+            detail="OTP delivery is currently unavailable. Please try again later.",
         )
 
 
 @router.post("/verify-otp")
-def verify_otp(request: VerifyOTPRequest):
-    normalized_email = request.email.strip().lower()
-    record = otp_cache.get(normalized_email)
+@rate_limit_endpoint(max_requests=8, window_seconds=60)
+def verify_otp(
+    otp_request: VerifyOTPRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    normalized_email = otp_request.email.strip().lower()
+    if not normalized_email or len(normalized_email) > 255:
+        raise HTTPException(status_code=400, detail="Valid email is required")
+
+    now = datetime.utcnow()
+    record = db.query(EmailOtpChallenge).filter(
+        EmailOtpChallenge.email == normalized_email,
+        EmailOtpChallenge.used_at.is_(None),
+        EmailOtpChallenge.expires_at > now,
+    ).order_by(EmailOtpChallenge.created_at.desc(), EmailOtpChallenge.id.desc()).first()
 
     if not record:
         raise HTTPException(status_code=400, detail="OTP not requested or expired")
 
-    if time.time() > record["expires_at"]:
-        otp_cache.pop(normalized_email, None)
-        raise HTTPException(status_code=400, detail="OTP expired")
+    if record.attempts >= 5:
+        record.used_at = now
+        db.commit()
+        raise HTTPException(status_code=400, detail="OTP attempt limit exceeded. Request a new OTP.")
 
-    if record["otp_hash"] != _hash_otp(request.otp):
+    supplied_otp = otp_request.otp.strip()
+    is_valid_format = bool(__import__("re").fullmatch(r"\d{6}", supplied_otp))
+    matches = is_valid_format and secrets.compare_digest(
+        record.otp_hash,
+        _hash_otp(supplied_otp),
+    )
+    if not matches:
+        record.attempts += 1
+        if record.attempts >= 5:
+            record.used_at = now
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to persist email OTP attempt")
+            raise HTTPException(status_code=500, detail="Unable to verify OTP")
         raise HTTPException(status_code=400, detail="Invalid OTP")
 
-    otp_cache.pop(normalized_email, None)
+    record.used_at = now
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to consume email OTP challenge")
+        raise HTTPException(status_code=500, detail="Unable to verify OTP")
+
     return {"msg": "OTP verified successfully"}
 
 
 @router.post("/reset-worker-pin")
+@rate_limit_endpoint(max_requests=5, window_seconds=60)
 def reset_worker_pin(
-    request: ResetWorkerPinRequest,
+    pin_request: ResetWorkerPinRequest,
+    request: Request,
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Reset a worker attendance PIN after owner-email OTP verification."""
-    normalized_email = request.email.strip().lower()
-    new_pin = request.new_pin.strip()
+    normalized_email = pin_request.email.strip().lower()
+    new_pin = pin_request.new_pin.strip()
 
     if not __import__("re").fullmatch(r"\d{4}", new_pin):
         raise HTTPException(status_code=400, detail="Worker PIN must be exactly 4 digits")
@@ -314,14 +438,14 @@ def reset_worker_pin(
     record = _find_db_otp(
         db,
         user_id=user.id,
-        otp=request.otp,
+        otp=pin_request.otp,
         purpose=OWNER_VERIFICATION_OTP_PURPOSE,
     )
     if not record:
         raise HTTPException(status_code=400, detail="Invalid or expired owner verification OTP")
 
     worker = db.query(Worker).filter(
-        Worker.id == request.worker_id,
+        Worker.id == pin_request.worker_id,
         Worker.shopkeeper_id == current_user,
     ).first()
     if not worker:
@@ -342,8 +466,10 @@ def reset_worker_pin(
 
 
 @router.post("/send-owner-otp")
+@rate_limit_endpoint(max_requests=3, window_seconds=60)
 def send_owner_otp(
-    request: OwnerOTPRequest,
+    otp_request: OwnerOTPRequest,
+    request: Request,
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -355,6 +481,18 @@ def send_owner_otp(
     if not normalized_email:
         raise HTTPException(status_code=400, detail="Owner account has no registered email")
 
+    now = datetime.utcnow()
+    recent_count = db.query(PasswordReset).filter(
+        PasswordReset.user_id == user.id,
+        PasswordReset.description == OWNER_VERIFICATION_OTP_PURPOSE,
+        PasswordReset.created_at >= now - timedelta(minutes=10),
+    ).count()
+    if recent_count >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="Owner OTP request limit reached. Please try again later.",
+        )
+
     otp_code = _new_otp()
     _store_db_otp(
         db,
@@ -365,7 +503,7 @@ def send_owner_otp(
 
     subject, body = EmailNotificationService.send_otp_template(
         otp_code,
-        request.purpose or "Owner Verification",
+        otp_request.purpose or "Owner Verification",
     )
 
     try:
@@ -394,12 +532,14 @@ def send_owner_otp(
 
 
 @router.post("/verify-owner-otp")
+@rate_limit_endpoint(max_requests=8, window_seconds=60)
 def verify_owner_otp(
-    request: VerifyOTPRequest,
+    otp_request: VerifyOTPRequest,
+    request: Request,
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    normalized_email = request.email.strip().lower()
+    normalized_email = otp_request.email.strip().lower()
     user = db.query(User).filter(User.id == current_user).first()
     if not user:
         raise HTTPException(status_code=401, detail="Authenticated user not found")
@@ -410,7 +550,7 @@ def verify_owner_otp(
     record = _find_db_otp(
         db,
         user_id=user.id,
-        otp=request.otp,
+        otp=otp_request.otp,
         purpose=OWNER_VERIFICATION_OTP_PURPOSE,
     )
     if not record:
@@ -633,10 +773,16 @@ def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
         ip_rate_limiter.record_success(ip)
         record_login_success(ip)
 
-        # Get user role from database
-        user_role = getattr(db_user, 'user_type', ROLE_OWNER) or ROLE_OWNER
+        # A database role is authoritative. Never turn a missing or unknown
+        # role into OWNER as a convenience fallback.
+        user_role = str(getattr(db_user, "user_type", None) or "").strip().upper()
+        if user_role not in VALID_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account role is invalid. Please contact support.",
+            )
 
-        # Create access token with user role
+        # Create access token with validated user role
         access_token = create_access_token(
             data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
         )
@@ -698,24 +844,33 @@ def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
                 detail="Invalid token type. Expected refresh token."
             )
         
-        # Extract user_id and role
-        user_id = int(payload.get("sub"))
-        role = payload.get("role")
-        
-        # Verify user still exists and is active
+        # Validate subject, then load current account permissions from the DB.
+        try:
+            user_id = int(payload.get("sub"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=401, detail="Invalid refresh token subject")
+        if user_id <= 0:
+            raise HTTPException(status_code=401, detail="Invalid refresh token subject")
+
+        # Verify user still exists and is active.
         db_user = db.query(User).filter(User.id == user_id).first()
         if not db_user or not db_user.is_active:
             raise HTTPException(
                 status_code=401,
                 detail="User not found or inactive"
             )
-        
-        # Create new access token
+
+        # Never carry stale privileges from the refresh JWT. Current DB role is
+        # authoritative and only recognized application roles may be renewed.
+        from security import VALID_ROLES
+        role = str(getattr(db_user, "user_type", None) or "").strip().upper()
+        if role not in VALID_ROLES:
+            raise HTTPException(status_code=401, detail="Account role is invalid.")
+
+        # Create access and rotated refresh tokens using the current DB role.
         new_access_token = create_access_token(
             data={"sub": str(db_user.id), "role": role, "user_type": role}
         )
-        
-        # Create new refresh token (rotate refresh tokens for security)
         new_refresh_token = create_refresh_token(db_user.id, role)
         
         return {
@@ -727,13 +882,15 @@ def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
             "user_id": db_user.id
         }
         
-    except JWTError as e:
-        logger.error(f"JWTError on refresh: {e}")
+    except HTTPException:
+        raise
+    except JWTError:
+        # Avoid logging token contents or detailed validation failures.
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired refresh token"
         )
-    except Exception as e:
+    except Exception:
         logger.error(f"Token refresh failed unexpectedly: {e}")
         raise HTTPException(
             status_code=500,

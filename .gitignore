@@ -30,3 +30,21 @@ frontend-web/out/
 # IDE
 .vscode/
 .idea/
+
+
+# Runtime and local database artifacts (never commit user data)
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+backups/
+retail_mind_dump.json
+test_report*.json
+backend_test_results.log
+test_out.txt
+error.log
+
+# Generated local test/evaluation outputs
+staging-ai-eval.json
+coverage.xml
+htmlcov/

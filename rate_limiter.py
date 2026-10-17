@@ -48,17 +48,49 @@ def _new_redis_client():
     )
 
 
+def _redis_failure_reason(error: Exception) -> str:
+    """Classify Redis connectivity failures without logging connection secrets."""
+    if isinstance(error, redis.exceptions.AuthenticationError):
+        return "authentication_failed"
+    if isinstance(error, redis.exceptions.TimeoutError):
+        return "timeout"
+
+    message = str(error).lower()
+    # redis-py may abbreviate getaddrinfo failures as "Error -2 connecting ...".
+    if (
+        "error -2 connecting" in message
+        or "error -3 connecting" in message
+        or "name or service not known" in message
+        or "temporary failure in name resolution" in message
+        or "no address associated with hostname" in message
+        or "nodename nor servname" in message
+        or "getaddrinfo failed" in message
+    ):
+        return "dns_failure"
+    if "connection refused" in message:
+        return "connection_refused"
+    if any(term in message for term in ("certificate verify failed", "ssl:", "tls")):
+        return "tls_failure"
+    if "timed out" in message or "timeout" in message:
+        return "timeout"
+    if "wrongpass" in message or "no password is set" in message:
+        return "authentication_failed"
+    return "connection_error"
+
+
 def _mark_redis_unavailable(error, operation: str) -> None:
     """Use local limits temporarily and retry Redis after a bounded delay."""
     global USE_REDIS, _next_redis_retry_at
     USE_REDIS = False
     _next_redis_retry_at = time.monotonic() + REDIS_RETRY_INTERVAL_SECONDS
-    # Never log REDIS_URL or full connection exceptions: they may contain
-    # credentials. The exception type is enough to diagnose fallback mode.
+    # Never log REDIS_URL or raw exception messages: they may contain
+    # credentials. Emit only an allowlisted high-level failure category.
     logger.warning(
-        "Redis %s unavailable; using in-memory rate limiting (error_type=%s)",
+        "Redis %s unavailable; using in-memory rate limiting "
+        "(error_type=%s, reason=%s)",
         operation,
         type(error).__name__,
+        _redis_failure_reason(error),
     )
 
 
@@ -118,27 +150,33 @@ class RateLimiter:
     def __init__(self):
         # Store request timestamps: {ip: {endpoint: [timestamp1, timestamp2, ...]}}
         self.requests = defaultdict(lambda: defaultdict(list))
-        # Limits: {endpoint: max_requests_per_minute}
+        # Limits are defaults only. Endpoint decorators pass their explicit
+        # per-route request/window limits to is_allowed().
         self.limits = {
-            'login': 5,           # 5 login attempts per minute
-            'register': 3,        # 3 registration attempts per minute
-            'forgot_password': 3, # 3 password reset attempts per minute
-            'default': 30,        # 30 requests per minute for other endpoints
+            'login': 5,
+            'register': 3,
+            'forgot_password': 3,
+            'default': 30,
         }
-        # Window size in seconds
         self.window = 60
-        
-        # Redis key prefix
+        self.endpoint_windows = defaultdict(lambda: self.window)
         self.redis_prefix = "rate_limit"
     
     def _get_redis_key(self, ip: str, endpoint: str) -> str:
         """Generate Redis key for rate limiting"""
         return f"{self.redis_prefix}:{ip}:{endpoint}"
     
-    def is_allowed(self, ip: str, endpoint: str) -> tuple[bool, int]:
+    def is_allowed(
+        self,
+        ip: str,
+        endpoint: str,
+        max_requests: int | None = None,
+        window_seconds: int | None = None,
+    ) -> tuple[bool, int]:
         """
-        Check if request is allowed based on rate limit
-        Returns (allowed, remaining_requests)
+        Check a request against the route's actual limit and window.
+        Returns (allowed, remaining_requests). Explicit decorator settings take
+        precedence over endpoint defaults.
         """
         # 🛡️ FIX: this method both reads USE_REDIS (below) and assigns to
         # it in the except block further down. Without declaring it global,
@@ -150,7 +188,9 @@ class RateLimiter:
         # rate-limited request in production, including login.
         global USE_REDIS
         now = time.time()
-        max_requests = self.limits.get(endpoint, self.limits['default'])
+        route_limit = max_requests if max_requests is not None else self.limits.get(endpoint, self.limits['default'])
+        route_window = max(1, int(window_seconds if window_seconds is not None else self.window))
+        self.endpoint_windows[endpoint] = max(self.endpoint_windows[endpoint], route_window)
         
         # Prefer shared Redis counters, but keep serving requests if Redis is
         # unavailable. The Lua script increments and assigns expiry atomically.
@@ -159,11 +199,11 @@ class RateLimiter:
                 key = self._get_redis_key(ip, endpoint)
                 current_count = int(
                     redis_client.eval(
-                        _REDIS_FIXED_WINDOW_SCRIPT, 1, key, self.window
+                        _REDIS_FIXED_WINDOW_SCRIPT, 1, key, route_window
                     )
                 )
-                if current_count <= max_requests:
-                    return True, max_requests - current_count
+                if current_count <= route_limit:
+                    return True, route_limit - current_count
                 return False, 0
             except Exception as error:
                 _mark_redis_unavailable(error, "request counter")
@@ -171,13 +211,13 @@ class RateLimiter:
         # In-memory fallback
         timestamps = self.requests[ip][endpoint]
         
-        # Remove timestamps outside the window
-        timestamps[:] = [t for t in timestamps if now - t < self.window]
+        # Remove timestamps outside this route's configured window.
+        timestamps[:] = [t for t in timestamps if now - t < route_window]
         
-        # Check if under limit
-        if len(timestamps) < max_requests:
+        # Check if under the route's configured limit.
+        if len(timestamps) < route_limit:
             timestamps.append(now)
-            remaining = max_requests - len(timestamps)
+            remaining = route_limit - len(timestamps)
             return True, remaining
         
         # Rate limit exceeded
@@ -218,7 +258,8 @@ class RateLimiter:
         for ip in list(self.requests.keys()):
             for endpoint in list(self.requests[ip].keys()):
                 timestamps = self.requests[ip][endpoint]
-                timestamps[:] = [t for t in timestamps if now - t < self.window]
+                window = self.endpoint_windows[endpoint]
+                timestamps[:] = [t for t in timestamps if now - t < window]
                 if not timestamps:
                     del self.requests[ip][endpoint]
             if not self.requests[ip]:
@@ -227,7 +268,10 @@ class RateLimiter:
 # Global rate limiter instance
 rate_limiter = RateLimiter()
 
-def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
+def rate_limit_endpoint(
+    max_requests: int | None = None,
+    window_seconds: int | None = None,
+):
     """
     Decorator for rate limiting API endpoints
     Works with both sync and async functions
@@ -269,20 +313,29 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
             ip = request.client.host if request.client else "unknown"
             endpoint = request.url.path.split('/')[-1] or "default"
             
-            # Check rate limit
-            allowed, remaining = rate_limiter.is_allowed(ip, endpoint)
-            
-            # Add rate limit headers
+            # Use the configured per-route limit/window; resolve defaults only
+            # when the decorator did not provide an explicit value.
+            resolved_limit = (
+                max_requests
+                if max_requests is not None
+                else rate_limiter.limits.get(endpoint, rate_limiter.limits["default"])
+            )
+            resolved_window = window_seconds if window_seconds is not None else rate_limiter.window
+            allowed, remaining = rate_limiter.is_allowed(
+                ip, endpoint, resolved_limit, resolved_window
+            )
+
             headers = {
-                "X-RateLimit-Limit": str(max_requests),
+                "X-RateLimit-Limit": str(resolved_limit),
                 "X-RateLimit-Remaining": str(remaining),
-                "X-RateLimit-Reset": str(int(time.time()) + window_seconds),
+                "X-RateLimit-Reset": str(int(time.time()) + resolved_window),
+                "Retry-After": str(resolved_window),
             }
             
             if not allowed:
                 return JSONResponse(
                     status_code=429,
-                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {window_seconds} seconds."},
+                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {resolved_window} seconds."},
                     headers=headers
                 )
             
@@ -307,20 +360,29 @@ def rate_limit_endpoint(max_requests: int = 30, window_seconds: int = 60):
             ip = request.client.host if request.client else "unknown"
             endpoint = request.url.path.split('/')[-1] or "default"
             
-            # Check rate limit
-            allowed, remaining = rate_limiter.is_allowed(ip, endpoint)
-            
-            # Add rate limit headers
+            # Use the configured per-route limit/window; resolve defaults only
+            # when the decorator did not provide an explicit value.
+            resolved_limit = (
+                max_requests
+                if max_requests is not None
+                else rate_limiter.limits.get(endpoint, rate_limiter.limits["default"])
+            )
+            resolved_window = window_seconds if window_seconds is not None else rate_limiter.window
+            allowed, remaining = rate_limiter.is_allowed(
+                ip, endpoint, resolved_limit, resolved_window
+            )
+
             headers = {
-                "X-RateLimit-Limit": str(max_requests),
+                "X-RateLimit-Limit": str(resolved_limit),
                 "X-RateLimit-Remaining": str(remaining),
-                "X-RateLimit-Reset": str(int(time.time()) + window_seconds),
+                "X-RateLimit-Reset": str(int(time.time()) + resolved_window),
+                "Retry-After": str(resolved_window),
             }
             
             if not allowed:
                 return JSONResponse(
                     status_code=429,
-                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {window_seconds} seconds."},
+                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {resolved_window} seconds."},
                     headers=headers
                 )
             

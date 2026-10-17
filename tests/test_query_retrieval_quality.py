@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import pytest
 
 from query_retrival import (
+    _SESSION,
+    _TOKENIZER,
     _fast_worker_payroll_query,
     _is_explicit_worker_salary_guidance_query,
     _select_distinct_schema_tables,
@@ -88,3 +90,12 @@ def test_schema_retrieval_respects_table_limit():
     assert [doc.metadata["table"] for doc in selected] == [
         "table_0", "table_1", "table_2", "table_3", "table_4"
     ]
+
+
+
+def test_query_embedding_model_is_not_loaded_during_module_import():
+    # The API should bind its port without doing a Hugging Face download or
+    # initializing ONNX. The model runtime is loaded only when an AI query
+    # actually needs an embedding.
+    assert _TOKENIZER is None
+    assert _SESSION is None

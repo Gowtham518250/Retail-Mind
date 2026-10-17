@@ -608,23 +608,39 @@ def _patch_routes():
         if getattr(route, "path", "") == "/sync"
         and "POST" in getattr(route, "methods", set())
     }
-    for route in app_module.api.routes:
+
+    def patch_invoice_sync_route(route) -> bool:
         if (
-            getattr(route, "endpoint", None) in invoice_sync_endpoints
-            and "POST" in getattr(route, "methods", set())
+            getattr(route, "endpoint", None) not in invoice_sync_endpoints
+            or "POST" not in (getattr(route, "methods", set()) or set())
+            or getattr(route.endpoint, "__retail_mind_patch_kind__", None) == "invoice-sync"
         ):
-            original = route.endpoint
+            return False
 
-            def invoice_sync_wrapper(data, db, current_user, _original=original):
-                for item in data.line_items or []:
-                    object.__setattr__(item, "quantity", Decimal(str(item.quantity)))
-                    object.__setattr__(item, "unit_price", Decimal(str(item.unit_price)))
-                    object.__setattr__(item, "discount_amount", Decimal(str(item.discount_amount)))
-                return _original(data=data, db=db, current_user=current_user)
+        original = route.endpoint
 
-            route.endpoint = invoice_sync_wrapper
+        def invoice_sync_wrapper(data, db, current_user, _original=original):
+            for item in data.line_items or []:
+                object.__setattr__(item, "quantity", Decimal(str(item.quantity)))
+                object.__setattr__(item, "unit_price", Decimal(str(item.unit_price)))
+                object.__setattr__(item, "discount_amount", Decimal(str(item.discount_amount)))
+            return _original(data=data, db=db, current_user=current_user)
+
+        invoice_sync_wrapper.__retail_mind_patch_kind__ = "invoice-sync"
+        route.endpoint = invoice_sync_wrapper
+        if hasattr(route, "dependant"):
             route.dependant.call = invoice_sync_wrapper
-            break
+        return True
+
+    # FastAPI <0.137 exposes flattened copies on app.routes; 0.137+ keeps the
+    # source APIRouter live behind lazy inclusion nodes. Patch both forms.
+    for route_collection in (
+        list(getattr(app_module.api, "routes", [])),
+        list(getattr(invoices_billing.router, "routes", [])),
+    ):
+        for route in route_collection:
+            patch_invoice_sync_route(route)
+
 
     def shift_check_in(employee_id, db, current_user_id):
         shift, now = _current_shift()
@@ -852,29 +868,66 @@ def _patch_routes():
             }
         return get_shift_attendance_by_date
 
-    patched = set()
-    for route in app_module.api.routes:
-        path = getattr(route, "path", "")
-        methods = getattr(route, "methods", set())
+    import attendance
 
-        if path == "/api/attendance/check-in" and "POST" in methods:
-            route.endpoint = shift_check_in
-            route.dependant.call = shift_check_in
-            patched.add("check-in")
-        elif path == "/api/attendance/check-out" and "POST" in methods:
-            route.endpoint = shift_check_out
-            route.dependant.call = shift_check_out
-            patched.add("check-out")
-        elif path == "/api/attendance/employee/{employee_id}" and "GET" in methods:
-            endpoint = make_shift_attendance_endpoint(route.endpoint)
-            route.endpoint = endpoint
-            route.dependant.call = endpoint
-            patched.add("employee")
-        elif path == "/api/attendance/date/{date_str}" and "GET" in methods:
-            endpoint = make_shift_date_endpoint(route.endpoint)
-            route.endpoint = endpoint
-            route.dependant.call = endpoint
-            patched.add("date")
+    # FastAPI 0.137+ retains included routers as lazy route nodes. Older
+    # FastAPI releases flatten copies into app.api.routes. Patch the live source
+    # router and any legacy flattened copies so behavior is consistent across
+    # supported FastAPI versions.
+    route_sets = [
+        list(getattr(app_module.api, "routes", [])),
+        list(getattr(attendance.router, "routes", [])),
+    ]
+
+    def patch_route(route, path: str, methods: set[str]) -> str | None:
+        if path not in {"/api/attendance/check-in", "/check-in"} and path not in {
+            "/api/attendance/check-out", "/check-out",
+            "/api/attendance/employee/{employee_id}", "/employee/{employee_id}",
+            "/api/attendance/date/{date_str}", "/date/{date_str}",
+        }:
+            return None
+
+        route_methods = set(getattr(route, "methods", set()) or set())
+        if not (route_methods & methods):
+            return None
+
+        if path.endswith("/check-in") and "POST" in route_methods:
+            if getattr(route.endpoint, "__retail_mind_patch_kind__", None) != "check-in":
+                route.endpoint = shift_check_in
+                route.dependant.call = shift_check_in
+            return "check-in"
+
+        if path.endswith("/check-out") and "POST" in route_methods:
+            if getattr(route.endpoint, "__retail_mind_patch_kind__", None) != "check-out":
+                route.endpoint = shift_check_out
+                route.dependant.call = shift_check_out
+            return "check-out"
+
+        if path.endswith("/employee/{employee_id}") and "GET" in route_methods:
+            if getattr(route.endpoint, "__retail_mind_patch_kind__", None) != "employee":
+                endpoint = make_shift_attendance_endpoint(route.endpoint)
+                endpoint.__retail_mind_patch_kind__ = "employee"
+                route.endpoint = endpoint
+                route.dependant.call = endpoint
+            return "employee"
+
+        if path.endswith("/date/{date_str}") and "GET" in route_methods:
+            if getattr(route.endpoint, "__retail_mind_patch_kind__", None) != "date":
+                endpoint = make_shift_date_endpoint(route.endpoint)
+                endpoint.__retail_mind_patch_kind__ = "date"
+                route.endpoint = endpoint
+                route.dependant.call = endpoint
+            return "date"
+
+        return None
+
+    patched: set[str] = set()
+    for routes in route_sets:
+        for route in routes:
+            path = str(getattr(route, "path", "") or "")
+            kind = patch_route(route, path, {"GET", "POST"})
+            if kind:
+                patched.add(kind)
 
     expected = {"check-in", "check-out", "employee", "date"}
     if patched == expected:
@@ -892,15 +945,38 @@ def _patch_routes():
     return app_module.api
 
 if __name__ == "__main__":
-    # Run migrations before compatibility helpers issue SQL against application tables.
-    # This also covers Render services whose dashboard start command is simply
-    # `python production_boot.py` and bypasses render.yaml.
+    boot_started = time_module.perf_counter()
+
+    stage_started = time_module.perf_counter()
+    # Versioned schema repairs complete before importing the API module.
     _run_database_migrations()
+    print(
+        f"[BOOT] Alembic migrations completed in {time_module.perf_counter() - stage_started:.2f}s",
+        flush=True,
+    )
+
+    stage_started = time_module.perf_counter()
     _ensure_online_order_status_enum()
     _ensure_sales_reference_order_id()
     _ensure_online_delivery_payment_trigger()
     _ensure_shift_table()
+    print(
+        f"[BOOT] Compatibility database setup completed in {time_module.perf_counter() - stage_started:.2f}s",
+        flush=True,
+    )
+
+    # app.py can now skip create_all/legacy ALTERs while it imports.
+    os.environ["RETAIL_MIND_BOOTSTRAP_COMPLETE"] = "1"
+    stage_started = time_module.perf_counter()
     api = _patch_routes()
+    print(
+        f"[BOOT] App import and route patch completed in {time_module.perf_counter() - stage_started:.2f}s",
+        flush=True,
+    )
+    print(
+        f"[BOOT] Total time before starting Uvicorn: {time_module.perf_counter() - boot_started:.2f}s",
+        flush=True,
+    )
     # The FastAPI startup hook starts the scheduler for both production_boot.py
     # and direct `uvicorn app:api` launches; do not start a duplicate thread here.
     import uvicorn

@@ -172,19 +172,23 @@ def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
 
 def test_production_boot_patches_routes_registered_on_the_running_app():
     import app
+    import attendance
 
     api = production_boot._patch_routes()
     assert api is app.api
 
+    # FastAPI 0.137+ stores included routers as lazy route-tree nodes, so the
+    # root app.routes list isn't a flat list of APIRoute objects anymore. The
+    # attendance router remains the canonical, live source of its operations.
     expected = {
-        "/api/attendance/check-in": "shift_check_in",
-        "/api/attendance/check-out": "shift_check_out",
-        "/api/attendance/employee/{employee_id}": "get_shift_attendance",
-        "/api/attendance/date/{date_str}": "get_shift_attendance_by_date",
+        "/check-in": "shift_check_in",
+        "/check-out": "shift_check_out",
+        "/employee/{employee_id}": "get_shift_attendance",
+        "/date/{date_str}": "get_shift_attendance_by_date",
     }
     registered = {
         getattr(route, "path", ""): route
-        for route in app.api.routes
+        for route in attendance.router.routes
         if getattr(route, "path", "") in expected
     }
     assert set(registered) == set(expected)

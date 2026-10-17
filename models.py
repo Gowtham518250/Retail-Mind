@@ -215,7 +215,7 @@ class OnlineOrderDeliveryOtp(Base):
     )
     otp_hash = Column(String(128), nullable=False)
     otp_expires_at = Column(DateTime, nullable=False, index=True)
-    otp_attempts = Column(Integer, nullable=False, default=0)
+    otp_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     used = Column(Boolean, nullable=False, default=False, index=True)
     verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
@@ -1020,6 +1020,7 @@ class PasswordReset(Base):
     user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash = Column(String(128), nullable=False, index=True)
     expires_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, server_default=func.now())
 
     # Relationship for convenience
@@ -1027,6 +1028,36 @@ class PasswordReset(Base):
     reference_id = Column(String(100))  # invoice_number or payment_id
     description = Column(String(200))
     transaction_date = Column(DateTime, server_default=func.now())
+
+
+class EmailOtpChallenge(Base):
+    """Database-backed one-time email OTP with expiry and attempt tracking."""
+    __tablename__ = "email_otp_challenges"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), nullable=False, index=True)
+    purpose = Column(String(64), nullable=False, default="Verification", server_default="Verification", index=True)
+    otp_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_email_otp_email_purpose_created",
+            "email",
+            "purpose",
+            "created_at",
+        ),
+        Index(
+            "uq_email_otp_one_active_per_email",
+            "email",
+            unique=True,
+            postgresql_where=text("used_at IS NULL"),
+            sqlite_where=text("used_at IS NULL"),
+        ),
+    )
 
 
 # ==================== EXPENSE TRACKING ====================
