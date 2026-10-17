@@ -2,9 +2,10 @@ services:
   - type: web
     name: retail-mind-api
     env: python
+    healthCheckPath: /health/ready
     buildCommand: "pip install -r requirements.txt && python build_faiss_index.py"
-    # Keep production startup on the compatibility bootstrap; schema changes are applied by guarded migrations/bootstrap patches.
-    startCommand: "alembic upgrade head && python production_boot.py"
+    # production_boot.py runs the controlled Alembic migration step before starting the API.
+    startCommand: "python production_boot.py"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -15,8 +16,6 @@ services:
       # Short-lived access token; the refresh token keeps an active login for 7 days.
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: 30
-      - key: REFRESH_TOKEN_EXPIRE_DAYS
-        value: 7
       - key: REFRESH_TOKEN_EXPIRE_DAYS
         value: 7
       - key: SENDER_EMAIL
