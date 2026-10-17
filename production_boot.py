@@ -608,23 +608,39 @@ def _patch_routes():
         if getattr(route, "path", "") == "/sync"
         and "POST" in getattr(route, "methods", set())
     }
-    for route in app_module.api.routes:
+
+    def patch_invoice_sync_route(route) -> bool:
         if (
-            getattr(route, "endpoint", None) in invoice_sync_endpoints
-            and "POST" in getattr(route, "methods", set())
+            getattr(route, "endpoint", None) not in invoice_sync_endpoints
+            or "POST" not in (getattr(route, "methods", set()) or set())
+            or getattr(route.endpoint, "__retail_mind_patch_kind__", None) == "invoice-sync"
         ):
-            original = route.endpoint
+            return False
 
-            def invoice_sync_wrapper(data, db, current_user, _original=original):
-                for item in data.line_items or []:
-                    object.__setattr__(item, "quantity", Decimal(str(item.quantity)))
-                    object.__setattr__(item, "unit_price", Decimal(str(item.unit_price)))
-                    object.__setattr__(item, "discount_amount", Decimal(str(item.discount_amount)))
-                return _original(data=data, db=db, current_user=current_user)
+        original = route.endpoint
 
-            route.endpoint = invoice_sync_wrapper
+        def invoice_sync_wrapper(data, db, current_user, _original=original):
+            for item in data.line_items or []:
+                object.__setattr__(item, "quantity", Decimal(str(item.quantity)))
+                object.__setattr__(item, "unit_price", Decimal(str(item.unit_price)))
+                object.__setattr__(item, "discount_amount", Decimal(str(item.discount_amount)))
+            return _original(data=data, db=db, current_user=current_user)
+
+        invoice_sync_wrapper.__retail_mind_patch_kind__ = "invoice-sync"
+        route.endpoint = invoice_sync_wrapper
+        if hasattr(route, "dependant"):
             route.dependant.call = invoice_sync_wrapper
-            break
+        return True
+
+    # FastAPI <0.137 exposes flattened copies on app.routes; 0.137+ keeps the
+    # source APIRouter live behind lazy inclusion nodes. Patch both forms.
+    for route_collection in (
+        list(getattr(app_module.api, "routes", [])),
+        list(getattr(invoices_billing.router, "routes", [])),
+    ):
+        for route in route_collection:
+            patch_invoice_sync_route(route)
+
 
     def shift_check_in(employee_id, db, current_user_id):
         shift, now = _current_shift()
