@@ -160,7 +160,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(echo "$heads" | grep -c '^037_password_reset_attempts')"
+          count="$(echo "$heads" | grep -c '^038_legacy_startup_schema_repairs')"
           test "$count" -eq 1
           head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
