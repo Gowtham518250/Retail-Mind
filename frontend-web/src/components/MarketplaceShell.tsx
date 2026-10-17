@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, Flower2, MapPin, Search, ShoppingBasket, Sparkles, Star, Store } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
@@ -336,12 +336,17 @@ export default function MarketplaceShell() {
     };
   }, []);
 
+  const resultsRef = useRef<HTMLElement>(null);
+  const scrollToResults = () => {
+    resultsRef.current?.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'start' });
+  };
+
   const preset = (value: string) => {
     setActiveProductCategory('All');
     setQuery(value);
-    // These chips come from real shop categories/types, so search both shops and products.
     setMode('all');
     void performSearch('all', value, true);
+    scrollToResults();
   };
 
 
@@ -355,12 +360,11 @@ export default function MarketplaceShell() {
     { id: 'shops', label: 'Shops', icon: <Store size={14} /> },
     { id: 'all', label: 'Everything' },
   ];
-  const resultsRef = useRef<HTMLElement>(null);
 
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void performSearch(mode, query, true);
-    resultsRef.current?.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth', block: 'start' });
+    scrollToResults();
   };
 
   return (
@@ -371,19 +375,13 @@ export default function MarketplaceShell() {
         <div className={styles.heroGrain} aria-hidden="true" />
 
         <motion.div className={styles.heroCopy} style={{ y: shouldReduceMotion ? 0 : copyY, opacity: shouldReduceMotion ? 1 : copyOpacity }}>
-          <motion.div className={styles.eyebrow} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
-            <span className={styles.pulse} />
-            Local commerce, reimagined
-          </motion.div>
-
           <h1 className={styles.title}>
             <span className={styles.titleLine}><Words text="Shop local." base={0.1} /></span>
-            <span className={styles.titleLine}><Words text="Think smarter." base={0.35} /></span>
-            <span className={styles.titleLine}><Words text="Move faster." base={0.6} className={styles.titleAccent} /></span>
+            <span className={styles.titleLine}><Words text="Find it faster." base={0.35} className={styles.titleAccent} /></span>
           </h1>
 
           <motion.p className={styles.lead} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.9, ease: EASE }}>
-            Search a product across local shops, check its price and availability, or ask AI to help you find the right fit.
+            Search local products and compare prices.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 1.05, ease: EASE }}>
@@ -401,7 +399,6 @@ export default function MarketplaceShell() {
                 {searching ? 'Searching…' : 'Search'} <ArrowRight size={16} />
               </button>
             </form>
-            <p className={styles.searchHint}>Search across local stores, then compare price and availability.</p>
 
             <div className={styles.modes} role="group" aria-label="Search scope">
               {searchModes.map((m) => (
@@ -418,137 +415,25 @@ export default function MarketplaceShell() {
               ))}
               <button type="button" className={styles.modeAi} onClick={performAiSearch}><Bot size={14} /> Ask AI</button>
             </div>
+            <div className={styles.quickSearches} aria-label="Popular searches">
+              <span>Popular:</span>
+              {[
+                { label: 'Groceries', icon: <ShoppingBasket size={15} /> },
+                { label: 'Bakery', icon: <Croissant size={15} /> },
+                { label: 'Personal care', icon: <Flower2 size={15} /> },
+              ].map((item) => (
+                <button key={item.label} type="button" onClick={() => preset(item.label)}>
+                  {item.icon}{item.label}
+                </button>
+              ))}
+            </div>
           </motion.div>
-
-          <motion.ul className={styles.trust} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.3, duration: 0.8 }}>
-            <li><ShieldCheck size={15} /> Secure checkout</li>
-            <li><Truck size={15} /> Local dispatch</li>
-            <li><Zap size={15} /> Stock-aware</li>
-          </motion.ul>
         </motion.div>
 
         <div className={styles.stage}>
           <div className={styles.stageGlow} aria-hidden="true" />
           <HeroScene3D className={styles.canvas} />
-
-          <motion.div className={`${styles.chip} ${styles.chipA}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -12, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
-            <span className={styles.chipIcon} style={{ background: '#f3ca4f' }}><Zap size={15} /></span>
-            <span><b>{shops.length > 0 && !query.trim() ? `${shops.length} shops online` : 'Live availability'}</b><small>Updated in real time</small></span>
-          </motion.div>
-          <motion.div className={`${styles.chip} ${styles.chipB}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, 14, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}>
-            <span className={styles.chipIcon} style={{ background: '#e8541e', color: '#fff' }}><Sparkles size={15} /></span>
-            <span><b>AI shopping</b><small>Describe it, we find it</small></span>
-          </motion.div>
-          <motion.div className={`${styles.chip} ${styles.chipC}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -10, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}>
-            <span className={styles.chipIcon} style={{ background: '#cfe3c6' }}><Truck size={15} /></span>
-            <span><b>Track every order</b><small>From shelf to door</small></span>
-          </motion.div>
-          <div className={styles.hint}><MousePointer2 size={13} /> Move your cursor · tap the bag</div>
         </div>
-      </section>
-
-      {/* ───────── BENTO ───────── */}
-      <section className={styles.section}>
-        <Reveal className={styles.bento}>
-          <Tilt3D className={`${styles.bentoWide}`}>
-            <button className={`${styles.bentoTile} ${styles.tileYellow}`} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
-              <span className={styles.tileKicker}>01 · Discover</span>
-              <strong>Local storefronts</strong>
-              <p>Meet verified shops near you and order straight from their shelves.</p>
-              <span className={styles.tileGo}>Browse shops <ArrowRight size={16} /></span>
-              <div className={styles.stack} aria-hidden="true"><i /><i /><i /></div>
-            </button>
-          </Tilt3D>
-          <Tilt3D>
-            <button className={`${styles.bentoTile} ${styles.tilePaper}`} onClick={() => { setMode('products'); void performSearch('products', '', true); }}>
-              <span className={styles.tileIcon}><Boxes size={22} /></span>
-              <strong>Compare products</strong>
-              <p>See prices across stores.</p>
-              <span className={styles.tileGo}><ArrowUpRight size={18} /></span>
-            </button>
-          </Tilt3D>
-          <Tilt3D>
-            <button className={`${styles.bentoTile} ${styles.tileDark}`} onClick={() => router.push('/ai-shopping')}>
-              <span className={styles.tileIcon}><Sparkles size={22} /></span>
-              <strong>AI shopping</strong>
-              <p>Describe what you need.</p>
-              <span className={styles.tileGo}><ArrowUpRight size={18} /></span>
-            </button>
-          </Tilt3D>
-          <Tilt3D>
-            <Link href="/orders" className={`${styles.bentoTile} ${styles.tileOrange}`}>
-              <span className={styles.tileIcon}><Truck size={22} /></span>
-              <strong>Order centre</strong>
-              <p>Returns, reviews &amp; history.</p>
-              <span className={styles.tileGo}><ArrowUpRight size={18} /></span>
-            </Link>
-          </Tilt3D>
-        </Reveal>
-      </section>
-
-      {/* ───────── CUSTOMER EXPERIENCE HIGHLIGHTS ───────── */}
-      <section className={styles.sellerPromoSection}>
-        <Reveal>
-          <Tilt3D>
-            <div className={styles.sellerPromoCard}>
-              <div className={styles.sellerPromoLeft}>
-                <div className={styles.sellerPromoBadge}>
-                  <Sparkles size={14} />
-                  <span>The RetailMind Promise</span>
-                </div>
-                <h2 className={styles.sellerPromoTitle}>
-                  Real Shops. Real Stock. <b>Direct to You.</b>
-                </h2>
-                <p className={styles.sellerPromoText}>
-                  Order directly from verified neighbourhood stores with zero markups. Enjoy live shelf updates, direct local dispatch, and transparent payment on delivery with Cash or UPI.
-                </p>
-                <div className={styles.sellerPromoPerks}>
-                  <span><ShieldCheck size={16} /> 100% Verified Stores</span>
-                  <span><Zap size={16} /> Real-time Stock Checked</span>
-                  <span><Truck size={16} /> Swift Local Delivery</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}
-                className={styles.sellerPromoBtn}
-              >
-                <Store size={18} />
-                <span>Explore Local Shops</span>
-                <ArrowRight size={16} />
-              </button>
-            </div>
-          </Tilt3D>
-        </Reveal>
-      </section>
-
-      {/* ───────── QUICK DISCOVERY ───────── */}
-      <section className={styles.section}>
-        <Reveal className={styles.discovery}>
-          <div>
-            <div className={styles.kicker}>Quick discovery</div>
-            <h2 className={styles.h2}>Jump into a shopping mood.</h2>
-            <p className={styles.sub}>Pick a category, or let Retail Mind turn a sentence into a shortlist.</p>
-          </div>
-          <div className={styles.presets}>
-            {[
-              { label: 'Groceries', note: 'Everyday essentials', icon: <ShoppingBasket size={20} /> },
-              { label: 'Bakery', note: 'Freshly baked', icon: <Croissant size={20} /> },
-              { label: 'Personal care', note: 'Beauty & wellness', icon: <Flower2 size={20} /> },
-            ].map((p) => (
-              <button key={p.label} className={styles.preset} onClick={() => preset(p.label)}>
-                <span className={styles.presetIcon}>{p.icon}</span>
-                <b>{p.label}</b>
-                <small>{p.note}</small>
-              </button>
-            ))}
-            <button className={`${styles.preset} ${styles.presetAi}`} onClick={() => router.push('/ai-shopping')}>
-              <span className={styles.presetIcon}><Sparkles size={20} /></span>
-              <b>Find with AI</b>
-              <small>Ask naturally</small>
-            </button>
-          </div>
-        </Reveal>
       </section>
 
       {error && (
@@ -612,7 +497,7 @@ export default function MarketplaceShell() {
             <div className={styles.head}>
               <div>
                 <div className={styles.kicker}>Results</div>
-                <h2 className={styles.h2}>{mode === 'shops' ? 'Shops matching your search' : mode === 'products' ? 'Products matching your search' : 'Shops and products'}</h2>
+                <h2 className={styles.h2}>{mode === 'shops' ? 'Shops' : mode === 'products' ? 'Products' : 'Matches'}</h2>
               </div>
             </div>
 
@@ -653,7 +538,6 @@ export default function MarketplaceShell() {
               <div>
                 <div className={styles.kicker}><Boxes size={12} /> Shop local products</div>
                 <h2 className={styles.h2}>Popular products nearby</h2>
-                <p className={styles.sub}>Compare products from local shops. Search above to find something specific.</p>
               </div>
               <span className={styles.count}>{showcaseProducts.length} {showcaseProducts.length === 1 ? 'product' : 'products'}</span>
             </div>
@@ -693,7 +577,6 @@ export default function MarketplaceShell() {
               <div>
                 <div className={styles.kicker}><Sparkles size={12} /> Local storefronts</div>
                 <h2 className={styles.h2}>Find your next favourite shop</h2>
-                <p className={styles.sub}>Meet the neighbourhood stores bringing everyday essentials closer to you.</p>
               </div>
               <span className={styles.count}>{shops.length} {shops.length === 1 ? 'shop' : 'shops'}</span>
             </div>
