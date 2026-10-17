@@ -249,7 +249,6 @@ def send_otp(
     # prevents distributed IPs from repeatedly mailing the same recipient.
     recent_count = db.query(EmailOtpChallenge).filter(
         EmailOtpChallenge.email == normalized_email,
-        EmailOtpChallenge.purpose == purpose,
         EmailOtpChallenge.created_at >= now - timedelta(minutes=10),
     ).count()
     if recent_count >= 3:
@@ -258,11 +257,10 @@ def send_otp(
             detail="OTP request limit reached. Please try again later.",
         )
 
-    # Consume any outstanding challenge for this same email + purpose before
-    # creating a new one; the latest issued code is the only usable code.
+    # Verification accepts email + OTP only, so there must be exactly one
+    # active challenge per email regardless of the email-template purpose.
     db.query(EmailOtpChallenge).filter(
         EmailOtpChallenge.email == normalized_email,
-        EmailOtpChallenge.purpose == purpose,
         EmailOtpChallenge.used_at.is_(None),
     ).update(
         {"used_at": now},
