@@ -58,7 +58,7 @@ decorator==5.1.1
 
 firebase-admin==7.7.0
 protobuf==6.33.5
-groq==0.10.0
+groq==1.7.0
 langchain==1.4.6
 langchain-classic==1.0.8
 langchain-community==0.4.2
