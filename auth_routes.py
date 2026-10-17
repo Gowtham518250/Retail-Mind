@@ -698,24 +698,33 @@ def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
                 detail="Invalid token type. Expected refresh token."
             )
         
-        # Extract user_id and role
-        user_id = int(payload.get("sub"))
-        role = payload.get("role")
-        
-        # Verify user still exists and is active
+        # Validate subject, then load current account permissions from the DB.
+        try:
+            user_id = int(payload.get("sub"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=401, detail="Invalid refresh token subject")
+        if user_id <= 0:
+            raise HTTPException(status_code=401, detail="Invalid refresh token subject")
+
+        # Verify user still exists and is active.
         db_user = db.query(User).filter(User.id == user_id).first()
         if not db_user or not db_user.is_active:
             raise HTTPException(
                 status_code=401,
                 detail="User not found or inactive"
             )
-        
-        # Create new access token
+
+        # Never carry stale privileges from the refresh JWT. Current DB role is
+        # authoritative and only recognized application roles may be renewed.
+        from security import VALID_ROLES
+        role = str(getattr(db_user, "user_type", None) or "").strip().upper()
+        if role not in VALID_ROLES:
+            raise HTTPException(status_code=401, detail="Account role is invalid.")
+
+        # Create access and rotated refresh tokens using the current DB role.
         new_access_token = create_access_token(
             data={"sub": str(db_user.id), "role": role, "user_type": role}
         )
-        
-        # Create new refresh token (rotate refresh tokens for security)
         new_refresh_token = create_refresh_token(db_user.id, role)
         
         return {
@@ -727,13 +736,15 @@ def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
             "user_id": db_user.id
         }
         
-    except JWTError as e:
-        logger.error(f"JWTError on refresh: {e}")
+    except HTTPException:
+        raise
+    except JWTError:
+        # Avoid logging token contents or detailed validation failures.
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired refresh token"
         )
-    except Exception as e:
+    except Exception:
         logger.error(f"Token refresh failed unexpectedly: {e}")
         raise HTTPException(
             status_code=500,
