@@ -59,9 +59,11 @@ class CacheManager:
         self._retry_after = time.monotonic() + self.retry_interval_seconds
         # Never include the URL or exception message: either may reveal details.
         logger.warning(
-            "Redis cache %s unavailable; bypassing cache (error_type=%s)",
+            "Redis cache %s unavailable; bypassing cache "
+            "(error_type=%s, reason=%s)",
             operation,
             type(error).__name__,
+            _redis_failure_reason(error),
         )
 
     def _ensure_available(self) -> bool:
