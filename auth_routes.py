@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from models import User, ShopProfile, Worker
-from security import hash_password, verify_password, create_access_token, create_refresh_token, ROLE_OWNER, get_current_user, check_login_lockout, record_login_failure, record_login_success
+from security import hash_password, verify_password, create_access_token, create_refresh_token, ROLE_OWNER, VALID_ROLES, get_current_user, check_login_lockout, record_login_failure, record_login_success
 from email_notifications import EmailNotificationService
 from rate_limiter import rate_limit_endpoint, get_client_ip, ip_rate_limiter
 import random
@@ -46,6 +46,12 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     from sqlalchemy import func
     from sqlalchemy.exc import SQLAlchemyError
 
+    # Public registration may choose only recognized application roles.
+    # Unknown roles must never become signed access-token claims.
+    requested_role = str(user.user_type or ROLE_OWNER).strip().upper()
+    if requested_role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Unsupported account role")
+
     # Check email uniqueness (case-insensitive) — return 409 Conflict
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
         raise HTTPException(status_code=409, detail="This email is already registered. Please login instead.")
@@ -65,14 +71,14 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
                 user_name=user.username,
                 email=user.email.strip().lower(),  # Store email in lowercase for consistency
                 password=hashed_password,
-                user_type=user.user_type.upper() if user.user_type else "OWNER",
+                user_type=requested_role,
                 is_active=user.is_active if user.is_active is not None else True
             )
             db.add(new_user)
             db.flush()  # ensure new_user.id is populated
 
             # Auto-create Shop Profile only if they are an OWNER
-            if (new_user.user_type or user.user_type or "OWNER").upper() == "OWNER":
+            if new_user.user_type == ROLE_OWNER:
                 shop_name_value = user.shop_name.strip() if user.shop_name and user.shop_name.strip() else f"{user.username}'s Shop"
                 shop_profile = ShopProfile(shop_id=new_user.id, shop_name=shop_name_value)
                 db.add(shop_profile)
@@ -633,10 +639,16 @@ def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
         ip_rate_limiter.record_success(ip)
         record_login_success(ip)
 
-        # Get user role from database
-        user_role = getattr(db_user, 'user_type', ROLE_OWNER) or ROLE_OWNER
+        # A database role is authoritative. Never turn a missing or unknown
+        # role into OWNER as a convenience fallback.
+        user_role = str(getattr(db_user, "user_type", None) or "").strip().upper()
+        if user_role not in VALID_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account role is invalid. Please contact support.",
+            )
 
-        # Create access token with user role
+        # Create access token with validated user role
         access_token = create_access_token(
             data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
         )
