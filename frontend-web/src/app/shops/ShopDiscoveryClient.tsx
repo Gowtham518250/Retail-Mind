@@ -86,11 +86,13 @@ export default function ShopDiscoveryClient({ initialShops }: { initialShops: Sh
       setError('');
       try {
         const response = await fetch(
-          API_BASE + '/store/marketplace/search?mode=shops&limit=60',
+          '/api/marketplace/search?mode=shops&limit=60',
           { cache: 'no-store', signal: controller.signal },
         );
-        if (!response.ok) throw new Error('Marketplace request failed (' + response.status + ').');
         const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || 'Marketplace request failed (' + response.status + ').');
+        }
         const list: Shop[] = Array.isArray(data.shops) ? data.shops : [];
         setShops(list);
 
@@ -195,8 +197,10 @@ export default function ShopDiscoveryClient({ initialShops }: { initialShops: Sh
           ) : visibleShops.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIcon}><Search size={23} /></div>
-              <h3>No shops match that search</h3>
-              <p>Try another name or choose a different category.</p>
+              <h3>{query.trim() || category !== 'All' ? 'No shops match that search' : 'No shops are available yet'}</h3>
+              <p>{query.trim() || category !== 'All'
+                ? 'Try another name or choose a different category.'
+                : 'Please check back soon as local stores join the marketplace.'}</p>
               <button type="button" className={styles.primary} onClick={() => { setQuery(''); setCategory('All'); }}>Clear filters</button>
             </div>
           ) : (

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { API_BASE } from './api';
 
-const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://retail-mind-web.onrender.com';
+const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://retail-mind-1.onrender.com';
 
 const parsedSiteUrl = new URL(configuredSiteUrl);
 if (!parsedSiteUrl.hostname || parsedSiteUrl.username || parsedSiteUrl.password) {

@@ -15,11 +15,11 @@ The browser API defaults to `https://retail-mind-hpx3.onrender.com`. Set
 route handlers use `RETAIL_MIND_BACKEND_URL` first and fall back to
 `NEXT_PUBLIC_API_URL`.
 
-Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS customer website origin before
-production deployment. SEO metadata and the sitemap use this trusted setting,
-not the incoming request Host header. The current fallback is
-`https://retail-mind-web.onrender.com`; confirm that this is the deployed
-customer website before launch.
+Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS customer website origin in
+the deployment environment. SEO metadata and the sitemap use this trusted
+setting, not the incoming request Host header. The default is
+`https://retail-mind-1.onrender.com`, the currently deployed customer website;
+update the setting if the production hostname changes.
 
 The public `/shops` directory is server-rendered when shop data is available,
 then keeps its existing client-side search and filters. Product and shop
@@ -37,7 +37,8 @@ the owner supplies an ID and consent requirements are decided.
 
 The public sitemap discovers shops and their products from the existing
 backend. It cannot list URLs while that API returns no online-enabled shops.
-The current backend returned an empty shop list during frontend launch checks.
+The deployed backend currently returns an empty shop list, so the sitemap
+contains only static public pages until online-enabled shops are available.
 The backend has no existing customer contact-submission endpoint, so this
 frontend does not show a contact form or report unpersisted messages as sent.
 The privacy page is an implementation summary, not a legal-reviewed policy;
@@ -50,11 +51,13 @@ Deploy this Next.js app as a server-rendered web app; its same-origin marketplac
 and AI routes require the Next.js server. After deployment over HTTPS, customers
 can install the PWA from a supported browser.
 
-The repository's root `render.yaml` currently deploys a different, minimal Vite
-app from `frontend/`, not this customer app. Deploy `frontend-web/` as a Node
-Next.js service (or configure the hosting platform to build this directory)
-before expecting these pages, route handlers, sitemap, or metadata on the public
-website. The known Render frontend hostname was unavailable during verification.
+The customer app is deployed at `https://retail-mind-1.onrender.com`. The
+repository's root `render.yaml` still describes a different, minimal Vite app
+from `frontend/`; it does not configure this Next.js service.
+`/shops` loads discovery results through the same-origin `/api/marketplace/search`
+route so browser requests do not depend on backend CORS for that page. Other
+browser-to-backend features still require the API service's `ALLOWED_ORIGINS`
+setting to include `https://retail-mind-1.onrender.com`.
 
 ## Android app
 
