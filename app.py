@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response
 import os
 import time
 import logging
@@ -445,8 +445,13 @@ setup_performance_middleware(api)
 # ========================
 # ROOT & HEALTH ENDPOINTS
 # ========================
-@api.get("/", tags=["System"])
+@api.api_route("/", methods=["GET", "HEAD"], tags=["System"])
 async def root(request: Request):
+    # Render and other platform probes may issue HEAD / before GET /. Return
+    # a body-less success response so that probe traffic does not get a 405.
+    if request.method == "HEAD":
+        return Response(status_code=200, headers={"Cache-Control": "no-store"})
+
     shop_id = request.query_params.get("shop_id")
     if shop_id:
         web_out_index = os.path.join(os.path.dirname(__file__), "frontend-web", "out", "index.html")
