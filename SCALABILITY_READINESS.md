@@ -47,7 +47,7 @@ When configuring a platform readiness/health-check path, prefer `/health/ready`.
 ## Required architecture before 100,000 concurrent users
 
 1. Keep API replicas stateless. Store durable data in PostgreSQL/object storage and shared, expiring coordination state in Redis or another managed shared service.
-2. Repair and verify Redis connectivity; the in-memory fallback is per process and is not a distributed rate limiter. Use atomic Redis operations and test failover.
+2. Repair and verify Redis connectivity; the in-memory fallback is per process and is not a distributed rate limiter. The cache can safely bypass Redis and retry, but cache hits and shared rate limits require a healthy common Redis endpoint. Use atomic Redis operations and test failover.
 3. Separate expensive AI, speech and document-indexing work into bounded worker pools and queues. Apply timeouts, quotas, backpressure and safe retries.
 4. Budget connections across every process and replica. Review slow queries, indexes, transaction lengths and N+1 query patterns; use read replicas only for appropriate read workloads.
 5. Keep order/inventory/payment changes transactional and idempotent. Never use a cache as the source of truth for stock, invoices or payments.
