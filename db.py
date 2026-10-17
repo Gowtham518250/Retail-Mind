@@ -28,7 +28,7 @@ def _sql_statement_summary(statement: str) -> str:
     normalized = " ".join(str(statement).split())
     operation = normalized.split(" ", 1)[0].upper() if normalized else "UNKNOWN"
     tables = re.findall(
-        r"\\b(?:FROM|JOIN|UPDATE|INTO)\\s+([\"A-Za-z_][\\w.$\"]*)",
+        r'\b(?:FROM|JOIN|UPDATE|INTO)\s+([A-Za-z_][\w.$"]*)',
         normalized,
         flags=re.IGNORECASE,
     )
@@ -36,7 +36,6 @@ def _sql_statement_summary(statement: str) -> str:
     if unique_tables:
         return f"{operation} tables={','.join(unique_tables)}"
     return operation
-
 
 def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
     if context is not None:
