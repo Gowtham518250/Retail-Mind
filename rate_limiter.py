@@ -297,6 +297,7 @@ def rate_limit_endpoint(
                 "X-RateLimit-Limit": str(resolved_limit),
                 "X-RateLimit-Remaining": str(remaining),
                 "X-RateLimit-Reset": str(int(time.time()) + resolved_window),
+                "Retry-After": str(resolved_window),
             }
             
             if not allowed:
@@ -343,12 +344,13 @@ def rate_limit_endpoint(
                 "X-RateLimit-Limit": str(resolved_limit),
                 "X-RateLimit-Remaining": str(remaining),
                 "X-RateLimit-Reset": str(int(time.time()) + resolved_window),
+                "Retry-After": str(resolved_window),
             }
             
             if not allowed:
                 return JSONResponse(
                     status_code=429,
-                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {window_seconds} seconds."},
+                    content={"error": "Too many requests", "message": f"Rate limit exceeded. Try again in {resolved_window} seconds."},
                     headers=headers
                 )
             
