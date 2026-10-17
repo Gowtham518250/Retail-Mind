@@ -12,6 +12,8 @@ from functools import wraps
 import hashlib
 import pickle
 import logging
+import threading
+import time
 from fastapi import APIRouter, Depends
 
 logger = logging.getLogger(__name__)
@@ -20,114 +22,172 @@ from security import get_current_user
 
 
 class CacheManager:
-    """Redis-based cache manager"""
-    
-    def __init__(self):
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        self.redis_client = None
-        self.prefix = "app_cache:"
-        self.enabled = False
+    """Redis cache with bounded connection retries and safe local fallback."""
 
+    def __init__(self):
+        self.redis_url = os.getenv("REDIS_URL", "").strip()
+        self.redis_client = None
+        self.enabled = False
+        self.prefix = "app_cache:"
+        self.retry_interval_seconds = 30
         try:
-            self.redis_client = redis.from_url(redis_url, decode_responses=False)
-            self.enabled = True
-        except Exception as e:
-            logger.warning(
-                f"Redis initialization failed for REDIS_URL={redis_url}: {e}. "
-                "Cache functionality is disabled until a valid Redis URL is provided."
+            self.retry_interval_seconds = max(
+                5, int(os.getenv("REDIS_RETRY_INTERVAL_SECONDS", "30"))
             )
-            self.redis_client = None
-            self.enabled = False
+        except (TypeError, ValueError):
+            logger.warning("Invalid REDIS_RETRY_INTERVAL_SECONDS for cache; using 30 seconds")
+        self._retry_after = 0.0
+        self._connection_lock = threading.Lock()
+        # Verify connectivity at startup. Failure disables cache use temporarily
+        # instead of allowing every request to repeatedly hit a broken endpoint.
+        self._ensure_available()
+
+    def _build_client(self):
+        if not self.redis_url:
+            return None
+        return redis.from_url(
+            self.redis_url,
+            decode_responses=False,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+
+    def _mark_unavailable(self, error, operation: str) -> None:
+        self.enabled = False
+        self._retry_after = time.monotonic() + self.retry_interval_seconds
+        # Never include the URL or exception message: either may reveal details.
+        logger.warning(
+            "Redis cache %s unavailable; bypassing cache (error_type=%s)",
+            operation,
+            type(error).__name__,
+        )
+
+    def _ensure_available(self) -> bool:
+        if not self.redis_url:
+            return False
+        if self.enabled and self.redis_client is not None:
+            return True
+        now = time.monotonic()
+        if now < self._retry_after or not self._connection_lock.acquire(blocking=False):
+            return False
+        try:
+            if self.enabled and self.redis_client is not None:
+                return True
+            if self.redis_client is None:
+                self.redis_client = self._build_client()
+            if self.redis_client is None:
+                return False
+            self.redis_client.ping()
+            was_enabled = self.enabled
+            self.enabled = True
+            self._retry_after = 0.0
+            if not was_enabled:
+                logger.info("Redis cache connected and enabled")
+            return True
+        except Exception as error:
+            self._mark_unavailable(error, "connection")
+            return False
+        finally:
+            self._connection_lock.release()
+
+    def _mark_operation_failure(self, error, operation: str) -> None:
+        self._mark_unavailable(error, operation)
 
     def _get_key(self, key: str) -> str:
-        """Generate cache key with prefix"""
+        """Generate cache key with prefix."""
         return f"{self.prefix}{key}"
-    
+
     def get(self, key: str) -> Optional[Any]:
-        """Get value from cache"""
-        if not self.enabled or self.redis_client is None:
+        """Return cached data, or None when cache is unavailable or misses."""
+        if not self._ensure_available():
             return None
         try:
             value = self.redis_client.get(self._get_key(key))
-            if value:
-                try:
-                    return json.loads(value)
-                except:
-                    return pickle.loads(value)
+            if value is None:
+                return None
+            try:
+                return json.loads(value)
+            except (ValueError, TypeError, UnicodeDecodeError):
+                return pickle.loads(value)
+        except Exception as error:
+            self._mark_operation_failure(error, "get")
             return None
-        except Exception as e:
-            logger.warning(f"Cache get error: {e}")
-            return None
-    
+
     def set(self, key: str, value: Any, ttl: int = 3600) -> bool:
-        """Set value in cache"""
-        if not self.enabled or self.redis_client is None:
+        """Cache data with a finite TTL. Cache errors never fail business requests."""
+        if not self._ensure_available():
             return False
         try:
             try:
                 serialized = json.dumps(value)
-            except:
+            except (TypeError, ValueError):
                 serialized = pickle.dumps(value)
-            self.redis_client.setex(self._get_key(key), ttl, serialized)
+            self.redis_client.setex(self._get_key(key), max(1, int(ttl)), serialized)
             return True
-        except Exception as e:
-            logger.warning(f"Cache set error: {e}")
+        except Exception as error:
+            self._mark_operation_failure(error, "set")
             return False
-    
+
     def delete(self, key: str) -> bool:
-        """Delete cache entry"""
-        if not self.enabled or self.redis_client is None:
+        """Delete a single cache entry."""
+        if not self._ensure_available():
             return False
         try:
             self.redis_client.delete(self._get_key(key))
             return True
-        except Exception as e:
-            logger.warning(f"Cache delete error: {e}")
+        except Exception as error:
+            self._mark_operation_failure(error, "delete")
             return False
-    
+
     def delete_pattern(self, pattern: str) -> int:
-        """Delete all keys matching pattern"""
-        if not self.enabled or self.redis_client is None:
+        """Delete matching entries incrementally; avoid Redis' blocking KEYS command."""
+        if not self._ensure_available():
             return 0
+        deleted = 0
+        batch = []
         try:
-            keys = self.redis_client.keys(f"{self.prefix}{pattern}*")
-            if keys:
-                return self.redis_client.delete(*keys)
-            return 0
-        except Exception as e:
-            logger.warning(f"Cache delete_pattern error: {e}")
-            return 0
-    
+            for key in self.redis_client.scan_iter(
+                match=f"{self.prefix}{pattern}*", count=500
+            ):
+                batch.append(key)
+                if len(batch) >= 500:
+                    deleted += int(self.redis_client.delete(*batch) or 0)
+                    batch.clear()
+            if batch:
+                deleted += int(self.redis_client.delete(*batch) or 0)
+            return deleted
+        except Exception as error:
+            self._mark_operation_failure(error, "pattern delete")
+            return deleted
+
     def clear_all(self) -> bool:
-        """Clear all cache entries"""
-        if not self.enabled or self.redis_client is None:
+        """Clear application cache keys using an incremental scan."""
+        if not self._ensure_available():
             return False
-        try:
-            keys = self.redis_client.keys(f"{self.prefix}*")
-            if keys:
-                self.redis_client.delete(*keys)
-            return True
-        except Exception as e:
-            logger.warning(f"Cache clear_all error: {e}")
-            return False
-    
+        return self.delete_pattern("")
+
     def get_stats(self) -> dict:
-        """Get cache statistics"""
-        if not self.enabled or self.redis_client is None:
+        """Return cache stats without allocating a full key list."""
+        if not self._ensure_available():
             return {}
         try:
             info = self.redis_client.info()
-            keys = self.redis_client.keys(f"{self.prefix}*")
+            total_keys = sum(
+                1 for _ in self.redis_client.scan_iter(
+                    match=f"{self.prefix}*", count=500
+                )
+            )
             return {
-                "total_keys": len(keys),
-                "memory_used_mb": info.get('used_memory_mb', 0),
-                "connected_clients": info.get('connected_clients', 0),
-                "hits": info.get('keyspace_hits', 0),
-                "misses": info.get('keyspace_misses', 0),
+                "total_keys": total_keys,
+                "memory_used_mb": info.get("used_memory_mb", 0),
+                "connected_clients": info.get("connected_clients", 0),
+                "hits": info.get("keyspace_hits", 0),
+                "misses": info.get("keyspace_misses", 0),
             }
-        except Exception as e:
-            logger.warning(f"Cache stats error: {e}")
+        except Exception as error:
+            self._mark_operation_failure(error, "stats")
             return {}
+
 
 cache_manager = CacheManager()
 
