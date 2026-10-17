@@ -23,6 +23,33 @@ from db import get_db
 from sqlalchemy.orm import Session
 
 
+def _redis_failure_reason(error: Exception) -> str:
+    """Classify Redis connectivity failures without logging connection secrets."""
+    if isinstance(error, redis.exceptions.AuthenticationError):
+        return "authentication_failed"
+    if isinstance(error, redis.exceptions.TimeoutError):
+        return "timeout"
+
+    message = str(error).lower()
+    if "connection refused" in message:
+        return "connection_refused"
+    if any(term in message for term in (
+        "name or service not known",
+        "temporary failure in name resolution",
+        "no address associated with hostname",
+        "nodename nor servname",
+        "getaddrinfo failed",
+    )):
+        return "dns_failure"
+    if any(term in message for term in ("certificate verify failed", "ssl:", "tls")):
+        return "tls_failure"
+    if "timed out" in message or "timeout" in message:
+        return "timeout"
+    if "wrongpass" in message or "no password is set" in message:
+        return "authentication_failed"
+    return "connection_error"
+
+
 class CacheManager:
     """Redis cache with bounded connection retries and safe local fallback."""
 
