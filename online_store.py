@@ -28,7 +28,7 @@ from datetime_utils import is_after_utc, is_before_utc
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, cast, String
+from sqlalchemy import func, or_, cast, String, case, and_
 from sqlalchemy.exc import IntegrityError
 
 from db import get_db
@@ -2391,20 +2391,22 @@ def get_owner_order_analytics(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Return unpaginated, shop-scoped order counts and order-value aggregates.
+    """Return shop-scoped order analytics with one aggregate SQL round trip.
 
-    This endpoint is intentionally separate from the paginated order list so
-    dashboard totals remain correct for shops with more than one page of orders.
-    "Revenue" values preserve the existing client contract; they represent gross
-    non-rejected/non-cancelled order value, not verified cash collection.
+    Keep the unpaginated dashboard totals accurate while avoiding repeated
+    COUNT/SUM queries. The former implementation issued nine serial aggregate
+    queries, each paying database network latency separately.
     """
     shop_id = int(current_user["user_id"])
-    base = db.query(OnlineOrder).filter(OnlineOrder.shop_id == shop_id)
-    normalized_status = func.upper(func.coalesce(cast(OnlineOrder.order_status, String), ""))
-    normalized_payment_status = func.upper(func.coalesce(OnlineOrder.payment_status, ""))
+    normalized_status = func.upper(
+        func.coalesce(cast(OnlineOrder.order_status, String), "")
+    )
+    normalized_payment_status = func.upper(
+        func.coalesce(OnlineOrder.payment_status, "")
+    )
 
-    # Store timestamps are persisted as UTC-naive values. Use India-local
-    # calendar boundaries to keep "today" stable for the target retail market.
+    # Order timestamps are stored as UTC-naive values; calculate India-local
+    # calendar boundaries and convert them to UTC-naive for the database.
     local_now = datetime.now(ZoneInfo("Asia/Kolkata"))
     local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     local_end = local_start + timedelta(days=1)
@@ -2412,40 +2414,57 @@ def get_owner_order_analytics(
     utc_end = local_end.astimezone(timezone.utc).replace(tzinfo=None)
 
     excluded_statuses = ("REJECTED", "CANCELLED", "RETURNED")
-    eligible = base.filter(normalized_status.notin_(excluded_statuses))
-    today_eligible = eligible.filter(
+    eligible_status = normalized_status.notin_(excluded_statuses)
+    today_eligible = and_(
+        eligible_status,
         OnlineOrder.created_at >= utc_start,
         OnlineOrder.created_at < utc_end,
     )
-    sum_total = func.coalesce(func.sum(OnlineOrder.total_amount), 0)
+    paid_status = normalized_payment_status == "PAID"
 
-    total_count = int(base.count() or 0)
-    pending_count = int(base.filter(normalized_status == "PENDING").count() or 0)
-    rejected_count = int(base.filter(normalized_status == "REJECTED").count() or 0)
-    cancelled_count = int(
-        base.filter(normalized_status.in_(("CANCELLED", "RETURNED"))).count() or 0
-    )
-    total_paid_count = int(
-        base.filter(normalized_payment_status == "PAID").count() or 0
-    )
-    today_count = int(today_eligible.count() or 0)
-    today_paid_count = int(
-        today_eligible.filter(normalized_payment_status == "PAID").count() or 0
-    )
-    total_revenue = float(eligible.with_entities(sum_total).scalar() or 0)
-    today_revenue = float(today_eligible.with_entities(sum_total).scalar() or 0)
+    def count_if(condition):
+        return func.coalesce(
+            func.sum(case((condition, 1), else_=0)),
+            0,
+        )
 
+    # One SQL statement replaces the old separate COUNT and SUM calls.
+    metrics = (
+        db.query(
+            func.count(OnlineOrder.id).label("total_count"),
+            count_if(normalized_status == "PENDING").label("pending_count"),
+            count_if(normalized_status == "REJECTED").label("rejected_count"),
+            count_if(
+                normalized_status.in_(("CANCELLED", "RETURNED"))
+            ).label("cancelled_count"),
+            count_if(paid_status).label("total_paid_count"),
+            count_if(today_eligible).label("today_count"),
+            count_if(and_(today_eligible, paid_status)).label("today_paid_count"),
+            func.coalesce(
+                func.sum(case((eligible_status, OnlineOrder.total_amount), else_=0)),
+                0,
+            ).label("total_revenue"),
+            func.coalesce(
+                func.sum(case((today_eligible, OnlineOrder.total_amount), else_=0)),
+                0,
+            ).label("today_revenue"),
+        )
+        .filter(OnlineOrder.shop_id == shop_id)
+        .one()
+    )
+
+    today_paid_count = int(metrics.today_paid_count or 0)
     return {
-        "pending": pending_count,
-        "todayCount": today_count,
-        "todayRevenue": round(today_revenue, 2),
+        "pending": int(metrics.pending_count or 0),
+        "todayCount": int(metrics.today_count or 0),
+        "todayRevenue": round(float(metrics.today_revenue or 0), 2),
         "paidCount": today_paid_count,
         "todayPaidCount": today_paid_count,
-        "totalCount": total_count,
-        "totalRevenue": round(total_revenue, 2),
-        "totalPaidCount": total_paid_count,
-        "rejectedCount": rejected_count,
-        "cancelledCount": cancelled_count,
+        "totalCount": int(metrics.total_count or 0),
+        "totalRevenue": round(float(metrics.total_revenue or 0), 2),
+        "totalPaidCount": int(metrics.total_paid_count or 0),
+        "rejectedCount": int(metrics.rejected_count or 0),
+        "cancelledCount": int(metrics.cancelled_count or 0),
         "available": True,
     }
 
