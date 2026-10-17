@@ -642,7 +642,18 @@ def get_all_stock(
     Frontend should call this to refresh entire inventory cache.
     """
     try:
-        products = db.query(Product).filter(
+        # Project only fields used in the sync payload instead of hydrating every
+        # Product ORM column (which may include large, unused metadata).
+        products = db.query(
+            Product.id.label("id"),
+            Product.product_name.label("product_name"),
+            Product.sku.label("sku"),
+            Product.current_stock.label("current_stock"),
+            Product.min_stock.label("min_stock"),
+            Product.max_stock.label("max_stock"),
+            Product.unit_price.label("unit_price"),
+            Product.category.label("category"),
+        ).filter(
             Product.user_id == user_id,
             Product.is_active == True
         ).all()
