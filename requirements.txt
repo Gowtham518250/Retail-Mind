@@ -1,4 +1,5 @@
 fastapi==0.143.3
+starlette==0.49.1
 uvicorn[standard]==0.30.0
 gunicorn==23.0.0
 python-multipart==0.0.31
@@ -21,6 +22,10 @@ cryptography==50.0.0
 python-dotenv==1.2.2
 
 requests==2.33.0
+aiohttp==3.14.3
+anyio==4.14.2
+h11==0.16.0
+idna==3.15
 httpx==0.25.2
 
 redis==5.0.1
@@ -49,7 +54,8 @@ tokenizers==0.21.4
 onnxruntime==1.20.1
 decorator==5.1.1
 
-firebase-admin==6.4.0
+firebase-admin==7.7.0
+protobuf==6.33.2
 groq==0.10.0
 langchain==1.4.6
 langchain-classic==1.0.8
