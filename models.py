@@ -215,7 +215,7 @@ class OnlineOrderDeliveryOtp(Base):
     )
     otp_hash = Column(String(128), nullable=False)
     otp_expires_at = Column(DateTime, nullable=False, index=True)
-    otp_attempts = Column(Integer, nullable=False, default=0)
+    otp_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     used = Column(Boolean, nullable=False, default=False, index=True)
     verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
@@ -1035,7 +1035,7 @@ class EmailOtpChallenge(Base):
 
     id = Column(Integer, primary_key=True)
     email = Column(String(255), nullable=False, index=True)
-    purpose = Column(String(64), nullable=False, default="Verification", index=True)
+    purpose = Column(String(64), nullable=False, default="Verification", server_default="Verification", index=True)
     otp_hash = Column(String(64), nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
     attempts = Column(Integer, nullable=False, default=0)
