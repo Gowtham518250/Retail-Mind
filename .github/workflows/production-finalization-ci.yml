@@ -46,51 +46,22 @@ jobs:
             --recursive
             .
 
-  refresh-lockfiles:
-    name: Refresh vulnerable npm lockfiles
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'enterprise/security-readiness-2026-10-17'
+  lockfile-integrity:
+    name: Verify lockfile consistency
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - name: Refresh frontend dependency lockfile
-        working-directory: frontend
-        shell: bash
-        run: |
-          npm audit fix --package-lock-only --ignore-scripts || true
-          npm install --package-lock-only --ignore-scripts
-      - name: Refresh customer web dependency lockfile
-        working-directory: frontend-web
-        shell: bash
-        run: |
-          npm audit fix --package-lock-only --ignore-scripts || true
-          npm install --package-lock-only --ignore-scripts
-      - name: Refresh root pnpm lockfile
+      - name: Verify root pnpm lockfile without modifying the branch
         shell: bash
         run: |
           corepack enable
           corepack prepare pnpm@9.15.0 --activate
-          pnpm install --lockfile-only --ignore-scripts
-      - name: Commit refreshed lockfiles to this fix branch
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/package-lock.json frontend-web/package-lock.json pnpm-lock.yaml
-          if git diff --cached --quiet; then
-            echo "Lockfiles already reflect current patched package manifests."
-            exit 0
-          fi
-          git commit -m "fix: refresh npm lockfiles for patched dependencies"
-          git push origin "HEAD:${{ github.head_ref }}"
-
+          pnpm install --lockfile-only --frozen-lockfile --ignore-scripts
   python-dependency-audit:
     name: Python dependency audit
     runs-on: ubuntu-latest
