@@ -35,4 +35,4 @@ if (
   );
 }
 
-export const API_BASE = parsedApiBase.origin.replace(/\\/+$/, '');
+export const API_BASE = parsedApiBase.origin;
