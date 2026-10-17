@@ -739,10 +739,10 @@
 }
 @media(max-width:700px){
   .navRow,.heroInner,.content{width:calc(100% - 28px)}
-  .copy h1{font-size:55px}
+  .copy h1{font-size:clamp(42px,12vw,55px)}
   .commandBar{flex-wrap:wrap;padding:9px}
-  .commandBar input{flex-basis:100%;padding:7px}
-  .askButton{width:100%}
+  .commandBar input{flex-basis:100%;min-height:48px;padding:7px}
+  .askButton{width:100%;min-height:48px}
   .visual{transform:scale(.84);margin:-35px 0 -30px}
   .dataCard{min-width:158px}
   .dataCardA{left:-13%}.dataCardB{right:-10%}.dataCardC{right:-3%}
@@ -755,6 +755,7 @@
   }
   .answerSide div+div{border-top:0;border-left:1px solid rgba(153,215,183,.08)}
   .resultsHeading{align-items:flex-start;flex-direction:column}
+  .exampleStrip button,.recent button{min-height:40px}
 }
 @media(prefers-reduced-motion:reduce){
   .ambientOne,.ambientTwo,.ambientThree,.orbitOne,.orbitTwo,.orbitThree,.responseIconRing,.result{animation:none!important}
@@ -969,4 +970,45 @@
 }
 @media(prefers-reduced-motion:reduce){
   .showroomRingA,.showroomRingB,.scanBeam{animation:none!important}
+}
+
+
+/* AI shopping — a warm, compact assistant workspace */
+.page { color: #182820 !important; background: #f7f4e9 !important; }
+.hero { margin: 16px auto 24px !important; border-radius: 28px !important; background: linear-gradient(125deg,#153b2c,#245b42 68%,#39734d) !important; box-shadow: 0 18px 42px rgba(20,59,44,.14) !important; }
+.hero::before { opacity: .22 !important; }
+.kicker, .eyebrowLine { color: #d8ed91 !important; }
+.liveBadge, .livePill { background: rgba(216,237,145,.14) !important; color: #e7f3d3 !important; border-color: rgba(216,237,145,.2) !important; border-radius: 999px !important; }
+.copy h1, .hero h1, .heroLead { color: #fff9e9 !important; }
+.heroLead { opacity: .78 !important; }
+.commandBar { background: #fffdf7 !important; border: 1px solid rgba(255,255,255,.32) !important; border-radius: 16px !important; box-shadow: 0 10px 25px rgba(0,0,0,.1) !important; }
+.commandBar input, .commandBar textarea { color: #182820 !important; }
+.commandPrefix { color: #245b42 !important; }
+.askButton { border-radius: 12px !important; background: #f16a45 !important; color: #fff !important; }
+.askButton:hover { background: #d95331 !important; transform: translateY(-2px); }
+.exampleStrip button, .recent button { border-radius: 999px !important; background: rgba(255,253,247,.12) !important; border-color: rgba(255,253,247,.18) !important; color: #fff9e9 !important; }
+.trustRow { color: #e5efdf !important; }
+.introCard, .answerDeck, .answerMain, .answerSide, .result {
+  border-radius: 20px !important; background: #fffdf7 !important; border: 1px solid #e5e0d1 !important;
+  box-shadow: 0 8px 24px rgba(31,50,35,.05) !important; color: #182820 !important;
+}
+.sectionLabel, .resultsHeading, .resultKicker { color: #245b42 !important; }
+.answerHead, .resultTitleRow, .shopRow, .metrics { color: #34473b !important; }
+.resultTitleRow h3, .resultTitleRow strong, .resultTitle, .price { color: #182820 !important; }
+.price { color: #245b42 !important; }
+.productBadge, .stockPill, .livePill { background: #e5efdf !important; color: #245b42 !important; border-radius: 999px !important; }
+.fillButton, .outlineButton { border-radius: 999px !important; }
+.fillButton { background: #245b42 !important; color: white !important; }
+.fillButton:hover { background: #143b2c !important; }
+.outlineButton { background: #fff0e8 !important; color: #b84e2d !important; border-color: #f4d5c6 !important; }
+.dataCard { background: #fffdf7 !important; border-color: #e5e0d1 !important; color: #182820 !important; border-radius: 14px !important; }
+.aiCore, .aiCoreShell { border-color: rgba(216,237,145,.32) !important; }
+.errorStage, .emptyStage { background: #fffdf7 !important; border-color: #e5e0d1 !important; color: #68756a !important; border-radius: 18px !important; }
+@media (max-width: 700px) {
+  .hero { margin: 8px auto 16px !important; border-radius: 21px !important; }
+  .trustRow { gap: 10px 14px; }
+  .resultsHeading h2 { font-size: clamp(24px, 7vw, 30px); }
+  .answerMain { padding: 17px; }
+  .answerMain h2 { font-size: clamp(19px, 5.5vw, 24px); }
+  .fillButton, .outlineButton { min-height: 44px; }
 }

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 const BACKEND_BASE = (
   process.env.RETAIL_MIND_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  'https://retail-mind-vkbp.onrender.com'
+  'https://retail-mind-hpx3.onrender.com'
 ).replace(/\/+$/, '');
 
 export const dynamic = 'force-dynamic';

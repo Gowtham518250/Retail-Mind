@@ -15,6 +15,7 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       { protocol: 'https', hostname: '**' },
       { protocol: 'http',  hostname: '**' },
@@ -23,10 +24,22 @@ const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
-  // NOTE: The API proxy is removed.
-  // All API calls now use absolute URLs via src/lib/api.ts
-  // pointing to process.env.NEXT_PUBLIC_API_URL or the default
-  // https://retail-mind-vkbp.onrender.com
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+        ],
+      },
+    ];
+  },
+  // Browser API calls use NEXT_PUBLIC_API_URL; server-side marketplace
+  // routes can use RETAIL_MIND_BACKEND_URL.
 };
 
 export default withPWA(nextConfig);

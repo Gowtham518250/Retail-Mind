@@ -93,12 +93,42 @@ export default function ProfilePage() {
     router.push('/');
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <main className={styles.profilePage} data-experience="profile">
+        <div className={styles.orbA} />
+        <div className={styles.orbB} />
+        <div className={styles.container} role="status" aria-live="polite">
+          <span className={styles.visuallyHidden}>Loading your account</span>
+          <div className={`${styles.skeletonCard} ${styles.skeletonHeader}`}>
+            <div className={styles.skeletonAvatar} />
+            <div className={styles.skeletonTextGroup}>
+              <div className={`${styles.skeletonLine} ${styles.skeletonName}`} />
+              <div className={`${styles.skeletonLine} ${styles.skeletonContact}`} />
+            </div>
+          </div>
+          <div className={`${styles.skeletonCard} ${styles.skeletonDetails}`}>
+            <div className={`${styles.skeletonLine} ${styles.skeletonTitle}`} />
+            <div className={styles.skeletonDetailsGrid}>
+              <div className={styles.skeletonDetail} />
+              <div className={styles.skeletonDetail} />
+              <div className={styles.skeletonDetail} />
+            </div>
+          </div>
+          <div className={styles.skeletonCards}>
+            <div className={styles.skeletonCard} />
+            <div className={styles.skeletonCard} />
+            <div className={styles.skeletonCard} />
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   const displayName = customer?.name || 'Shopper';
 
   return (
-    <main className={styles.profilePage}>
+    <main className={styles.profilePage} data-experience="profile">
       {/* 3D Ambient Orbs */}
       <div className={styles.orbA} />
       <div className={styles.orbB} />
@@ -160,7 +190,7 @@ export default function ProfilePage() {
           transition={{ duration: 0.55, delay: 0.1 }}
         >
           <h2 className={styles.cardSectionTitle}>
-            <MapPin size={18} color="#38bdf8" />
+            <MapPin size={18} color="var(--rm-lime)" />
             Saved Delivery Information
           </h2>
 

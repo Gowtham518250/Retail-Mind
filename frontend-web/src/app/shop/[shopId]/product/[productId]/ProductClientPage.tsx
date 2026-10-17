@@ -2,55 +2,104 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { ArrowLeft, ShoppingCart, Sparkles, Package2, Truck, ShieldCheck, CheckCircle2, Star } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ShoppingCart, Sparkles, Package2, Truck, ShieldCheck, CheckCircle2, Star, Minus, Plus } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { API_BASE } from '../../../../../lib/api';
 import { useCart } from '../../../../../context/CartContext';
 import type { ShopProduct } from '../../../../../lib/types';
+import JsonLd from '../../../../../components/JsonLd';
+import { absoluteSiteUrl, publicImageUrl } from '../../../../../lib/seo';
 
-export default function ProductClientPage() {
-  const params = useParams();
-  const shopId = Number(params?.shopId || 8);
-  const productId = Number(params?.productId);
+export default function ProductClientPage({
+  shopId,
+  productId,
+  initialProduct,
+  shopName,
+}: {
+  shopId: number;
+  productId: number;
+  initialProduct: ShopProduct | null;
+  shopName: string;
+}) {
+  const shouldReduceMotion = Boolean(useReducedMotion());
   const { addToCart } = useCart();
-  const [product, setProduct] = useState<ShopProduct | null>(null);
+  const [product, setProduct] = useState<ShopProduct | null>(initialProduct);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialProduct);
+  const [loadError, setLoadError] = useState('');
+  const [reloadCount, setReloadCount] = useState(0);
   const [added, setAdded] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const [reviews, setReviews] = useState<
     Array<{ id: number; customer_name: string; rating: number; comment?: string | null; created_at?: string | null }>
   >([]);
 
   useEffect(() => {
+    setQuantity(1);
+    setAdded(false);
+    const controller = new AbortController();
+    let cancelled = false;
     const load = async () => {
+      if (initialProduct) {
+        setProduct(initialProduct);
+        setLoading(false);
+        try {
+          const reviewResponse = await fetch(
+            API_BASE + '/store/shops/' + shopId + '/reviews?limit=12',
+            { cache: 'no-store', signal: controller.signal },
+          );
+          if (reviewResponse.ok) {
+            const reviewData = await reviewResponse.json();
+            if (!cancelled) setReviews(Array.isArray(reviewData.reviews) ? reviewData.reviews : []);
+          }
+        } catch {
+          if (!cancelled) setReviews([]);
+        }
+        return;
+      }
       setLoading(true);
+      setLoadError('');
       try {
-        const res = await fetch(API_BASE + '/store/shops/' + shopId + '/products');
-        if (!res.ok) throw new Error('Unable to load product');
+        const res = await fetch(API_BASE + '/store/shops/' + shopId + '/products', {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error('Unable to load this product right now.');
         const data = await res.json();
-        setProduct(data.products?.find((item: ShopProduct) => item.id === productId) || null);
+        const foundProduct = data.products?.find((item: ShopProduct) => item.id === productId) || null;
+        if (cancelled) return;
+        setProduct(foundProduct);
+        if (!foundProduct) setLoadError('This product is not available in this shop right now.');
 
         try {
           const reviewResponse = await fetch(
             API_BASE + '/store/shops/' + shopId + '/reviews?limit=12',
-            { cache: 'no-store' },
+            { cache: 'no-store', signal: controller.signal },
           );
           if (reviewResponse.ok) {
             const reviewData = await reviewResponse.json();
-            setReviews(Array.isArray(reviewData.reviews) ? reviewData.reviews : []);
+            if (!cancelled) setReviews(Array.isArray(reviewData.reviews) ? reviewData.reviews : []);
           }
         } catch {
-          setReviews([]);
+          if (!cancelled) setReviews([]);
         }
-      } catch {
+      } catch (error) {
+        if (cancelled) return;
         setProduct(null);
+        setLoadError(error instanceof TypeError
+          ? 'We couldn’t reach this shop. Check your connection and try again.'
+          : error instanceof Error
+            ? error.message
+            : 'Unable to load this product right now.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    load();
-  }, [productId, shopId]);
+    void load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [initialProduct, productId, reloadCount, shopId]);
 
   const discount = useMemo(() => {
     if (!product) return 0;
@@ -60,29 +109,88 @@ export default function ProductClientPage() {
     return product.discount_pct || 0;
   }, [product]);
 
-  if (loading) return <div className="page-loading">Loading product details…</div>;
-  if (!product) return <div className="container product-page"><div className="store-empty-state">This product is not available right now.</div></div>;
+  if (loading) return <div className="page-loading" data-experience="product">Loading product details…</div>;
+  if (!product) {
+    return (
+      <div className="container product-page" data-experience="product">
+        <div className="store-empty-state" role="alert">
+          <p>{loadError || 'This product is not available right now.'}</p>
+          <div className="product-recovery-actions">
+            <button type="button" className="hero-cta" onClick={() => setReloadCount((count) => count + 1)}>
+              Try again
+            </button>
+            <Link href={`/shop/${shopId}`} className="store-link-btn">Back to shop</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const stockAvailable = product.stock_available ?? 0;
+  const stockAvailable = product.stock_available;
+  const isOutOfStock = stockAvailable !== undefined && stockAvailable <= 0;
+  const maxQuantity = stockAvailable === undefined ? 99 : Math.max(0, stockAvailable);
 
   const handleAdd = () => {
-    addToCart({ ...product, shop_id: shopId });
+    if (isOutOfStock) return;
+    if (!addToCart({ ...product, shop_id: shopId }, quantity)) return;
     setAdded(true);
     window.setTimeout(() => setAdded(false), 1300);
   };
 
   return (
-    <main className="container product-page">
-      <Link href={'/shop/' + shopId} className="product-back"><ArrowLeft size={16} /> Back to shop</Link>
+    <main className="container product-page" data-experience="product">
+      <JsonLd data={{
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: absoluteSiteUrl('/') },
+          { '@type': 'ListItem', position: 2, name: shopName, item: absoluteSiteUrl(`/shop/${shopId}`) },
+          { '@type': 'ListItem', position: 3, name: product.name, item: absoluteSiteUrl(`/shop/${shopId}/product/${product.id}`) },
+        ],
+      }} />
+      <JsonLd data={{
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: product.name,
+        description: product.description || undefined,
+        image: [publicImageUrl(product.image_url)],
+        sku: String(product.id),
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: 'INR',
+          price: Number(product.price).toFixed(2),
+          availability: product.stock_available === undefined || product.stock_available > 0
+            ? 'https://schema.org/InStock'
+            : 'https://schema.org/OutOfStock',
+          url: absoluteSiteUrl(`/shop/${shopId}/product/${product.id}`),
+          seller: { '@type': 'Organization', name: shopName },
+        },
+      }} />
+      <nav aria-label="Breadcrumb" className="product-back">
+        <Link href="/">Marketplace</Link>
+        <span aria-hidden="true"> / </span>
+        <Link href={`/shop/${shopId}`}>{shopName}</Link>
+        <span aria-hidden="true"> / </span>
+        <span aria-current="page">{product.name}</span>
+      </nav>
       <motion.section className="product-detail" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .45 }}>
         <div className="product-visual">
           <div className="product-glow" />
-          <motion.div className="product-orbit" animate={{ rotate: 360 }} transition={{ duration: 22, repeat: Infinity, ease: 'linear' }}>
+          <motion.div className="product-orbit" animate={shouldReduceMotion ? { rotate: 0 } : { rotate: 360 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 22, repeat: Infinity, ease: 'linear' }}>
             <span /><span /><span />
           </motion.div>
-          <motion.div className="product-image-frame" animate={{ y: [0, -6, 0], rotateZ: [-1, 1, -1] }} transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}>
+          <motion.div className="product-image-frame" animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -9, 0], rotateZ: [-1, 1, -1] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}>
             {product.image_url && failedImageUrl !== product.image_url
-              ? <img src={product.image_url} alt={product.name} onError={() => setFailedImageUrl(product.image_url || null)} />
+              ? <img
+                  src={product.image_url}
+                  alt={product.name}
+                  width={720}
+                  height={720}
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                  onError={() => setFailedImageUrl(product.image_url || null)}
+                />
               : <Package2 size={70} />}
           </motion.div>
           <div className="product-floating-badge"><CheckCircle2 size={15} /> Local stock</div>
@@ -106,15 +214,44 @@ export default function ProductClientPage() {
           </div>
 
           <div className="product-availability">
-            <span className={stockAvailable > 0 ? 'available' : 'unavailable'}>
-              {stockAvailable > 0 ? String(stockAvailable) + ' available' : 'Out of stock'}
+            <span className={isOutOfStock ? 'unavailable' : 'available'}>
+              {isOutOfStock
+                ? 'Out of stock'
+                : stockAvailable === undefined
+                  ? 'Availability confirmed by shop'
+                  : `${stockAvailable} available`}
             </span>
             <span>Shop #{shopId}</span>
           </div>
 
+          {!isOutOfStock && (
+            <div className="product-quantity-row">
+              <span>Quantity</span>
+              <div className="product-quantity-control">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+                  disabled={quantity <= 1}
+                  aria-label="Decrease quantity"
+                >
+                  <Minus size={16} />
+                </button>
+                <output aria-live="polite">{quantity}</output>
+                <button
+                  type="button"
+                  onClick={() => setQuantity((current) => Math.min(maxQuantity, current + 1))}
+                  disabled={quantity >= maxQuantity}
+                  aria-label="Increase quantity"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="product-actions">
-            <button className="store-cart-btn" onClick={handleAdd} disabled={stockAvailable <= 0}>
-              <ShoppingCart size={17} /> {added ? 'Added to cart' : 'Add to cart'}
+            <button className="store-cart-btn" onClick={handleAdd} disabled={isOutOfStock}>
+              <ShoppingCart size={17} /> {isOutOfStock ? 'Unavailable' : added ? `Added ${quantity} to cart` : 'Add to cart'}
             </button>
             <Link href="/orders" className="store-link-btn">View orders</Link>
           </div>
@@ -168,6 +305,36 @@ export default function ProductClientPage() {
           </div>
         )}
       </motion.section>
+      {!isOutOfStock && (
+        <div className="product-mobile-buy" aria-label="Quick add to cart">
+          <div className="product-mobile-quantity">
+            <button
+              type="button"
+              onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+              disabled={quantity <= 1}
+              aria-label="Decrease quantity"
+            >
+              <Minus size={16} />
+            </button>
+            <output aria-live="polite">{quantity}</output>
+            <button
+              type="button"
+              onClick={() => setQuantity((current) => Math.min(maxQuantity, current + 1))}
+              disabled={quantity >= maxQuantity}
+              aria-label="Increase quantity"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+          <div className="product-mobile-total">
+            <span>Total</span>
+            <strong>₹{(product.price * quantity).toFixed(2)}</strong>
+          </div>
+          <button type="button" className="store-cart-btn" onClick={handleAdd}>
+            <ShoppingCart size={17} /> {added ? 'Added' : 'Add'}
+          </button>
+        </div>
+      )}
     </main>
   );
 }

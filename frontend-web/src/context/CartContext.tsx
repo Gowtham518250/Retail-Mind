@@ -21,10 +21,14 @@ export interface CartItem {
 interface CartContextType {
   cartItems: CartItem[];
   isCartOpen: boolean;
-  addToCart: (product: Product, quantity?: number) => void;
+  cartNotice: string | null;
+  canReplaceCart: boolean;
+  addToCart: (product: Product, quantity?: number) => boolean;
   removeFromCart: (productId: number) => void;
   updateQuantity: (productId: number, delta: number) => void;
   clearCart: () => void;
+  replaceCartWithPendingProduct: () => void;
+  dismissCartNotice: () => void;
   toggleCart: () => void;
   cartTotal: number;
   itemCount: number;
@@ -35,6 +39,8 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartNotice, setCartNotice] = useState<string | null>(null);
+  const [pendingProduct, setPendingProduct] = useState<CartItem | null>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -54,33 +60,69 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [cartItems]);
 
   const addToCart = (product: Product, quantity: number = 1) => {
+    const existingShopId = cartItems[0]?.product.shop_id;
+    const incomingShopId = product.shop_id;
+    const maxQuantity = product.stock_available === undefined
+      ? 99
+      : Math.max(0, product.stock_available);
+
+    if (maxQuantity === 0) {
+      setPendingProduct(null);
+      setCartNotice(`${product.name} is currently out of stock.`);
+      setIsCartOpen(true);
+      return false;
+    }
+
+    if (
+      existingShopId !== undefined &&
+      incomingShopId !== undefined &&
+      existingShopId !== incomingShopId
+    ) {
+      setPendingProduct({ product, quantity });
+      setCartNotice('Your cart can only contain items from one shop at a time.');
+      setIsCartOpen(true);
+      return false;
+    }
+
+    setPendingProduct(null);
+    setCartNotice(null);
     setCartItems(prev => {
-      const existingShopId = prev[0]?.product.shop_id;
-      const incomingShopId = product.shop_id;
-
-      // Never mix products from different shops. The order API accepts one
-      // shop_id, so a mixed cart could otherwise charge one shop for another
-      // shop's products.
-      if (
-        existingShopId !== undefined &&
-        incomingShopId !== undefined &&
-        existingShopId !== incomingShopId
-      ) {
-        window.alert('Your cart contains items from another shop. Please checkout or clear the cart before shopping here.');
-        return prev;
-      }
-
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
         return prev.map(item =>
           item.product.id === product.id
-            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock_available || 99) }
+            ? { ...item, quantity: Math.min(item.quantity + quantity, maxQuantity) }
             : item
         );
       }
-      return [...prev, { product, quantity: Math.min(quantity, product.stock_available || 99) }];
+      return [...prev, { product, quantity: Math.min(quantity, maxQuantity) }];
     });
     setIsCartOpen(true);
+    return true;
+  };
+
+  const replaceCartWithPendingProduct = () => {
+    if (!pendingProduct) return;
+    const maxQuantity = pendingProduct.product.stock_available === undefined
+      ? 99
+      : Math.max(0, pendingProduct.product.stock_available);
+    if (maxQuantity === 0) {
+      setPendingProduct(null);
+      setCartNotice(`${pendingProduct.product.name} is currently out of stock.`);
+      return;
+    }
+
+    setCartItems([{
+      product: pendingProduct.product,
+      quantity: Math.min(Math.max(1, pendingProduct.quantity), maxQuantity),
+    }]);
+    setPendingProduct(null);
+    setCartNotice(null);
+  };
+
+  const dismissCartNotice = () => {
+    setCartNotice(null);
+    setPendingProduct(null);
   };
 
   const removeFromCart = (productId: number) => {
@@ -92,7 +134,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (item.product.id === productId) {
         const newQty = item.quantity + delta;
         if (newQty <= 0) return null; // We filter these out below
-        return { ...item, quantity: Math.min(newQty, item.product.stock_available || 99) };
+        const stockLimit = item.product.stock_available === undefined
+          ? 99
+          : Math.max(0, item.product.stock_available);
+        if (stockLimit === 0) return null;
+        return { ...item, quantity: Math.min(newQty, stockLimit) };
       }
       return item;
     }).filter(Boolean) as CartItem[]);
@@ -100,6 +146,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = () => {
     setCartItems([]);
+    dismissCartNotice();
   };
 
   const toggleCart = () => {
@@ -113,10 +160,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <CartContext.Provider value={{
       cartItems,
       isCartOpen,
+      cartNotice,
+      canReplaceCart: pendingProduct !== null,
       addToCart,
       removeFromCart,
       updateQuantity,
       clearCart,
+      replaceCartWithPendingProduct,
+      dismissCartNotice,
       toggleCart,
       cartTotal,
       itemCount

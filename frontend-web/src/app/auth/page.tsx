@@ -13,9 +13,8 @@ import {
   User,
   Mail,
   CheckCircle,
-  Sparkles,
   ShieldCheck,
-  Zap,
+  Sparkles,
   Truck,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
@@ -180,10 +179,10 @@ export default function AuthPage() {
       body: JSON.stringify({ email: email.trim() }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send OTP.');
+    if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send the code.');
     setResetStep('verify');
     setResendCooldown(30);
-    setSuccess('A 6-digit OTP has been sent to your registered email address.');
+    setSuccess('A 6-digit code has been sent to your email.');
   };
 
   const handleReset = async (e: React.FormEvent) => {
@@ -198,7 +197,7 @@ export default function AuthPage() {
       }
       if (resetStep === 'verify') {
         if (!/^\d{6}$/.test(resetOtp)) {
-          throw new Error('Enter the 6-digit OTP from your email.');
+          throw new Error('Enter the 6-digit code from your email.');
         }
         const res = await fetch(`${API_BASE}/store/customer/verify-password-reset-otp`, {
           method: 'POST',
@@ -206,14 +205,14 @@ export default function AuthPage() {
           body: JSON.stringify({ email: email.trim(), otp: resetOtp.trim() }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || data.message || 'OTP verification failed.');
+        if (!res.ok) throw new Error(data.detail || data.message || 'Code verification failed.');
         setResetToken(data.reset_token || '');
         setResetStep('password');
-        setSuccess('OTP verified. Create your new password.');
+        setSuccess('Code verified. Create your new password.');
         return;
       }
       if (!resetToken) {
-        throw new Error('Reset authorization expired. Request a new OTP.');
+        throw new Error('Reset authorization expired. Request a new code.');
       }
       if (resetPassword.length < 8) {
         throw new Error('New password must be at least 8 characters long.');
@@ -238,90 +237,79 @@ export default function AuthPage() {
   };
 
   return (
-    <main className={styles.authMain}>
-      {/* 3D Ambient Orbs */}
+    <main className={styles.authMain} data-experience="auth">
       <div className={styles.orb1} />
       <div className={styles.orb2} />
-      <div className={styles.orb3} />
 
       <div className={styles.authContainer}>
-        {/* Left Hero Showcase */}
-        <motion.div
-          className={styles.heroShowcase}
-          initial={{ opacity: 0, x: -30 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.65 }}
-        >
-          <div className={styles.brandPill}>
-            <Sparkles size={14} />
-            <span>RetailMind Customer Hub</span>
-          </div>
-
+        <section className={styles.heroShowcase} aria-label="Shop local with RetailMind">
+          <div className={styles.brandPill}><Sparkles size={15} /> RetailMind Customer Hub</div>
           <h1 className={styles.heroTitle}>
-            Discover &amp; Order From{' '}
-            <span className={styles.heroGradientText}>Your Local Stores.</span>
+            Discover &amp; Order
+            <br />
+            From <span className={styles.heroGradientText}>Your Local Stores.</span>
           </h1>
-
           <p className={styles.heroSubtitle}>
             Enjoy verified neighborhood shops, real-time stock availability, fast local delivery, and AI-guided shopping assistance.
           </p>
-
           <div className={styles.featureList}>
             <div className={styles.featureItem}>
-              <div className={styles.featureIconWrap}>
-                <ShoppingBag size={20} />
-              </div>
-              <div className={styles.featureContent}>
-                <strong>Genuine Local Catalogs</strong>
-                <span>Browse live stock and clear prices from verified shops</span>
-              </div>
+              <span className={styles.featureIconWrap}><ShoppingBag size={19} /></span>
+              <span className={styles.featureContent}>
+                <strong>Genuine local catalogs</strong>
+                <span>Browse live stock and clear prices from verified shops.</span>
+              </span>
             </div>
-
             <div className={styles.featureItem}>
-              <div className={styles.featureIconWrap}>
-                <Truck size={20} />
-              </div>
-              <div className={styles.featureContent}>
-                <strong>Swift Local Dispatch</strong>
-                <span>Direct delivery straight from nearby storefronts to your door</span>
-              </div>
+              <span className={styles.featureIconWrap}><Truck size={19} /></span>
+              <span className={styles.featureContent}>
+                <strong>Swift local dispatch</strong>
+                <span>Get delivery from nearby storefronts to your door.</span>
+              </span>
             </div>
-
             <div className={styles.featureItem}>
-              <div className={styles.featureIconWrap}>
-                <ShieldCheck size={20} />
-              </div>
-              <div className={styles.featureContent}>
-                <strong>Safe &amp; Transparent Checkout</strong>
-                <span>Pay seamlessly on delivery with Cash or UPI with live order tracking</span>
-              </div>
+              <span className={styles.featureIconWrap}><ShieldCheck size={19} /></span>
+              <span className={styles.featureContent}>
+                <strong>Safe, transparent checkout</strong>
+                <span>Pay by cash or UPI and follow your order updates.</span>
+              </span>
             </div>
           </div>
-        </motion.div>
+        </section>
 
-        {/* Right Glass Card */}
         <motion.div
           className={styles.authCard}
-          initial={{ opacity: 0, y: 25 }}
+          initial={{ opacity: 0 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, delay: 0.1 }}
+          transition={{ duration: 0.45, ease: [0.2, 0.75, 0.25, 1] }}
         >
           <div className={styles.cardGlowBar} />
+
+          <div className={styles.authBrand}>
+            <span className={styles.authBrandIcon}><ShoppingBag size={18} /></span>
+            <span>Retail<b>Mind</b></span>
+          </div>
 
           <div className={styles.cardHeader}>
             <h2 className={styles.authTitle}>
               {view === 'login'
-                ? 'Sign In to Shop'
+                ? 'Sign in to shop'
                 : view === 'register'
-                  ? 'Create Customer Account'
-                  : 'Account Recovery'}
+                  ? 'Create account'
+                  : resetStep === 'password'
+                    ? 'Choose a new password'
+                    : 'Reset password'}
             </h2>
             <p className={styles.authSubtitle}>
               {view === 'login'
-                ? 'Sign in to access your cart, tracked orders, and saved addresses'
+                ? 'Sign in to access your cart, orders, and saved addresses.'
                 : view === 'register'
-                  ? 'Join RetailMind for instant local shopping and convenient checkout'
-                  : 'We will send a 6-digit verification code to your email'}
+                  ? 'Create an account to start shopping with local stores.'
+                  : resetStep === 'request'
+                    ? 'Enter your email to receive a reset code.'
+                    : resetStep === 'verify'
+                      ? `Enter the 6-digit code sent to ${email}.`
+                      : 'Choose a password with at least 8 characters.'}
             </p>
           </div>
 
@@ -375,7 +363,6 @@ export default function AuthPage() {
           </AnimatePresence>
 
           {/* ── FORMS ── */}
-          <AnimatePresence mode="wait">
             {/* ── Sign In ── */}
             {view === 'login' && (
               <motion.form
@@ -388,10 +375,11 @@ export default function AuthPage() {
                 transition={{ duration: 0.25 }}
               >
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Email Address</label>
+                  <label className={styles.label} htmlFor="customer-email">Email</label>
                   <div className={styles.inputWrap}>
                     <Mail size={17} className={styles.inputIcon} />
                     <input
+                      id="customer-email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -405,14 +393,15 @@ export default function AuthPage() {
 
                 <div className={styles.fieldGroup}>
                   <div className={styles.labelRow}>
-                    <label className={styles.label}>Password</label>
-                    <span className={styles.forgotLink} onClick={() => switchView('reset')}>
+                    <label className={styles.label} htmlFor="customer-password">Password</label>
+                    <button type="button" className={styles.forgotLink} onClick={() => switchView('reset')}>
                       Forgot Password?
-                    </span>
+                    </button>
                   </div>
                   <div className={styles.inputWrap}>
                     <Lock size={17} className={styles.inputIcon} />
                     <input
+                      id="customer-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -425,7 +414,6 @@ export default function AuthPage() {
                       type="button"
                       className={styles.eyeBtn}
                       onClick={() => setShowPassword(!showPassword)}
-                      tabIndex={-1}
                       aria-label="Toggle password visibility"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -440,7 +428,7 @@ export default function AuthPage() {
                   disabled={loading}
                   className={styles.submitBtn}
                 >
-                  {loading ? <span className={styles.spinner} /> : <>Sign In to Shop <ArrowRight size={17} /></>}
+                  {loading ? <><span className={styles.spinner} /> Signing in…</> : <>Sign in <ArrowRight size={17} /></>}
                 </motion.button>
               </motion.form>
             )}
@@ -457,14 +445,15 @@ export default function AuthPage() {
                 transition={{ duration: 0.25 }}
               >
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Full Name</label>
+                  <label className={styles.label} htmlFor="customer-name">Name</label>
                   <div className={styles.inputWrap}>
                     <User size={17} className={styles.inputIcon} />
                     <input
+                      id="customer-name"
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="Your full name"
+                      placeholder="Your name"
                       className={styles.input}
                       required
                       minLength={2}
@@ -475,10 +464,11 @@ export default function AuthPage() {
 
                 <div className={styles.twoCols}>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Email Address</label>
+                    <label className={styles.label} htmlFor="customer-email">Email</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
+                        id="customer-email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -491,14 +481,16 @@ export default function AuthPage() {
                   </div>
 
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Mobile Number</label>
+                    <label className={styles.label} htmlFor="customer-phone">Phone number</label>
                     <div className={styles.inputWrap}>
                       <Phone size={17} className={styles.inputIcon} />
                       <input
+                        id="customer-phone"
                         type="tel"
+                        inputMode="numeric"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="10-digit number"
+                        placeholder="10-digit phone number"
                         className={styles.input}
                         required
                         maxLength={10}
@@ -509,10 +501,11 @@ export default function AuthPage() {
                 </div>
 
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Password</label>
+                  <label className={styles.label} htmlFor="register-password">Password</label>
                   <div className={styles.inputWrap}>
                     <Lock size={17} className={styles.inputIcon} />
                     <input
+                      id="register-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -541,7 +534,7 @@ export default function AuthPage() {
                   disabled={loading}
                   className={styles.submitBtn}
                 >
-                  {loading ? <span className={styles.spinner} /> : <>Create Customer Account <ArrowRight size={17} /></>}
+                  {loading ? <><span className={styles.spinner} /> Creating account…</> : <>Create account <ArrowRight size={17} /></>}
                 </motion.button>
               </motion.form>
             )}
@@ -559,10 +552,11 @@ export default function AuthPage() {
               >
                 {resetStep === 'request' && (
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Registered Email Address</label>
+                    <label className={styles.label} htmlFor="reset-email">Email</label>
                     <div className={styles.inputWrap}>
                       <Mail size={17} className={styles.inputIcon} />
                       <input
+                        id="reset-email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -578,10 +572,11 @@ export default function AuthPage() {
                 {resetStep === 'verify' && (
                   <>
                     <div className={styles.fieldGroup}>
-                      <label className={styles.label}>6-Digit Verification Code</label>
+                      <label className={styles.label} htmlFor="reset-code">Verification code</label>
                       <div className={styles.inputWrap}>
                         <CheckCircle size={17} className={styles.inputIcon} />
                         <input
+                          id="reset-code"
                           type="text"
                           inputMode="numeric"
                           value={resetOtp}
@@ -601,7 +596,7 @@ export default function AuthPage() {
                       disabled={resendCooldown > 0 || loading}
                       style={{ background: 'none', border: 'none', alignSelf: 'flex-start', padding: 0 }}
                     >
-                      {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+                      {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
                     </button>
                   </>
                 )}
@@ -609,10 +604,11 @@ export default function AuthPage() {
                 {resetStep === 'password' && (
                   <>
                     <div className={styles.fieldGroup}>
-                      <label className={styles.label}>New Password</label>
+                      <label className={styles.label} htmlFor="reset-password">New password</label>
                       <div className={styles.inputWrap}>
                         <Lock size={17} className={styles.inputIcon} />
                         <input
+                          id="reset-password"
                           type={showPassword ? 'text' : 'password'}
                           value={resetPassword}
                           onChange={(e) => setResetPassword(e.target.value)}
@@ -634,10 +630,11 @@ export default function AuthPage() {
                     </div>
 
                     <div className={styles.fieldGroup}>
-                      <label className={styles.label}>Confirm New Password</label>
+                      <label className={styles.label} htmlFor="confirm-reset-password">Confirm password</label>
                       <div className={styles.inputWrap}>
                         <Lock size={17} className={styles.inputIcon} />
                         <input
+                          id="confirm-reset-password"
                           type={showPassword ? 'text' : 'password'}
                           value={resetPasswordConfirm}
                           onChange={(e) => setResetPasswordConfirm(e.target.value)}
@@ -659,41 +656,38 @@ export default function AuthPage() {
                   className={styles.submitBtn}
                 >
                   {loading ? (
-                    <span className={styles.spinner} />
+                    <><span className={styles.spinner} /> {resetStep === 'request' ? 'Sending code…' : resetStep === 'verify' ? 'Verifying…' : 'Saving password…'}</>
                   ) : resetStep === 'request' ? (
-                    'Send Verification OTP'
+                    'Send code'
                   ) : resetStep === 'verify' ? (
-                    'Verify Code'
+                    'Verify code'
                   ) : (
-                    'Save New Password'
+                    'Save password'
                   )}
                 </motion.button>
               </motion.form>
             )}
-          </AnimatePresence>
 
           {/* Footer switch */}
-          <div className={styles.switchRow}>
-            {view === 'reset' ? (
+          {view === 'reset' && (
+            <div className={styles.switchRow}>
               <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>
-                ← Back to Sign In
+                ← Back to sign in
               </button>
-            ) : view === 'login' ? (
-              <span>
-                New customer?{' '}
-                <button type="button" className={styles.switchAction} onClick={() => switchView('register')}>
-                  Create an Account
-                </button>
-              </span>
-            ) : (
-              <span>
-                Already have an account?{' '}
-                <button type="button" className={styles.switchAction} onClick={() => switchView('login')}>
-                  Sign In
-                </button>
-              </span>
-            )}
-          </div>
+            </div>
+          )}
+          {view !== 'reset' && (
+            <div className={styles.switchRow}>
+              <span>{view === 'login' ? 'New customer?' : 'Already a customer?'}</span>
+              <button
+                type="button"
+                className={styles.switchAction}
+                onClick={() => switchView(view === 'login' ? 'register' : 'login')}
+              >
+                {view === 'login' ? 'Create an account' : 'Sign in'}
+              </button>
+            </div>
+          )}
         </motion.div>
       </div>
     </main>

@@ -17,7 +17,18 @@ const STAGES = [
   { key: 'DELIVERED', label: 'Delivered', icon: Home },
 ];
 
-type StoredOrder = PlacedOrder & { tracking_token?: string };
+type StoredOrder = PlacedOrder & { tracking_token?: string; order_notes?: string };
+
+function readDeliveryDetails(value: string) {
+  const raw = String(value || '');
+  const phone = raw.match(/(?:^|\s\|\s)Contact phone:\s*(\d{10})/i)?.[1] || '';
+  const orderNotes = raw.match(/(?:^|\s\|\s)Order notes:\s*([\s\S]*)$/i)?.[1]?.trim() || '';
+  const address = raw
+    .replace(/\s*\|\s*Contact phone:\s*\d{10}/i, '')
+    .replace(/\s*\|\s*Order notes:[\s\S]*$/i, '')
+    .trim();
+  return { address, phone, orderNotes };
+}
 
 export default function OrderSuccessClientPage() {
   const params = useParams();
@@ -82,6 +93,7 @@ export default function OrderSuccessClientPage() {
           }
         }
 
+        const deliveryDetails = readDeliveryDetails(data.delivery_address || storedOrder.delivery_address || '');
         setOrder({
           order_id: Number(data.order_id),
           shop_name: data.shop_name || storedOrder.shop_name || `Shop #${data.shop_id}`,
@@ -89,8 +101,9 @@ export default function OrderSuccessClientPage() {
           status: data.status || 'PENDING',
           payment_method: 'COD',
           customer_name: data.customer_name || storedOrder.customer_name || 'Customer',
-          phone: data.customer_phone || storedOrder.phone || '',
-          delivery_address: data.delivery_address || storedOrder.delivery_address || '',
+          phone: deliveryDetails.phone || storedOrder.phone || data.customer_phone || '',
+          delivery_address: deliveryDetails.address || data.delivery_address || storedOrder.delivery_address || '',
+          order_notes: deliveryDetails.orderNotes || storedOrder.order_notes || '',
           items: Array.isArray(data.items)
             ? data.items.map((item: any) => ({
                 name: item.product_name || item.name || `Product #${item.product_id}`,
@@ -117,7 +130,7 @@ export default function OrderSuccessClientPage() {
 
   useEffect(() => {
     if (!order) return;
-    confetti({ particleCount: 160, spread: 75, origin: { y: 0.4 }, colors: ['#6366f1', '#22d3ee', '#facc15'] });
+    confetti({ particleCount: 160, spread: 75, origin: { y: 0.4 }, colors: ['#d8ed91', '#5fc890', '#f16a45'], disableForReducedMotion: true });
   }, [order]);
 
   const refreshStatus = async () => {
@@ -146,12 +159,17 @@ export default function OrderSuccessClientPage() {
         throw new Error(data.detail || 'Unable to refresh order status right now.');
       }
       setLiveStatus(String(data.status || 'PENDING').toUpperCase());
-      setOrder((current) => current ? {
+      setOrder((current) => {
+        if (!current) return current;
+        const deliveryDetails = readDeliveryDetails(data.delivery_address || current.delivery_address || '');
+        return {
         ...current,
         shop_name: data.shop_name || current.shop_name,
         status: data.status || current.status,
         total_amount: Number(data.total_amount ?? current.total_amount),
-        delivery_address: data.delivery_address || current.delivery_address,
+        phone: deliveryDetails.phone || current.phone || data.customer_phone || '',
+        delivery_address: deliveryDetails.address || current.delivery_address,
+        order_notes: deliveryDetails.orderNotes || current.order_notes || '',
         items: Array.isArray(data.items)
           ? data.items.map((item: any) => ({
               name: item.product_name || item.name || `Product #${item.product_id}`,
@@ -159,7 +177,8 @@ export default function OrderSuccessClientPage() {
               price: Number(item.unit_price ?? item.price ?? 0),
             }))
           : current.items,
-      } : current);
+        };
+      });
     } catch (error: any) {
       setTrackingError(error.message || 'Unable to refresh order status right now.');
     } finally {
@@ -305,7 +324,7 @@ export default function OrderSuccessClientPage() {
 
   if (notFound) {
     return (
-      <div className="container" style={{ padding: '48px 20px' }}>
+      <div className="container" data-experience="order-success" style={{ padding: '48px 20px' }}>
         <div className="store-empty-state">We couldn't find that order. It may have already been viewed.</div>
         <div style={{ marginTop: 18 }}>
           <button className="hero-cta" onClick={() => router.push(`/shop/${shopId}`)}>
@@ -324,7 +343,7 @@ export default function OrderSuccessClientPage() {
   const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="container" style={{ padding: '28px 20px 90px', maxWidth: 780 }}>
+    <div className="container" data-experience="order-success" style={{ padding: '28px 20px 90px', maxWidth: 780 }}>
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -369,7 +388,8 @@ export default function OrderSuccessClientPage() {
             <h3><MapPin size={15} /> Delivering to</h3>
             <p>{order.customer_name}</p>
             <p className="muted">{order.delivery_address}</p>
-            <p className="muted"><Phone size={12} /> {order.phone}</p>
+            <p className="muted"><Phone size={12} /> {order.phone || 'No contact number added'}</p>
+            {order.order_notes && <p className="muted"><strong>Order instructions:</strong> {order.order_notes}</p>}
           </div>
           <div className="success-detail-card">
             <h3><ShoppingBag size={15} /> Items ({order.items.length})</h3>

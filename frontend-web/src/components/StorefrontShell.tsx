@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { API_BASE } from '../lib/api';
@@ -16,6 +16,7 @@ const EASE = [0.2, 0.75, 0.25, 1] as const;
 
 interface StorefrontShellProps {
   shopId: number;
+  initialData?: ShopResponse | null;
 }
 
 function StarRating({ value }: { value: number }) {
@@ -29,15 +30,16 @@ function StarRating({ value }: { value: number }) {
 }
 
 function Words({ text, base = 0 }: { text: string; base?: number }) {
+  const reduceMotion = Boolean(useReducedMotion());
   return (
     <>
       {text.split(' ').map((word, i) => (
         <span key={i + word}><span className={styles.wordMask}>
           <motion.span
             className={styles.word}
-            initial={{ y: '115%', rotate: 4 }}
+            initial={reduceMotion ? false : { y: '115%', rotate: 4 }}
             animate={{ y: 0, rotate: 0 }}
-            transition={{ duration: 0.8, delay: base + i * 0.08, ease: EASE }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.8, delay: base + i * 0.08, ease: EASE }}
           >
             {word}
           </motion.span>
@@ -47,36 +49,51 @@ function Words({ text, base = 0 }: { text: string; base?: number }) {
   );
 }
 
-export default function StorefrontShell({ shopId }: StorefrontShellProps) {
-  const [products, setProducts] = useState<ShopProduct[]>([]);
-  const [shop, setShop] = useState<ShopResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function StorefrontShell({ shopId, initialData = null }: StorefrontShellProps) {
+  const shouldReduceMotion = Boolean(useReducedMotion());
+  const [products, setProducts] = useState<ShopProduct[]>(initialData?.products || []);
+  const [shop, setShop] = useState<ShopResponse | null>(initialData);
+  const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'featured' | 'price-low' | 'price-high' | 'discount'>('featured');
   const [activeCategory, setActiveCategory] = useState('All');
   const [justAddedId, setJustAddedId] = useState<number | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
   const { addToCart, cartItems } = useCart();
 
   useEffect(() => {
+    if (initialData && reloadCount === 0) return;
+    const controller = new AbortController();
+    let cancelled = false;
     const loadShop = async () => {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`${API_BASE}/store/shops/${shopId}/products`);
+        const res = await fetch(`${API_BASE}/store/shops/${shopId}/products`, {
+          signal: controller.signal,
+        });
         if (!res.ok) throw new Error('Unable to load this shop right now.');
         const data = await res.json();
+        if (cancelled) return;
         setShop(data);
         setProducts(data.products || []);
       } catch (err: any) {
-        setError(err.message || 'Something went wrong.');
+        if (cancelled) return;
+        setError(err instanceof TypeError
+          ? 'We couldn’t reach this shop. Check your connection and try again.'
+          : err.message || 'Something went wrong.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    loadShop();
-  }, [shopId]);
+    void loadShop();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [initialData, shopId, reloadCount]);
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(products.map((product) => product.category).filter(Boolean))) as string[];
@@ -117,7 +134,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
   }, [activeCategory, products, search, sortBy]);
 
   const handleAddToCart = (product: ShopProduct) => {
-    addToCart({ ...product, shop_id: shopId });
+    if (!addToCart({ ...product, shop_id: shopId })) return;
     setJustAddedId(product.id);
     window.setTimeout(() => setJustAddedId(null), 1200);
   };
@@ -126,7 +143,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
   const rating = Number(shop?.rating || 0);
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-experience="storefront">
       {/* ───────── shop hero ───────── */}
       <section className={styles.hero}>
         <div className={styles.heroBg} aria-hidden="true" />
@@ -135,7 +152,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
         <div className={styles.heroCopy}>
           <motion.div className={styles.identity} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
             <div className={styles.avatar}>
-              {logo ? <img src={logo} alt={(shop?.shop_name || 'Shop') + ' profile'} /> : <Store size={32} strokeWidth={1.6} />}
+              {logo ? <img src={logo} alt={(shop?.shop_name || 'Shop') + ' logo'} width={76} height={76} fetchPriority="high" decoding="async" /> : <Store size={32} strokeWidth={1.6} />}
             </div>
             <div>
               <div className={styles.type}><span className={styles.pulse} /> {shop?.shop_type || 'Local storefront'} · Online</div>
@@ -176,7 +193,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
         <div className={styles.stage}>
           <div className={styles.stageGlow} aria-hidden="true" />
           <HeroScene3D lite className={styles.canvas} />
-          <motion.div className={styles.floatChip} animate={{ y: [0, -9, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
+          <motion.div className={styles.floatChip} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -13, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
             <span className={styles.floatIcon}><PackageCheck size={16} /></span>
             <span><b>{loading ? 'Loading shelves…' : `${products.length} products`}</b><small>Ready to order</small></span>
           </motion.div>
@@ -188,7 +205,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
         <section className={styles.toolbar} aria-label="Store controls">
           <label className={styles.searchBox}>
             <Search size={18} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product, category or keyword" />
+            <input type="search" inputMode="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product, category or keyword" />
             <AnimatePresence>
               {search && (
                 <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={styles.clear} onClick={() => setSearch('')} aria-label="Clear search" type="button">
@@ -200,7 +217,7 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
 
           <div className={styles.sort}>
             <SlidersHorizontal size={16} />
-            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as any)} aria-label="Sort products">
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)} aria-label="Sort products">
               <option value="featured">Featured</option>
               <option value="price-low">Price: Low to High</option>
               <option value="price-high">Price: High to Low</option>
@@ -226,15 +243,47 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
             <p className={styles.kicker}>Curated for you</p>
             <h2>Popular picks</h2>
           </div>
-          <div className={styles.count}>{filteredProducts.length} items</div>
+          <div className={styles.count} aria-live="polite">
+            {filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'items'}
+          </div>
         </div>
 
         {loading ? (
           <div className={styles.grid}>{Array.from({ length: 8 }).map((_, index) => <div key={index} className={styles.skeleton} />)}</div>
         ) : error ? (
-          <div className={styles.empty}><strong>Couldn&apos;t open this shop</strong><p>{error}</p></div>
+          <div className={styles.empty} role="alert">
+            <strong>Couldn&apos;t open this shop</strong>
+            <p>{error}</p>
+            <button
+              type="button"
+              className={styles.retry}
+              onClick={() => setReloadCount((count) => count + 1)}
+            >
+              Try again
+            </button>
+          </div>
         ) : filteredProducts.length === 0 ? (
-          <div className={styles.empty}><strong>Nothing matches yet</strong><p>No products match your search. Try another keyword.</p></div>
+          <div className={styles.empty}>
+            <strong>{products.length ? 'Nothing matches yet' : 'No products listed yet'}</strong>
+            <p>
+              {products.length
+                ? 'No products match your current search and filters.'
+                : 'This shop has not listed any products yet.'}
+            </p>
+            {products.length > 0 && (
+              <button
+                type="button"
+                className={styles.retry}
+                onClick={() => {
+                  setSearch('');
+                  setActiveCategory('All');
+                  setSortBy('featured');
+                }}
+              >
+                Clear search and filters
+              </button>
+            )}
+          </div>
         ) : (
           <motion.div className={styles.grid} layout>
             <AnimatePresence mode="popLayout" initial={false}>
@@ -242,10 +291,10 @@ export default function StorefrontShell({ shopId }: StorefrontShellProps) {
                 <motion.div
                   key={product.id}
                   layout
-                  initial={{ opacity: 0, y: 36, scale: 0.94 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 36, scale: 0.94 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.5, delay: Math.min(index, 10) * 0.04, ease: EASE }}
+                  exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.5, delay: Math.min(index, 10) * 0.04, ease: EASE }}
                   className={styles.cell}
                 >
                   <ProductCard

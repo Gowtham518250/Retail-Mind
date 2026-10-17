@@ -22,7 +22,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     : product.discount_pct || 0;
 
   const stock = product.stock_available;
-  const isOutOfStock = (stock ?? 0) <= 0;
+  const isOutOfStock = stock !== undefined && stock <= 0;
   const lowStock = !isOutOfStock && stock !== undefined && stock <= 5;
   const href = `/shop/${shopId}/product/${product.id}`;
 
@@ -50,7 +50,15 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
       <article className={styles.card}>
         <Link href={href} className={styles.media} aria-label={`View ${product.name}`}>
           {product.image_url ? (
-            <img src={product.image_url} alt={product.name} loading="lazy" className={styles.image} />
+            <img
+              src={product.image_url}
+              alt={product.name}
+              width={480}
+              height={480}
+              loading="lazy"
+              decoding="async"
+              className={styles.image}
+            />
           ) : (
             <div className={styles.placeholder}>
               <span className={styles.initial} aria-hidden="true">{product.name.trim().charAt(0).toUpperCase()}</span>
@@ -78,6 +86,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
             </div>
 
             <motion.button
+              type="button"
               className={`${styles.add} ${state === 'added' ? styles.added : ''}`}
               onClick={handleAdd}
               disabled={isOutOfStock}

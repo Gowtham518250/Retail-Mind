@@ -1,11 +1,14 @@
 'use client';
 
-import { useParams } from 'next/navigation';
 import StorefrontShell from '../../../components/StorefrontShell';
+import type { ShopResponse } from '../../../lib/types';
 
-export default function ShopClientPage() {
-  const params = useParams();
-  const shopId = Number(params?.shopId || 8);
-
-  return <StorefrontShell shopId={Number.isFinite(shopId) && shopId > 0 ? shopId : 8} />;
+export default function ShopClientPage({
+  shopId,
+  initialData,
+}: {
+  shopId: number;
+  initialData: ShopResponse | null;
+}) {
+  return <StorefrontShell shopId={shopId} initialData={initialData} />;
 }

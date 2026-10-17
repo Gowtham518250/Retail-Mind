@@ -54,6 +54,8 @@ export interface PlacedOrder {
   customer_name: string;
   phone: string;
   delivery_address: string;
+  /** Optional delivery instructions attached to this customer's order. */
+  order_notes?: string;
   items: { name: string; quantity: number; price: number }[];
   placed_at: string;
 }

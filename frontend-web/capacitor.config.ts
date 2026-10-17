@@ -5,8 +5,7 @@ const config: CapacitorConfig = {
   appName: 'RetailMind',
   webDir: 'out',
   server: {
-    // If CAPACITOR_SERVER_URL is provided, load the live deployed URL (e.g. Render / custom domain)
-    // Otherwise it defaults to local assets
+    // Set to the deployed customer website; the retail API URL is configured separately.
     url: process.env.CAPACITOR_SERVER_URL || undefined,
     cleartext: true,
     androidScheme: 'https',
@@ -14,4 +13,3 @@ const config: CapacitorConfig = {
 };
 
 export default config;
-

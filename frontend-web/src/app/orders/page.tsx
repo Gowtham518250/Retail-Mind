@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Package,
   MapPin,
@@ -24,6 +25,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
+import styles from './orders.module.css';
+
+const OrderPackageScene = dynamic(
+  () => import('../../components/OrderPackageScene'),
+  { ssr: false },
+);
 
 interface OrderItem {
   product_id: number;
@@ -66,6 +73,17 @@ interface Order {
   review?: OrderReview | null;
   can_cancel?: boolean;
   return_request?: ReturnRequest | null;
+}
+
+function readOrderDeliveryDetails(value: string) {
+  const raw = String(value || '');
+  const phone = raw.match(/(?:^|\s\|\s)Contact phone:\s*(\d{10})/i)?.[1] || '';
+  const orderNotes = raw.match(/(?:^|\s\|\s)Order notes:\s*([\s\S]*)$/i)?.[1]?.trim() || '';
+  const address = raw
+    .replace(/\s*\|\s*Contact phone:\s*\d{10}/i, '')
+    .replace(/\s*\|\s*Order notes:[\s\S]*$/i, '')
+    .trim();
+  return { address, phone, orderNotes };
 }
 
 const STATUS_STEPS = ['PENDING', 'ACCEPTED', 'DISPATCHED', 'DELIVERED'] as const;
@@ -125,6 +143,26 @@ const STATUS_META: Record<
 
 const TERMINAL_STATUSES = ['DELIVERED', 'REJECTED', 'CANCELLED', 'RETURNED'];
 const REVERSIBLE_STATUSES = ['PENDING', 'ACCEPTED'];
+type OrderFilter =
+  | 'ALL'
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'DISPATCHED'
+  | 'DELIVERED'
+  | 'CANCELLED'
+  | 'REJECTED'
+  | 'RETURNS';
+
+const ORDER_FILTERS: { value: OrderFilter; label: string }[] = [
+  { value: 'ALL', label: 'All orders' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'ACCEPTED', label: 'Confirmed' },
+  { value: 'DISPATCHED', label: 'Dispatched' },
+  { value: 'DELIVERED', label: 'Delivered' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'RETURNS', label: 'Returns' },
+];
 
 function getCustomerSyncCursorKey(token: string): string | null {
   try {
@@ -252,11 +290,10 @@ export default function MyOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
-  const [filter, setFilter] = useState<
-    'ALL' | 'ACTIVE' | 'DELIVERED' | 'RETURNED' | 'CANCELLED'
-  >('ALL');
+  const [filter, setFilter] = useState<OrderFilter>('ALL');
   const [query, setQuery] = useState('');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [returningOrderId, setReturningOrderId] = useState<number | null>(null);
@@ -271,10 +308,13 @@ export default function MyOrdersPage() {
   const customerFeedProbeAfterRef = useRef(0);
   const customerFeedPollInProgressRef = useRef(false);
   const seenRealtimeEventIdsRef = useRef<Set<string>>(new Set());
+  const ordersFetchRequestIdRef = useRef(0);
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
 
   const fetchOrders = useCallback(
     async (silent = false): Promise<boolean> => {
+      const requestId = ++ordersFetchRequestIdRef.current;
       const token = localStorage.getItem('customerToken');
 
       if (!token) {
@@ -290,6 +330,8 @@ export default function MyOrdersPage() {
           cache: 'no-store',
         });
 
+        if (requestId !== ordersFetchRequestIdRef.current) return false;
+
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) {
             localStorage.removeItem('customerToken');
@@ -300,16 +342,21 @@ export default function MyOrdersPage() {
         }
 
         const data = await response.json();
+        if (requestId !== ordersFetchRequestIdRef.current) return false;
         setOrders(Array.isArray(data.orders) ? data.orders : []);
         setError('');
         setLastUpdated(new Date());
         return true;
       } catch (err: any) {
-        setError(err?.message || 'Unable to refresh orders right now.');
+        if (requestId === ordersFetchRequestIdRef.current) {
+          setError(err?.message || 'Unable to refresh orders right now.');
+        }
         return false;
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (requestId === ordersFetchRequestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [router],
@@ -713,11 +760,6 @@ export default function MyOrdersPage() {
     [orders],
   );
 
-  const returnedCount = useMemo(
-    () => orders.filter((order) => activeReturnRequest(order)).length,
-    [orders],
-  );
-
   const cancelledCount = useMemo(
     () => orders.filter((order) => ['CANCELLED', 'REJECTED'].includes(order.status)).length,
     [orders],
@@ -728,34 +770,23 @@ export default function MyOrdersPage() {
     [orders],
   );
 
-  const totalSpent = useMemo(
-    () =>
-      orders.reduce(
-        (sum, order) =>
-          ['CANCELLED', 'REJECTED', 'RETURNED'].includes(order.status)
-            ? sum
-            : sum + Number(order.total_amount || 0),
-        0,
-      ),
-    [orders],
-  );
-
   const visibleOrders = useMemo(() => {
     const q = query.trim().toLowerCase();
 
     return orders.filter((order) => {
       const filterMatch =
         filter === 'ALL' ||
-        (filter === 'ACTIVE' &&
-          !TERMINAL_STATUSES.includes(order.status)) ||
-        (filter === 'DELIVERED' && order.status === 'DELIVERED') ||
-        (filter === 'RETURNED' && activeReturnRequest(order)) ||
-        (filter === 'CANCELLED' &&
-          ['CANCELLED', 'REJECTED'].includes(order.status));
+        (filter === 'RETURNS' &&
+          (order.status === 'RETURNED' || activeReturnRequest(order))) ||
+        (filter === 'CANCELLED' && order.status === 'CANCELLED') ||
+        (filter === 'REJECTED' && order.status === 'REJECTED') ||
+        order.status === filter;
 
       const queryMatch =
         !q ||
         String(order.order_id).includes(q) ||
+        String(order.shop_name || '').toLowerCase().includes(q) ||
+        (STATUS_META[order.status]?.label || order.status).toLowerCase().includes(q) ||
         order.items.some((item) =>
           String(item.product_name || item.name || '')
             .toLowerCase()
@@ -812,7 +843,7 @@ export default function MyOrdersPage() {
     const confirmed = window.confirm(
       'Cancel Order #' +
         order.order_id +
-        '? Reserved stock will be released and the online order will be closed.',
+        '? Orders can only be cancelled before dispatch. Reserved stock will be released, and any paid online amount may require a refund.',
     );
     if (!confirmed) return;
 
@@ -822,6 +853,8 @@ export default function MyOrdersPage() {
       return;
     }
 
+    setError('');
+    setNotice('');
     setCancelingOrderId(order.order_id);
     try {
       const response = await fetch(
@@ -844,7 +877,11 @@ export default function MyOrdersPage() {
         throw new Error(data?.detail || 'Unable to cancel this order.');
       }
 
-      setError('Order #' + order.order_id + ' was cancelled successfully.');
+      if (data?.success !== true || data?.status !== 'CANCELLED') {
+        throw new Error('The server did not confirm the order cancellation.');
+      }
+
+      setNotice(data.message || 'Order #' + order.order_id + ' was cancelled successfully.');
       await fetchOrders(true);
     } catch (err: any) {
       setError(err?.message || 'Unable to cancel this order.');
@@ -896,11 +933,12 @@ export default function MyOrdersPage() {
         );
       }
 
-      setError(
+      setNotice(
         'Return request submitted for Order #' +
           order.order_id +
           '. The shop will review it.',
       );
+      await fetchOrders(true);
     } catch (err: any) {
       setError(err?.message || 'Unable to submit the return request.');
     } finally {
@@ -950,7 +988,7 @@ export default function MyOrdersPage() {
         throw new Error(data?.detail || 'Unable to save your review.');
       }
 
-      setError('Thanks! Your verified review is now visible on the shop.');
+      setNotice('Thanks! Your verified review is now visible on the shop.');
       setReviewingOrderId(null);
       setReviewComment('');
       setReviewRating(5);
@@ -963,22 +1001,34 @@ export default function MyOrdersPage() {
 
 
   return (
-    <div className="orders-fk-page">
+    <div className={`${styles.page} orders-fk-page`} data-experience="orders">
       <div className="orders-fk-shell">
         <header className="orders-fk-topbar">
-          <div className="orders-fk-brand">
+        <div className="orders-fk-scene-wrap" aria-hidden="true">
+          <OrderPackageScene />
+        </div>
+        <div className="orders-fk-brand">
             <button
               className="orders-fk-back"
-              onClick={() => router.back()}
+              onClick={() => {
+                const referrer = document.referrer;
+                const cameFromThisSite =
+                  referrer === window.location.origin ||
+                  referrer.startsWith(window.location.origin + '/');
+                if (cameFromThisSite && window.history.length > 1) router.back();
+                else router.push('/');
+              }}
+              type="button"
               aria-label="Go back"
             >
               <ArrowLeft size={18} />
             </button>
-            <div>
-              <div className="orders-fk-brand-title">My Orders</div>
-              <div className="orders-fk-brand-subtitle">
-                Track every purchase in one place
-              </div>
+            <div className="orders-fk-brand-copy">
+              <span className="orders-fk-eyebrow">ORDER HISTORY</span>
+              <h1 className="orders-fk-brand-title">Your Orders</h1>
+              <p className="orders-fk-brand-subtitle">
+                Every order, every update, all in one place.
+              </p>
             </div>
           </div>
 
@@ -1004,51 +1054,37 @@ export default function MyOrdersPage() {
           </div>
         </header>
 
-        <section className="orders-fk-stats">
-          <div className="orders-fk-stat">
-            <span>Total orders</span>
-            <strong>{orders.length}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>In progress</span>
-            <strong>{activeCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Delivered</span>
-            <strong>{deliveredCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Returned</span>
-            <strong>{returnedCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Cancelled</span>
-            <strong>{cancelledCount}</strong>
-          </div>
-          <div className="orders-fk-stat">
-            <span>Net spent</span>
-            <strong>{formatCurrency(totalSpent)}</strong>
-          </div>
+        <section className="orders-fk-stats" aria-label="Order summary">
+          {[
+            { label: 'Total orders', value: orders.length, Icon: Package },
+            { label: 'In progress', value: activeCount, Icon: Clock },
+            { label: 'Delivered', value: deliveredCount, Icon: CheckCircle2 },
+            { label: 'Cancelled or rejected', value: cancelledCount, Icon: Ban },
+          ].map(({ label, value, Icon }) => (
+            <div className="orders-fk-stat" key={label}>
+              <span className="orders-fk-stat-icon" aria-hidden="true">
+                <Icon size={17} />
+              </span>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
         </section>
 
         <section className="orders-fk-toolbar">
           <div
             className="orders-fk-tabs"
-            role="tablist"
-            aria-label="Order filters"
+            role="group"
+            aria-label="Filter orders by status"
           >
-            {([
-              ['ALL', 'All orders'],
-              ['ACTIVE', 'Active'],
-              ['DELIVERED', 'Delivered'],
-              ['RETURNED', 'Returned'],
-              ['CANCELLED', 'Cancelled'],
-            ] as const).map(([value, label]) => (
+            {ORDER_FILTERS.map(({ value, label }) => (
               <button
+                type="button"
                 key={value}
                 className={
                   'orders-fk-tab ' + (filter === value ? 'active' : '')
                 }
+                aria-pressed={filter === value}
                 onClick={() => setFilter(value)}
               >
                 {label}
@@ -1074,6 +1110,13 @@ export default function MyOrdersPage() {
               hour: '2-digit',
               minute: '2-digit',
             })}
+          </div>
+        )}
+
+        {notice && (
+          <div className="orders-fk-notice" role="status">
+            <CheckCircle2 size={16} aria-hidden="true" />
+            {notice}
           </div>
         )}
 
@@ -1106,7 +1149,15 @@ export default function MyOrdersPage() {
             <div className="orders-fk-empty-icon">
               <ShoppingBag size={30} />
             </div>
-            <h2>{orders.length === 0 ? 'No orders yet' : 'No matching orders'}</h2>
+            <h2>
+              {orders.length === 0
+                ? 'No orders yet'
+                : query
+                  ? 'No orders match your search'
+                  : filter === 'ALL'
+                    ? 'No matching orders'
+                    : 'No orders in this status'}
+            </h2>
             <p>
               {orders.length === 0
                 ? 'Place your first order and it will appear here with live tracking.'
@@ -1118,6 +1169,18 @@ export default function MyOrdersPage() {
                 onClick={() => router.push('/')}
               >
                 Start Shopping
+              </button>
+            )}
+            {orders.length > 0 && (
+              <button
+                type="button"
+                className="orders-fk-primary-btn"
+                onClick={() => {
+                  setFilter('ALL');
+                  setQuery('');
+                }}
+              >
+                Clear filters
               </button>
             )}
           </div>
@@ -1133,6 +1196,7 @@ export default function MyOrdersPage() {
             <div className="orders-fk-list">
               {visibleOrders.map((order, orderIndex) => {
                 const meta = STATUS_META[order.status] || STATUS_META.PENDING;
+                const deliveryDetails = readOrderDeliveryDetails(order.delivery_address);
                 const returnActive = activeReturnRequest(order);
                 const effectiveStatus =
                   returnActive && order.status === 'DELIVERED'
@@ -1163,11 +1227,11 @@ export default function MyOrdersPage() {
                 return (
                   <motion.article
                     key={order.order_id}
-                    initial={{ opacity: 0, y: 12 }}
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
-                      duration: 0.25,
-                      delay: Math.min(orderIndex * 0.04, 0.2),
+                      duration: shouldReduceMotion ? 0 : 0.3,
+                      delay: shouldReduceMotion ? 0 : Math.min(orderIndex * 0.04, 0.2),
                     }}
                     className="orders-fk-card"
                   >
@@ -1175,6 +1239,9 @@ export default function MyOrdersPage() {
                       <div>
                         <div className="orders-fk-order-number">
                           Order #{order.order_id}
+                        </div>
+                        <div className="orders-fk-shop-name">
+                          {order.shop_name || `Shop #${order.shop_id}`}
                         </div>
                         <div className="orders-fk-order-date">
                           {formatDate(order.created_at)}
@@ -1244,14 +1311,14 @@ export default function MyOrdersPage() {
                     <div className="orders-fk-card-actions">
                       <div className="orders-fk-delivery">
                         <MapPin size={16} />
-                        <span>{order.delivery_address}</span>
+                        <span>{deliveryDetails.address || order.delivery_address}</span>
                       </div>
                       <div className="orders-fk-details-actions">
                         {(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status)) && (
                           <button
                             className="orders-fk-details-btn danger"
                             onClick={() => void cancelOrder(order)}
-                            disabled={cancelingOrderId === order.order_id}
+                            disabled={cancelingOrderId !== null}
                           >
                             {cancelingOrderId === order.order_id ? 'Cancelling…' : 'Cancel order'}
                             <Ban size={14} />
@@ -1286,8 +1353,11 @@ export default function MyOrdersPage() {
                           </button>
                         )}
                         <button
+                          type="button"
                           className="orders-fk-details-btn"
                           onClick={() => toggleOrder(order.order_id)}
+                          aria-expanded={isOpen}
+                          aria-controls={`order-details-${order.order_id}`}
                         >
                         {isOpen ? 'Hide details' : 'View details'}
                         {isOpen ? (
@@ -1300,12 +1370,25 @@ export default function MyOrdersPage() {
                     </div>
 
                     {isOpen && (
-                      <div className="orders-fk-details">
+                      <div
+                        className="orders-fk-details"
+                        id={`order-details-${order.order_id}`}
+                      >
                         <div className="orders-fk-details-grid">
                           <div>
                             <span>Delivery address</span>
-                            <strong>{order.delivery_address}</strong>
+                            <strong>{deliveryDetails.address || order.delivery_address}</strong>
                           </div>
+                          <div>
+                            <span>Contact phone</span>
+                            <strong>{deliveryDetails.phone || 'Not provided for this order'}</strong>
+                          </div>
+                          {deliveryDetails.orderNotes && (
+                            <div>
+                              <span>Order instructions</span>
+                              <strong>{deliveryDetails.orderNotes}</strong>
+                            </div>
+                          )}
                           <div>
                             <span>Current status</span>
                             <strong>

@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Retail Mind customer app
 
-## Getting Started
+The customer experience is a responsive Next.js storefront that can run in a
+browser, install as a PWA, or load inside the Android Capacitor shell.
 
-First, run the development server:
+## Run locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The browser API defaults to `https://retail-mind-hpx3.onrender.com`. Set
+`NEXT_PUBLIC_API_URL` when the browser should use a different backend. Server
+route handlers use `RETAIL_MIND_BACKEND_URL` first and fall back to
+`NEXT_PUBLIC_API_URL`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS customer website origin before
+production deployment. SEO metadata and the sitemap use this trusted setting,
+not the incoming request Host header. The current fallback is
+`https://retail-mind-web.onrender.com`; confirm that this is the deployed
+customer website before launch.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+To enable Google Search Console verification, set
+`NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` to the real HTML-tag verification token.
+Submit `https://<your-customer-domain>/sitemap.xml` after deployment. No GA4
+measurement ID is currently configured; analytics should remain disabled until
+the owner supplies an ID and consent requirements are decided.
 
-## Learn More
+The public sitemap discovers shops and their products from the existing
+backend. It cannot list URLs while that API returns no online-enabled shops.
+The current backend returned an empty shop list during frontend launch checks.
+The backend has no existing customer contact-submission endpoint, so this
+frontend does not show a contact form or report unpersisted messages as sent.
+The privacy page is an implementation summary, not a legal-reviewed policy;
+the service operator must confirm retention, rights, support contact, and
+third-party processing details.
 
-To learn more about Next.js, take a look at the following resources:
+## Web and PWA deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Deploy this Next.js app as a server-rendered web app; its same-origin marketplace
+and AI routes require the Next.js server. After deployment over HTTPS, customers
+can install the PWA from a supported browser.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The repository's root `render.yaml` currently deploys a different, minimal Vite
+app from `frontend/`, not this customer app. Deploy `frontend-web/` as a Node
+Next.js service (or configure the hosting platform to build this directory)
+before expecting these pages, route handlers, sitemap, or metadata on the public
+website. The known Render frontend hostname was unavailable during verification.
 
-## Deploy on Vercel
+## Android app
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The Capacitor shell loads the deployed web app, so set `CAPACITOR_SERVER_URL` to
+the public HTTPS URL before syncing or building Android. Static export is not
+configured because the customer app uses server route handlers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npx cap sync android
+npx cap open android
+```
+
+Keep `CAPACITOR_SERVER_URL` pointed at the customer web deployment and
+`RETAIL_MIND_BACKEND_URL` pointed at the retail API deployment. Do not use the
+backend URL as the Capacitor server URL.

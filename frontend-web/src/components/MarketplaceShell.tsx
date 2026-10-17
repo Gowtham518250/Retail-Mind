@@ -1,10 +1,10 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
@@ -27,15 +27,16 @@ const SHOP_TONES = [
 const resolveLogo = (url?: string) => (url ? (url.startsWith('http') ? url : API_BASE + url) : '');
 
 function Words({ text, base = 0, className }: { text: string; base?: number; className?: string }) {
+  const reduceMotion = Boolean(useReducedMotion());
   return (
     <>
       {text.split(' ').map((word, i) => (
         <span key={i + word}><span className={styles.wordMask}>
           <motion.span
             className={`${styles.word} ${className || ''}`}
-            initial={{ y: '115%', rotate: 4 }}
+            initial={reduceMotion ? false : { y: '115%', rotate: 4 }}
             animate={{ y: 0, rotate: 0 }}
-            transition={{ duration: 0.85, delay: base + i * 0.09, ease: EASE }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.85, delay: base + i * 0.09, ease: EASE }}
           >
             {word}
           </motion.span>
@@ -46,13 +47,14 @@ function Words({ text, base = 0, className }: { text: string; base?: number; cla
 }
 
 function Reveal({ children, delay = 0, className }: { children: React.ReactNode; delay?: number; className?: string }) {
+  const reduceMotion = Boolean(useReducedMotion());
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y: 36 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 36, rotateX: -2 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-70px' }}
-      transition={{ duration: 0.7, delay, ease: EASE }}
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.7, delay, ease: EASE }}
     >
       {children}
     </motion.div>
@@ -60,15 +62,16 @@ function Reveal({ children, delay = 0, className }: { children: React.ReactNode;
 }
 
 function ShopCard({ shop, index }: { shop: any; index: number }) {
+  const reduceMotion = Boolean(useReducedMotion());
   const [from, to, ink] = SHOP_TONES[Math.abs(Number(shop.shop_id) || index) % SHOP_TONES.length];
   const logo = resolveLogo(shop.logo_url);
   const rated = Boolean(shop.rating_count);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40, rotateX: -8 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 40, rotateX: -8 }}
       whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
       viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration: 0.65, delay: (index % 4) * 0.08, ease: EASE }}
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.65, delay: (index % 4) * 0.08, ease: EASE }}
       style={{ transformPerspective: 1100 }}
     >
       <Tilt3D className={styles.tiltFill}>
@@ -77,7 +80,7 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
             <span className={styles.shopInitial} aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
             <span className={styles.liveTag}><i /> Online</span>
             <div className={styles.shopTile}>
-              {logo ? <img src={logo} alt={shop.shop_name + ' logo'} loading="lazy" /> : <Store size={34} strokeWidth={1.6} />}
+              {logo ? <img src={logo} alt={shop.shop_name + ' logo'} width={64} height={64} loading="lazy" decoding="async" /> : <Store size={34} strokeWidth={1.6} />}
             </div>
             <span className={styles.shopOrbOne} aria-hidden="true" />
             <span className={styles.shopOrbTwo} aria-hidden="true" />
@@ -122,6 +125,7 @@ type FeaturedProduct = { product_id: number; product_name: string; shop_id: numb
 
 export default function MarketplaceShell() {
   const router = useRouter();
+  const shouldReduceMotion = Boolean(useReducedMotion());
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<ResultMode>('all');
   const [shops, setShops] = useState<any[]>([]);
@@ -199,9 +203,9 @@ export default function MarketplaceShell() {
 
     try {
       if (!value) {
-        const res = await fetch(API_BASE + '/store/marketplace/search?mode=shops&limit=60', { cache: 'no-store', signal: controller.signal });
-        if (!res.ok) throw new Error('Marketplace API returned ' + res.status + '.');
+        const res = await fetch('/api/marketplace/search?mode=shops&limit=60', { cache: 'no-store', signal: controller.signal });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Marketplace API returned ' + res.status + '.');
         if (requestId !== requestIdRef.current) return;
         setShops(Array.isArray(data.shops) ? data.shops : []);
         setProducts([]);
@@ -210,11 +214,11 @@ export default function MarketplaceShell() {
 
       const searchMode = requestedMode === 'shops' ? 'shops' : requestedMode === 'products' ? 'products' : 'all';
       const res = await fetch(
-        API_BASE + '/store/marketplace/search?q=' + encodeURIComponent(value) + '&mode=' + searchMode + '&limit=30',
+        '/api/marketplace/search?q=' + encodeURIComponent(value) + '&mode=' + searchMode + '&limit=30',
         { cache: 'no-store', signal: controller.signal }
       );
-      if (!res.ok) throw new Error('Marketplace API returned ' + res.status + '.');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Marketplace API returned ' + res.status + '.');
       if (requestId !== requestIdRef.current) return;
 
       setShops(Array.isArray(data.shops) ? data.shops : []);
@@ -223,7 +227,11 @@ export default function MarketplaceShell() {
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       setShops([]);
       setProducts([]);
-      setError(err instanceof Error ? err.message : 'Unable to search the marketplace.');
+      setError(err instanceof TypeError
+        ? 'We couldn’t reach the marketplace. Check your connection and try again.'
+        : err instanceof Error
+          ? err.message
+          : 'Unable to search the marketplace.');
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
@@ -283,7 +291,7 @@ export default function MarketplaceShell() {
     const loadFeaturedProducts = async () => {
       const batches = await Promise.all(visibleShops.map(async (shop) => {
         try {
-          const response = await fetch(API_BASE + '/store/shops/' + encodeURIComponent(String(shop.shop_id)) + '/products', { cache: 'no-store' });
+          const response = await fetch('/api/marketplace/shops/' + encodeURIComponent(String(shop.shop_id)) + '/products', { cache: 'no-store' });
           if (!response.ok) return [];
           const data = await response.json();
           const list = Array.isArray(data.products) ? data.products : [];
@@ -348,13 +356,13 @@ export default function MarketplaceShell() {
   ];
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-experience="marketplace">
       {/* ───────── HERO ───────── */}
       <section className={styles.hero} ref={heroRef}>
         <div className={styles.heroBg} aria-hidden="true" />
         <div className={styles.heroGrain} aria-hidden="true" />
 
-        <motion.div className={styles.heroCopy} style={{ y: copyY, opacity: copyOpacity }}>
+        <motion.div className={styles.heroCopy} style={{ y: shouldReduceMotion ? 0 : copyY, opacity: shouldReduceMotion ? 1 : copyOpacity }}>
           <motion.div className={styles.eyebrow} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
             <span className={styles.pulse} />
             Local commerce, reimagined
@@ -411,34 +419,21 @@ export default function MarketplaceShell() {
           <div className={styles.stageGlow} aria-hidden="true" />
           <HeroScene3D className={styles.canvas} />
 
-          <motion.div className={`${styles.chip} ${styles.chipA}`} animate={{ y: [0, -9, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
+          <motion.div className={`${styles.chip} ${styles.chipA}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -12, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
             <span className={styles.chipIcon} style={{ background: '#f3ca4f' }}><Zap size={15} /></span>
             <span><b>{shops.length > 0 && !query.trim() ? `${shops.length} shops online` : 'Live availability'}</b><small>Updated in real time</small></span>
           </motion.div>
-          <motion.div className={`${styles.chip} ${styles.chipB}`} animate={{ y: [0, 10, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}>
+          <motion.div className={`${styles.chip} ${styles.chipB}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, 14, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}>
             <span className={styles.chipIcon} style={{ background: '#e8541e', color: '#fff' }}><Sparkles size={15} /></span>
             <span><b>AI shopping</b><small>Describe it, we find it</small></span>
           </motion.div>
-          <motion.div className={`${styles.chip} ${styles.chipC}`} animate={{ y: [0, -7, 0] }} transition={{ duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}>
+          <motion.div className={`${styles.chip} ${styles.chipC}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -10, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}>
             <span className={styles.chipIcon} style={{ background: '#cfe3c6' }}><Truck size={15} /></span>
             <span><b>Track every order</b><small>From shelf to door</small></span>
           </motion.div>
           <div className={styles.hint}><MousePointer2 size={13} /> Move your cursor · tap the bag</div>
         </div>
       </section>
-
-      {/* ───────── MARQUEE ───────── */}
-      <div className={styles.marquee} aria-hidden="true">
-        <div className={styles.marqueeTrack}>
-          {[0, 1].map((copy) => (
-            <div className={styles.marqueeGroup} key={copy}>
-              {['Good things grow locally', 'Better finds, closer to home', 'Your neighbourhood market', 'Shop close. Live well.'].map((t) => (
-                <span key={t}>{t}<Sparkles size={22} /></span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* ───────── BENTO ───────── */}
       <section className={styles.section}>
@@ -549,6 +544,14 @@ export default function MarketplaceShell() {
           <div className={styles.banner} role="alert">
             <span className={styles.bannerIcon}>!</span>
             <div><strong>Marketplace connection issue</strong><p>{error}</p></div>
+            <button
+              type="button"
+              className={styles.bannerRetry}
+              onClick={() => void performSearch(mode, query, true)}
+              disabled={searching}
+            >
+              {searching ? 'Retrying…' : 'Try again'}
+            </button>
           </div>
         </section>
       )}
@@ -586,6 +589,12 @@ export default function MarketplaceShell() {
               ))}
             </div>
           </>
+        ) : error ? (
+          <div className={styles.empty} role="status">
+            <span><Search size={24} /></span>
+            <strong>Marketplace results are temporarily unavailable</strong>
+            <p>We couldn’t load shops or products. Use “Try again” above to refresh.</p>
+          </div>
         ) : query.trim() ? (
           <>
             <div className={styles.head}>
@@ -631,7 +640,21 @@ export default function MarketplaceShell() {
               <span className={styles.count}>{shops.length} {shops.length === 1 ? 'shop' : 'shops'}</span>
             </div>
             <div className={styles.grid}>{shops.map((shop, i) => <ShopCard key={shop.shop_id} shop={shop} index={i} />)}</div>
-            {!shops.length && <div className={styles.empty}><span><Store size={24} /></span><strong>No online shops are showing right now</strong><p>Try refreshing or opening a shop link directly.</p></div>}
+            {!shops.length && (
+              <div className={styles.empty} role="status">
+                <span><Store size={24} /></span>
+                <strong>No online shops are showing right now</strong>
+                <p>There are no shops available to browse yet. Check again in a moment.</p>
+                <button
+                  type="button"
+                  className={styles.emptyRetry}
+                  onClick={() => void performSearch('shops', '', true)}
+                  disabled={searching}
+                >
+                  {searching ? 'Checking shops…' : 'Refresh shops'}
+                </button>
+              </div>
+            )}
           </>
         )}
       </section>

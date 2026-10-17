@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { usePathname, useParams, useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useSpring, useTransform } from 'framer-motion';
-import { ArrowRight, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
+import { ArrowRight, Loader2, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import styles from './CartDrawer.module.css';
 
@@ -15,12 +15,29 @@ function Money({ value }: { value: number }) {
 }
 
 export default function CartDrawer() {
-  const { cartItems, isCartOpen, toggleCart, updateQuantity, removeFromCart, cartTotal } = useCart();
+  const {
+    cartItems,
+    isCartOpen,
+    cartNotice,
+    canReplaceCart,
+    toggleCart,
+    updateQuantity,
+    removeFromCart,
+    replaceCartWithPendingProduct,
+    dismissCartNotice,
+    cartTotal,
+  } = useCart();
   const router = useRouter();
+  const pathname = usePathname();
   const params = useParams();
   const shopId = Number(params?.shopId || 8);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [openingCheckout, setOpeningCheckout] = useState(false);
   const count = cartItems.reduce((s, i) => s + i.quantity, 0);
+
+  useEffect(() => {
+    setOpeningCheckout(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!isCartOpen) return;
@@ -36,16 +53,16 @@ export default function CartDrawer() {
   }, [isCartOpen, toggleCart]);
 
   const handleCheckout = () => {
-    toggleCart();
     const cartShopId = cartItems[0]?.product.shop_id || shopId;
     const token = localStorage.getItem('customerToken');
+    const destination = token
+      ? `/shop/${cartShopId}/checkout`
+      : `/auth?next=${encodeURIComponent(`/shop/${cartShopId}/checkout`)}`;
 
-    if (!token) {
-      router.push(`/auth?next=${encodeURIComponent(`/shop/${cartShopId}/checkout`)}`);
-      return;
-    }
-
-    router.push(`/shop/${cartShopId}/checkout`);
+    toggleCart();
+    if (pathname === destination.split('?')[0]) return;
+    setOpeningCheckout(true);
+    router.push(destination);
   };
 
   return (
@@ -87,6 +104,25 @@ export default function CartDrawer() {
             </div>
 
             <div className={styles.scroll}>
+              {cartNotice && (
+                <div className={styles.notice} role="alert">
+                  <p>{cartNotice}</p>
+                  <div className={styles.noticeActions}>
+                    {canReplaceCart && (
+                      <button
+                        type="button"
+                        className={styles.noticePrimary}
+                        onClick={replaceCartWithPendingProduct}
+                      >
+                        Replace cart with this item
+                      </button>
+                    )}
+                    <button type="button" onClick={dismissCartNotice}>
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
               {cartItems.length === 0 ? (
                 <div className={styles.empty}>
                   <motion.div className={styles.emptyBag} animate={{ y: [0, -12, 0], rotate: [-4, 4, -4] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
@@ -124,7 +160,13 @@ export default function CartDrawer() {
                                 {item.quantity}
                               </motion.span>
                             </AnimatePresence>
-                            <button onClick={() => updateQuantity(item.product.id, 1)} aria-label="Increase quantity"><Plus size={14} /></button>
+                            <button
+                              onClick={() => updateQuantity(item.product.id, 1)}
+                              disabled={item.product.stock_available !== undefined && item.quantity >= item.product.stock_available}
+                              aria-label={`Increase ${item.product.name} quantity`}
+                            >
+                              <Plus size={14} />
+                            </button>
                           </div>
                         </div>
                         <div className={styles.side}>
@@ -154,8 +196,16 @@ export default function CartDrawer() {
                     <b><Money value={cartTotal} /></b>
                   </div>
                   <p>Taxes included. Delivery charges calculated at checkout.</p>
-                  <button className={styles.checkout} onClick={handleCheckout} id="checkout-btn">
-                    Proceed to checkout <ArrowRight size={18} />
+                  <button
+                    className={styles.checkout}
+                    onClick={handleCheckout}
+                    disabled={openingCheckout}
+                    aria-busy={openingCheckout}
+                    id="checkout-btn"
+                  >
+                    {openingCheckout
+                      ? <><Loader2 size={18} className="spin" /> Opening checkout…</>
+                      : <>Proceed to checkout <ArrowRight size={18} /></>}
                   </button>
                 </motion.div>
               )}
