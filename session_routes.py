@@ -42,7 +42,8 @@ def refresh_token(req: RefreshRequest, db: Session = Depends(get_db)):
     #
     # We now decode the JWT directly and only treat a genuine JWTError as
     # "not a JWT refresh token", letting it fall through to the legacy path.
-    from jose import JWTError, jwt as jose_jwt
+    from jwt import InvalidTokenError as JWTError
+    import jwt as jose_jwt
     from security import SECRET_KEY, ALGORITHM, create_access_token, create_refresh_token
 
     payload = None
