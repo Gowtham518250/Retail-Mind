@@ -117,6 +117,7 @@ jobs:
           pytest -q tests/test_financial_integrity.py
           pytest -q tests/test_product_image_contract.py
           pytest -q tests/test_render_host_validation.py
+          pytest -q tests/test_root_head_probe.py
           pytest -q tests/test_attendance_auto_checkout_contract.py
           pytest -q tests/test_query_retrieval_optimization.py
           pytest -q tests/test_query_safety.py
