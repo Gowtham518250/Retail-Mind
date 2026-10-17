@@ -12,7 +12,7 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from datetime_utils import is_before_utc
 from passlib.context import CryptContext
-from jose import jwt
+import jwt
 import secrets
 import logging
 
