@@ -136,8 +136,9 @@ def test_websocket_rejects_missing_first_frame_authentication(monkeypatch):
     app.include_router(realtime.router)
 
     with TestClient(app) as client:
-        with pytest.raises(WebSocketDisconnect) as exc_info:
-            with client.websocket_connect("/api/ws/live/42/0") as websocket:
-                websocket.send_json({"action": "subscribe"})
+        with client.websocket_connect("/api/ws/live/42/0") as websocket:
+            websocket.send_json({"action": "subscribe"})
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                websocket.receive_json()
 
     assert exc_info.value.code == 1008
