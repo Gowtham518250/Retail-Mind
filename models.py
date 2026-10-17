@@ -1029,6 +1029,29 @@ class PasswordReset(Base):
     transaction_date = Column(DateTime, server_default=func.now())
 
 
+class EmailOtpChallenge(Base):
+    """Database-backed one-time email OTP with expiry and attempt tracking."""
+    __tablename__ = "email_otp_challenges"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), nullable=False, index=True)
+    purpose = Column(String(64), nullable=False, default="Verification", index=True)
+    otp_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_email_otp_email_purpose_created",
+            "email",
+            "purpose",
+            "created_at",
+        ),
+    )
+
+
 # ==================== EXPENSE TRACKING ====================
 
 class ShopExpense(Base):
