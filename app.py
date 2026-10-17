@@ -287,9 +287,20 @@ from host_validation import build_allowed_hosts, build_allowed_origins
 # RENDER_EXTERNAL_HOSTNAME (or hostname parsed from RENDER_EXTERNAL_URL). This
 # prevents TrustedHostMiddleware from rejecting the service's own URL with 400.
 ALLOWED_HOSTS = build_allowed_hosts(os.environ)
+# The customer storefront at retail-mind-1.onrender.com creates online orders,
+# so allow this exact HTTPS origin even when ALLOWED_ORIGINS is also configured.
+# Keep any deployment-specific origins from the environment.
+_EXTRA_ALLOWED_ORIGINS = ",".join(
+    value
+    for value in (
+        os.getenv("ALLOWED_ORIGINS", "").strip(),
+        "https://retail-mind-1.onrender.com",
+    )
+    if value
+)
 ALLOWED_ORIGINS = build_allowed_origins(
     ALLOWED_HOSTS,
-    os.getenv("ALLOWED_ORIGINS", ""),
+    _EXTRA_ALLOWED_ORIGINS,
 )
 
 # 1. CORS — Restrict to known origins only (no wildcard *)
