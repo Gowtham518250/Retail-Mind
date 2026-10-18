@@ -245,3 +245,10 @@ def test_shift_rows_use_chronological_session_indices_not_shift_names():
     normalized = production_boot._combine_shift_and_legacy_records(rows, [])
     by_time = sorted(normalized, key=lambda row: row["check_in_time"])
     assert [row["session_index"] for row in by_time] == [0, 1]
+
+
+
+def test_huggingface_cache_directories_are_initialized_before_app_import():
+    assert production_boot.RENDER_CACHE_DIR.is_dir()
+    assert production_boot.HF_CACHE_DIR.is_dir()
+    assert production_boot.HF_CACHE_DIR.parent == production_boot.RENDER_CACHE_DIR
