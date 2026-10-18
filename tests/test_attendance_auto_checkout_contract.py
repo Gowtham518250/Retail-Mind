@@ -186,11 +186,15 @@ def test_production_boot_patches_routes_registered_on_the_running_app():
         "/employee/{employee_id}": "get_shift_attendance",
         "/date/{date_str}": "get_shift_attendance_by_date",
     }
-    registered = {
-        getattr(route, "path", ""): route
-        for route in attendance.router.routes
-        if getattr(route, "path", "") in expected
-    }
+    registered = {}
+    for route in attendance.router.routes:
+        route_path = str(getattr(route, "path", "") or "")
+        # APIRouter may expose the prefix in router.routes depending on the
+        # FastAPI version. Normalize so the contract test supports both forms.
+        if route_path.startswith("/api/attendance/"):
+            route_path = route_path.removeprefix("/api/attendance")
+        if route_path in expected:
+            registered[route_path] = route
     assert set(registered) == set(expected)
 
     for path, endpoint_name in expected.items():
@@ -241,3 +245,10 @@ def test_shift_rows_use_chronological_session_indices_not_shift_names():
     normalized = production_boot._combine_shift_and_legacy_records(rows, [])
     by_time = sorted(normalized, key=lambda row: row["check_in_time"])
     assert [row["session_index"] for row in by_time] == [0, 1]
+
+
+
+def test_huggingface_cache_directories_are_initialized_before_app_import():
+    assert production_boot.RENDER_CACHE_DIR.is_dir()
+    assert production_boot.HF_CACHE_DIR.is_dir()
+    assert production_boot.HF_CACHE_DIR.parent == production_boot.RENDER_CACHE_DIR
