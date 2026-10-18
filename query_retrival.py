@@ -7,8 +7,13 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import Form, File, UploadFile, HTTPException, Depends, APIRouter
+from fastapi import Form, File, UploadFile, HTTPException, Depends, APIRouter, Request
 import httpx
+from rate_limiter import rate_limit_endpoint, rate_limiter
+
+# Anonymous onboarding dictation is expensive model work; cap it per IP.
+# The shared limiter uses Redis when configured and has an in-memory fallback.
+rate_limiter.limits["voice-transcribe"] = 5
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -519,6 +524,86 @@ def _translate_query_to_english(query: str, language_code: str) -> str:
 
 VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
 VOICE_AUDIO_SUFFIXES = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
+
+
+@app.post("/auth/voice-transcribe")
+@rate_limit_endpoint(max_requests=5, window_seconds=60)
+async def transcribe_onboarding_voice(
+    request: Request,
+    audio: UploadFile = File(...),
+    language_code: str = Form(...),
+):
+    """Transcribe a short onboarding form recording without requiring a session.
+
+    The speech-service key stays on the backend. Limit request size and per-IP
+    frequency because a model-backed route is intentionally available pre-login.
+    """
+    code = (language_code or "").strip().lower()
+    if code not in VOICE_LANGUAGE_CODES:
+        raise HTTPException(status_code=422, detail="Unsupported voice language.")
+
+    service_url = (os.getenv("INDIC_SPEECH_SERVICE_URL") or "").strip().rstrip("/")
+    service_key = (os.getenv("INDIC_SPEECH_SERVICE_API_KEY") or "").strip()
+    if not service_url or not service_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Multilingual speech recognition is not configured on the server.",
+        )
+
+    suffix = Path(audio.filename or "voice-field.wav").suffix.lower() or ".wav"
+    content_type = (audio.content_type or "").lower()
+    if not content_type.startswith("audio/") and suffix not in VOICE_AUDIO_SUFFIXES:
+        raise HTTPException(status_code=415, detail="Upload a supported audio recording.")
+
+    max_bytes = 10 * 1024 * 1024
+    content = await audio.read(max_bytes + 1)
+    if not content:
+        raise HTTPException(status_code=422, detail="The audio recording is empty.")
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail="Voice recording exceeds the 10 MB limit.")
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
+            speech_response = await client.post(
+                f"{service_url}/transcribe-and-translate",
+                headers={"X-Speech-Service-Key": service_key},
+                files={
+                    "audio": (
+                        Path(audio.filename or "voice-field.wav").name,
+                        content,
+                        content_type if content_type.startswith("audio/") else "audio/wav",
+                    )
+                },
+                data={"language_code": code},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Speech recognition timed out. Please try a shorter recording.")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="The multilingual speech service is temporarily unavailable.")
+
+    if speech_response.status_code != 200:
+        if speech_response.status_code in (413, 415, 422):
+            raise HTTPException(
+                status_code=speech_response.status_code,
+                detail="No clear speech was detected. Please record the field again.",
+            )
+        raise HTTPException(status_code=502, detail="The multilingual speech service could not process this recording.")
+
+    try:
+        speech_data = speech_response.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="The speech service returned an invalid response.")
+
+    transcript = str(speech_data.get("transcript") or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=422, detail="No clear speech was detected. Please record the field again.")
+
+    # Do not log or persist the recognized value: it may contain personal details.
+    return {
+        "language_code": code,
+        "transcript": transcript,
+        "asr_model": speech_data.get("asr_model", "AI4Bharat IndicConformer"),
+    }
 
 
 @app.post("/askquery/voice")
