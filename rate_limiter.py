@@ -282,28 +282,18 @@ def rate_limit_endpoint(
     """
     def decorator(func):
         def _extract_request(args, kwargs) -> Request:
-            # 🛡️ FIX: previously both wrappers below declared `request:
-            # Request` as their own first positional parameter, then called
-            # `func(request, *args, **kwargs)` -- reinjecting it
-            # positionally. That's only safe if the wrapped endpoint's own
-            # first parameter is also `request`. FastAPI actually calls the
-            # wrapper with resolved parameters as keyword arguments matching
-            # the ENDPOINT's real signature (e.g. login(user, request, db)
-            # gets called as wrapper(user=..., request=..., db=...)), so for
-            # any endpoint where `request` isn't first (like login, where
-            # `user` is), the positional reinjection collided with the
-            # wrapped function's own first parameter -- "got multiple values
-            # for argument 'user'" in production. Look up `request` by
-            # keyword first (matches how FastAPI actually calls this), fall
-            # back to scanning positional args for a Request instance.
-            if 'request' in kwargs:
-                return kwargs['request']
-            for a in args:
-                if isinstance(a, Request):
-                    return a
+            # FastAPI passes endpoint parameters by keyword. A request-body
+            # model is often also named "request", so do not trust the key
+            # name; locate the actual Starlette Request object by type.
+            for value in kwargs.values():
+                if isinstance(value, Request):
+                    return value
+            for value in args:
+                if isinstance(value, Request):
+                    return value
             raise TypeError(
-                "rate_limit_endpoint could not find a 'request: Request' "
-                "parameter on the wrapped endpoint"
+                "rate_limit_endpoint could not find a Starlette Request "
+                "object among the wrapped endpoint arguments"
             )
 
         @wraps(func)
