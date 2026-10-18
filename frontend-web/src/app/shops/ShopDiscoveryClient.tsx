@@ -45,7 +45,7 @@ function ShopCoverImage({ shop }: { shop: Shop }) {
   const [failedLogo, setFailedLogo] = useState(false);
 
   return (
-    <div className={styles.image} aria-label={shop.shop_name + ' brand'}>
+    <div className={styles.image}>
       <div className={styles.imageFallback}>
         {logo && !failedLogo ? (
           <Image

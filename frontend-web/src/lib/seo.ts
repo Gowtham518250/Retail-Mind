@@ -15,7 +15,9 @@ export const SITE_URL = parsedSiteUrl.origin;
 export const SITE_NAME = 'Retail Mind';
 export const FALLBACK_DESCRIPTION =
   'Discover neighbourhood shops, browse local products, and place orders with Retail Mind.';
-export const FALLBACK_SOCIAL_IMAGE = '/retail-mind-social.svg';
+export const FALLBACK_SOCIAL_IMAGE = '/retail-mind-social.png';
+export const FALLBACK_SOCIAL_IMAGE_WIDTH = 1200;
+export const FALLBACK_SOCIAL_IMAGE_HEIGHT = 630;
 
 export function absoluteSiteUrl(path: string): string {
   return new URL(path, `${SITE_URL}/`).toString();
@@ -52,6 +54,7 @@ export function publicPageMetadata({
   type?: 'website' | 'article';
 }): Metadata {
   const imageUrl = publicImageUrl(image);
+  const isFallbackImage = imageUrl === absoluteSiteUrl(FALLBACK_SOCIAL_IMAGE);
   return {
     title: { absolute: title },
     description,
@@ -62,7 +65,17 @@ export function publicPageMetadata({
       title,
       description,
       url: absoluteSiteUrl(path),
-      images: [{ url: imageUrl, alt: `${SITE_NAME} - ${title}` }],
+      images: [{
+        url: imageUrl,
+        alt: `${SITE_NAME} - ${title}`,
+        ...(isFallbackImage
+          ? {
+              width: FALLBACK_SOCIAL_IMAGE_WIDTH,
+              height: FALLBACK_SOCIAL_IMAGE_HEIGHT,
+              type: 'image/png',
+            }
+          : {}),
+      }],
     },
     twitter: {
       card: 'summary_large_image',

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Suspense } from 'react';
 import './globals.css';
 import './storefront-polish.css';
 import './premium-v3.css';
@@ -12,7 +11,17 @@ import NativeAppPerformance from '../components/NativeAppPerformance';
 import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
 import JsonLd from '../components/JsonLd';
-import { FALLBACK_DESCRIPTION, FALLBACK_SOCIAL_IMAGE, SITE_NAME, SITE_URL } from '../lib/seo';
+import GoogleAnalytics from '../components/GoogleAnalytics';
+import AnalyticsSettings from '../components/AnalyticsSettings';
+import { SUPPORT_EMAIL } from '../lib/support';
+import {
+  FALLBACK_DESCRIPTION,
+  FALLBACK_SOCIAL_IMAGE,
+  FALLBACK_SOCIAL_IMAGE_HEIGHT,
+  FALLBACK_SOCIAL_IMAGE_WIDTH,
+  SITE_NAME,
+  SITE_URL,
+} from '../lib/seo';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -28,7 +37,13 @@ export const metadata: Metadata = {
     title: 'Retail Mind | Shop Local Online',
     description: FALLBACK_DESCRIPTION,
     url: SITE_URL,
-    images: [{ url: FALLBACK_SOCIAL_IMAGE, alt: 'Retail Mind' }],
+    images: [{
+      url: FALLBACK_SOCIAL_IMAGE,
+      alt: 'Retail Mind — shop local online',
+      width: FALLBACK_SOCIAL_IMAGE_WIDTH,
+      height: FALLBACK_SOCIAL_IMAGE_HEIGHT,
+      type: 'image/png',
+    }],
   },
   twitter: {
     card: 'summary_large_image',
@@ -58,13 +73,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         <CartProvider>
           <JsonLd data={{
             '@context': 'https://schema.org',
             '@type': 'Organization',
             name: SITE_NAME,
             url: SITE_URL,
-            logo: new URL('/icons/retail-mind.svg', SITE_URL).toString(),
+            logo: {
+              '@type': 'ImageObject',
+              url: new URL('/icons/retail-mind-logo.png', SITE_URL).toString(),
+              width: 512,
+              height: 512,
+            },
+            ...(SUPPORT_EMAIL
+              ? {
+                  contactPoint: {
+                    '@type': 'ContactPoint',
+                    contactType: 'customer support',
+                    email: SUPPORT_EMAIL,
+                  },
+                }
+              : {}),
           }} />
           <JsonLd data={{
             '@context': 'https://schema.org',
@@ -75,14 +105,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <NativeAppPerformance>
             <Navbar />
             <NavigationProgress />
-            <main className="page-transition">
-              <Suspense fallback={<div className="page-loading" role="status" aria-live="polite">Getting things ready…</div>}>{children}</Suspense>
-            </main>
+            <main id="main-content" tabIndex={-1} className="page-transition">{children}</main>
             <footer className="site-footer">
               <Link href="/shops">Browse shops</Link>
+              <Link href="/ai-shopping">AI shopping</Link>
+              <Link href="/contact">Contact</Link>
               <Link href="/privacy">Privacy information</Link>
+              <AnalyticsSettings />
             </footer>
             <CartDrawer />
+            <GoogleAnalytics />
           </NativeAppPerformance>
         </CartProvider>
       </body>

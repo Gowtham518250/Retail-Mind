@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { absoluteSiteUrl } from '../lib/seo';
 import { getPublicShops } from '../lib/publicCatalog';
 import { API_BASE } from '../lib/api';
+import { SUPPORT_EMAIL } from '../lib/support';
 import type { ShopProduct } from '../lib/types';
 
 export const revalidate = 3600;
@@ -13,6 +14,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteSiteUrl('/ai-shopping'), changeFrequency: 'weekly', priority: 0.7 },
     { url: absoluteSiteUrl('/privacy'), changeFrequency: 'yearly', priority: 0.2 },
   ];
+  if (SUPPORT_EMAIL) {
+    entries.splice(3, 0, {
+      url: absoluteSiteUrl('/contact'),
+      changeFrequency: 'yearly',
+      priority: 0.4,
+    });
+  }
   const shops = await getPublicShops();
   const backendBase = (
     process.env.RETAIL_MIND_BACKEND_URL ||

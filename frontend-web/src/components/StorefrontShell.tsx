@@ -8,6 +8,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Search, SlidersHorizontal, Sparkles, Phone, MapPin, PackageCheck, ShieldCheck, ArrowRight, Globe, Star, Store, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { API_BASE } from '../lib/api';
+import { trackEvent } from '../lib/analytics';
 import type { ShopProduct, ShopResponse } from '../lib/types';
 import ProductCard from './ProductCard';
 import styles from './Storefront.module.css';
@@ -38,9 +39,9 @@ function Words({ text, base = 0 }: { text: string; base?: number }) {
         <span key={i + word}><span className={styles.wordMask}>
           <motion.span
             className={styles.word}
-            initial={reduceMotion ? false : { y: '115%', rotate: 4 }}
+            initial={false}
             animate={{ y: 0, rotate: 0 }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.8, delay: base + i * 0.08, ease: EASE }}
+            transition={{ duration: 0 }}
           >
             {word}
           </motion.span>
@@ -64,6 +65,13 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
   const { addToCart, cartItems } = useCart();
 
   useEffect(() => {
+    if (initialData?.products?.length && reloadCount === 0) {
+      setShop(initialData);
+      setProducts(initialData.products);
+      setLoading(false);
+      setError('');
+      return;
+    }
     const controller = new AbortController();
     let cancelled = false;
     const loadShop = async () => {
@@ -101,6 +109,16 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
       controller.abort();
     };
   }, [initialData, shopId, reloadCount]);
+
+  useEffect(() => {
+    if (!shop?.shop_name) return;
+    trackEvent('shop_view', {
+      shop_id: shopId,
+      shop_name: shop.shop_name,
+      shop_type: shop.shop_type || 'Local shop',
+      product_count: products.length,
+    });
+  }, [products.length, shop?.shop_name, shop?.shop_type, shopId]);
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(products.map((product) => product.category).filter(Boolean))) as string[];
@@ -158,7 +176,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
         <div className={styles.grain} aria-hidden="true" />
 
         <div className={styles.heroCopy}>
-          <motion.div className={styles.identity} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
+          <motion.div className={styles.identity} initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
             <div className={styles.avatar}>
               {logo ? <Image src={logo} alt={(shop?.shop_name || 'Shop') + ' logo'} width={76} height={76} sizes="76px" fetchPriority="high" decoding="async" /> : <Store size={32} strokeWidth={1.6} />}
             </div>
@@ -174,24 +192,24 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
 
           <h1 className={styles.title}><Words text={shop?.shop_name || 'Retail Mind Storefront'} base={0.1} /></h1>
 
-          <motion.p className={styles.tagline} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5, ease: EASE }}>
+          <motion.p className={styles.tagline} initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5, ease: EASE }}>
             {shop?.shop_tagline || shop?.shop_description || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
           </motion.p>
 
-          <motion.div className={styles.metaRow} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.65 }}>
+          <motion.div className={styles.metaRow} initial={false} animate={{ opacity: 1 }} transition={{ delay: 0.65 }}>
             {shop?.shop_phone && <span><Phone size={15} /> {shop.shop_phone}</span>}
             {(shop?.shop_city || shop?.shop_address) && <span><MapPin size={15} /> {shop.shop_city || shop.shop_address}</span>}
             {shop?.shop_website && <span><Globe size={15} /> {shop.shop_website}</span>}
           </motion.div>
 
-          <motion.div className={styles.stats} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.75, duration: 0.6, ease: EASE }}>
+          <motion.div className={styles.stats} initial={false} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.75, duration: 0.6, ease: EASE }}>
             <span><PackageCheck size={17} /> {products.length} products</span>
             <span><ShieldCheck size={17} /> Secure checkout</span>
             <span><Sparkles size={17} /> Fast dispatch</span>
             {(shop?.online_setup_fee || 0) > 0 && <span><b className={styles.rupee}>₹</b> Online setup fee ₹{Number(shop?.online_setup_fee || 0).toFixed(2)}</span>}
           </motion.div>
 
-          <motion.div className={styles.ctas} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, duration: 0.6, ease: EASE }}>
+          <motion.div className={styles.ctas} initial={false} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, duration: 0.6, ease: EASE }}>
             <Link href="#products" className={styles.ctaMain}>Shop now <ArrowRight size={18} /></Link>
             <Link href="/orders" className={styles.ctaGhost}>My orders</Link>
           </motion.div>
@@ -213,7 +231,14 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
         <section className={styles.toolbar} aria-label="Store controls">
           <label className={styles.searchBox}>
             <Search size={18} />
-            <input type="search" inputMode="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product, category or keyword" />
+            <input
+              type="search"
+              inputMode="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by product, category or keyword"
+              aria-label="Search this shop's products"
+            />
             <AnimatePresence>
               {search && (
                 <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={styles.clear} onClick={() => setSearch('')} aria-label="Clear search" type="button">
@@ -233,9 +258,9 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
             </select>
           </div>
 
-          <div className={styles.cats} role="tablist" aria-label="Categories">
+          <div className={styles.cats} role="group" aria-label="Filter products by category">
             {categories.map((category) => (
-              <button key={category} role="tab" aria-selected={activeCategory === category} className={`${styles.cat} ${activeCategory === category ? styles.catOn : ''}`} onClick={() => setActiveCategory(category)}>
+              <button key={category} type="button" aria-pressed={activeCategory === category} className={`${styles.cat} ${activeCategory === category ? styles.catOn : ''}`} onClick={() => setActiveCategory(category)}>
                 {activeCategory === category && <motion.span layoutId="catPill" className={styles.catPill} transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                 <span className={styles.catLabel}>{category}</span>
               </button>

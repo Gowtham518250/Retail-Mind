@@ -5,8 +5,6 @@ import { getPublicShop, getPublicShopResult } from '../../../../../lib/publicCat
 import { publicPageMetadata } from '../../../../../lib/seo';
 import type { ShopProduct } from '../../../../../lib/types';
 
-export { generateStaticParams } from './generateStaticParams';
-
 type ProductRouteProps = { params: Promise<{ shopId: string; productId: string }> };
 
 async function getPublicProduct(shopId: string, productId: string): Promise<{
@@ -23,7 +21,8 @@ async function getPublicProduct(shopId: string, productId: string): Promise<{
 
 export async function generateMetadata({ params }: ProductRouteProps): Promise<Metadata> {
   const { shopId, productId } = await params;
-  const { shopName, product } = await getPublicProduct(shopId, productId);
+  const { shopName, shop, product, notFound: productNotFound } = await getPublicProduct(shopId, productId);
+  if (productNotFound || (shop && !product)) notFound();
   const name = product?.name || 'Local product';
   const description = product?.description ||
     `${name} from ${shopName}. Check current availability and order on Retail Mind.`;

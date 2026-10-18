@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,6 +9,8 @@ import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion
 import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, Flower2, MapPin, Search, ShoppingBasket, Sparkles, Star, Store } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
+import { trackEvent } from '../lib/analytics';
+import type { PublicProductPreview, PublicShop } from '../lib/publicCatalog';
 import Tilt3D from './Tilt3D';
 
 // WebGL is client-only and heavy: load it after first paint.
@@ -35,9 +37,9 @@ function Words({ text, base = 0, className }: { text: string; base?: number; cla
         <span key={i + word}><span className={styles.wordMask}>
           <motion.span
             className={`${styles.word} ${className || ''}`}
-            initial={reduceMotion ? false : { y: '115%', rotate: 4 }}
+            initial={false}
             animate={{ y: 0, rotate: 0 }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.85, delay: base + i * 0.09, ease: EASE }}
+            transition={{ duration: 0 }}
           >
             {word}
           </motion.span>
@@ -52,7 +54,7 @@ function Reveal({ children, delay = 0, className }: { children: React.ReactNode;
   return (
     <motion.div
       className={className}
-      initial={reduceMotion ? false : { opacity: 0, y: 36, rotateX: -2 }}
+      initial={false}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-70px' }}
       transition={reduceMotion ? { duration: 0 } : { duration: 0.7, delay, ease: EASE }}
@@ -69,7 +71,7 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
   const rated = Boolean(shop.rating_count);
   return (
     <motion.div
-      initial={reduceMotion ? false : { opacity: 0, y: 40, rotateX: -8 }}
+      initial={false}
       whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
       viewport={{ once: true, margin: '-50px' }}
       transition={reduceMotion ? { duration: 0 } : { duration: 0.65, delay: (index % 4) * 0.08, ease: EASE }}
@@ -124,22 +126,29 @@ type ResultMode = 'all' | 'shops' | 'products';
 
 type FeaturedProduct = { product_id: number; product_name: string; shop_id: number; shop_name: string; price: number; image_url?: string | null; category?: string; description?: string; stock_available?: number };
 
-export default function MarketplaceShell() {
+export default function MarketplaceShell({
+  initialShops = [],
+  initialFeaturedProducts = [],
+}: {
+  initialShops?: PublicShop[];
+  initialFeaturedProducts?: PublicProductPreview[];
+}) {
   const router = useRouter();
   const shouldReduceMotion = Boolean(useReducedMotion());
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<ResultMode>('products');
-  const [shops, setShops] = useState<any[]>([]);
+  const [mode, setMode] = useState<ResultMode>(initialFeaturedProducts.length ? 'products' : 'shops');
+  const [shops, setShops] = useState<PublicShop[]>(initialShops);
   const [products, setProducts] = useState<any[]>([]);
-  const [featuredProducts, setFeaturedProducts] = useState<FeaturedProduct[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<FeaturedProduct[]>(initialFeaturedProducts);
   const [activeProductCategory, setActiveProductCategory] = useState('All');
   const [aiMessage, setAiMessage] = useState('');
   const [aiResults, setAiResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
   const requestIdRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
+  const skipInitialFeaturedLoad = useRef(initialShops.length > 0);
 
   const showcaseProducts = useMemo<FeaturedProduct[]>(() => {
     // When the customer searches specifically for products, showcase those actual
@@ -224,6 +233,14 @@ export default function MarketplaceShell() {
 
       setShops(Array.isArray(data.shops) ? data.shops : []);
       setProducts(Array.isArray(data.products) ? data.products : []);
+      if (userInitiated && value) {
+        trackEvent('search', {
+          search_term: value,
+          search_scope: requestedMode,
+          result_count: (Array.isArray(data.shops) ? data.shops.length : 0)
+            + (Array.isArray(data.products) ? data.products.length : 0),
+        });
+      }
     } catch (err) {
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       setShops([]);
@@ -257,6 +274,10 @@ export default function MarketplaceShell() {
       setAiMessage(data.response || '');
       setShops([]);
       setProducts([]);
+      trackEvent('ai_search', {
+        search_term: value,
+        result_count: Array.isArray(data.recommendations) ? data.recommendations.length : 0,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to ask the shopping assistant.');
     } finally {
@@ -283,6 +304,10 @@ export default function MarketplaceShell() {
   }, []);
 
   useEffect(() => {
+    if (skipInitialFeaturedLoad.current) {
+      skipInitialFeaturedLoad.current = false;
+      return;
+    }
     let cancelled = false;
     const visibleShops = shops.slice(0, 6);
     if (!visibleShops.length) {
@@ -328,12 +353,9 @@ export default function MarketplaceShell() {
     return () => { cancelled = true; };
   }, [shops]);
 
-  useEffect(() => {
-    void performSearch('all', '');
-    return () => {
-      requestIdRef.current += 1;
-      controllerRef.current?.abort();
-    };
+  useEffect(() => () => {
+    requestIdRef.current += 1;
+    controllerRef.current?.abort();
   }, []);
 
   const resultsRef = useRef<HTMLElement>(null);
@@ -380,11 +402,11 @@ export default function MarketplaceShell() {
             <span className={styles.titleLine}><Words text="Find it faster." base={0.35} className={styles.titleAccent} /></span>
           </h1>
 
-          <motion.p className={styles.lead} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.9, ease: EASE }}>
+          <motion.p className={styles.lead} initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.9, ease: EASE }}>
             Search local products and compare prices.
           </motion.p>
 
-          <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 1.05, ease: EASE }}>
+          <motion.div initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 1.05, ease: EASE }}>
             <form className={styles.search} onSubmit={submitSearch} role="search" aria-label="Search local products">
               <Search size={20} className={styles.searchIcon} />
               <input

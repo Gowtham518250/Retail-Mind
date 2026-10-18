@@ -58,6 +58,7 @@ export default function CheckoutClientPage() {
   const [offerDelivery, setOfferDelivery] = useState(true);
   const [acceptCod, setAcceptCod] = useState(true);
   const [acceptOnline, setAcceptOnline] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'UPI'>('COD');
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponValidatedSubtotal, setCouponValidatedSubtotal] = useState(0);
@@ -162,6 +163,7 @@ export default function CheckoutClientPage() {
         setOfferDelivery(data.offer_delivery !== false);
         setAcceptCod(data.accept_cod !== false);
         setAcceptOnline(data.accept_online === true);
+        setPaymentMethod(data.accept_cod !== false ? 'COD' : data.accept_online === true ? 'UPI' : 'COD');
       } catch (error) {
         if (!cancelled) {
           setShopSettingsError(error instanceof TypeError
@@ -265,6 +267,14 @@ export default function CheckoutClientPage() {
       setSubmitError('This shop has not enabled a payment method yet.');
       return false;
     }
+    if (paymentMethod === 'COD' && !acceptCod) {
+      setSubmitError('This shop does not accept cash on delivery.');
+      return false;
+    }
+    if (paymentMethod === 'UPI' && !acceptOnline) {
+      setSubmitError('This shop does not accept UPI payment.');
+      return false;
+    }
     if (minOrder > 0 && cartTotal < minOrder) {
       setSubmitError(
         'Minimum online order is ₹' + minOrder.toFixed(2) +
@@ -326,6 +336,7 @@ export default function CheckoutClientPage() {
 
     const payload = {
       shop_id: shopId,
+      payment_method: paymentMethod,
       items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
       delivery_address: combinedAddress,
       coupon_code: couponCode.trim().toUpperCase() || undefined,
@@ -365,7 +376,7 @@ export default function CheckoutClientPage() {
         shop_name: data.shop_name,
         total_amount: Number(data.total_amount || grandTotal),
         status: data.status || 'PENDING',
-        payment_method: 'COD',
+        payment_method: paymentMethod,
         customer_name: customer.name,
         phone: form.phone.trim(),
         delivery_address: combinedAddress,
@@ -449,9 +460,9 @@ export default function CheckoutClientPage() {
               <span className="checkout-account-badge">Signed in</span>
             </div>
             <div className="checkout-field">
-              <label><Home size={14} /> Delivery address</label>
+              <label htmlFor="checkout-address"><Home size={14} /> Delivery address</label>
               <div className="location-row">
-                <textarea value={form.address} onChange={setField('address')} placeholder="House / flat no, street, area" rows={2} />
+                <textarea id="checkout-address" value={form.address} onChange={setField('address')} placeholder="House / flat no, street, area" rows={2} />
                 <button type="button" className="location-button" onClick={detectLocation} disabled={isDetectingLocation}>
                   <span className="location-button-icon">
                     {isDetectingLocation
@@ -473,19 +484,19 @@ export default function CheckoutClientPage() {
             </div>
             <div className="checkout-field-row">
               <div className="checkout-field">
-                <label>City</label>
-                <input value={form.city} onChange={setField('city')} placeholder="City" />
+                <label htmlFor="checkout-city">City</label>
+                <input id="checkout-city" value={form.city} onChange={setField('city')} placeholder="City" />
                 {errors.city && <span className="field-error">{errors.city}</span>}
               </div>
               <div className="checkout-field">
-                <label>Pincode</label>
-                <input value={form.pincode} onChange={setField('pincode')} placeholder="6-digit pincode" inputMode="numeric" maxLength={6} />
+                <label htmlFor="checkout-pincode">Pincode</label>
+                <input id="checkout-pincode" value={form.pincode} onChange={setField('pincode')} placeholder="6-digit pincode" inputMode="numeric" maxLength={6} />
                 {errors.pincode && <span className="field-error">{errors.pincode}</span>}
               </div>
             </div>
             <div className="checkout-field">
-              <label>Landmark <span className="field-optional">(optional)</span></label>
-              <input value={form.landmark} onChange={setField('landmark')} placeholder="Nearby landmark" />
+              <label htmlFor="checkout-landmark">Landmark <span className="field-optional">(optional)</span></label>
+              <input id="checkout-landmark" value={form.landmark} onChange={setField('landmark')} placeholder="Nearby landmark" />
             </div>
           </section>
 
@@ -493,8 +504,9 @@ export default function CheckoutClientPage() {
             <h2 className="checkout-card-title"><Phone size={18} /> Contact details for this order</h2>
             <p className="checkout-section-description">Confirm how the shop can reach you about this delivery. Your number and note will be saved with this order.</p>
             <div className="checkout-field">
-              <label><Phone size={14} /> Mobile number <span className="field-optional">(required)</span></label>
+              <label htmlFor="checkout-phone"><Phone size={14} /> Mobile number <span className="field-optional">(required)</span></label>
               <input
+                id="checkout-phone"
                 type="tel"
                 value={form.phone}
                 onChange={setField('phone')}
@@ -507,8 +519,9 @@ export default function CheckoutClientPage() {
               {errors.phone && <span className="field-error">{errors.phone}</span>}
             </div>
             <div className="checkout-field">
-              <label><ClipboardList size={14} /> Order details / delivery instructions <span className="field-optional">(optional)</span></label>
+              <label htmlFor="checkout-notes"><ClipboardList size={14} /> Order details / delivery instructions <span className="field-optional">(optional)</span></label>
               <textarea
+                id="checkout-notes"
                 value={form.orderNotes}
                 onChange={setField('orderNotes')}
                 placeholder="For example: call before arriving, leave with the security guard, or add a note for the shop."
@@ -521,25 +534,42 @@ export default function CheckoutClientPage() {
 
           <section className="checkout-card">
             <h2 className="checkout-card-title"><Banknote size={18} /> Payment method</h2>
-            <div className="payment-options">
+            <div className="payment-options" role="radiogroup" aria-label="Payment method">
               {acceptCod && (
-                <div className="payment-option active" aria-label="Cash on Delivery available">
+                <label className={`payment-option ${paymentMethod === 'COD' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="payment-method"
+                    value="COD"
+                    checked={paymentMethod === 'COD'}
+                    onChange={() => setPaymentMethod('COD')}
+                    style={{ width: 18, height: 18, accentColor: '#245b42', flex: 'none' }}
+                  />
                   <Banknote size={20} />
                   <div>
                     <strong>Cash on Delivery</strong>
                     <span>Pay when your order arrives</span>
                   </div>
-                </div>
+                </label>
               )}
               {acceptOnline && (
-                <div className="payment-option" aria-label="Online payment configured">
+                <label className={`payment-option ${paymentMethod === 'UPI' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="payment-method"
+                    value="UPI"
+                    checked={paymentMethod === 'UPI'}
+                    onChange={() => setPaymentMethod('UPI')}
+                    style={{ width: 18, height: 18, accentColor: '#245b42', flex: 'none' }}
+                  />
                   <ShieldCheck size={20} />
                   <div>
-                    <strong>Online payment configured</strong>
-                    <span>Payment processing requires a verified payment provider connection.</span>
+                    <strong>UPI payment</strong>
+                    <span>The shop confirms receipt before fulfilment.</span>
                   </div>
-                </div>
+                </label>
               )}
+              {!acceptCod && !acceptOnline && <p className="field-error">This shop has not enabled a payment method.</p>}
             </div>
           </section>
         </div>
@@ -621,6 +651,7 @@ export default function CheckoutClientPage() {
                 onChange={(e) => setCouponCode(e.target.value)}
                 placeholder="Coupon code"
                 maxLength={50}
+                aria-label="Coupon code"
               />
               <button type="button" onClick={applyCoupon} disabled={couponLoading}>
                 {couponLoading ? 'Checking…' : 'Apply'}

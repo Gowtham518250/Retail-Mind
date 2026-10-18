@@ -99,7 +99,7 @@ export default function OrderSuccessClientPage() {
           shop_name: data.shop_name || storedOrder.shop_name || `Shop #${data.shop_id}`,
           total_amount: Number(data.total_amount || 0),
           status: data.status || 'PENDING',
-          payment_method: 'COD',
+          payment_method: (data.payment_method || storedOrder.payment_method || 'COD') as 'COD' | 'UPI',
           customer_name: data.customer_name || storedOrder.customer_name || 'Customer',
           phone: deliveryDetails.phone || storedOrder.phone || data.customer_phone || '',
           delivery_address: deliveryDetails.address || data.delivery_address || storedOrder.delivery_address || '',
@@ -359,7 +359,7 @@ export default function OrderSuccessClientPage() {
         <div className="success-meta-row">
           <div className="success-meta-pill"><span>Order ID</span><strong>#{order.order_id}</strong></div>
           <div className="success-meta-pill"><span>Estimated delivery</span><strong>{fmt(estStart)} – {fmt(estEnd)}</strong></div>
-          <div className="success-meta-pill"><span>Payment</span><strong>Cash on Delivery</strong></div>
+          <div className="success-meta-pill"><span>Payment</span><strong>{order.payment_method === "UPI" ? "UPI payment" : "Cash on Delivery"}</strong></div>
         </div>
 
         <div className="timeline-refresh-row">

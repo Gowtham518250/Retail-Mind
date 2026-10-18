@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
 import MarketplaceShell from '../components/MarketplaceShell';
+import { getHomepagePreview } from '../lib/publicCatalog';
 import { publicPageMetadata } from '../lib/seo';
+
+export const revalidate = 900;
 
 export const metadata: Metadata = publicPageMetadata({
   title: 'Retail Mind | Shop Local Online',
@@ -9,15 +11,7 @@ export const metadata: Metadata = publicPageMetadata({
   path: '/',
 });
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ shop_id?: string | string[] }>;
-}) {
-  const params = await searchParams;
-  const requestedShop = Array.isArray(params.shop_id) ? params.shop_id[0] : params.shop_id;
-  if (requestedShop && /^\d+$/.test(requestedShop) && Number(requestedShop) > 0) {
-    redirect(`/shop/${requestedShop}`);
-  }
-  return <MarketplaceShell />;
+export default async function Home() {
+  const { shops, products } = await getHomepagePreview();
+  return <MarketplaceShell initialShops={shops} initialFeaturedProducts={products} />;
 }

@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { ShoppingCart, Sparkles, Package2, Truck, ShieldCheck, CheckCircle2, Star, Minus, Plus } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { API_BASE } from '../../../../../lib/api';
+import { trackEvent } from '../../../../../lib/analytics';
 import { flyProductToCart } from '../../../../../lib/cartFlight';
 import { useCart } from '../../../../../context/CartContext';
 import type { ShopProduct } from '../../../../../lib/types';
@@ -104,6 +105,18 @@ export default function ProductClientPage({
     };
   }, [initialProduct, productId, reloadCount, shopId]);
 
+  useEffect(() => {
+    if (!product) return;
+    trackEvent('view_item', {
+      item_id: product.id,
+      item_name: product.name,
+      item_category: product.category || 'Uncategorised',
+      price: product.price,
+      currency: 'INR',
+      shop_id: shopId,
+    });
+  }, [product?.id, shopId]);
+
   const discount = useMemo(() => {
     if (!product) return 0;
     if (product.original_price && product.original_price > product.price) {
@@ -161,8 +174,9 @@ export default function ProductClientPage({
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: 'Home', item: absoluteSiteUrl('/') },
-          { '@type': 'ListItem', position: 2, name: shopName, item: absoluteSiteUrl(`/shop/${shopId}`) },
-          { '@type': 'ListItem', position: 3, name: product.name, item: absoluteSiteUrl(`/shop/${shopId}/product/${product.id}`) },
+          { '@type': 'ListItem', position: 2, name: 'Shops', item: absoluteSiteUrl('/shops') },
+          { '@type': 'ListItem', position: 3, name: shopName, item: absoluteSiteUrl(`/shop/${shopId}`) },
+          { '@type': 'ListItem', position: 4, name: product.name, item: absoluteSiteUrl(`/shop/${shopId}/product/${product.id}`) },
         ],
       }} />
       <JsonLd data={{
@@ -184,13 +198,15 @@ export default function ProductClientPage({
         },
       }} />
       <nav aria-label="Breadcrumb" className="product-back">
-        <Link href="/">Marketplace</Link>
+        <Link href="/">Home</Link>
+        <span aria-hidden="true"> / </span>
+        <Link href="/shops">Shops</Link>
         <span aria-hidden="true"> / </span>
         <Link href={`/shop/${shopId}`}>{shopName}</Link>
         <span aria-hidden="true"> / </span>
         <span aria-current="page">{product.name}</span>
       </nav>
-      <motion.section className="product-detail" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .45 }}>
+      <motion.section className="product-detail" initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: .45 }}>
         <div className="product-visual">
           <div className="product-glow" />
           <motion.div className="product-orbit" animate={shouldReduceMotion ? { rotate: 0 } : { rotate: 360 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 22, repeat: Infinity, ease: 'linear' }}>

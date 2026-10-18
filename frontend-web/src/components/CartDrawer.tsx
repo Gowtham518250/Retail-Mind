@@ -32,6 +32,8 @@ export default function CartDrawer() {
   const pathname = usePathname();
   const params = useParams();
   const shopId = Number(params?.shopId || 8);
+  const drawerRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [openingCheckout, setOpeningCheckout] = useState(false);
   const count = cartItems.reduce((s, i) => s + i.quantity, 0);
@@ -40,18 +42,43 @@ export default function CartDrawer() {
     setOpeningCheckout(false);
   }, [pathname]);
 
+  const toggleCartRef = useRef(toggleCart);
+  useEffect(() => { toggleCartRef.current = toggleCart; }, [toggleCart]);
+
   useEffect(() => {
     if (!isCartOpen) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') toggleCart(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        toggleCartRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusables = Array.from(drawerRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) || []).filter((element) => element.offsetParent !== null);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener('keydown', onKey);
     closeRef.current?.focus();
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener('keydown', onKey);
+      previousFocusRef.current?.focus();
     };
-  }, [isCartOpen, toggleCart]);
+  }, [isCartOpen]);
 
   const handleCheckout = () => {
     const cartShopId = cartItems[0]?.product.shop_id || shopId;
@@ -83,8 +110,9 @@ export default function CartDrawer() {
 
           <motion.aside
             key="drawer"
+            ref={drawerRef}
             className={styles.drawer}
-            aria-label="Shopping cart"
+            aria-labelledby="cart-drawer-title"
             role="dialog"
             aria-modal="true"
             initial={{ x: '104%', rotateY: -14 }}
@@ -96,7 +124,7 @@ export default function CartDrawer() {
             <div className={styles.head}>
               <div className={styles.headLeft}>
                 <span className={styles.headIcon}><ShoppingBag size={20} /></span>
-                <h2>Your cart</h2>
+                <h2 id="cart-drawer-title">Your cart</h2>
                 {count > 0 && <span className={styles.count}>{count}</span>}
               </div>
               <button ref={closeRef} className={styles.close} onClick={toggleCart} aria-label="Close cart">

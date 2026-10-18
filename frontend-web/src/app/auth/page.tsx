@@ -18,6 +18,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
+import { safeNextPath } from '../../lib/navigation';
 import styles from './auth.module.css';
 
 type View = 'login' | 'register' | 'reset';
@@ -52,10 +53,7 @@ export default function AuthPage() {
     const params = new URLSearchParams(window.location.search);
     const resetRequested = params.get('view') === 'reset';
     const emailParam = params.get('email') || '';
-    const requestedNext = params.get('next') || '/';
-    const safeNext = requestedNext.startsWith('/') && !requestedNext.startsWith('//')
-      ? requestedNext
-      : '/';
+    const safeNext = safeNextPath(params.get('next'));
 
     setRedirectPath(safeNext);
 

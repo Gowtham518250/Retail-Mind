@@ -74,7 +74,7 @@ export default function Navbar() {
       <header className={styles.wrap}>
         <motion.nav
           className={`${styles.nav} ${scrolled ? styles.scrolled : ''}`}
-          initial={shouldReduceMotion ? false : { y: -40, opacity: 0 }}
+          initial={false}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 220, damping: 24 }}
           aria-label="Customer Primary Navigation"

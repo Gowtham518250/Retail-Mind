@@ -31,19 +31,25 @@ preferences.
 
 To enable Google Search Console verification, set
 `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` to the real HTML-tag verification token.
-Submit `https://<your-customer-domain>/sitemap.xml` after deployment. No GA4
-measurement ID is currently configured; analytics should remain disabled until
-the owner supplies an ID and consent requirements are decided.
+Submit `https://<your-customer-domain>/sitemap.xml` after deployment.
 
-The public sitemap discovers shops and their products from the existing
-backend. It cannot list URLs while that API returns no online-enabled shops.
-The deployed backend currently returns an empty shop list, so the sitemap
-contains only static public pages until online-enabled shops are available.
-The backend has no existing customer contact-submission endpoint, so this
-frontend does not show a contact form or report unpersisted messages as sent.
-The privacy page is an implementation summary, not a legal-reviewed policy;
-the service operator must confirm retention, rights, support contact, and
-third-party processing details.
+Google Analytics 4 is optional and remains completely inactive until
+`NEXT_PUBLIC_GA_MEASUREMENT_ID` is set to a valid `G-...` web-stream ID and the
+customer chooses **Allow analytics**. The consent banner stores only the
+choice, sends no account, cart, or checkout data, and can be reopened from the
+footer. Set `NEXT_PUBLIC_SUPPORT_EMAIL` to a real support address to enable the
+email-draft contact form and contact metadata.
+
+The homepage, shops directory, shop pages, and product pages are
+server-rendered with public catalogue data. The sitemap discovers shops and
+products from the existing backend; it cannot list URLs while that API returns
+no online-enabled shops. The backend has no customer contact-submission
+endpoint, so the contact page prepares a message in the customer's own email
+app and explicitly states that Retail Mind has not received it. The privacy
+page is an implementation summary, not a legal-reviewed policy; the operator
+must confirm retention, rights, support contact, and third-party processing.
+Host-level HTTPS/domain redirects and sitemap submission remain deployment
+tasks.
 
 ## Web and PWA deployment
 
