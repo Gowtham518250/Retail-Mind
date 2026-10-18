@@ -10,5 +10,7 @@ def test_ai_query_history_model_and_routes():
     assert any(path == "/askquery/history" and "GET" in methods for path, methods in routes)
     assert any(path == "/askquery/history" and "DELETE" in methods for path, methods in routes)
     assert any(path == "/askquery/history/{history_id}" and "DELETE" in methods for path, methods in routes)
+    # Pre-login onboarding needs speech-to-text for fields before an auth token exists.
+    assert any(path == "/auth/voice-transcribe" and "POST" in methods for path, methods in routes)
 
     assert callable(_fast_business_query)
