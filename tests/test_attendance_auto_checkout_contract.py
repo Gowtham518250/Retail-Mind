@@ -186,11 +186,15 @@ def test_production_boot_patches_routes_registered_on_the_running_app():
         "/employee/{employee_id}": "get_shift_attendance",
         "/date/{date_str}": "get_shift_attendance_by_date",
     }
-    registered = {
-        getattr(route, "path", ""): route
-        for route in attendance.router.routes
-        if getattr(route, "path", "") in expected
-    }
+    registered = {}
+    for route in attendance.router.routes:
+        route_path = str(getattr(route, "path", "") or "")
+        # APIRouter may expose the prefix in router.routes depending on the
+        # FastAPI version. Normalize so the contract test supports both forms.
+        if route_path.startswith("/api/attendance/"):
+            route_path = route_path.removeprefix("/api/attendance")
+        if route_path in expected:
+            registered[route_path] = route
     assert set(registered) == set(expected)
 
     for path, endpoint_name in expected.items():
