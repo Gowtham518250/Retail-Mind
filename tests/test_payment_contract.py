@@ -203,3 +203,25 @@ def test_upi_ledger_reports_only_confirmed_collections():
 
     UpiLedger.__table__.drop(engine)
     engine.dispose()
+
+
+def test_payment_idempotency_model_has_a_matching_versioned_migration():
+    from pathlib import Path
+    from models import Payment
+
+    assert "idempotency_key" in Payment.__table__.c
+    assert any(
+        index.unique and [column.name for column in index.columns] == ["idempotency_key"]
+        for index in Payment.__table__.indexes
+    )
+
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "039_payment_idempotency_key.py"
+    ).read_text(encoding="utf-8")
+    assert 'revision = "039_payment_idempotency_key"' in migration
+    assert 'down_revision = "038_legacy_startup_schema_repairs"' in migration
+    assert 'op.add_column("payments"' in migration
+    assert '"ix_payments_idempotency_key"' in migration
