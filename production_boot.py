@@ -371,7 +371,10 @@ def _ensure_workers_table_schema() -> None:
                   AND table_name = 'workers' AND column_name = 'user_id'
             ) THEN
                 EXECUTE 'UPDATE workers SET shopkeeper_id = user_id WHERE shopkeeper_id IS NULL';
-            ELSIF EXISTS (
+            END IF;
+            -- Legacy schemas may contain both names, and user_id may be NULL
+            -- on some rows. Try shop_id for any rows still missing an owner.
+            IF EXISTS (
                 SELECT 1 FROM information_schema.columns
                 WHERE table_schema = current_schema()
                   AND table_name = 'workers' AND column_name = 'shop_id'
