@@ -605,11 +605,11 @@ def request_password_reset_otp(
         purpose=PASSWORD_RESET_OTP_PURPOSE,
     )
 
-    subject, body = EmailNotificationService.send_otp_template(
-        otp_code,
-        "Password Reset",
-    )
     try:
+        subject, body = EmailNotificationService.send_otp_template(
+            otp_code,
+            "Password Reset",
+        )
         success = EmailNotificationService.send_email(
             recipient_email=email,
             subject=subject,
