@@ -567,16 +567,35 @@ def verify_owner_otp(
 
 
 @router.post("/request-password-reset-otp")
+@rate_limit_endpoint(max_requests=3, window_seconds=60)
 def request_password_reset_otp(
     request: RequestPasswordReset,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
-    email = request.email.strip().lower()
+    generic_response = {
+        "msg": "If the email exists, a password-reset OTP has been sent"
+    }
+    email = (request.email or "").strip().lower()
+    if not email or len(email) > 255:
+        return generic_response
+
     user = db.query(User).filter(User.email.ilike(email)).first()
 
-    # Deliberately keep the response generic so account existence is not disclosed.
+    # Return exactly the same public response for unknown accounts, send-limit
+    # hits, and delivery failures to avoid turning this endpoint into an
+    # account-enumeration oracle.
     if not user:
-        return {"msg": "If the email exists, a password-reset OTP has been sent"}
+        return generic_response
+
+    send_window_start = datetime.utcnow() - timedelta(minutes=10)
+    recent_count = db.query(PasswordReset).filter(
+        PasswordReset.user_id == user.id,
+        PasswordReset.description == PASSWORD_RESET_OTP_PURPOSE,
+        PasswordReset.created_at >= send_window_start,
+    ).count()
+    if recent_count >= 3:
+        return generic_response
 
     otp_code = _new_otp()
     _store_db_otp(
@@ -586,12 +605,11 @@ def request_password_reset_otp(
         purpose=PASSWORD_RESET_OTP_PURPOSE,
     )
 
-    subject, body = EmailNotificationService.send_otp_template(
-        otp_code,
-        "Password Reset",
-    )
-
     try:
+        subject, body = EmailNotificationService.send_otp_template(
+            otp_code,
+            "Password Reset",
+        )
         success = EmailNotificationService.send_email(
             recipient_email=email,
             subject=subject,
@@ -599,21 +617,15 @@ def request_password_reset_otp(
         )
         if not success:
             db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to send password-reset OTP. Check backend email configuration.",
-            )
+            logger.warning("Password-reset OTP delivery was not confirmed")
+            return generic_response
         db.commit()
-        return {"msg": "If the email exists, a password-reset OTP has been sent"}
-    except HTTPException:
-        raise
-    except Exception as e:
+    except Exception:
         db.rollback()
-        logger.exception("Password-reset OTP email failed: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to send password-reset OTP. Check backend email configuration.",
-        )
+        logger.exception("Password-reset OTP delivery or persistence failed")
+        return generic_response
+
+    return generic_response
 
 
 class CheckResetOTPRequest(BaseModel):
@@ -622,8 +634,10 @@ class CheckResetOTPRequest(BaseModel):
 
 
 @router.post("/check-reset-otp")
+@rate_limit_endpoint(max_requests=8, window_seconds=60)
 def check_reset_otp(
     request: CheckResetOTPRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     email = request.email.strip().lower()
@@ -655,7 +669,12 @@ def store_reset_otp_legacy(request: StoreResetOTPRequestLegacy):
 
 
 @router.post("/verify-reset-otp")
-def verify_reset_otp(request: VerifyResetOTPRequest, db: Session = Depends(get_db)):
+@rate_limit_endpoint(max_requests=8, window_seconds=60)
+def verify_reset_otp(
+    request: VerifyResetOTPRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
     """Verify a backend-generated password-reset OTP and reset the user's password."""
     email = request.email.strip().lower()
     user = db.query(User).filter(User.email.ilike(email)).first()
@@ -689,49 +708,26 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
-@router.post("/request-password-reset")
-def request_password_reset(data: RequestPasswordReset, db: Session = Depends(get_db)):
-    # Generate a server-side reset token and return it so frontend can email it.
-    email = data.email.strip().lower()
-    user = db.query(User).filter(User.email.ilike(email)).first()
-    if not user:
-        # Don't reveal whether the email exists; return generic message
-        return {"msg": "If the email exists, a reset token was generated"}
-
-    token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    expires_at = datetime.utcnow() + timedelta(minutes=30)
-
-    pr = PasswordReset(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
-    db.add(pr)
-    db.commit()
-
-    # Return token to the caller (frontend) so it can send/email the reset link
-    return {"msg": "Reset token generated", "token": token, "expires_in": 1800}
+@router.post("/request-password-reset", deprecated=True)
+def request_password_reset(data: RequestPasswordReset):
+    # This legacy flow disclosed a usable reset token to an unauthenticated
+    # caller. It is deliberately disabled; never create or return reset tokens
+    # from this endpoint. The supported owner flow emails a backend-generated
+    # OTP through /auth/request-password-reset-otp.
+    raise HTTPException(
+        status_code=410,
+        detail="Legacy password reset is disabled. Use the owner OTP reset flow.",
+    )
 
 
-@router.post("/reset-password")
-def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
-    token_hash = hashlib.sha256(data.token.encode()).hexdigest()
-    now = datetime.utcnow()
-    pr = db.query(PasswordReset).filter(PasswordReset.token_hash == token_hash, PasswordReset.expires_at > now).first()
-    if not pr:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
-
-    user = db.query(User).get(pr.user_id)
-    if not user:
-        raise HTTPException(status_code=400, detail="User not found for token")
-
-    # Update password
-    user.password = hash_password(data.password)
-    # Invalidate token
-    try:
-        db.delete(pr)
-        db.commit()
-    except Exception:
-        db.rollback()
-
-    return {"msg": "Password reset successfully"}
+@router.post("/reset-password", deprecated=True)
+def reset_password(data: ResetPasswordRequest):
+    # Do not accept generic PasswordReset rows here: those rows were shared
+    # with OTP records, so this token-only endpoint could bypass OTP semantics.
+    raise HTTPException(
+        status_code=410,
+        detail="Legacy token-based password reset is disabled. Use the owner OTP reset flow.",
+    )
 
 @router.post("/login")
 @rate_limit_endpoint(max_requests=5, window_seconds=60)

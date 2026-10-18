@@ -1009,10 +1009,10 @@ class KhataHistory(Base):
 
 
 class PasswordReset(Base):
-    """Password reset tokens for secure password reset flows.
+    """Store hashed owner OTP challenges and legacy reset-token records.
 
-    Tokens are stored as SHA256 hashes; the plaintext token is returned
-    to the caller who uses it to send out the email from the frontend.
+    Public token-based owner reset routes are retired. Plaintext reset tokens
+    and OTPs must never be returned to an unauthenticated API caller.
     """
     __tablename__ = "password_resets"
 
