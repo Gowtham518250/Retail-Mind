@@ -140,8 +140,15 @@ api = FastAPI(
 @api.on_event("startup")
 def _start_attendance_auto_checkout_on_startup():
     try:
-        from production_boot import _ensure_shift_table, _start_attendance_auto_checkout
+        from production_boot import (
+            _ensure_shift_table,
+            _ensure_workers_table_schema,
+            _start_attendance_auto_checkout,
+        )
         if os.getenv("RETAIL_MIND_BOOTSTRAP_COMPLETE", "").strip() != "1":
+            # Also repair worker schema when Render launches app:api directly
+            # instead of the recommended production_boot.py entrypoint.
+            _ensure_workers_table_schema()
             _ensure_shift_table()
         _start_attendance_auto_checkout()
         logger.info("Attendance auto-checkout scheduler initialized")
