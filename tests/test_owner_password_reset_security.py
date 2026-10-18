@@ -18,7 +18,9 @@ from app import api
 from rate_limiter import rate_limit_endpoint
 
 
-client = TestClient(api)
+// Use an explicitly allowlisted Host. FastAPI's TestClient default `testserver`
+// is intentionally rejected by TrustedHostMiddleware and returns HTTP 400.
+client = TestClient(api, base_url="http://localhost")
 
 
 def test_legacy_owner_reset_request_cannot_disclose_a_token_or_email_existence():
