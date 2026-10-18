@@ -2838,7 +2838,7 @@ def _translate_with_indic_service(
             f"{base_url}/translate-text-batch",
             json={"language_code": language_code, "texts": texts},
             headers={"X-Speech-Service-Key": service_key},
-            timeout=30.0,
+            timeout=90.0,
         )
         response.raise_for_status()
         payload = response.json()
