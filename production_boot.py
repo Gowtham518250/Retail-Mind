@@ -854,7 +854,23 @@ def _patch_routes():
         }
 
     def make_shift_attendance_endpoint(legacy_endpoint):
-        def get_shift_attendance(employee_id, from_date=None, to_date=None, db=None, current_user_id=None):
+        # Preserve FastAPI's dependency injection contract from the original
+        # attendance route. The wrapper's old plain defaults (db=None,
+        # current_user_id=None) let requests reach _resolve_employee with no
+        # SQLAlchemy session, causing AttributeError: NoneType.query in Render.
+        from fastapi import Depends
+        from db import get_db
+        from security import get_current_user as check_current_user
+
+        def get_shift_attendance(
+            employee_id: int,
+            from_date=None,
+            to_date=None,
+            db=Depends(get_db),
+            current_user_id=Depends(check_current_user),
+        ):
+            if db is None:
+                raise HTTPException(503, "Database session is temporarily unavailable")
             actual_employee_id, worker_id = _resolve_employee(employee_id, current_user_id, db)
             clauses = [
                 "employee_id = :employee_id",
