@@ -106,3 +106,8 @@ def test_worker_schema_boot_repair_creates_missing_table_and_columns(monkeypatch
     assert "ADD COLUMN IF NOT EXISTS pin VARCHAR(10)" in joined
     assert "ADD COLUMN IF NOT EXISTS shopkeeper_id INTEGER" in joined
     assert "ix_workers_shopkeeper_id" in joined
+    # Preserve data when both legacy ownership columns exist: rows missing
+    # user_id must still get a chance to backfill from shop_id.
+    assert "UPDATE workers SET shopkeeper_id = user_id WHERE shopkeeper_id IS NULL" in joined
+    assert "UPDATE workers SET shopkeeper_id = shop_id WHERE shopkeeper_id IS NULL" in joined
+    assert "ELSIF EXISTS" not in joined
