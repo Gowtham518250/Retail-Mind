@@ -15,7 +15,19 @@ import uuid
 import os
 from pathlib import Path
 
-# Render uses /opt/render as the writable application area. Some Hugging Face\n# components default to /app/.cache, which does not exist on Render.\n# Set the cache locations before importing application modules so ML/RAG\n# dependencies use a writable directory.\nRENDER_CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", "/tmp/.cache"))\nHF_CACHE_DIR = RENDER_CACHE_DIR / "huggingface"\nHF_CACHE_DIR.mkdir(parents=True, exist_ok=True)\nos.environ.setdefault("XDG_CACHE_HOME", str(RENDER_CACHE_DIR))\nos.environ.setdefault("HF_HOME", str(HF_CACHE_DIR))\nos.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(HF_CACHE_DIR / "hub"))\nos.environ.setdefault("TRANSFORMERS_CACHE", str(HF_CACHE_DIR / "transformers"))\n\nfrom fastapi import HTTPException
+# Render uses /opt/render as the writable application area. Some Hugging Face
+# components default to /app/.cache, which does not exist on Render.
+# Set the cache locations before importing application modules so ML/RAG
+# dependencies use a writable directory.
+RENDER_CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", "/tmp/.cache"))
+HF_CACHE_DIR = RENDER_CACHE_DIR / "huggingface"
+HF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("XDG_CACHE_HOME", str(RENDER_CACHE_DIR))
+os.environ.setdefault("HF_HOME", str(HF_CACHE_DIR))
+os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(HF_CACHE_DIR / "hub"))
+os.environ.setdefault("TRANSFORMERS_CACHE", str(HF_CACHE_DIR / "transformers"))
+
+from fastapi import HTTPException
 from sqlalchemy import text
 
 from db import get_db
