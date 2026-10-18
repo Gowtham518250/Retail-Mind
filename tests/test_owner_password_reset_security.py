@@ -18,7 +18,7 @@ from app import api
 from rate_limiter import rate_limit_endpoint
 
 
-client = TestClient(api)
+client = TestClient(api, base_url="http://localhost")
 
 
 def test_legacy_owner_reset_request_cannot_disclose_a_token_or_email_existence():
