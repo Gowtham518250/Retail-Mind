@@ -2857,9 +2857,41 @@ TRANSLATION_BATCH_MAX_ITEMS = 20
 TRANSLATION_BATCH_MAX_TEXT_CHARS = 600
 TRANSLATION_BATCH_MAX_TOTAL_CHARS = 4000
 
+# Small per-process LRU cache for repeated UI labels. The frontend already
+# batches requests; this cache also prevents re-translating identical strings
+# across page rebuilds and users on the same worker process.
+_TRANSLATION_CACHE_MAX_ITEMS = 4096
+_TRANSLATION_CACHE: "OrderedDict[tuple[str, str], str]" 
+try:
+    from collections import OrderedDict
+except ImportError:  # pragma: no cover - collections is part of the stdlib
+    OrderedDict = dict  # type: ignore[misc,assignment]
+_TRANSLATION_CACHE = OrderedDict()
+_TRANSLATION_CACHE_LOCK = threading.RLock()
+
+
+def _translation_cache_get(language_code: str, text_value: str) -> str | None:
+    key = (language_code, text_value)
+    with _TRANSLATION_CACHE_LOCK:
+        value = _TRANSLATION_CACHE.get(key)
+        if value is not None:
+            _TRANSLATION_CACHE.move_to_end(key)
+        return value
+
+
+def _translation_cache_put(language_code: str, text_value: str, translated: str) -> None:
+    if not translated or translated == text_value:
+        return
+    key = (language_code, text_value)
+    with _TRANSLATION_CACHE_LOCK:
+        _TRANSLATION_CACHE[key] = translated
+        _TRANSLATION_CACHE.move_to_end(key)
+        while len(_TRANSLATION_CACHE) > _TRANSLATION_CACHE_MAX_ITEMS:
+            _TRANSLATION_CACHE.popitem(last=False)
+
 
 def _translate_text_batch_to_language(texts: list[str], language_code: str) -> list[str]:
-    """Translate a bounded list in one model call, preserving input order and facts."""
+    """Translate a bounded list in one model call, caching and deduplicating misses."""
     if language_code == "en":
         return texts
     target_language = QUERY_LANGUAGE_NAMES.get(language_code)
@@ -2867,38 +2899,57 @@ def _translate_text_batch_to_language(texts: list[str], language_code: str) -> l
         raise HTTPException(status_code=422, detail="Unsupported translation language.")
 
     translated: list[str | None] = [None] * len(texts)
-    pending_indices: list[int] = []
-    pending_texts: list[str] = []
+    pending_keys: list[tuple[str, str] | None] = [None] * len(texts)
+    unique_pending: list[str] = []
+    unique_positions: dict[tuple[str, str], int] = {}
+
     for index, text_value in enumerate(texts):
         trimmed = str(text_value or "").strip()
         predefined = _translate_common_answer_template(trimmed, language_code)
         if predefined is not None:
             translated[index] = predefined
-        elif not trimmed:
+            continue
+        if not trimmed:
             translated[index] = trimmed
-        else:
-            pending_indices.append(index)
-            pending_texts.append(trimmed)
+            continue
 
-    if not pending_texts:
+        key = (language_code, trimmed)
+        cached = _translation_cache_get(language_code, trimmed)
+        if cached is not None:
+            translated[index] = cached
+            continue
+
+        pending_keys[index] = key
+        if key not in unique_positions:
+            unique_positions[key] = len(unique_pending)
+            unique_pending.append(trimmed)
+
+    if not unique_pending:
         print(
-            f"ASKQUERY STAGE=display_translation path=predefined_batch "
+            f"ASKQUERY STAGE=display_translation path=cache_or_predefined "
             f"items={len(texts)} llm_calls=0"
         )
-        return [value or "" for value in translated]
+        return [value if value is not None else str(texts[index] or "")
+                for index, value in enumerate(translated)]
 
     if not GROQ_API_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="AI translation is not configured. Set GROQ_API_KEY on the Retail Mind backend.",
+        # Cached/predefined entries are still usable if the key is exhausted or
+        # absent. Return original text for misses instead of breaking the UI.
+        print(
+            f"ASKQUERY STAGE=display_translation path=cache_fallback "
+            f"items={len(texts)} cache_misses={len(unique_pending)} llm_calls=0"
         )
+        return [
+            value if value is not None else str(texts[index] or "")
+            for index, value in enumerate(translated)
+        ]
 
     translation_model = (
         os.getenv("GROQ_TRANSLATION_MODEL")
         or os.getenv("GROQ_MODEL")
         or "qwen/qwen3.8-27b"
     )
-    payload = json.dumps({"texts": pending_texts}, ensure_ascii=False)
+    payload = json.dumps({"texts": unique_pending}, ensure_ascii=False)
     try:
         completion = client.chat.completions.create(
             model=translation_model,
@@ -2940,40 +2991,47 @@ def _translate_text_batch_to_language(texts: list[str], language_code: str) -> l
         try:
             decoded = json.loads(raw_content)
         except json.JSONDecodeError:
-            # Some models wrap the JSON object in a short preamble despite the
-            # strict prompt. Only accept a single parseable object; never guess
-            # at individual string boundaries.
             match = re.search(r"\{[\s\S]*\}", raw_content)
             decoded = json.loads(match.group(0)) if match else None
         batch_values = decoded.get("translations") if isinstance(decoded, dict) else None
         if (
             not isinstance(batch_values, list)
-            or len(batch_values) != len(pending_texts)
+            or len(batch_values) != len(unique_pending)
             or any(not isinstance(value, str) or not value.strip() for value in batch_values)
         ):
             raise ValueError("Translation model returned an invalid batch shape.")
     except Exception as exc:
         print(f"LLM display translation batch failed: {type(exc).__name__}: {exc}")
-        if isinstance(exc, HTTPException):
-            raise
         if _is_groq_rate_limit_error(exc):
-            raise HTTPException(
-                status_code=429,
-                detail="The translation service is temporarily rate-limited. Please try again shortly.",
-            ) from exc
+            # Never fail a screen render because the shared translation quota
+            # is exhausted. Preserve known translations and show source text for
+            # cache misses; a later request can retry after quota reset.
+            print(
+                f"ASKQUERY STAGE=display_translation path=rate_limit_fallback "
+                f"items={len(texts)} llm_calls=1"
+            )
+            return [
+                value if value is not None else str(texts[index] or "")
+                for index, value in enumerate(translated)
+            ]
         raise HTTPException(
             status_code=502,
             detail=f"Could not translate text to {target_language}. Please try again.",
         ) from exc
 
-    for index, value in zip(pending_indices, batch_values):
-        translated[index] = value
+    for key, value in zip(unique_positions.keys(), batch_values):
+        _translation_cache_put(key[0], key[1], value)
+
+    for index, key in enumerate(pending_keys):
+        if translated[index] is None and key is not None:
+            translated[index] = _translation_cache_get(key[0], key[1]) or str(texts[index] or "")
+
     print(
         f"ASKQUERY STAGE=display_translation path=batch_llm "
-        f"items={len(texts)} translated={len(pending_texts)} llm_calls=1"
+        f"items={len(texts)} translated={len(unique_pending)} llm_calls=1"
     )
-    return [value if value is not None else texts[index] for index, value in enumerate(translated)]
-
+    return [value if value is not None else str(texts[index] or "")
+            for index, value in enumerate(translated)]
 
 VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
 VOICE_AUDIO_SUFFIXES = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
