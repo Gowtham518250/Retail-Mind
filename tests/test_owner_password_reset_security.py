@@ -105,3 +105,62 @@ def test_rate_limiter_finds_starlette_request_by_type_not_body_parameter_name():
 
     response = endpoint(request={"email": "owner@example.com"}, http_request=http_request)
     assert response == {"ok": True}
+
+def test_owner_otp_request_response_is_generic_for_known_and_unknown_emails(monkeypatch):
+    import uuid
+
+    from db import sessionLocal
+    from email_notifications import EmailNotificationService
+    from models import PasswordReset, User
+    from security import hash_password
+
+    email = f"owner-reset-{uuid.uuid4().hex}@example.com"
+    db = sessionLocal()
+    user = User(
+        user_name="Owner reset test",
+        email=email,
+        password=hash_password("OriginalPassword123!"),
+        user_type="OWNER",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    user_id = user.id
+    db.close()
+
+    sent_messages = []
+
+    def fake_send_email(**kwargs):
+        sent_messages.append(kwargs)
+        return True
+
+    monkeypatch.setattr(EmailNotificationService, "send_email", fake_send_email)
+
+    try:
+        registered = client.post(
+            "/auth/request-password-reset-otp",
+            json={"email": email},
+        )
+        unknown = client.post(
+            "/auth/request-password-reset-otp",
+            json={"email": f"missing-{uuid.uuid4().hex}@example.com"},
+        )
+
+        assert registered.status_code == unknown.status_code == 200
+        assert registered.json() == unknown.json() == {
+            "msg": "If the email exists, a password-reset OTP has been sent"
+        }
+        assert "token" not in registered.json()
+        assert len(sent_messages) == 1
+        assert sent_messages[0]["recipient_email"] == email
+    finally:
+        cleanup = sessionLocal()
+        cleanup.query(PasswordReset).filter(
+            PasswordReset.user_id == user_id
+        ).delete(synchronize_session=False)
+        cleanup.query(User).filter(User.id == user_id).delete(
+            synchronize_session=False
+        )
+        cleanup.commit()
+        cleanup.close()
