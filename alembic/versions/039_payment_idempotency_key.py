@@ -39,7 +39,15 @@ def upgrade() -> None:
         index["name"]: index for index in sa.inspect(bind).get_indexes("payments")
     }
     index_name = "ix_payments_idempotency_key"
-    if index_name not in indexes:
+    existing_index = indexes.get(index_name)
+    if existing_index is not None and not existing_index.get("unique", False):
+        # A legacy non-unique index does not enforce idempotency. Replace it;
+        # duplicate non-NULL keys intentionally make the migration fail rather
+        # than silently weaken financial replay protection.
+        op.drop_index(index_name, table_name="payments")
+        existing_index = None
+
+    if existing_index is None:
         current_columns = {
             column["name"] for column in sa.inspect(bind).get_columns("payments")
         }
