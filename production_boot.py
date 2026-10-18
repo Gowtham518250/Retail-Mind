@@ -318,6 +318,65 @@ def _run_database_migrations() -> None:
     print("[DB] Alembic migrations completed successfully.", flush=True)
 
 
+def _ensure_workers_table_schema() -> None:
+    """Repair old/partially migrated worker tables before the API serves requests."""
+    from sqlalchemy import text as sql_text
+    from db import engine
+
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS workers (
+            id SERIAL PRIMARY KEY,
+            shopkeeper_id INTEGER NOT NULL
+                REFERENCES user_details(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            phone VARCHAR(20),
+            address TEXT,
+            salary NUMERIC(10, 2) DEFAULT 0,
+            assigned_work VARCHAR(200),
+            position VARCHAR(100) DEFAULT 'Staff',
+            join_date DATE DEFAULT CURRENT_DATE,
+            status VARCHAR(20) DEFAULT 'active',
+            pin VARCHAR(10)
+        )
+        """,
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS shopkeeper_id INTEGER",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS name VARCHAR(100) DEFAULT 'Worker'",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS address TEXT",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS salary NUMERIC(10, 2) DEFAULT 0",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS assigned_work VARCHAR(200)",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS position VARCHAR(100) DEFAULT 'Staff'",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS join_date DATE DEFAULT CURRENT_DATE",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'",
+        "ALTER TABLE workers ADD COLUMN IF NOT EXISTS pin VARCHAR(10)",
+        """
+        DO $rm_workers_owner$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'workers' AND column_name = 'user_id'
+            ) THEN
+                EXECUTE 'UPDATE workers SET shopkeeper_id = user_id WHERE shopkeeper_id IS NULL';
+            ELSIF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'workers' AND column_name = 'shop_id'
+            ) THEN
+                EXECUTE 'UPDATE workers SET shopkeeper_id = shop_id WHERE shopkeeper_id IS NULL';
+            END IF;
+        END
+        $rm_workers_owner$;
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_workers_shopkeeper_id ON workers(shopkeeper_id)",
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(sql_text(statement))
+    print("[DB] Worker management schema verified.", flush=True)
+
+
 def _ensure_online_order_status_enum():
     """Keep production PostgreSQL enum values aligned with the online-order state machine."""
     from db import engine
@@ -959,6 +1018,7 @@ if __name__ == "__main__":
     _ensure_online_order_status_enum()
     _ensure_sales_reference_order_id()
     _ensure_online_delivery_payment_trigger()
+    _ensure_workers_table_schema()
     _ensure_shift_table()
     print(
         f"[BOOT] Compatibility database setup completed in {time_module.perf_counter() - stage_started:.2f}s",
