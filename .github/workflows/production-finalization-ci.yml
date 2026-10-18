@@ -139,7 +139,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(echo "$heads" | grep -c '^038_legacy_startup_schema_repairs')"
+          count="$(echo "$heads" | grep -c '^039_payment_idempotency_key')"
           test "$count" -eq 1
           head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
@@ -176,6 +176,17 @@ jobs:
           if "reference_order_id" not in sales_columns:
               raise SystemExit("Fresh sales schema is missing reference_order_id")
 
+          payments_columns = {item["name"] for item in inspector.get_columns("payments")}
+          if "idempotency_key" not in payments_columns:
+              raise SystemExit("Fresh payments schema is missing idempotency_key")
+          payment_indexes = inspector.get_indexes("payments")
+          if not any(
+              index.get("unique")
+              and index.get("column_names") == ["idempotency_key"]
+              for index in payment_indexes
+          ):
+              raise SystemExit("Fresh payments schema is missing the unique idempotency index")
+
           print("Fresh database migration smoke test passed.")
           PY
       - name: Run focused production tests
@@ -205,6 +216,7 @@ jobs:
           pytest -q tests/test_rate_limiter_redis_recovery.py
           pytest -q tests/test_invoice_replay_guard.py
           pytest -q tests/test_purchase_order_receiving.py
+          pytest -q tests/test_database_url.py
           pytest -q tests/test_payment_contract.py
           pytest -q tests/test_ai_query_eval.py
           pytest -q tests/test_staging_safety.py

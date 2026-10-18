@@ -12,6 +12,7 @@ from typing import List, Optional
 from zoneinfo import ZoneInfo
 import json
 import uuid
+import logging
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Attendance, LeaveRequest, User, Worker
@@ -19,6 +20,7 @@ from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
+logger = logging.getLogger(__name__)
 
 # Two attendance sessions per business day (morning shift + evening shift).
 # Times are evaluated in India time because Retail Mind is intended for the
@@ -226,8 +228,55 @@ def get_workers(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all workers for a shopkeeper"""
-    return db.query(Worker).filter(Worker.shopkeeper_id == user_id).all()
+    """Return worker records for the authenticated shopkeeper only."""
+    try:
+        # Select named columns explicitly rather than serializing SQLAlchemy ORM
+        # instances. This keeps the response contract stable and avoids exposing
+        # relationship internals while ensuring decimals/dates become JSON values.
+        rows = (
+            db.query(
+                Worker.id,
+                Worker.shopkeeper_id,
+                Worker.name,
+                Worker.phone,
+                Worker.address,
+                Worker.salary,
+                Worker.assigned_work,
+                Worker.position,
+                Worker.join_date,
+                Worker.status,
+                Worker.pin,
+            )
+            .filter(Worker.shopkeeper_id == user_id)
+            .order_by(Worker.id.asc())
+            .all()
+        )
+        return [
+            {
+                "id": row.id,
+                "shopkeeper_id": row.shopkeeper_id,
+                "name": row.name or "Worker",
+                "phone": row.phone or "",
+                "address": row.address or "",
+                "salary": float(row.salary or 0),
+                "assigned_work": row.assigned_work or "",
+                "position": row.position or "Staff",
+                "join_date": row.join_date.isoformat() if row.join_date else None,
+                "status": row.status or "active",
+                "pin": row.pin or "",
+            }
+            for row in rows
+        ]
+    except Exception as exc:
+        db.rollback()
+        logger.exception(
+            "Failed to load attendance workers for authenticated shopkeeper_id=%s",
+            user_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Worker data is temporarily unavailable. Please try again shortly.",
+        ) from exc
 
 @router.put("/workers/{worker_id}")
 def update_worker(

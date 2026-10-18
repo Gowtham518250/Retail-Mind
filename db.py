@@ -57,21 +57,28 @@ def _after_cursor_execute(conn, cursor, statement, parameters, context, executem
 
 
 def _statement_timeout_ms() -> int:
-    """Return the configured PostgreSQL statement timeout in milliseconds."""
+    """Return the optional app-side PostgreSQL statement timeout in milliseconds.
+
+    A positive value adds one SET LOCAL round trip to each transaction. Prefer
+    a provider/database-side statement timeout for remote pooled databases.
+    """
     try:
-        return max(0, int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000")))
+        return max(0, int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "0")))
     except (TypeError, ValueError):
-        logger.warning("Invalid DB_STATEMENT_TIMEOUT_MS; using 30000ms")
-        return 30000
+        logger.warning(
+            "Invalid DB_STATEMENT_TIMEOUT_MS; app-side timeout disabled (0ms)"
+        )
+        return 0
 
 
 def _set_postgres_statement_timeout(connection) -> None:
-    """Apply a per-transaction timeout without a libpq startup parameter.
+    """Optionally apply a per-transaction timeout without a startup parameter.
 
-    Neon poolers reject statement_timeout in connection startup options, and
+    Some hosted poolers reject statement_timeout in startup options, and
     transaction pooling can reassign a backend between client transactions.
-    SET LOCAL applies only to the active transaction, so it works with pooled
-    endpoints and is reset automatically at transaction end.
+    SET LOCAL is safe with transaction pooling but costs an additional database
+    round trip per transaction. Keep it opt-in; prefer a database-side timeout
+    when the provider supports it.
     """
     timeout_ms = _statement_timeout_ms()
     if timeout_ms <= 0:
@@ -213,9 +220,10 @@ else:
         print(f"Database connection failed: {safe_error}")
         raise
 
-# Preserve the 30-second query guard without sending statement_timeout in the
-# connection startup packet (incompatible with Neon pooled connection URLs).
-# SET LOCAL runs at transaction start and is safe with transaction pooling.
+# Application-side transaction timeouts are opt-in because SET LOCAL adds a
+# round trip to every transaction on remote databases. Prefer a provider-side
+# statement_timeout; set DB_STATEMENT_TIMEOUT_MS=30000 to enable the app-side
+# guard when a database-side timeout is unavailable.
 if engine.dialect.name == "postgresql":
     event.listen(engine, "begin", _set_postgres_statement_timeout)
 

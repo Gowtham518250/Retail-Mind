@@ -56,6 +56,19 @@ def test_neon_statement_timeout_is_set_transaction_locally(monkeypatch):
     ]
 
 
+def test_statement_timeout_is_disabled_by_default_to_avoid_a_per_transaction_round_trip(monkeypatch):
+    from db import _statement_timeout_ms, _set_postgres_statement_timeout
+
+    monkeypatch.delenv("DB_STATEMENT_TIMEOUT_MS", raising=False)
+    assert _statement_timeout_ms() == 0
+
+    class FakeConnection:
+        def exec_driver_sql(self, statement):
+            raise AssertionError("Default timeout must not add a SET LOCAL query")
+
+    _set_postgres_statement_timeout(FakeConnection())
+
+
 def test_neon_statement_timeout_can_be_disabled(monkeypatch):
     from db import _set_postgres_statement_timeout
 
