@@ -197,6 +197,9 @@ def test_production_boot_patches_routes_registered_on_the_running_app():
             registered[route_path] = route
     assert set(registered) == set(expected)
 
+    from inspect import signature
+    from fastapi.params import Depends as DependsParam
+
     for path, endpoint_name in expected.items():
         route = registered[path]
         assert route.endpoint.__name__ == endpoint_name
@@ -204,6 +207,11 @@ def test_production_boot_patches_routes_registered_on_the_running_app():
         # dependencies must not be dropped while swapping the endpoint handler.
         assert route.dependant.call is route.endpoint
         assert len(route.dependant.dependencies) >= 2
+
+        if path in {"/employee/{employee_id}", "/date/{date_str}"}:
+            parameters = signature(route.endpoint).parameters
+            assert isinstance(parameters["current_user_id"].default, DependsParam)
+            assert isinstance(parameters["db"].default, DependsParam)
 
 
 
