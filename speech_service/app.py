@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
 import tempfile
 import threading
@@ -190,7 +191,7 @@ TARGET_SCRIPT_RANGES: dict[str, tuple[int, int]] = {
     "kn": (0x0C80, 0x0CFF),
     "ml": (0x0D00, 0x0D7F),
 }
-_PROTECTED_TRANSLATION_TOKEN = __import__("re").compile(
+_PROTECTED_TRANSLATION_TOKEN = re.compile(
     r"https?://\S+|www\.\S+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|"
     r"\{[^{}]{1,80}\}|%[a-zA-Z]|₹\s?[\d,]+(?:\.\d+)?|"
     r"\b\d[\d,]*(?:\.\d+)?(?:%|[/:.-]\d[\d,]*(?:\.\d+)?)?\b"
