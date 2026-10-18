@@ -255,7 +255,7 @@ def get_workers(
             {
                 "id": row.id,
                 "shopkeeper_id": row.shopkeeper_id,
-                "name": row.name,
+                "name": row.name or "Worker",
                 "phone": row.phone or "",
                 "address": row.address or "",
                 "salary": float(row.salary or 0),
