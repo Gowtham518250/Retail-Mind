@@ -911,7 +911,21 @@ def _patch_routes():
         return get_shift_attendance
 
     def make_shift_date_endpoint(legacy_endpoint):
-        def get_shift_attendance_by_date(date_str, employee_id=None, current_user_id=None, db=None):
+        # Keep FastAPI's dependency injection contract on the date-history route,
+        # just as on the employee-history route. Plain None defaults caused
+        # db.execute/_resolve_employee to run without a session in production.
+        from fastapi import Depends
+        from db import get_db
+        from security import get_current_user as check_current_user
+
+        def get_shift_attendance_by_date(
+            date_str: str,
+            employee_id=None,
+            current_user_id=Depends(check_current_user),
+            db=Depends(get_db),
+        ):
+            if db is None or current_user_id is None:
+                raise HTTPException(503, "Attendance session is temporarily unavailable")
             try:
                 att_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             except (TypeError, ValueError):
