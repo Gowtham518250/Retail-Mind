@@ -474,8 +474,10 @@ def _update_session_token(db: Session, user_id: int, new_access_token: str, new_
         _create_session_token(db, user_id, new_access_token, new_refresh_token)
 
 
-# Password-reset authorization extension. It is attached here because this
-# router is already registered by app.py under /api/auth-hardened.
+# Experimental password-reset endpoints are deliberately retained only as
+# explicit HTTP 410 responses by password_reset_security.py. Do not restore
+# token/OTP proof registration here without a server-controlled email proof
+# boundary and regression tests.
 try:
     from password_reset_security import attach_password_reset_security_routes
     attach_password_reset_security_routes(router)
