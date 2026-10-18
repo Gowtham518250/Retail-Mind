@@ -166,32 +166,29 @@ def test_answer_translation_route_is_registered():
     assert ("/askquery/translate-answer", frozenset({"POST"})) in routes
 
 
-def test_translate_answer_uses_existing_llm_and_preserves_target_language(monkeypatch):
-    from types import SimpleNamespace
+def test_translate_answer_uses_open_source_service_and_preserves_target_language(monkeypatch):
     import query_retrival
 
-    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
-    calls = {}
+    with query_retrival._DISPLAY_TRANSLATION_CACHE_LOCK:
+        query_retrival._DISPLAY_TRANSLATION_CACHE.clear()
 
-    def fake_create(**kwargs):
-        calls.update(kwargs)
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content="మీ మొత్తం అమ్మకాలు ₹12,450.")
-                )
-            ]
-        )
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "")
+    monkeypatch.setenv("INDIC_SPEECH_SERVICE_URL", "https://indic.example")
+    monkeypatch.setenv("INDIC_SPEECH_SERVICE_API_KEY", "service-test-key")
+    calls = []
 
-    monkeypatch.setattr(
-        query_retrival,
-        "client",
-        SimpleNamespace(
-            chat=SimpleNamespace(
-                completions=SimpleNamespace(create=fake_create),
-            ),
-        ),
-    )
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"translations": ["మీ మొత్తం అమ్మకాలు ₹12,450."]}
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return FakeResponse()
+
+    monkeypatch.setattr(query_retrival.httpx, "post", fake_post)
 
     translated = query_retrival._translate_answer_to_language(
         "Your total sales are ₹12,450.",
@@ -199,10 +196,13 @@ def test_translate_answer_uses_existing_llm_and_preserves_target_language(monkey
     )
 
     assert translated == "మీ మొత్తం అమ్మకాలు ₹12,450."
-    assert calls["stream"] is False
-    assert calls["temperature"] == 0.0
-    assert "Telugu" in calls["messages"][0]["content"]
-    assert "preserve all numbers" in calls["messages"][0]["content"].lower()
+    assert len(calls) == 1
+    assert calls[0][0] == "https://indic.example/translate-text-batch"
+    assert calls[0][1]["json"] == {
+        "language_code": "te",
+        "texts": ["Your total sales are ₹12,450."],
+    }
+    assert calls[0][1]["headers"]["X-Speech-Service-Key"] == "service-test-key"
 
 
 def test_answer_translation_returns_english_without_llm(monkeypatch):
