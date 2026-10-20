@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import Numeric
 from pydantic import ValidationError
 
@@ -99,7 +100,7 @@ def test_inventory_import_preview_preserves_decimal_stock_and_unit():
 
 
 def test_stock_api_rejects_more_than_three_decimal_places():
-    with __import__("pytest").raises(ValidationError):
+    with pytest.raises(ValidationError):
         inventory_module.ProductCreate(
             product_name="Loose Rice",
             sku="RICE-002",
