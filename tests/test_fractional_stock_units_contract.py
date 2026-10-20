@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from sqlalchemy import Numeric
+from pydantic import ValidationError
 
 import inventory as inventory_module
 from models import Product, ProductBatch, StockMovement
@@ -74,3 +75,42 @@ def test_product_response_includes_fractional_stock_and_unit():
 
     assert response.current_stock == 2.5
     assert response.unit == "kg"
+
+
+
+def test_inventory_import_preview_preserves_decimal_stock_and_unit():
+    columns = ["Product Name", "SKU", "Current Stock", "Unit", "Unit Price"]
+    mapping = inventory_module._inventory_import_fallback_mapping(columns)
+    rows = inventory_module._inventory_import_build_preview_rows(
+        columns,
+        [{
+            "Product Name": "Loose Rice",
+            "SKU": "RICE-001",
+            "Current Stock": "2.500",
+            "Unit": "kg",
+            "Unit Price": "60",
+        }],
+        mapping,
+    )
+
+    assert rows[0]["current_stock"] == 2.5
+    assert rows[0]["unit"] == "kg"
+    assert rows[0]["issues"] == []
+
+
+def test_stock_api_rejects_more_than_three_decimal_places():
+    with __import__("pytest").raises(ValidationError):
+        inventory_module.ProductCreate(
+            product_name="Loose Rice",
+            sku="RICE-002",
+            current_stock=Decimal("1.2345"),
+            unit="kg",
+            unit_price=60,
+        )
+
+    with __import__("pytest").raises(ValidationError):
+        inventory_module.StockMovementCreate(
+            product_id=1,
+            movement_type="OUT",
+            quantity=Decimal("0.0001"),
+        )
