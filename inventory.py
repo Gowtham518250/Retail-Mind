@@ -594,7 +594,7 @@ async def preview_inventory_upload(file: UploadFile = File(...), user_id: int = 
             "keys source_columns (array of visible header labels), rows (array of objects whose keys are exact "
             "visible header labels), mapping (object mapping each canonical field to an exact source header or null), "
             "and notes (array of short uncertainty notes). Canonical fields: product_name, sku, description, "
-            "current_stock, min_stock, max_stock, reorder_level, unit_price, category. Use null when a field/header "
+            "current_stock, unit, min_stock, max_stock, reorder_level, unit_price, category. Use null when a field/header "
             "is absent. Never invent prices, SKUs, quantities, product names, or other values. Copy visible cell "
             "text as closely as possible. Ignore titles, totals, blank rows and decorative text. If a cell is "
             "unreadable, leave it blank and add a note. Mapping values must be exact strings from source_columns. "
@@ -631,7 +631,7 @@ async def preview_inventory_upload(file: UploadFile = File(...), user_id: int = 
         mapping_prompt = (
             "You map columns from user-provided retail inventory data. Return JSON only with a single key mapping. "
             "Map each canonical field to an exact source header string present in source_columns, or null if no column "
-            "matches. Canonical fields are product_name, sku, description, current_stock, min_stock, max_stock, "
+            "matches. Canonical fields are product_name, sku, description, current_stock, unit, min_stock, max_stock, "
             "reorder_level, unit_price, category. Do not transform or invent any source values. Match synonyms such "
             "as item/product/name, qty/on-hand/stock, rate/cost/selling price, barcode/code, and category/group. "
             "Never map an unrelated column. Input follows: " + json.dumps({"source_columns": columns, "sample_rows": source_rows[:10]}, ensure_ascii=False, default=str)[:18000]
