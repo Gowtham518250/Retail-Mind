@@ -818,6 +818,18 @@ def get_batch_history(user_id: int = Depends(check_current_user), db: Session = 
 
 # ==================== PYDANTIC MODELS ====================
 
+def _validate_stock_precision(value: Optional[Decimal]) -> Optional[Decimal]:
+    """Reject stock quantities that the NUMERIC(12, 3) database cannot preserve."""
+    if value is None:
+        return None
+    parsed = Decimal(str(value))
+    if not parsed.is_finite() or parsed < 0:
+        raise ValueError("Stock quantity must be finite and non-negative.")
+    if parsed != parsed.quantize(Decimal("0.001")):
+        raise ValueError("Stock quantity supports at most 3 decimal places.")
+    return parsed
+
+
 class ProductCreate(BaseModel):
     product_name: str = Field(..., min_length=2, max_length=100)
     sku: str = Field(..., min_length=2, max_length=50)
@@ -832,6 +844,11 @@ class ProductCreate(BaseModel):
     purchase_price: float = Field(0, ge=0)
     category: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
+
+    @field_validator("current_stock")
+    @classmethod
+    def _validate_current_stock_precision(cls, value):
+        return _validate_stock_precision(value)
 
     @field_validator("unit")
     @classmethod
@@ -858,6 +875,11 @@ class ProductUpdate(BaseModel):
     category: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
 
+    @field_validator("current_stock")
+    @classmethod
+    def _validate_optional_stock_precision(cls, value):
+        return _validate_stock_precision(value)
+
     @field_validator("unit")
     @classmethod
     def _validate_optional_unit(cls, value):
@@ -879,12 +901,24 @@ class StockMovementCreate(BaseModel):
     reason: Optional[str] = None
     reference_id: Optional[str] = None
 
+    @field_validator("quantity")
+    @classmethod
+    def _validate_quantity_precision(cls, value):
+        return _validate_stock_precision(value)
+
+
 class ProductBatchCreate(BaseModel):
     product_id: int
     batch_number: str
     manufacture_date: Optional[str] = None
     expiry_date: Optional[str] = None
     quantity: Decimal = Field(..., ge=0)
+
+    @field_validator("quantity")
+    @classmethod
+    def _validate_batch_quantity_precision(cls, value):
+        return _validate_stock_precision(value)
+
 
 class ProductResponse(BaseModel):
     id: int
