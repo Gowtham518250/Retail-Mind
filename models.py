@@ -336,8 +336,10 @@ class Product(Base):
     sku = Column(String(50), nullable=False, index=True)
     description = Column(Text)
     image_url = Column(Text, nullable=True)
+    # Decimal stock supports loose goods sold by weight or volume (e.g. 0.500 kg).
     current_stock = Column(Numeric(12, 3), default=0)
-    min_stock = Column(Integer, default=10)  # Alert when below this
+    unit = Column(String(20), nullable=False, default="pcs", server_default="pcs")
+    min_stock = Column(Integer, default=10)  # Integer reorder threshold; interpreted in the product's unit
     max_stock = Column(Integer, default=100)
     reorder_level = Column(Integer, default=20)
     unit_price = Column(Numeric(10, 2), nullable=False)

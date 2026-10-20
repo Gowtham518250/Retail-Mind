@@ -11,6 +11,7 @@ import './reference-design.css';
 import './experience-motion.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
+import ServiceWorkerRegister from '../components/ServiceWorkerRegister';
 import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
 import JsonLd from '../components/JsonLd';
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-scroll-behavior="smooth">
       <body>
         <CartProvider>
+          <ServiceWorkerRegister />
           <JsonLd data={{
             '@context': 'https://schema.org',
             '@type': 'Organization',

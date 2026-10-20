@@ -293,7 +293,7 @@ def barcode_product_lookup(
 # ==================== AI-ASSISTED INVENTORY IMPORT ====================
 
 INVENTORY_IMPORT_FIELDS = (
-    "product_name", "sku", "description", "current_stock", "min_stock",
+    "product_name", "sku", "description", "current_stock", "unit", "min_stock",
     "max_stock", "reorder_level", "unit_price", "category",
 )
 _INVENTORY_IMPORT_MAX_BYTES = 10 * 1024 * 1024
@@ -326,6 +326,7 @@ def _inventory_import_fallback_mapping(columns: List[str]) -> Dict[str, Optional
         "sku": ("sku", "itemcode", "productcode", "barcode", "ean", "upc", "itemid", "code"),
         "description": ("description", "details", "productdescription", "itemdescription", "notes"),
         "current_stock": ("currentstock", "stock", "quantity", "qty", "availableqty", "availablequantity", "onhand", "onhandqty", "closingstock", "openingstock", "balance", "units"),
+        "unit": ("unit", "uom", "unitofmeasure", "measurementunit", "measure", "quantityunit"),
         "min_stock": ("minstock", "minimumstock", "minimumquantity", "reorderpoint", "safetystock"),
         "max_stock": ("maxstock", "maximumstock", "maximumquantity", "targetstock"),
         "reorder_level": ("reorderlevel", "reorderquantity", "reorderqty", "replenishmentlevel"),
@@ -501,8 +502,8 @@ def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[D
         if price is None or price < 0:
             issues.append("Unit price is missing or invalid; edit this row before uploading.")
 
-        numeric_values: Dict[str, Optional[int]] = {}
-        numeric_defaults = {"current_stock": 0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
+        numeric_values: Dict[str, Optional[float]] = {}
+        numeric_defaults = {"current_stock": 0.0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
         for field, default in numeric_defaults.items():
             raw = source_value(field)
             if raw is None or str(raw).strip() == "":
@@ -510,12 +511,22 @@ def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[D
                 continue
             try:
                 parsed = _inventory_import_parse_number(raw)
-                if parsed is None or parsed < 0 or not float(parsed).is_integer():
-                    raise ValueError("Expected a non-negative whole number.")
-                numeric_values[field] = int(parsed)
+                if parsed is None or parsed < 0:
+                    raise ValueError("Expected a non-negative stock quantity.")
+                if field == "current_stock":
+                    if round(parsed, 3) != parsed:
+                        raise ValueError("Stock supports at most 3 decimal places.")
+                    numeric_values[field] = parsed
+                else:
+                    if not float(parsed).is_integer():
+                        raise ValueError("Expected a non-negative whole number.")
+                    numeric_values[field] = int(parsed)
             except (ValueError, TypeError, OverflowError):
                 numeric_values[field] = None
-                issues.append(f"{field.replace('_', ' ').title()} must be a non-negative whole number.")
+                if field == "current_stock":
+                    issues.append("Current stock must be a non-negative quantity with at most 3 decimal places.")
+                else:
+                    issues.append(f"{field.replace('_', ' ').title()} must be a non-negative whole number.")
         if numeric_values.get("min_stock") is not None and numeric_values.get("max_stock") is not None:
             if numeric_values["min_stock"] > numeric_values["max_stock"]:
                 issues.append("Minimum stock cannot exceed maximum stock.")
@@ -525,6 +536,7 @@ def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[D
             "sku": sku,
             "description": str(source_value("description") or "").strip() or None,
             "current_stock": numeric_values["current_stock"],
+            "unit": str(source_value("unit") or "pcs").strip()[:20] or "pcs",
             "min_stock": numeric_values["min_stock"],
             "max_stock": numeric_values["max_stock"],
             "reorder_level": numeric_values["reorder_level"],
@@ -584,7 +596,7 @@ async def preview_inventory_upload(file: UploadFile = File(...), user_id: int = 
             "keys source_columns (array of visible header labels), rows (array of objects whose keys are exact "
             "visible header labels), mapping (object mapping each canonical field to an exact source header or null), "
             "and notes (array of short uncertainty notes). Canonical fields: product_name, sku, description, "
-            "current_stock, min_stock, max_stock, reorder_level, unit_price, category. Use null when a field/header "
+            "current_stock, unit, min_stock, max_stock, reorder_level, unit_price, category. Use null when a field/header "
             "is absent. Never invent prices, SKUs, quantities, product names, or other values. Copy visible cell "
             "text as closely as possible. Ignore titles, totals, blank rows and decorative text. If a cell is "
             "unreadable, leave it blank and add a note. Mapping values must be exact strings from source_columns. "
@@ -621,7 +633,7 @@ async def preview_inventory_upload(file: UploadFile = File(...), user_id: int = 
         mapping_prompt = (
             "You map columns from user-provided retail inventory data. Return JSON only with a single key mapping. "
             "Map each canonical field to an exact source header string present in source_columns, or null if no column "
-            "matches. Canonical fields are product_name, sku, description, current_stock, min_stock, max_stock, "
+            "matches. Canonical fields are product_name, sku, description, current_stock, unit, min_stock, max_stock, "
             "reorder_level, unit_price, category. Do not transform or invent any source values. Match synonyms such "
             "as item/product/name, qty/on-hand/stock, rate/cost/selling price, barcode/code, and category/group. "
             "Never map an unrelated column. Input follows: " + json.dumps({"source_columns": columns, "sample_rows": source_rows[:10]}, ensure_ascii=False, default=str)[:18000]
@@ -682,8 +694,8 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
         if price is None or price < 0:
             issues.append({"row_number": row_number, "field": "unit_price", "message": "Unit price is required and must be zero or greater."})
 
-        numbers: Dict[str, Optional[int]] = {}
-        defaults = {"current_stock": 0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
+        numbers: Dict[str, Optional[float]] = {}
+        defaults = {"current_stock": 0.0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
         for field, default in defaults.items():
             raw = row.get(field)
             if raw is None or str(raw).strip() == "":
@@ -691,12 +703,24 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
             else:
                 try:
                     parsed = _inventory_import_parse_number(raw)
-                    if parsed is None or parsed < 0 or not float(parsed).is_integer():
+                    if parsed is None or parsed < 0:
                         raise ValueError()
-                    numbers[field] = int(parsed)
+                    if field == "current_stock":
+                        if round(parsed, 3) != parsed:
+                            raise ValueError()
+                        numbers[field] = parsed
+                    else:
+                        if not float(parsed).is_integer():
+                            raise ValueError()
+                        numbers[field] = int(parsed)
                 except (ValueError, TypeError, OverflowError):
                     numbers[field] = None
-                    issues.append({"row_number": row_number, "field": field, "message": f"{field.replace('_', ' ').title()} must be a non-negative whole number."})
+                    message = (
+                        "Current stock must be a non-negative quantity with at most 3 decimal places."
+                        if field == "current_stock"
+                        else f"{field.replace('_', ' ').title()} must be a non-negative whole number."
+                    )
+                    issues.append({"row_number": row_number, "field": field, "message": message})
         if numbers.get("min_stock") is not None and numbers.get("max_stock") is not None and numbers["min_stock"] > numbers["max_stock"]:
             issues.append({"row_number": row_number, "field": "max_stock", "message": "Minimum stock cannot exceed maximum stock."})
 
@@ -707,6 +731,7 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
                 "sku": sku,
                 "description": str(row.get("description") or "").strip() or None,
                 "current_stock": numbers["current_stock"],
+                "unit": str(row.get("unit") or "pcs").strip()[:20] or "pcs",
                 "min_stock": numbers["min_stock"],
                 "max_stock": numbers["max_stock"],
                 "reorder_level": numbers["reorder_level"],
@@ -750,7 +775,8 @@ def bulk_export_products(user_id: int = Depends(check_current_user), db: Session
     products = db.query(Product).filter_by(user_id=user_id, is_active=True).all()
     return [{"id": p.id, "product_name": p.product_name, "sku": p.sku,
              "unit_price": float(p.unit_price), "purchase_price": float(p.purchase_price or 0),
-             "current_stock": float(p.current_stock or 0)} for p in products]
+             "current_stock": float(p.current_stock or 0),
+             "unit": str(p.unit or "pcs")} for p in products]
 
 @router.post("/bulk-import/products")
 def bulk_import_products(items: list[dict], user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
@@ -797,11 +823,25 @@ def get_batch_history(user_id: int = Depends(check_current_user), db: Session = 
 
 # ==================== PYDANTIC MODELS ====================
 
+def _validate_stock_precision(value: Optional[Decimal]) -> Optional[Decimal]:
+    """Reject stock quantities that the NUMERIC(12, 3) database cannot preserve."""
+    if value is None:
+        return None
+    parsed = Decimal(str(value))
+    if not parsed.is_finite() or parsed < 0:
+        raise ValueError("Stock quantity must be finite and non-negative.")
+    if parsed != parsed.quantize(Decimal("0.001")):
+        raise ValueError("Stock quantity supports at most 3 decimal places.")
+    return parsed
+
+
 class ProductCreate(BaseModel):
     product_name: str = Field(..., min_length=2, max_length=100)
     sku: str = Field(..., min_length=2, max_length=50)
     description: Optional[str] = None
-    current_stock: int = Field(0, ge=0)
+    # Match the database NUMERIC(12, 3) type to support loose goods by weight/volume.
+    current_stock: Decimal = Field(Decimal("0"), ge=0)
+    unit: str = Field("pcs", min_length=1, max_length=20)
     min_stock: int = Field(10, ge=0)
     max_stock: int = Field(100, gt=0)
     reorder_level: int = Field(20, ge=0)
@@ -809,6 +849,17 @@ class ProductCreate(BaseModel):
     purchase_price: float = Field(0, ge=0)
     category: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
+
+    @field_validator("current_stock")
+    @classmethod
+    def _validate_current_stock_precision(cls, value):
+        return _validate_stock_precision(value)
+
+    @field_validator("unit")
+    @classmethod
+    def _validate_unit(cls, value):
+        normalized = (value or "pcs").strip()
+        return normalized or "pcs"
 
     @field_validator("image_url")
     @classmethod
@@ -819,7 +870,8 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     product_name: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = None
-    current_stock: Optional[int] = Field(None, ge=0)
+    current_stock: Optional[Decimal] = Field(None, ge=0)
+    unit: Optional[str] = Field(None, min_length=1, max_length=20)
     min_stock: Optional[int] = Field(None, ge=0)
     max_stock: Optional[int] = Field(None, gt=0)
     reorder_level: Optional[int] = Field(None, ge=0)
@@ -827,6 +879,19 @@ class ProductUpdate(BaseModel):
     purchase_price: Optional[float] = Field(None, ge=0)
     category: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
+
+    @field_validator("current_stock")
+    @classmethod
+    def _validate_optional_stock_precision(cls, value):
+        return _validate_stock_precision(value)
+
+    @field_validator("unit")
+    @classmethod
+    def _validate_optional_unit(cls, value):
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or "pcs"
 
     @field_validator("image_url")
     @classmethod
@@ -837,22 +902,35 @@ class ProductUpdate(BaseModel):
 class StockMovementCreate(BaseModel):
     product_id: int
     movement_type: str  # "IN", "OUT", "ADJUSTMENT"
-    quantity: int = Field(..., ge=0, description="Must be non-negative; use movement_type to indicate direction")
+    quantity: Decimal = Field(..., ge=0, description="Fractional quantities are allowed, up to 3 decimal places.")
     reason: Optional[str] = None
     reference_id: Optional[str] = None
+
+    @field_validator("quantity")
+    @classmethod
+    def _validate_quantity_precision(cls, value):
+        return _validate_stock_precision(value)
+
 
 class ProductBatchCreate(BaseModel):
     product_id: int
     batch_number: str
     manufacture_date: Optional[str] = None
     expiry_date: Optional[str] = None
-    quantity: int
+    quantity: Decimal = Field(..., ge=0)
+
+    @field_validator("quantity")
+    @classmethod
+    def _validate_batch_quantity_precision(cls, value):
+        return _validate_stock_precision(value)
+
 
 class ProductResponse(BaseModel):
     id: int
     product_name: str
     sku: str
-    current_stock: int
+    current_stock: float
+    unit: str = "pcs"
     min_stock: int
     max_stock: int
     unit_price: float
@@ -892,6 +970,7 @@ def create_product(
         existing.product_name = product.product_name
         existing.description = product.description
         existing.current_stock = product.current_stock
+        existing.unit = product.unit
         existing.min_stock = product.min_stock
         existing.max_stock = product.max_stock
         existing.reorder_level = product.reorder_level
@@ -935,6 +1014,7 @@ def create_product(
             raced.product_name = product.product_name
             raced.description = product.description
             raced.current_stock = product.current_stock
+            raced.unit = product.unit
             raced.min_stock = product.min_stock
             raced.max_stock = product.max_stock
             raced.reorder_level = product.reorder_level
@@ -1619,6 +1699,7 @@ async def parse_voice_billing(
             "sku": str(product.sku or ""),
             "category": str(product.category or ""),
             "catalog_unit_price": float(product.unit_price or 0),
+            "unit": str(getattr(product, "unit", "pcs") or "pcs"),
             "available_stock": float(product.current_stock or 0),
         }
         for product in candidates
@@ -1805,6 +1886,7 @@ async def parse_voice_billing(
             "product_name": product_name,
             "product_name_en": product_name,
             "sku": str(product.sku or "") if product is not None else "",
+            "unit": str(getattr(product, "unit", "pcs") or "pcs") if product is not None else None,
             "quantity": float(quantity),
             "unit_price": float(unit_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
             "price_source": price_source,
