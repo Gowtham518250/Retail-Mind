@@ -223,7 +223,9 @@ def test_payment_idempotency_model_has_a_matching_versioned_migration():
     ).read_text(encoding="utf-8")
     assert 'revision = "039_payment_idempotency_key"' in migration
     assert 'down_revision = "038_legacy_startup_schema_repairs"' in migration
+    # Keep the contract independent of whether the call is formatted on one
+    # line or across multiple lines.
     import re
 
-    assert re.search(r'op\.add_column\(\s*["\']payments["\']', migration)
+    assert re.search(r"""op\.add_column\(\s*["']payments["']""", migration)
     assert '"ix_payments_idempotency_key"' in migration
