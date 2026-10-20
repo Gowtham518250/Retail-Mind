@@ -775,7 +775,8 @@ def bulk_export_products(user_id: int = Depends(check_current_user), db: Session
     products = db.query(Product).filter_by(user_id=user_id, is_active=True).all()
     return [{"id": p.id, "product_name": p.product_name, "sku": p.sku,
              "unit_price": float(p.unit_price), "purchase_price": float(p.purchase_price or 0),
-             "current_stock": float(p.current_stock or 0)} for p in products]
+             "current_stock": float(p.current_stock or 0),
+             "unit": str(p.unit or "pcs")} for p in products]
 
 @router.post("/bulk-import/products")
 def bulk_import_products(items: list[dict], user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
