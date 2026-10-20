@@ -1699,7 +1699,7 @@ async def parse_voice_billing(
             "sku": str(product.sku or ""),
             "category": str(product.category or ""),
             "catalog_unit_price": float(product.unit_price or 0),
-            "unit": str(product.unit or "pcs"),
+            "unit": str(getattr(product, "unit", "pcs") or "pcs"),
             "available_stock": float(product.current_stock or 0),
         }
         for product in candidates
@@ -1886,7 +1886,7 @@ async def parse_voice_billing(
             "product_name": product_name,
             "product_name_en": product_name,
             "sku": str(product.sku or "") if product is not None else "",
-            "unit": str(product.unit or "pcs") if product is not None else None,
+            "unit": str(getattr(product, "unit", "pcs") or "pcs") if product is not None else None,
             "quantity": float(quantity),
             "unit_price": float(unit_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
             "price_source": price_source,
