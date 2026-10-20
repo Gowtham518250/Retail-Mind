@@ -109,7 +109,7 @@ def test_stock_api_rejects_more_than_three_decimal_places():
             unit_price=60,
         )
 
-    with __import__("pytest").raises(ValidationError):
+    with pytest.raises(ValidationError):
         inventory_module.StockMovementCreate(
             product_id=1,
             movement_type="OUT",
