@@ -4,8 +4,10 @@ services:
     env: python
     healthCheckPath: /health/ready
     buildCommand: "pip install -r requirements.txt && python build_faiss_index.py"
-    # production_boot.py runs the controlled Alembic migration step before starting the API.
-    startCommand: "python production_boot.py"
+    # Run schema changes once before any newly deployed instance receives traffic.
+    preDeployCommand: "python predeploy_db.py"
+    # production_app.py only imports/serves the already-prepared FastAPI application.
+    startCommand: "gunicorn --config gunicorn.conf.py production_app:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
