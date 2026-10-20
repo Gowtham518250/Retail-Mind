@@ -139,7 +139,7 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(echo "$heads" | grep -c '^039_payment_idempotency_key')"
+          count="$(echo "$heads" | grep -c '^040_fractional_stock_units')"
           test "$count" -eq 1
           head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
