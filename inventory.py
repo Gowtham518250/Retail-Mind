@@ -293,7 +293,7 @@ def barcode_product_lookup(
 # ==================== AI-ASSISTED INVENTORY IMPORT ====================
 
 INVENTORY_IMPORT_FIELDS = (
-    "product_name", "sku", "description", "current_stock", "min_stock",
+    "product_name", "sku", "description", "current_stock", "unit", "min_stock",
     "max_stock", "reorder_level", "unit_price", "category",
 )
 _INVENTORY_IMPORT_MAX_BYTES = 10 * 1024 * 1024
@@ -326,6 +326,7 @@ def _inventory_import_fallback_mapping(columns: List[str]) -> Dict[str, Optional
         "sku": ("sku", "itemcode", "productcode", "barcode", "ean", "upc", "itemid", "code"),
         "description": ("description", "details", "productdescription", "itemdescription", "notes"),
         "current_stock": ("currentstock", "stock", "quantity", "qty", "availableqty", "availablequantity", "onhand", "onhandqty", "closingstock", "openingstock", "balance", "units"),
+        "unit": ("unit", "uom", "unitofmeasure", "measurementunit", "measure", "quantityunit"),
         "min_stock": ("minstock", "minimumstock", "minimumquantity", "reorderpoint", "safetystock"),
         "max_stock": ("maxstock", "maximumstock", "maximumquantity", "targetstock"),
         "reorder_level": ("reorderlevel", "reorderquantity", "reorderqty", "replenishmentlevel"),
@@ -501,8 +502,8 @@ def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[D
         if price is None or price < 0:
             issues.append("Unit price is missing or invalid; edit this row before uploading.")
 
-        numeric_values: Dict[str, Optional[int]] = {}
-        numeric_defaults = {"current_stock": 0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
+        numeric_values: Dict[str, Optional[float]] = {}
+        numeric_defaults = {"current_stock": 0.0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
         for field, default in numeric_defaults.items():
             raw = source_value(field)
             if raw is None or str(raw).strip() == "":
@@ -510,12 +511,20 @@ def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[D
                 continue
             try:
                 parsed = _inventory_import_parse_number(raw)
-                if parsed is None or parsed < 0 or not float(parsed).is_integer():
-                    raise ValueError("Expected a non-negative whole number.")
-                numeric_values[field] = int(parsed)
+                if parsed is None or parsed < 0:
+                    raise ValueError("Expected a non-negative stock quantity.")
+                if field == "current_stock":
+                    numeric_values[field] = round(parsed, 3)
+                else:
+                    if not float(parsed).is_integer():
+                        raise ValueError("Expected a non-negative whole number.")
+                    numeric_values[field] = int(parsed)
             except (ValueError, TypeError, OverflowError):
                 numeric_values[field] = None
-                issues.append(f"{field.replace('_', ' ').title()} must be a non-negative whole number.")
+                if field == "current_stock":
+                    issues.append("Current stock must be a non-negative quantity with at most 3 decimal places.")
+                else:
+                    issues.append(f"{field.replace('_', ' ').title()} must be a non-negative whole number.")
         if numeric_values.get("min_stock") is not None and numeric_values.get("max_stock") is not None:
             if numeric_values["min_stock"] > numeric_values["max_stock"]:
                 issues.append("Minimum stock cannot exceed maximum stock.")
@@ -525,6 +534,7 @@ def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[D
             "sku": sku,
             "description": str(source_value("description") or "").strip() or None,
             "current_stock": numeric_values["current_stock"],
+            "unit": str(source_value("unit") or "pcs").strip()[:20] or "pcs",
             "min_stock": numeric_values["min_stock"],
             "max_stock": numeric_values["max_stock"],
             "reorder_level": numeric_values["reorder_level"],
@@ -682,8 +692,8 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
         if price is None or price < 0:
             issues.append({"row_number": row_number, "field": "unit_price", "message": "Unit price is required and must be zero or greater."})
 
-        numbers: Dict[str, Optional[int]] = {}
-        defaults = {"current_stock": 0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
+        numbers: Dict[str, Optional[float]] = {}
+        defaults = {"current_stock": 0.0, "min_stock": 10, "max_stock": 100, "reorder_level": 20}
         for field, default in defaults.items():
             raw = row.get(field)
             if raw is None or str(raw).strip() == "":
@@ -691,12 +701,22 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
             else:
                 try:
                     parsed = _inventory_import_parse_number(raw)
-                    if parsed is None or parsed < 0 or not float(parsed).is_integer():
+                    if parsed is None or parsed < 0:
                         raise ValueError()
-                    numbers[field] = int(parsed)
+                    if field == "current_stock":
+                        numbers[field] = round(parsed, 3)
+                    else:
+                        if not float(parsed).is_integer():
+                            raise ValueError()
+                        numbers[field] = int(parsed)
                 except (ValueError, TypeError, OverflowError):
                     numbers[field] = None
-                    issues.append({"row_number": row_number, "field": field, "message": f"{field.replace('_', ' ').title()} must be a non-negative whole number."})
+                    message = (
+                        "Current stock must be a non-negative quantity with at most 3 decimal places."
+                        if field == "current_stock"
+                        else f"{field.replace('_', ' ').title()} must be a non-negative whole number."
+                    )
+                    issues.append({"row_number": row_number, "field": field, "message": message})
         if numbers.get("min_stock") is not None and numbers.get("max_stock") is not None and numbers["min_stock"] > numbers["max_stock"]:
             issues.append({"row_number": row_number, "field": "max_stock", "message": "Minimum stock cannot exceed maximum stock."})
 
@@ -707,6 +727,7 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
                 "sku": sku,
                 "description": str(row.get("description") or "").strip() or None,
                 "current_stock": numbers["current_stock"],
+                "unit": str(row.get("unit") or "pcs").strip()[:20] or "pcs",
                 "min_stock": numbers["min_stock"],
                 "max_stock": numbers["max_stock"],
                 "reorder_level": numbers["reorder_level"],
