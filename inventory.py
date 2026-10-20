@@ -910,6 +910,7 @@ def create_product(
         existing.product_name = product.product_name
         existing.description = product.description
         existing.current_stock = product.current_stock
+        existing.unit = product.unit
         existing.min_stock = product.min_stock
         existing.max_stock = product.max_stock
         existing.reorder_level = product.reorder_level
@@ -953,6 +954,7 @@ def create_product(
             raced.product_name = product.product_name
             raced.description = product.description
             raced.current_stock = product.current_stock
+            raced.unit = product.unit
             raced.min_stock = product.min_stock
             raced.max_stock = product.max_stock
             raced.reorder_level = product.reorder_level
@@ -1637,6 +1639,7 @@ async def parse_voice_billing(
             "sku": str(product.sku or ""),
             "category": str(product.category or ""),
             "catalog_unit_price": float(product.unit_price or 0),
+            "unit": str(product.unit or "pcs"),
             "available_stock": float(product.current_stock or 0),
         }
         for product in candidates
@@ -1823,6 +1826,7 @@ async def parse_voice_billing(
             "product_name": product_name,
             "product_name_en": product_name,
             "sku": str(product.sku or "") if product is not None else "",
+            "unit": str(product.unit or "pcs") if product is not None else None,
             "quantity": float(quantity),
             "unit_price": float(unit_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
             "price_source": price_source,
