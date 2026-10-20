@@ -514,7 +514,9 @@ def _inventory_import_build_preview_rows(columns: List[str], source_rows: List[D
                 if parsed is None or parsed < 0:
                     raise ValueError("Expected a non-negative stock quantity.")
                 if field == "current_stock":
-                    numeric_values[field] = round(parsed, 3)
+                    if round(parsed, 3) != parsed:
+                        raise ValueError("Stock supports at most 3 decimal places.")
+                    numeric_values[field] = parsed
                 else:
                     if not float(parsed).is_integer():
                         raise ValueError("Expected a non-negative whole number.")
@@ -704,7 +706,9 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
                     if parsed is None or parsed < 0:
                         raise ValueError()
                     if field == "current_stock":
-                        numbers[field] = round(parsed, 3)
+                        if round(parsed, 3) != parsed:
+                            raise ValueError()
+                        numbers[field] = parsed
                     else:
                         if not float(parsed).is_integer():
                             raise ValueError()
