@@ -458,7 +458,11 @@ def _record_below_cost_sale_loss(
 
 def _payment_actor_id(current_user) -> Optional[int]:
     """Extract the authenticated actor identifier without trusting request data."""
-    raw = current_user.get("id") if isinstance(current_user, dict) else getattr(current_user, "id", None)
+    raw = (
+        current_user.get("user_id") or current_user.get("sub") or current_user.get("id")
+        if isinstance(current_user, dict)
+        else getattr(current_user, "id", None)
+    )
     try:
         return int(raw) if raw is not None else None
     except (TypeError, ValueError):
@@ -482,6 +486,11 @@ def _apply_payment_write(
         )
 
     verification_status, verification_method = _validate_payment_verification(data)
+    if verification_actor_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authenticated actor identity is required to confirm payment receipt.",
+        )
 
     idempotency_key = (data.idempotency_key or "").strip() or None
     if idempotency_key:
@@ -673,6 +682,7 @@ def _apply_payment_write(
                 "source": data.source,
                 "verification_status": verification_status,
                 "verification_method": verification_method,
+                "verification_actor_id": verification_actor_id,
             }),
             append_sync_event(db, {
                 "event_id": str(uuid.uuid4()),
@@ -752,6 +762,9 @@ def _apply_payment_write(
                     "payment_method": payment_method.value,
                     "reference_id": (data.reference_id or "").strip() or None,
                     "source": data.source,
+                    "verification_status": verification_status,
+                    "verification_method": verification_method,
+                    "verification_actor_id": verification_actor_id,
                 },
                 description=f"Payment recorded for invoice {invoice.invoice_number}",
             )
