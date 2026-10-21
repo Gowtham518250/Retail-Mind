@@ -229,3 +229,79 @@ def test_payment_idempotency_model_has_a_matching_versioned_migration():
 
     assert re.search(r"""op\.add_column\(\s*["']payments["']""", migration)
     assert '"ix_payments_idempotency_key"' in migration
+
+
+
+def test_payment_write_defaults_to_pending_and_requires_explicit_merchant_confirmation():
+    import pytest
+    from fastapi import HTTPException
+    from invoices_billing import PaymentWriteRequest, _validate_payment_verification
+
+    pending = PaymentWriteRequest(invoice_id=1, amount=10)
+    with pytest.raises(HTTPException) as exc:
+        _validate_payment_verification(pending)
+    assert exc.value.status_code == 409
+    assert "pending verification" in exc.value.detail.lower()
+
+    confirmed = PaymentWriteRequest(
+        invoice_id=1,
+        amount=10,
+        verification_status="MERCHANT_CONFIRMED",
+        verification_method="MERCHANT_CONFIRMATION",
+    )
+    assert _validate_payment_verification(confirmed) == (
+        "MERCHANT_CONFIRMED",
+        "MERCHANT_CONFIRMATION",
+    )
+
+
+def test_public_payment_write_cannot_claim_provider_verification():
+    import pytest
+    from fastapi import HTTPException
+    from invoices_billing import PaymentWriteRequest, _validate_payment_verification
+
+    request = PaymentWriteRequest(
+        invoice_id=1,
+        amount=10,
+        verification_status="PROVIDER_VERIFIED",
+        verification_method="PROVIDER_API",
+    )
+    with pytest.raises(HTTPException) as exc:
+        _validate_payment_verification(request)
+    assert exc.value.status_code == 403
+
+
+def test_payment_model_persists_verification_provenance():
+    from models import Payment
+
+    columns = Payment.__table__.c
+    assert "verification_status" in columns
+    assert "verification_method" in columns
+    assert "verification_actor_id" in columns
+
+
+def test_payment_verification_migration_is_versioned_and_fail_closed():
+    from pathlib import Path
+
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "040_payment_verification_provenance.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'revision = "040_payment_verification_provenance"' in migration
+    assert 'down_revision = "039_payment_idempotency_key"' in migration
+    assert '"LEGACY_UNVERIFIED"' in migration
+    assert '"LEGACY_UNKNOWN"' in migration
+
+
+def test_payment_writer_validates_verification_before_changing_invoice_balance():
+    import inspect
+    from invoices_billing import _apply_payment_write
+
+    source = inspect.getsource(_apply_payment_write)
+    guard = source.index("_validate_payment_verification(data)")
+    balance_change = source.index("invoice.paid_amount = new_paid")
+    assert guard < balance_change
+    assert "verification_actor_id=verification_actor_id" in source
