@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - "production-payment-contract-*"
+      - "hardening/payment-detection-safety-*"
   pull_request:
     branches:
       - "production-fix-2026-08-18"
+      - "production-fix-2026-08-18-playstore"
       - "main"
 
 jobs:
