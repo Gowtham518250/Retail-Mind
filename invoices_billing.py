@@ -288,6 +288,49 @@ class PaymentWriteRequest(BaseModel):
     source: str = Field(default="PAYMENT_DETECTION", max_length=50)
     timestamp: Optional[str] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    # Detection is not settlement proof. Public payment writes must explicitly
+    # identify a merchant-confirmed event; provider verification is server-only.
+    verification_status: str = Field(default="PENDING", max_length=30)
+    verification_method: str = Field(default="UNVERIFIED", max_length=30)
+
+
+def _validate_payment_verification(data: PaymentWriteRequest) -> tuple[str, str]:
+    """Fail closed unless an authorized operator explicitly confirmed receipt.
+
+    A client-supplied UTR, trusted-app name, sender string, or confidence score is
+    not independent bank verification. Provider-verified writes must be performed
+    by a future trusted server-side provider integration, never this public API.
+    """
+    status = str(data.verification_status or "PENDING").strip().upper()
+    method = str(data.verification_method or "UNVERIFIED").strip().upper()
+
+    if status == "PROVIDER_VERIFIED":
+        raise HTTPException(
+            status_code=403,
+            detail="Provider-verified status can only be set by a trusted server-side payment integration.",
+        )
+    if status != "MERCHANT_CONFIRMED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Payment is pending verification. A notification or SMS cannot "
+                "settle an invoice; confirm receipt in the merchant app first."
+            ),
+        )
+
+    aliases = {
+        "MANUAL_CONFIRMATION": "MERCHANT_CONFIRMATION",
+        "OWNER_CONFIRMATION": "MERCHANT_CONFIRMATION",
+        "MERCHANT_CONFIRMATION": "MERCHANT_CONFIRMATION",
+        "MANUAL_ENTRY": "MANUAL_ENTRY",
+    }
+    normalized_method = aliases.get(method)
+    if normalized_method is None:
+        raise HTTPException(
+            status_code=400,
+            detail="verification_method must identify an explicit merchant confirmation or manual entry.",
+        )
+    return status, normalized_method
 
 
 def _payment_status_for(invoice: Invoice) -> PaymentStatus:
@@ -428,6 +471,8 @@ def _apply_payment_write(
             detail="Provide either amount or paid_amount.",
         )
 
+    verification_status, verification_method = _validate_payment_verification(data)
+
     idempotency_key = (data.idempotency_key or "").strip() or None
     if idempotency_key:
         existing = (
@@ -559,6 +604,8 @@ def _apply_payment_write(
             )
         ),
         idempotency_key=idempotency_key,
+        verification_status=verification_status,
+        verification_method=verification_method,
     )
     db.add(payment)
 
@@ -613,6 +660,8 @@ def _apply_payment_write(
                 "payment_id": payment.id,
                 "reference_id": (data.reference_id or "").strip() or None,
                 "source": data.source,
+                "verification_status": verification_status,
+                "verification_method": verification_method,
             }),
             append_sync_event(db, {
                 "event_id": str(uuid.uuid4()),
@@ -1791,7 +1840,9 @@ def get_invoice_payments(
                 "amount": float(p.amount),
                 "payment_date": p.payment_date,
                 "reference_number": p.reference_number,
-                "notes": p.notes
+                "notes": p.notes,
+                "verification_status": getattr(p, "verification_status", "LEGACY_UNVERIFIED"),
+                "verification_method": getattr(p, "verification_method", "LEGACY_UNKNOWN")
             }
             for p in payments
         ],
