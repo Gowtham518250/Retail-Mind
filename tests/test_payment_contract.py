@@ -305,3 +305,11 @@ def test_payment_writer_validates_verification_before_changing_invoice_balance()
     balance_change = source.index("invoice.paid_amount = new_paid")
     assert guard < balance_change
     assert "verification_actor_id=verification_actor_id" in source
+
+
+def test_payment_confirmation_actor_uses_authenticated_token_subject():
+    from invoices_billing import _payment_actor_id
+
+    assert _payment_actor_id({"user_id": 23, "role": "OWNER"}) == 23
+    assert _payment_actor_id({"sub": "24", "role": "WORKER"}) == 24
+    assert _payment_actor_id({"role": "OWNER"}) is None
