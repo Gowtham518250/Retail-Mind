@@ -456,12 +456,22 @@ def _record_below_cost_sale_loss(
     return loss_amount
 
 
+def _payment_actor_id(current_user) -> Optional[int]:
+    """Extract the authenticated actor identifier without trusting request data."""
+    raw = current_user.get("id") if isinstance(current_user, dict) else getattr(current_user, "id", None)
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _apply_payment_write(
     *,
     data: PaymentWriteRequest,
     db: Session,
     shop_id: int,
     mode: str,
+    verification_actor_id: Optional[int] = None,
     commit_transaction: bool = True,
 ):
     """Record a payment; callers may join it to a larger atomic transaction."""
@@ -606,6 +616,7 @@ def _apply_payment_write(
         idempotency_key=idempotency_key,
         verification_status=verification_status,
         verification_method=verification_method,
+        verification_actor_id=verification_actor_id,
     )
     db.add(payment)
 
@@ -778,6 +789,9 @@ def _apply_payment_write(
         "applied_amount": float(delta),
         "paid_amount": float(invoice.paid_amount or 0),
         "payment_status": payment_status,
+        "verification_status": verification_status,
+        "verification_method": verification_method,
+        "verification_actor_id": verification_actor_id,
         "events": [] if commit_transaction else payment_events,
         "message": "Payment recorded successfully.",
     }
@@ -1782,7 +1796,10 @@ def create_invoice_payment(
     current_user: dict = Depends(worker_or_owner),
 ):
     shop_id = resolve_shop_id(current_user)
-    return _apply_payment_write(data=data, db=db, shop_id=shop_id, mode="delta")
+    return _apply_payment_write(
+        data=data, db=db, shop_id=shop_id, mode="delta",
+        verification_actor_id=_payment_actor_id(current_user),
+    )
 
 
 @router.put("/update_payment")
@@ -1792,7 +1809,10 @@ def update_invoice_payment(
     current_user: dict = Depends(worker_or_owner),
 ):
     shop_id = resolve_shop_id(current_user)
-    return _apply_payment_write(data=data, db=db, shop_id=shop_id, mode="target")
+    return _apply_payment_write(
+        data=data, db=db, shop_id=shop_id, mode="target",
+        verification_actor_id=_payment_actor_id(current_user),
+    )
 
 
 @router.get("/overdue")
