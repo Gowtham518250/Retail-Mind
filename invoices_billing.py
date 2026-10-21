@@ -488,7 +488,7 @@ def _payment_retry_matches(
             return False
     requested_reference = (data.reference_id or "").strip()
     recorded_reference = (existing.reference_number or "").strip()
-    if requested_reference and recorded_reference and requested_reference != recorded_reference:
+    if requested_reference and requested_reference != recorded_reference:
         return False
     return True
 
