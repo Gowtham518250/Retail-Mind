@@ -313,3 +313,38 @@ def test_payment_confirmation_actor_uses_authenticated_token_subject():
     assert _payment_actor_id({"user_id": 23, "role": "OWNER"}) == 23
     assert _payment_actor_id({"sub": "24", "role": "WORKER"}) == 24
     assert _payment_actor_id({"role": "OWNER"}) is None
+
+
+def test_idempotency_replay_must_match_invoice_amount_and_reference():
+    from types import SimpleNamespace
+    from invoices_billing import PaymentWriteRequest, _payment_retry_matches
+
+    existing = SimpleNamespace(amount=25.00, reference_number="UTR123")
+    invoice = SimpleNamespace(id=7, invoice_number="BILL-0007")
+    matching = PaymentWriteRequest(
+        invoice_id=7,
+        invoice_number="BILL-0007",
+        amount=25,
+        reference_id="UTR123",
+        idempotency_key="same-key",
+        verification_status="MERCHANT_CONFIRMED",
+        verification_method="MERCHANT_CONFIRMATION",
+    )
+    assert _payment_retry_matches(
+        existing=existing, existing_invoice=invoice, data=matching, mode="delta"
+    )
+
+    different_amount = matching.copy(update={"amount": 26})
+    assert not _payment_retry_matches(
+        existing=existing, existing_invoice=invoice, data=different_amount, mode="delta"
+    )
+
+    different_invoice = matching.copy(update={"invoice_id": 8})
+    assert not _payment_retry_matches(
+        existing=existing, existing_invoice=invoice, data=different_invoice, mode="delta"
+    )
+
+    different_reference = matching.copy(update={"reference_id": "UTR999"})
+    assert not _payment_retry_matches(
+        existing=existing, existing_invoice=invoice, data=different_reference, mode="delta"
+    )
