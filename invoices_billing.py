@@ -469,6 +469,30 @@ def _payment_actor_id(current_user) -> Optional[int]:
         return None
 
 
+def _payment_retry_matches(
+    *,
+    existing: Payment,
+    existing_invoice: Invoice,
+    data: PaymentWriteRequest,
+    mode: str,
+) -> bool:
+    """Only treat an idempotency replay as a duplicate when business facts match."""
+    if data.invoice_id is not None and existing_invoice.id != data.invoice_id:
+        return False
+    if data.invoice_number and existing_invoice.invoice_number != data.invoice_number.strip():
+        return False
+    if mode == "delta" and data.amount is not None:
+        requested = Decimal(str(data.amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        recorded = Decimal(str(existing.amount or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if requested != recorded:
+            return False
+    requested_reference = (data.reference_id or "").strip()
+    recorded_reference = (existing.reference_number or "").strip()
+    if requested_reference and recorded_reference and requested_reference != recorded_reference:
+        return False
+    return True
+
+
 def _apply_payment_write(
     *,
     data: PaymentWriteRequest,
@@ -514,6 +538,16 @@ def _apply_payment_write(
             )
             if existing_invoice is None:
                 raise HTTPException(status_code=404, detail="Payment invoice not found.")
+            if not _payment_retry_matches(
+                existing=existing,
+                existing_invoice=existing_invoice,
+                data=data,
+                mode=mode,
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency key was already used for different payment facts.",
+                )
             return {
                 "success": True,
                 "duplicate": True,
@@ -721,6 +755,19 @@ def _apply_payment_write(
                     )
                     .first()
                 )
+
+                if existing_invoice is None:
+                    raise HTTPException(status_code=404, detail="Payment invoice not found.")
+                if not _payment_retry_matches(
+                    existing=existing,
+                    existing_invoice=existing_invoice,
+                    data=data,
+                    mode=mode,
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Idempotency key was already used for different payment facts.",
+                    )
                 return {
                     "success": True,
                     "duplicate": True,
