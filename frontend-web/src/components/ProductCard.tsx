@@ -50,7 +50,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
   const state = justAdded ? 'added' : inCartCount > 0 ? 'incart' : 'add';
 
   return (
-    <Tilt3D className={styles.wrap} max={2} lift={2}>
+    <Tilt3D className={styles.wrap} max={1.5} lift={0.7}>
       <article className={styles.card}>
         <Link href={href} className={styles.media} aria-label={`View ${product.name}`}>
           {product.image_url && failedImageUrl !== product.image_url ? (
