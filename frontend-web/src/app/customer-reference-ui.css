@@ -187,3 +187,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @media(max-width:768px) {
   .site-footer { display: none !important; }
 }
+
+
+/* Standalone app-entry screens have no site chrome or legal footer below them. */
+body:has([data-entry-screen="splash"]) .site-footer,
+body:has([data-entry-screen="onboarding"]) .site-footer {
+  display: none !important;
+}
