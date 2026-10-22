@@ -8,6 +8,7 @@ BACKEND_ROUTES = {
     'GET /': 'system',
     'GET /health': 'system',
     'POST /auth/register': 'authentication_router',
+    'POST /auth/google': 'authentication_router',
     'POST /auth/send-otp': 'authentication_router',
     'POST /auth/verify-otp': 'authentication_router',
     'POST /auth/login': 'authentication_router',
@@ -53,6 +54,7 @@ BACKEND_ROUTES = {
 FLUTTER_ENDPOINTS = {
     '/health': 'healthEndpoint',
     '/auth/register': 'registerEndpoint',
+    '/auth/google': 'googleSignInEndpoint',
     '/auth/login': 'loginEndpoint',
     '/store/customer/login': 'customerLogin',
     '/store/customer/register': 'customerRegister',
