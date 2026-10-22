@@ -95,7 +95,7 @@ def test_profit_and_loss_excludes_payment_and_cancellation_artifact_categories()
 
 
 def test_legacy_cancelled_order_migration_removes_old_invoice_and_reversal_records():
-    migration = (ROOT / "alembic/versions/032_cancelled_online_order_financial_cleanup.py").read_text(encoding="utf-8")
+    migration = (ROOT / "alembic/versions/041_cancelled_online_order_financial_cleanup.py").read_text(encoding="utf-8")
     assert "CANCELLED', 'REJECTED', 'RETURNED" in migration
     assert "DELETE FROM invoices" in migration
     assert "DELETE FROM universal_transactions" in migration
