@@ -46,12 +46,12 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     }
     const added = onAddToCart(product);
     if (!added) return;
-    confetti({
-      particleCount: 26,
-      spread: 70,
-      startVelocity: 24,
-      scalar: 0.75,
-      ticks: 110,
+    if (!reduceMotion) confetti({
+      particleCount: 9,
+      spread: 42,
+      startVelocity: 13,
+      scalar: 0.58,
+      ticks: 70,
       gravity: 1.1,
       zIndex: 1200,
       disableForReducedMotion: true,
@@ -63,7 +63,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
   const state = justAdded ? 'added' : inCartCount > 0 ? 'incart' : 'add';
 
   return (
-    <Tilt3D className={styles.wrap} max={7} lift={8}>
+    <Tilt3D className={styles.wrap} max={2} lift={2}>
       <article className={styles.card}>
         <Link href={href} className={styles.media} aria-label={`View ${product.name}`}>
           {product.image_url && failedImageUrl !== product.image_url ? (
