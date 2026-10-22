@@ -779,3 +779,82 @@
   .marketSkeleton { animation: none; }
   .productCard, .addProductButton { transition: none; }
 }
+
+/* Final spacing pass for the supplied compact mobile marketplace screen. */
+@media (max-width: 620px) {
+  .marketHeader {
+    width: calc(100% - 24px);
+    margin: 7px auto 12px;
+    min-height: 25px;
+  }
+  .locationGroup { gap: 5px; }
+  .locationIcon { width: 21px; height: 21px; border-radius: 0; background: transparent; color: #101a34; }
+  .locationIcon svg { width: 14px; height: 14px; }
+  .locationCopy { display: flex; align-items: center; gap: 5px; }
+  .locationCopy small { display: none; }
+  .locationCopy strong { font-size: 10px; font-weight: 850; letter-spacing: -.01em; }
+  .headerActions { display: none; }
+  .marketSearch { min-height: 39px; padding: 3px 4px 3px 12px; border-radius: 13px; gap: 7px; box-shadow: 0 2px 8px rgba(8,20,43,.025); }
+  .marketSearchIcon { width: 15px; height: 15px; }
+  .marketSearch input { padding: 7px 0; font-size: 10px; }
+  .marketSearch input::placeholder { color: #8794ab; }
+  .marketSearch button { width: 31px; height: 31px; border-radius: 10px; }
+  .marketSearch button svg { width: 15px; height: 15px; }
+  .marketContent { width: calc(100% - 24px); }
+  .freshBanner { margin-top: 12px; min-height: 153px; grid-template-columns: minmax(0,1fr) 110px; padding: 14px 12px; gap: 1px; border-radius: 15px; box-shadow: 0 7px 17px rgba(8,123,73,.11); }
+  .freshBadge { padding: 4px 6px; font-size: 7px; gap: 4px; }
+  .freshBadge svg { width: 10px; height: 10px; }
+  .freshBanner h1 { margin-top: 9px; font-size: clamp(18px,5.4vw,23px); line-height: 1.04; letter-spacing: -.045em; }
+  .freshBanner p { margin: 6px 0 10px; font-size: 8px; }
+  .freshCta { min-height: 29px; padding: 0 9px; border-radius: 9px; font-size: 8px; gap: 4px; }
+  .freshCta svg { width: 12px; height: 12px; }
+  .freshArtwork { min-height: 118px; }
+  .artHalo { width: 103px; height: 103px; }
+  .artBasket { width: 70px; height: 70px; border-radius: 20px; }
+  .artBasket svg { width: 51px; height: 51px; }
+  .artTile { width: 35px; height: 35px; border-width: 2px; border-radius: 11px; }
+  .artTile svg { width: 20px; height: 20px; }
+  .artTileOne { right: -1%; top: 0; }
+  .artTileTwo { right: -2%; bottom: 0; }
+  .artTileThree { left: -5%; bottom: 6%; }
+  .marketSection { margin-top: 17px; }
+  .categoryGrid { display: flex; gap: 5px; overflow-x: auto; padding: 1px 0 5px; scrollbar-width: none; }
+  .categoryGrid::-webkit-scrollbar { display: none; }
+  .categoryButton { flex: 0 0 48px; width: 48px; min-width: 48px; display: flex; align-items: center; gap: 4px; padding: 2px 0; border-radius: 11px; font-size: 8px; font-weight: 700; white-space: nowrap; }
+  .categoryButton:hover { background: transparent; box-shadow: none; }
+  .categoryIcon { width: 31px; height: 31px; flex: 0 0 31px; border-radius: 10px; }
+  .categoryIcon svg { width: 18px; height: 18px; }
+  .sectionHeader { margin-bottom: 10px; }
+  .sectionHeader h2 { font-size: 15px; margin-top: 1px; }
+  .sectionHeader p { display: none; }
+  .sectionEyebrow { font-size: 7px; letter-spacing: .12em; }
+  .viewAllLink { font-size: 9px; }
+  .shopsGrid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+  .shopCard { border-radius: 12px; }
+  .shopVisual { height: 72px; }
+  .shopInitial { font-size: 7rem; }
+  .liveTag { left: 6px; top: 6px; padding: 3px 5px; gap: 3px; font-size: 6px; }
+  .shopTile { width: 42px; height: 42px; border-radius: 13px; }
+  .shopTile svg { width: 22px; height: 22px; }
+  .shopBody { padding: 8px; gap: 4px; }
+  .shopTopline { gap: 3px; font-size: 6px; letter-spacing: 0; }
+  .shopTopline b { padding: 2px 4px; font-size: 7px; }
+  .shopName { font-size: 10px; line-height: 1.15; }
+  .shopLoc { gap: 2px; font-size: 7px; }
+  .shopLoc svg { width: 9px; height: 9px; }
+  .shopBody p { margin-top: 0; font-size: 8px; line-height: 1.35; }
+  .shopFoot { padding-top: 6px; font-size: 7px; }
+  .shopGo svg { width: 11px; height: 11px; }
+  .productGrid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .productCard { border-radius: 12px; }
+  .productPicture { aspect-ratio: 1.08; }
+  .productPicture img { padding: 6px; }
+  .productCardBody { padding: 8px; gap: 4px; }
+  .productCardBody > small { font-size: 7px; }
+  .productTitle { font-size: 10px; }
+  .productCardFooter > b { font-size: 13px; }
+  .addProductButton { width: 27px; height: 27px; border-radius: 9px; }
+  .addProductButton svg { width: 15px; height: 15px; }
+  .stockBadge { font-size: 6px; }
+  .trustStrip { display: none; }
+}

@@ -198,3 +198,29 @@
   .cart { border-radius: 12px; }
   .bottomNavItem { gap: 3px; }
 }
+
+/* Reference-board mobile navigation: one compact five-item dock on the home screen. */
+.navCartDot {
+  position: absolute; top: -7px; right: -11px; min-width: 15px; height: 15px; padding: 0 3px;
+  display: grid; place-items: center; border: 1.5px solid #fff; border-radius: 999px;
+  background: #6657f5; color: #fff; font-size: 8px; font-weight: 900; line-height: 1;
+}
+@media (max-width: 768px) {
+  .wrap { display: none !important; }
+  .mobileBottomNav {
+    display: block;
+    background: rgba(255,255,255,.97);
+    border-top: 1px solid #dfe6f3;
+    box-shadow: 0 -5px 18px rgba(8,20,43,.07);
+    padding: 5px max(9px,env(safe-area-inset-right,0px)) calc(5px + env(safe-area-inset-bottom,0px)) max(9px,env(safe-area-inset-left,0px));
+  }
+  .bottomNavTrack { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); max-width: 520px; gap: 2px; }
+  .bottomNavItem {
+    min-width: 0; min-height: 48px; padding: 4px 2px;
+    gap: 3px; border: 0; background: transparent; cursor: pointer;
+    color: #7b88a1; font: 650 9px/1.2 var(--font-body,Inter,sans-serif);
+  }
+  .bottomNavItemActive { color: #3157d5; background: #eef2ff; border-radius: 12px; }
+  .bottomNavIconWrap { position: relative; width: 22px; height: 21px; display: grid; place-items: center; }
+  .bottomActiveDot { position: absolute; bottom: -3px; width: 3px; height: 3px; background: #28c9bb; box-shadow: none; }
+}

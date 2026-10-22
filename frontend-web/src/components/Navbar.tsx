@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ShoppingBag, User, Package, LogIn, Sparkles, Trophy, Store, Home } from 'lucide-react';
+import { ShoppingBag, User, Package, LogIn, Sparkles, Trophy, Store, Home, Grid2X2, ShoppingCart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import styles from './Navbar.module.css';
 
@@ -62,11 +62,10 @@ export default function Navbar() {
 
   const mobileNavItems = [
     { href: '/', label: 'Home', icon: Home },
-    { href: '/#shops', label: 'Shops', icon: Store },
-    { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles },
+    { href: '/#categories', label: 'Categories', icon: Grid2X2 },
+    { href: '#cart', label: 'Cart', icon: ShoppingCart },
     { href: signedIn ? '/orders' : '/auth?next=%2Forders', label: 'Orders', icon: Package },
-    ...(signedIn ? [{ href: '/smart-shop', label: 'Smart Hub', icon: Trophy }] : []),
-    { href: signedIn ? '/profile' : '/auth?next=%2Fprofile', label: 'Account', icon: User },
+    { href: signedIn ? '/profile' : '/auth?next=%2Fprofile', label: 'Profile', icon: User },
   ];
 
   return (
@@ -140,36 +139,57 @@ export default function Navbar() {
         </motion.nav>
       </header>
 
-      {/* ── Mobile Bottom Navigation Bar (Customer Only) ── */}
-      <nav className={styles.mobileBottomNav} aria-label="Mobile Navigation">
-        <div className={`${styles.bottomNavTrack} ${signedIn ? styles.bottomNavTrackSignedIn : ''}`}>
-          {mobileNavItems.map(({ href, label, icon: Icon }) => {
-            const active = label === 'Shops'
-              ? pathname.startsWith('/shop') || (pathname === '/' && hash === '#shops')
-              : href === '/'
-                ? pathname === '/' && hash !== '#shops'
-                : pathname === href || pathname.startsWith(href + '/');
-            return (
-              <Link
-                key={label + href}
-                href={href}
-                className={`${styles.bottomNavItem} ${active ? styles.bottomNavItemActive : ''}`}
-                aria-current={active ? 'page' : undefined}
-                onClick={() => {
-                  if (label === 'Shops') setHash('#shops');
-                  else if (label === 'Home') setHash('');
-                }}
-              >
-                <div className={styles.bottomNavIconWrap}>
-                  <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
-                  {active && <span className={styles.bottomActiveDot} />}
-                </div>
-                <span>{label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+      {/* App-style bottom navigation is shown only on the marketplace home screen. */}
+      {pathname === '/' && (
+        <nav className={styles.mobileBottomNav} aria-label="Mobile Navigation">
+          <div className={styles.bottomNavTrack}>
+            {mobileNavItems.map(({ href, label, icon: Icon }) => {
+              const active = label === 'Categories'
+                ? pathname === '/' && hash === '#categories'
+                : label === 'Cart'
+                  ? false
+                  : label === 'Home'
+                    ? pathname === '/' && hash !== '#categories'
+                    : pathname === href || pathname.startsWith(href + '/');
+              if (label === 'Cart') {
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    className={styles.bottomNavItem}
+                    onClick={toggleCart}
+                    aria-label={'Open cart, ' + itemCount + ' items'}
+                  >
+                    <div className={styles.bottomNavIconWrap}>
+                      <Icon size={20} strokeWidth={1.8} />
+                      {itemCount > 0 && <span className={styles.navCartDot}>{itemCount > 9 ? '9+' : itemCount}</span>}
+                    </div>
+                    <span>{label}</span>
+                  </button>
+                );
+              }
+              return (
+                <Link
+                  key={label + href}
+                  href={href}
+                  className={`${styles.bottomNavItem} ${active ? styles.bottomNavItemActive : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => {
+                    if (label === 'Categories') setHash('#categories');
+                    else if (label === 'Home') setHash('');
+                  }}
+                >
+                  <div className={styles.bottomNavIconWrap}>
+                    <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
+                    {active && <span className={styles.bottomActiveDot} />}
+                  </div>
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </>
   );
 }

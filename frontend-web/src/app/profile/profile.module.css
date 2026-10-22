@@ -595,3 +595,79 @@
 .logoutDialogEyebrow { color: var(--rm-orange, #f16a45); }
 .logoutDialog h2 { color: var(--rm-green-deep, #143b2c); }
 .logoutDialogClose:hover { border-color: var(--rm-green, #245b42); color: var(--rm-green, #245b42); }
+
+/* Reference-profile screen: compact customer identity card followed by familiar settings rows. */
+.profilePage {
+  min-height: calc(100svh - 62px);
+  padding: 12px 12px 38px !important;
+  color: #101a34 !important;
+  background: #f7f9ff !important;
+}
+.orbA, .orbB { display: none !important; }
+.container { width: min(100%, 440px) !important; max-width: 440px !important; gap: 11px !important; }
+.profilePageTop { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 2px 2px; }
+.profilePageTop h1 { margin: 0; color: #101a34; font-size: 17px; font-weight: 850; letter-spacing: -.03em; }
+.profileBack { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 9px; color: #101a34; text-decoration: none; }
+.profileBack:hover { background: #e9efff; color: #3157d5; }
+.profileHeaderCard {
+  align-items: center !important; justify-content: space-between !important; flex-wrap: nowrap !important;
+  gap: 12px !important; padding: 14px !important; border: 1px solid #dfe6f3 !important;
+  border-radius: 15px !important; background: #fff !important;
+  box-shadow: 0 4px 14px rgba(8,20,43,.035) !important;
+}
+.headerGlowLine { display: none !important; }
+.userInfoArea { align-items: center !important; gap: 11px !important; min-width: 0; }
+.avatarAura { width: 47px !important; height: 47px !important; flex: 0 0 47px; padding: 0 !important; background: #eef2ff !important; box-shadow: none !important; }
+.avatarInner { width: 43px !important; height: 43px !important; border: 0 !important; border-radius: 14px !important; background: linear-gradient(145deg,#3157d5,#6657f5) !important; color: #fff !important; font-size: 17px !important; font-weight: 850 !important; }
+.userMeta { min-width: 0; gap: 4px !important; }
+.userName { margin: 0 !important; color: #101a34 !important; font-size: 13px !important; font-weight: 850 !important; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.userNameRow { display: block !important; }
+.roleBadge { display: none !important; }
+.userContactRow { display: flex !important; flex-direction: column; gap: 3px !important; margin-top: 4px !important; color: #64718a !important; font-size: 9px !important; }
+.userContactRow span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.userContactRow svg { color: #8996ad !important; }
+.profileHeaderChevron { color: #7f8da5; flex: 0 0 auto; }
+.logoutBtn { display: none !important; }
+.profileMenuCard { overflow: hidden; border: 1px solid #dfe6f3; border-radius: 15px; background: #fff; box-shadow: 0 4px 14px rgba(8,20,43,.035); }
+.profileMenuRow {
+  width: 100%; min-height: 48px; display: grid !important; grid-template-columns: 28px minmax(0,1fr) auto 14px;
+  align-items: center; gap: 9px; padding: 0 12px !important; border: 0 !important;
+  border-bottom: 1px solid #edf0f7 !important; border-radius: 0 !important;
+  background: #fff !important; color: #17223e !important; text-align: left;
+  font: 650 11px/1.2 var(--font-body,Inter,sans-serif) !important; text-decoration: none; cursor: pointer;
+}
+.profileMenuRow:last-of-type { border-bottom: 1px solid #edf0f7 !important; }
+.profileMenuRow:hover { background: #f8faff !important; color: #3157d5 !important; }
+.profileMenuIcon { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 9px; background: #eef2ff; color: #3157d5; }
+.profileMenuRowText { min-width: 0; }
+.profileMenuValue { color: #64718a; font-size: 9px; }
+.profileMenuChevron { color: #8c98ad; justify-self: end; }
+.profileMenuLogout {
+  width: 100%; min-height: 46px; display: grid; grid-template-columns: 28px minmax(0,1fr) 14px; align-items: center;
+  gap: 9px; padding: 0 12px; border: 0; background: #fff; color: #c83e4c;
+  text-align: left; font: 750 11px/1.2 var(--font-body,Inter,sans-serif); cursor: pointer;
+}
+.profileMenuLogout:hover { background: #fff5f6; }
+.profileMenuLogout > svg:first-child { margin-left: 5px; }
+.profileMenuLogout > svg:last-child { justify-self: end; color: #a6afbf; }
+.profileNotice { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid #cdd8fb; border-radius: 12px; background: #f2f5ff; color: #34456f; font-size: 10px; line-height: 1.5; }
+.profileNotice p { flex: 1; margin: 0; }
+.profileNotice button { border: 0; background: transparent; color: #3157d5; font-size: 10px; font-weight: 800; cursor: pointer; }
+.accountDetailsCard { padding: 13px !important; border: 1px solid #dfe6f3 !important; border-radius: 15px !important; background: #fff !important; box-shadow: 0 4px 14px rgba(8,20,43,.03) !important; }
+.cardSectionTitle { display: flex; align-items: center; gap: 7px; margin: 0 0 11px !important; color: #101a34 !important; font-size: 12px !important; font-weight: 850 !important; }
+.cardSectionTitle svg { color: #3157d5 !important; }
+.detailsGrid { grid-template-columns: minmax(0,1fr) !important; gap: 8px !important; }
+.detailBox { padding: 9px 10px !important; border: 1px solid #e8edf7 !important; border-radius: 10px !important; background: #f9fbff !important; }
+.detailLabel { color: #7c89a1 !important; font-size: 9px !important; }
+.detailValue { color: #354360 !important; font-size: 10px !important; line-height: 1.5; }
+.profileSecurityCard { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #dfe6f3; border-radius: 14px; background: #fff; }
+.profileSecurityIcon { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border-radius: 10px; background: #e4f9f0; color: #15845a; }
+.profileSecurityCard strong { color: #101a34; font-size: 11px; }
+.profileSecurityCard p { margin: 4px 0 0; color: #64718a; font-size: 9px; line-height: 1.45; }
+@media(max-width:650px) {
+  .profilePage { padding: 10px 12px 30px !important; }
+  .container { width: 100% !important; }
+  .profileHeaderCard { padding: 12px !important; }
+  .profileMenuRow { min-height: 44px; }
+  .profileMenuLogout { min-height: 43px; }
+}

@@ -284,6 +284,13 @@ export default function MarketplaceShell({
   }, [shops]);
 
   useEffect(() => {
+    if (initialShops.length > 0) {
+      setLoading(false);
+      return () => {
+        requestIdRef.current += 1;
+        controllerRef.current?.abort();
+      };
+    }
     void performSearch('all', '');
     return () => {
       requestIdRef.current += 1;
@@ -309,6 +316,7 @@ export default function MarketplaceShell({
   ];
 
   const categories = [
+    { label: 'All', icon: <Boxes size={22} />, tone: 'purple' },
     { label: 'Groceries', icon: <ShoppingBasket size={22} />, tone: 'blue' },
     { label: 'Snacks', icon: <Croissant size={22} />, tone: 'peach' },
     { label: 'Beverages', icon: <Coffee size={22} />, tone: 'purple' },
@@ -335,10 +343,10 @@ export default function MarketplaceShell({
     <div className={styles.page} data-experience="marketplace">
       <div className={styles.marketHeader}>
         <div className={styles.locationGroup}>
-          <span className={styles.locationIcon}><MapPin size={18} /></span>
+          <span className={styles.locationIcon}><MapPin size={16} /></span>
           <span className={styles.locationCopy}>
-            <small>SHOP LOCAL, SHOP SMART</small>
-            <strong>Find stores near you</strong>
+            <small>DELIVER TO</small>
+            <strong>Kadapa, Andhra Pradesh</strong>
           </span>
         </div>
         <div className={styles.headerActions}>
@@ -370,25 +378,6 @@ export default function MarketplaceShell({
             <Search size={18} />
           </button>
         </form>
-
-        <div className={styles.searchControls}>
-          <div className={styles.searchModes} role="group" aria-label="Search by">
-            {searchModes.map((searchMode) => (
-              <button
-                key={searchMode.id}
-                type="button"
-                className={mode === searchMode.id ? styles.searchModeActive : styles.searchMode}
-                onClick={() => { setMode(searchMode.id); void performSearch(searchMode.id, query, true); }}
-              >
-                {searchMode.icon}
-                {searchMode.label}
-              </button>
-            ))}
-          </div>
-          <button type="button" className={styles.aiSearch} onClick={performAiSearch}>
-            <Sparkles size={14} /> Ask AI
-          </button>
-        </div>
 
         <section className={styles.freshBanner} aria-labelledby="fresh-banner-title">
           <div className={styles.freshBannerCopy}>
@@ -425,13 +414,24 @@ export default function MarketplaceShell({
           </div>
         )}
 
-        <section className={styles.marketSection} aria-labelledby="category-heading">
-          <div className={styles.sectionHeader}>
-            <div><span className={styles.sectionEyebrow}>EXPLORE THE MARKET</span><h2 id="category-heading">Shop by category</h2></div>
-          </div>
+        <section className={styles.marketSection} id="categories" aria-label="Shop by category">
           <div className={styles.categoryGrid}>
             {categories.map((category) => (
-              <button key={category.label} type="button" className={styles.categoryButton} onClick={() => preset(category.label)}>
+              <button
+                key={category.label}
+                type="button"
+                className={styles.categoryButton}
+                onClick={() => {
+                  setActiveProductCategory('All');
+                  if (category.label === 'All') {
+                    setQuery('');
+                    setMode('all');
+                    void performSearch('all', '', true);
+                  } else {
+                    preset(category.label);
+                  }
+                }}
+              >
                 <span className={styles.categoryIcon + ' ' + styles['category' + category.tone]}>
                   {category.icon}
                 </span>
