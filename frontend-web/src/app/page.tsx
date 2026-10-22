@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import MarketplaceShell from '../components/MarketplaceShell';
+import MobileWelcomeGate from '../components/MobileWelcomeGate';
 import { getHomepagePreview } from '../lib/publicCatalog';
 import { publicPageMetadata } from '../lib/seo';
 
@@ -13,5 +14,9 @@ export const metadata: Metadata = publicPageMetadata({
 
 export default async function Home() {
   const { shops, products } = await getHomepagePreview();
-  return <MarketplaceShell initialShops={shops} initialFeaturedProducts={products} />;
+  return (
+    <MobileWelcomeGate>
+      <MarketplaceShell initialShops={shops} initialFeaturedProducts={products} />
+    </MobileWelcomeGate>
+  );
 }

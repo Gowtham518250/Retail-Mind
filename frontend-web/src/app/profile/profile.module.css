@@ -671,3 +671,6 @@
   .profileMenuRow { min-height: 44px; }
   .profileMenuLogout { min-height: 43px; }
 }
+
+.profileAvatarImage { width: 44px !important; height: 44px !important; display: block; object-fit: cover; border-radius: 13px; }
+@media(max-width:650px) { .profileAvatarImage { width: 43px !important; height: 43px !important; border-radius: 13px; } }
