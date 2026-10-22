@@ -36,3 +36,11 @@ def test_google_login_returns_the_normal_access_and_refresh_session():
     assert '"token_type": "bearer"' in route
     assert '"user_id": db_user.id' in route
     assert '"role": user_role' in route
+
+
+
+def test_endpoint_audit_lists_google_sign_in_for_client_and_server():
+    source = (ROOT / "endpoint_matching.py").read_text(encoding="utf-8")
+
+    assert "'POST /auth/google': 'authentication_router'" in source
+    assert "'/auth/google': 'googleSignInEndpoint'" in source
