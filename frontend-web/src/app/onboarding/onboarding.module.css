@@ -78,3 +78,100 @@
 .productThree { bottom: 4%; right: 5%; background: #fff; }
 
 .productFour { left: 2%; bottom: 25%; background: #f0edff; color: #6657f5; transform: rotate(-8deg); }
+
+
+/* Full illustration artwork replaces placeholder glyphs across the onboarding slides. */
+.screen {
+  background:
+    radial-gradient(ellipse at 48% 44%, rgba(224,237,255,.64), transparent 41%),
+    linear-gradient(180deg,#f8faff 0%,#fff 78%,#eff5ff 100%);
+}
+.header { max-width: 460px; width: 100%; align-self: center; }
+.content { width: 100%; max-width: 460px; margin: 0 auto; gap: 8px; }
+.illustration {
+  height: clamp(265px, 39vh, 355px);
+  max-height: 370px;
+  margin: 0 -4px;
+  overflow: visible;
+}
+.halo {
+  z-index: 0;
+  width: min(79vw,330px);
+  height: min(79vw,330px);
+  background: radial-gradient(circle,#e3efff 0%,#eff5ff 56%,rgba(239,245,255,0) 72%);
+  border-color: rgba(49,87,213,.07);
+}
+.illustrationImage {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 8px 14px rgba(18,44,93,.055));
+}
+.sparkleOne,.sparkleTwo { z-index: 4; }
+.sparkleOne { top: 3%; left: 12%; box-shadow: 0 8px 16px rgba(102,87,245,.18); }
+.sparkleTwo { bottom: 6%; right: 9%; box-shadow: 0 8px 16px rgba(40,110,60,.12); }
+.smallCard {
+  z-index: 3;
+  padding: 7px 9px;
+  border-radius: 12px;
+  box-shadow: 0 7px 18px rgba(8,20,43,.075);
+}
+.nearbyCard { left: 0; bottom: 13%; }
+.freshCard { right: 0; top: 14%; }
+.smallCardIcon { width: 25px; height: 25px; }
+.smallCard b { font-size: 8px; }
+.smallCard small { font-size: 7px; }
+.copy { padding: 0 5px; }
+.eyebrow { font-size: 8px; }
+.copy h1 { font-size: clamp(27px, 7.2vw, 35px); line-height: 1.03; }
+.copy p { max-width: 340px; font-size: 11px; line-height: 1.55; }
+.feature {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid #e4ebf8;
+  border-radius: 11px;
+  background: rgba(255,255,255,.8);
+  color: #475775;
+  font-size: 9px;
+}
+.footer { width: 100%; max-width: 460px; align-self: center; }
+.carouselControls { align-items: center; }
+.arrowButton {
+  width: 36px;
+  height: 36px;
+  border-color: #dfe7f4;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 3px 10px rgba(8,20,43,.035);
+}
+.primaryButton {
+  min-height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(105deg,#3157d5 0%,#4d5ef0 100%);
+  box-shadow: 0 9px 20px rgba(49,87,213,.2);
+}
+.primaryButton:hover { background: #2445bd; }
+.signInPrompt { font-size: 10px; }
+.footerTrust { font-size: 8px; letter-spacing: .015em; }
+@media(min-width:700px) {
+  .screen { width: min(100%,560px); padding-left: 27px; padding-right: 27px; }
+  .illustration { height: clamp(290px,42vh,385px); }
+}
+@media(max-height:700px) {
+  .content { gap: 2px; }
+  .illustration { height: clamp(170px,30vh,225px); }
+  .halo { width: min(66vw,230px); height: min(66vw,230px); }
+  .sparkleOne,.sparkleTwo { width: 28px; height: 28px; border-radius: 10px; }
+  .smallCard { padding: 5px 6px; }
+  .smallCardIcon { width: 21px; height: 21px; }
+  .smallCard b { font-size: 7px; }
+  .smallCard small { font-size: 6px; }
+  .copy h1 { font-size: 23px; margin: 5px 0; }
+  .copy p { font-size: 9px; }
+  .feature { margin-top: 6px; padding: 5px 7px; font-size: 8px; }
+  .footer { gap: 7px; padding-top: 7px; }
+  .primaryButton { min-height: 40px; }
+}
