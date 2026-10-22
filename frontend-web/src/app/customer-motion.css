@@ -128,3 +128,24 @@ main.page-transition > :first-child:not([data-entry-screen]) {
     transform: none !important;
   }
 }
+
+
+/* AI shopping had a second CSS animation layer running alongside Framer Motion. */
+[data-experience="ai-shopping"] [class*="ambient"],
+[data-experience="ai-shopping"] [class*="orbit"],
+[data-experience="ai-shopping"] [class*="showroomRing"],
+[data-experience="ai-shopping"] [class*="scanBeam"],
+[data-experience="ai-shopping"] [class*="result"] {
+  animation: none !important;
+}
+[data-experience="ai-shopping"] [class*="showroomRing"] {
+  opacity: .42;
+}
+
+/* Stop background decorations from drifting behind otherwise stable content. */
+[data-experience="profile"] [class*="orbA"],
+[data-experience="profile"] [class*="orbB"],
+[data-experience="auth"] [class*="orb1"],
+[data-experience="auth"] [class*="orb2"] {
+  animation: none !important;
+}
