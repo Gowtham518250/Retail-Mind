@@ -381,40 +381,40 @@ export default function HeroScene3DScene({ lite = false, className }: HeroScene3
       last = now;
       if (!reduced) t += dt;
 
-      pointer.x += (pointer.tx - pointer.x) * 0.06;
-      pointer.y += (pointer.ty - pointer.y) * 0.06;
-      impulse *= 0.94;
+      pointer.x += (pointer.tx - pointer.x) * 0.035;
+      pointer.y += (pointer.ty - pointer.y) * 0.035;
+      impulse *= 0.9;
 
-      rig.rotation.y = pointer.x * 0.58 + Math.sin(t * 0.16) * 0.045;
-      rig.rotation.x = pointer.y * 0.24 + scrollShift * 0.35;
-      rig.position.x = (lite ? 0.12 : 0.24) + pointer.x * 0.24;
-      rig.position.y = -scrollShift * 0.9 + Math.sin(t * 0.72) * 0.07;
+      rig.rotation.y = pointer.x * 0.22 + Math.sin(t * 0.12) * 0.018;
+      rig.rotation.x = pointer.y * 0.1 + scrollShift * 0.1;
+      rig.position.x = (lite ? 0.12 : 0.24) + pointer.x * 0.08;
+      rig.position.y = -scrollShift * 0.18 + Math.sin(t * 0.36) * 0.025;
 
-      bag.rotation.y = Math.sin(t * 0.55) * 0.72 + pointer.x * 0.34 + impulse * Math.sin(t * 9) * 0.3;
-      bag.rotation.x = Math.sin(t * 0.47) * 0.075;
-      bag.rotation.z = Math.sin(t * 0.8) * 0.075;
-      bag.position.y = -0.1 + Math.sin(t * 1.1) * 0.2;
-      shadow.scale.setScalar(1 - Math.sin(t * 1.1) * 0.09);
-      orbitRings[0].rotation.y = t * 0.11;
-      orbitRings[1].rotation.z = -t * 0.07;
-      baguette.rotation.z = 0.32 + Math.sin(t * 1.3) * 0.055;
-      greens.rotation.y = t * 0.72;
+      bag.rotation.y = Math.sin(t * 0.28) * 0.12 + pointer.x * 0.1 + impulse * Math.sin(t * 5) * 0.04;
+      bag.rotation.x = Math.sin(t * 0.24) * 0.018;
+      bag.rotation.z = Math.sin(t * 0.32) * 0.018;
+      bag.position.y = -0.1 + Math.sin(t * 0.48) * 0.045;
+      shadow.scale.setScalar(1 - Math.sin(t * 0.48) * 0.025);
+      orbitRings[0].rotation.y = t * 0.025;
+      orbitRings[1].rotation.z = -t * 0.018;
+      baguette.rotation.z = 0.32 + Math.sin(t * 0.42) * 0.018;
+      greens.rotation.y = t * 0.16;
 
-      const boost = 1 + impulse * 2.2;
+      const boost = 1 + impulse * 0.45;
       orbiters.forEach((o) => {
-        const a = t * o.speed * boost + o.phase;
+        const a = t * o.speed * 0.45 * boost + o.phase;
         o.mesh.position.set(
           Math.cos(a) * o.radius,
-          o.lift + Math.sin(t * 0.9 + o.phase) * (lite ? 0.72 : 0.62) * o.bob,
+          o.lift + Math.sin(t * 0.42 + o.phase) * 0.22 * o.bob,
           Math.sin(a) * o.radius * 0.72,
         );
-        o.mesh.scale.setScalar(1 + Math.sin(t * 1.4 + o.phase) * 0.045);
-        o.mesh.rotation.x += o.spin.x * dt * boost;
-        o.mesh.rotation.y += o.spin.y * dt * boost;
-        o.mesh.rotation.z += o.spin.z * dt * boost;
+        o.mesh.scale.setScalar(1 + Math.sin(t * 0.55 + o.phase) * 0.015);
+        o.mesh.rotation.x += o.spin.x * dt * boost * 0.2;
+        o.mesh.rotation.y += o.spin.y * dt * boost * 0.2;
+        o.mesh.rotation.z += o.spin.z * dt * boost * 0.2;
       });
 
-      if (sparkles) sparkles.rotation.y = t * 0.05;
+      if (sparkles) sparkles.rotation.y = t * 0.018;
 
       renderer.render(scene, camera);
       if (!host.dataset.ready) host.dataset.ready = '1';
