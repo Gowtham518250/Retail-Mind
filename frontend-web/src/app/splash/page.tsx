@@ -24,9 +24,9 @@ export default function SplashPage() {
       <section className={styles.content}>
         <motion.div
           className={styles.brandBlock}
-          initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: .55 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: .28 }}
         >
           <div className={styles.logoWrap}>
             <Image src="/icons/retail-mind-logo.png" alt="Retail Mind" width={110} height={110} priority className={styles.logo} />
@@ -39,9 +39,9 @@ export default function SplashPage() {
         <motion.div
           className={styles.scene}
           aria-label="Illustration of a friendly local grocery store"
-          initial={reduceMotion ? false : { opacity: 0, y: 10, scale: .97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: .65, delay: .08 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: .35, delay: .04 }}
         >
           <img
             src="/illustrations/splash-local-market.svg"
