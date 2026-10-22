@@ -41,3 +41,14 @@ def test_sales_restore_omits_legacy_cancelled_invoices_and_summary_totals():
     source = (ROOT / "sales_restore_service.py").read_text(encoding="utf-8")
     assert "Invoice.status != InvoiceStatus.CANCELLED" in source
     assert "from models import Invoice, InvoiceStatus," in source
+
+
+def test_customer_web_calls_the_authenticated_cancel_endpoint():
+    orders_page = (
+        ROOT / "frontend-web" / "src" / "app" / "orders" / "page.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "API_BASE + '/store/order/' + order.order_id + '/cancel'" in orders_page
+    assert "method: 'POST'" in orders_page
+    assert "Authorization: 'Bearer ' + token" in orders_page
+    assert "data?.status !== 'CANCELLED'" in orders_page
