@@ -3,6 +3,9 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+import requests
 
 from db import get_db
 from models import User, ShopProfile, Worker, EmailOtpChallenge
@@ -33,6 +36,14 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class GoogleLoginRequest(BaseModel):
+    # The current web client sends a Google OAuth access token as google_token.
+    # Optional browser profile fields are accepted for compatibility only.
+    google_token: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    photo_url: Optional[str] = None
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
@@ -728,6 +739,150 @@ def reset_password(data: ResetPasswordRequest):
         status_code=410,
         detail="Legacy token-based password reset is disabled. Use the owner OTP reset flow.",
     )
+
+@router.post("/google")
+@rate_limit_endpoint(max_requests=5, window_seconds=60)
+def google_login(data: GoogleLoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Authenticate via Google's verified UserInfo response, not client-supplied email."""
+    google_token = (data.google_token or "").strip()
+    if not google_token or len(google_token) > 4096:
+        raise HTTPException(status_code=400, detail="A valid Google sign-in token is required.")
+
+    try:
+        google_response = requests.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={"Authorization": f"Bearer {google_token}"},
+            timeout=8,
+        )
+    except requests.RequestException:
+        logger.warning("Google identity verification service is temporarily unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google sign-in verification is temporarily unavailable. Please try again.",
+        )
+
+    if google_response.status_code in (400, 401, 403):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google sign-in token is invalid or expired. Please try again.",
+        )
+    if google_response.status_code != 200:
+        logger.warning("Google identity verification returned HTTP %s", google_response.status_code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google sign-in verification is temporarily unavailable. Please try again.",
+        )
+
+    try:
+        google_profile = google_response.json()
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google returned an invalid identity response.",
+        )
+
+    # UserInfo is authenticated by Google with the bearer token. Never use the
+    # email/name supplied by the browser as proof of account ownership.
+    google_subject = str(google_profile.get("sub") or "").strip()
+    google_email = str(google_profile.get("email") or "").strip().lower()
+    email_verified = str(google_profile.get("email_verified", "")).lower() == "true"
+    if not google_subject or not google_email or not email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google must provide a verified email address to sign in.",
+        )
+
+    raw_name = str(
+        google_profile.get("name")
+        or google_profile.get("given_name")
+        or google_email.split("@", 1)[0]
+    )
+    display_name = "".join(ch for ch in raw_name if ch.isprintable()).strip()[:100]
+    if not display_name:
+        display_name = google_email.split("@", 1)[0][:100]
+
+    db_user = db.query(User).filter(func.lower(User.email) == google_email).first()
+    if db_user is None:
+        # First Google sign-in provisions a normal owner account and shop profile.
+        # Existing database roles are always retained and never taken from input.
+        try:
+            db_user = User(
+                user_name=display_name,
+                email=google_email,
+                password=hash_password(secrets.token_urlsafe(32)),
+                user_type=ROLE_OWNER,
+                is_active=True,
+            )
+            db.add(db_user)
+            db.flush()
+            db.add(
+                ShopProfile(
+                    shop_id=db_user.id,
+                    shop_name=f"{display_name}'s Shop"[:200],
+                    email=google_email,
+                )
+            )
+            db.commit()
+            db.refresh(db_user)
+        except IntegrityError:
+            # A concurrent request may have created the same verified email first.
+            db.rollback()
+            db_user = db.query(User).filter(func.lower(User.email) == google_email).first()
+            if db_user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Unable to create this account. Please try Google sign-in again.",
+                )
+        except Exception:
+            db.rollback()
+            logger.exception("Google sign-in account provisioning failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to complete Google sign-in. Please try again.",
+            )
+
+    if not db_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated. Please contact support.",
+        )
+
+    user_role = str(getattr(db_user, "user_type", None) or "").strip().upper()
+    if user_role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account role is invalid. Please contact support.",
+        )
+
+    shop_profile = None
+    if user_role == ROLE_OWNER:
+        from shop_management import ShopService
+        shop_profile = ShopService.get_shop_profile(db, db_user.id)
+
+    access_token = create_access_token(
+        data={"sub": str(db_user.id), "role": user_role, "user_type": user_role}
+    )
+    refresh_token = create_refresh_token(db_user.id, user_role)
+
+    return {
+        "msg": "Google sign-in successful",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "role": user_role,
+        "user_type": user_role,
+        "user_id": db_user.id,
+        "username": db_user.user_name,
+        "shop_profile": {
+            "id": shop_profile.id,
+            "shop_id": shop_profile.shop_id,
+            "shop_name": shop_profile.shop_name,
+            "shop_type": shop_profile.shop_type,
+            "logo_url": shop_profile.logo_url,
+            "is_online_store_enabled": bool(shop_profile.is_online_store_enabled),
+        } if shop_profile else None,
+    }
+
 
 @router.post("/login")
 @rate_limit_endpoint(max_requests=5, window_seconds=60)
