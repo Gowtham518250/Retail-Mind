@@ -9,7 +9,8 @@ import { useCart } from '../context/CartContext';
 import styles from './CartDrawer.module.css';
 
 function Money({ value }: { value: number }) {
-  const spring = useSpring(value, { stiffness: 150, damping: 22 });
+  const reduceMotion = Boolean(useReducedMotion());
+  const spring = useSpring(value, reduceMotion ? { stiffness: 1200, damping: 90 } : { stiffness: 150, damping: 22 });
   useEffect(() => { spring.set(value); }, [value, spring]);
   const text = useTransform(spring, (v) => '₹' + v.toFixed(2));
   return <motion.span>{text}</motion.span>;
@@ -103,10 +104,10 @@ export default function CartDrawer() {
             className={styles.overlay}
             onClick={toggleCart}
             aria-hidden="true"
-            initial={{ opacity: 0 }}
+            initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.24 }}
           />
 
           <motion.aside
@@ -116,10 +117,10 @@ export default function CartDrawer() {
             aria-labelledby="cart-drawer-title"
             role="dialog"
             aria-modal="true"
-            initial={{ x: '104%', rotateY: -14 }}
+            initial={reduceMotion ? false : { x: '104%', rotateY: -9 }}
             animate={{ x: 0, rotateY: 0 }}
-            exit={{ x: '104%', rotateY: -14 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+            exit={reduceMotion ? undefined : { x: '104%', rotateY: -7 }}
+            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30 }}
             style={{ transformPerspective: 1600, transformOrigin: 'right center' }}
           >
             <div className={styles.head}>
@@ -170,10 +171,10 @@ export default function CartDrawer() {
                         key={item.product.id}
                         layout
                         className={styles.item}
-                        initial={{ opacity: 0, x: 50, scale: 0.96 }}
+                        initial={reduceMotion ? false : { opacity: 0, x: 22, scale: 0.99 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: 80, scale: 0.9 }}
-                        transition={{ type: 'spring', stiffness: 320, damping: 30, delay: i * 0.04 }}
+                        exit={reduceMotion ? undefined : { opacity: 0, x: 18, scale: 0.99 }}
+                        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 30, delay: i * 0.035 }}
                       >
                         <div className={styles.thumb}>
                           {item.product.image_url
@@ -186,7 +187,7 @@ export default function CartDrawer() {
                           <div className={styles.qty}>
                             <button onClick={() => updateQuantity(item.product.id, -1)} aria-label="Decrease quantity"><Minus size={14} /></button>
                             <AnimatePresence mode="popLayout" initial={false}>
-                              <motion.span key={item.quantity} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} transition={{ duration: 0.15 }}>
+                              <motion.span key={item.quantity} initial={reduceMotion ? false : { y: 6, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={reduceMotion ? undefined : { y: -6, opacity: 0 }} transition={reduceMotion ? { duration: 0 } : { duration: 0.13 }}>
                                 {item.quantity}
                               </motion.span>
                             </AnimatePresence>
@@ -216,10 +217,10 @@ export default function CartDrawer() {
               {cartItems.length > 0 && (
                 <motion.div
                   className={styles.foot}
-                  initial={{ y: 40, opacity: 0 }}
+                  initial={reduceMotion ? false : { y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 40, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  exit={reduceMotion ? undefined : { y: 14, opacity: 0 }}
+                  transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 30 }}
                 >
                   <div className={styles.total}>
                     <span>Subtotal</span>
