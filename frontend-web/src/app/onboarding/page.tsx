@@ -43,7 +43,7 @@ export default function OnboardingPage() {
   const next = () => setActive((current) => (current + 1) % slides.length);
 
   return (
-    <main className={styles.screen}>
+    <main className={styles.screen} data-entry-screen="onboarding">
       <header className={styles.header}>
         <Link href="/splash" className={styles.backButton} aria-label="Back to splash screen">
           <ChevronLeft size={20} />
