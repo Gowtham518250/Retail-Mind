@@ -117,11 +117,10 @@ export default function CartDrawer() {
             aria-labelledby="cart-drawer-title"
             role="dialog"
             aria-modal="true"
-            initial={reduceMotion ? false : { x: '104%', rotateY: -9 }}
-            animate={{ x: 0, rotateY: 0 }}
-            exit={reduceMotion ? undefined : { x: '104%', rotateY: -7 }}
-            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30 }}
-            style={{ transformPerspective: 1600, transformOrigin: 'right center' }}
+            initial={reduceMotion ? false : { x: '100%' }}
+            animate={{ x: 0 }}
+            exit={reduceMotion ? undefined : { x: '100%' }}
+            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 32 }}
           >
             <div className={styles.head}>
               <div className={styles.headLeft}>
@@ -156,9 +155,9 @@ export default function CartDrawer() {
               )}
               {cartItems.length === 0 ? (
                 <div className={styles.empty}>
-                  <motion.div className={styles.emptyBag} animate={reduceMotion ? { y: 0, rotate: 0 } : { y: [0, -8, 0], rotate: [-2, 2, -2] }} transition={reduceMotion ? { duration: 0 } : { duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}>
+                  <div className={styles.emptyBag}>
                     <ShoppingBag size={44} strokeWidth={1.5} />
-                  </motion.div>
+                  </div>
                   <strong>Nothing here yet</strong>
                   <p>Add items from a shop and they&apos;ll show up here.</p>
                   <button className={styles.keep} onClick={toggleCart}>Keep browsing</button>
@@ -171,10 +170,10 @@ export default function CartDrawer() {
                         key={item.product.id}
                         layout
                         className={styles.item}
-                        initial={reduceMotion ? false : { opacity: 0, x: 22, scale: 0.99 }}
-                        animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={reduceMotion ? undefined : { opacity: 0, x: 18, scale: 0.99 }}
-                        transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 30, delay: i * 0.035 }}
+                        initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={reduceMotion ? undefined : { opacity: 0 }}
+                        transition={reduceMotion ? { duration: 0 } : { duration: 0.18, delay: i * 0.02 }}
                       >
                         <div className={styles.thumb}>
                           {item.product.image_url
@@ -217,10 +216,10 @@ export default function CartDrawer() {
               {cartItems.length > 0 && (
                 <motion.div
                   className={styles.foot}
-                  initial={reduceMotion ? false : { y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={reduceMotion ? undefined : { y: 14, opacity: 0 }}
-                  transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 30 }}
+                  initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={reduceMotion ? undefined : { opacity: 0 }}
+                  transition={reduceMotion ? { duration: 0 } : { duration: 0.18 }}
                 >
                   <div className={styles.total}>
                     <span>Subtotal</span>
