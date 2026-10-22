@@ -451,11 +451,11 @@ export default function AiShoppingPage() {
                 <motion.article
                   className={styles.result}
                   key={String(item.product_id) + '-' + String(item.shop_id)}
-                  initial={{ opacity: 0, y: 24, rotateX: 9 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 18, rotateX: 5 }}
                   animate={{ opacity: 1, y: 0, rotateX: 0 }}
-                  transition={{
-                    duration: .5,
-                    delay: Math.min(index * .07, .35),
+                  transition={shouldReduceMotion ? { duration: 0 } : {
+                    duration: .42,
+                    delay: Math.min(index * .06, .3),
                     ease: [.22, .7, .25, 1],
                   }}
                 >
