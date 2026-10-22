@@ -201,11 +201,13 @@ def get_restore_summary(
         
         # Get date range
         oldest_invoice = db.query(Invoice).filter(
-            Invoice.user_id == user_id
+            Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
         ).order_by(Invoice.created_at).first()
         
         newest_invoice = db.query(Invoice).filter(
-            Invoice.user_id == user_id
+            Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
         ).order_by(desc(Invoice.created_at)).first()
         
         # Get total revenue
