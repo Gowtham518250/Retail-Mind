@@ -24,10 +24,22 @@ const SHOP_TONES = [
 
 const resolveLogo = (url?: string) => (url ? (url.startsWith('http') ? url : API_BASE + url) : '');
 
+function categoryIllustration(value?: string) {
+  const text = String(value || '').toLowerCase();
+  if (/beverage|drink|juice|tea|coffee|water/.test(text)) return '/categories/category-beverages.svg';
+  if (/snack|bakery|biscuit|sweet|cake|chips/.test(text)) return '/categories/category-snacks.svg';
+  if (/fruit|apple|banana|mango/.test(text)) return '/categories/category-fruits.svg';
+  if (/vegetable|veggie|greens|leaf|produce/.test(text)) return '/categories/category-vegetables.svg';
+  if (/dairy|milk|curd|yogurt|cheese|paneer/.test(text)) return '/categories/category-dairy.svg';
+  if (/grocery|supermarket|provision|general store|rice|flour|sugar/.test(text)) return '/categories/category-groceries.svg';
+  return '/categories/category-all.svg';
+}
+
 function ShopCard({ shop, index }: { shop: any; index: number }) {
   const reduceMotion = Boolean(useReducedMotion());
   const [from, to, ink] = SHOP_TONES[Math.abs(Number(shop.shop_id) || index) % SHOP_TONES.length];
   const logo = resolveLogo(shop.logo_url);
+  const shopIllustration = categoryIllustration(String(shop.shop_type || shop.shop_name || ''));
   const rated = Boolean(shop.rating_count);
   return (
     <motion.div
@@ -40,6 +52,7 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
       <Tilt3D className={styles.tiltFill}>
         <Link href={'/shop/' + shop.shop_id} className={styles.shopCard}>
           <div className={styles.shopVisual} style={{ background: `linear-gradient(135deg, ${from}, ${to})`, color: ink }}>
+            <img src={shopIllustration} alt="" aria-hidden="true" className={styles.shopArt} loading="lazy" />
             <span className={styles.shopInitial} aria-hidden="true">{(shop.shop_name || 'S').trim().charAt(0).toUpperCase()}</span>
             <span className={styles.liveTag}><i /> Online</span>
             <div className={styles.shopTile}>
@@ -514,7 +527,7 @@ export default function MarketplaceShell({
           {filteredFeaturedProducts.length ? (
             <div className={styles.productGrid}>
               {filteredFeaturedProducts.slice(0, 8).map((product) => {
-                const image = product.image_url ? resolveLogo(product.image_url) : '';
+                const image = product.image_url ? resolveLogo(product.image_url) : categoryIllustration(product.category);
                 const outOfStock = product.stock_available === 0;
                 return (
                   <article className={styles.productCard} key={product.shop_id + ':' + product.product_id}>
