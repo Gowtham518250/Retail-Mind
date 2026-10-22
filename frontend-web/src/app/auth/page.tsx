@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   Eye,
   EyeOff,
@@ -25,6 +25,7 @@ type View = 'login' | 'register' | 'reset';
 
 export default function AuthPage() {
   const router = useRouter();
+  const reduceMotion = Boolean(useReducedMotion());
   const [view, setView] = useState<View>('login');
 
   const [email, setEmail] = useState('');
@@ -282,9 +283,9 @@ export default function AuthPage() {
 
         <motion.div
           className={styles.authCard}
-          initial={{ opacity: 0 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.2, 0.75, 0.25, 1] }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.42, ease: [0.2, 0.75, 0.25, 1] }}
         >
           <div className={styles.cardGlowBar} />
 
@@ -325,7 +326,7 @@ export default function AuthPage() {
                 onClick={() => switchView('login')}
               >
                 Sign In
-                {view === 'login' && <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />}
+                {view === 'login' && (reduceMotion ? <span className={styles.modeIndicator} /> : <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />)}
               </button>
               <button
                 type="button"
@@ -333,7 +334,7 @@ export default function AuthPage() {
                 onClick={() => switchView('register')}
               >
                 Create Account
-                {view === 'register' && <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />}
+                {view === 'register' && (reduceMotion ? <span className={styles.modeIndicator} /> : <motion.div layoutId="modeUnderline" className={styles.modeIndicator} />)}
               </button>
             </div>
           )}
@@ -343,9 +344,10 @@ export default function AuthPage() {
             {error && (
               <motion.div
                 key="err"
-                initial={{ opacity: 0, height: 0 }}
+                initial={reduceMotion ? false : { opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.18 }}
                 className={styles.errorBanner}
               >
                 {error}
@@ -372,10 +374,10 @@ export default function AuthPage() {
                 key="login-form"
                 onSubmit={handleLogin}
                 className={styles.form}
-                initial={{ opacity: 0, y: 12 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
               >
                 <div className={styles.fieldGroup}>
                   <label className={styles.label} htmlFor="customer-email">Email</label>
@@ -425,8 +427,8 @@ export default function AuthPage() {
                 </div>
 
                 <motion.button
-                  whileHover={{ scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
+                  whileHover={reduceMotion ? undefined : { scale: 1.01 }}
+                  whileTap={reduceMotion ? undefined : { scale: 0.99 }}
                   type="submit"
                   disabled={loading}
                   className={styles.submitBtn}
@@ -531,8 +533,8 @@ export default function AuthPage() {
                 </div>
 
                 <motion.button
-                  whileHover={{ scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
+                  whileHover={reduceMotion ? undefined : { scale: 1.01 }}
+                  whileTap={reduceMotion ? undefined : { scale: 0.99 }}
                   type="submit"
                   disabled={loading}
                   className={styles.submitBtn}
