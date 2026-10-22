@@ -1,0 +1,242 @@
+/* Retail Mind motion system: brief entrances, clear feedback, and reduced-motion support. */
+:root {
+  --rm-motion-ease: cubic-bezier(.2,.75,.25,1);
+  --rm-motion-spring: cubic-bezier(.22,1,.36,1);
+  --rm-motion-fast: 150ms;
+  --rm-motion-medium: 320ms;
+  --rm-motion-slow: 520ms;
+}
+@keyframes rm-motion-page-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rm-motion-rise-in {
+  from { opacity: 0; transform: translate3d(0,12px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+@keyframes rm-motion-soft-pop {
+  from { opacity: 0; transform: scale(.965); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes rm-motion-float {
+  0%,100% { transform: translate3d(0,0,0) rotate(0); }
+  50% { transform: translate3d(0,-5px,0) rotate(1deg); }
+}
+@keyframes rm-motion-orbit-breathe {
+  0%,100% { opacity:.58; transform:scale(.97); }
+  50% { opacity:.9; transform:scale(1.035); }
+}
+
+/* The shared route container stays in normal layout flow; only its new page child enters. */
+main.page-transition > :first-child:not([data-entry-screen]) {
+  animation: rm-motion-page-in 420ms var(--rm-motion-ease) both;
+}
+:where(.page-transition) :where(button:not(:disabled), a[role="button"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+:where(.page-transition) :where(button:not(:disabled)) {
+  transition: color var(--rm-motion-fast) ease, background-color var(--rm-motion-fast) ease,
+    border-color var(--rm-motion-fast) ease, box-shadow var(--rm-motion-fast) ease,
+    filter var(--rm-motion-fast) ease, scale var(--rm-motion-fast) ease;
+}
+:where(.page-transition) :where(button:not(:disabled):active) { scale: .975; }
+:where(.page-transition) :where(a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible) {
+  outline: 3px solid rgba(49,87,213,.33);
+  outline-offset: 3px;
+}
+
+/* Marketplace: reveal the content in a short, intentional rhythm. */
+[data-experience="marketplace"] [class*="freshBannerCopy"] {
+  animation: rm-motion-rise-in 580ms var(--rm-motion-ease) both;
+}
+[data-experience="marketplace"] [class*="freshArtwork"] {
+  animation: rm-motion-soft-pop 720ms var(--rm-motion-ease) 80ms both;
+}
+[data-experience="marketplace"] [class*="artHalo"] {
+  transform-origin: center;
+  animation: rm-motion-orbit-breathe 8s ease-in-out infinite;
+}
+[data-experience="marketplace"] [class*="artBasket"] {
+  transform-origin: 50% 75%;
+  animation: rm-motion-float 5.8s ease-in-out 420ms infinite;
+}
+[data-experience="marketplace"] [class*="artTileOne"] { animation: rm-motion-float 5s ease-in-out 180ms infinite; }
+[data-experience="marketplace"] [class*="artTileTwo"] { animation: rm-motion-float 5.7s ease-in-out 620ms infinite; }
+[data-experience="marketplace"] [class*="artTileThree"] { animation: rm-motion-float 4.8s ease-in-out 950ms infinite; }
+[data-experience="marketplace"] [class*="categoryButton"] {
+  animation: rm-motion-rise-in 430ms var(--rm-motion-ease) both;
+}
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(1) { animation-delay: 35ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(2) { animation-delay: 75ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(3) { animation-delay: 115ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(4) { animation-delay: 155ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(5) { animation-delay: 195ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(6) { animation-delay: 235ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(7) { animation-delay: 275ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:active { scale: .96; }
+[data-experience="marketplace"] [class*="productGrid"] > [class*="productCard"] {
+  animation: rm-motion-rise-in 420ms var(--rm-motion-ease) both;
+}
+[data-experience="marketplace"] [class*="productGrid"] > [class*="productCard"]:nth-child(4n+1) { animation-delay: 30ms; }
+[data-experience="marketplace"] [class*="productGrid"] > [class*="productCard"]:nth-child(4n+2) { animation-delay: 75ms; }
+[data-experience="marketplace"] [class*="productGrid"] > [class*="productCard"]:nth-child(4n+3) { animation-delay: 120ms; }
+[data-experience="marketplace"] [class*="productGrid"] > [class*="productCard"]:nth-child(4n+4) { animation-delay: 165ms; }
+[data-experience="marketplace"] [class*="productCard"] {
+  transition: transform 220ms var(--rm-motion-ease), box-shadow 220ms ease, border-color 220ms ease;
+}
+[data-experience="marketplace"] [class*="productCard"]:focus-within {
+  outline: 2px solid rgba(49,87,213,.35);
+  outline-offset: 2px;
+}
+
+/* Shop detail cards already use Motion layout; these styles make pointer feedback consistent. */
+[data-experience="storefront"] [class*="toolbar"],
+[data-experience="storefront"] > section:first-of-type {
+  animation: rm-motion-rise-in 500ms var(--rm-motion-ease) both;
+}
+[data-experience="storefront"] [class*="toolbar"] { animation-delay: 60ms; }
+[data-experience="storefront"] [class*="cat"] { transition: color 180ms ease, background-color 180ms ease, transform 180ms ease; }
+[data-experience="storefront"] [class*="cat"]:active { transform: scale(.96); }
+[data-experience="storefront"] [class*="ctaMain"],
+[data-experience="storefront"] [class*="ctaGhost"] { transition: transform 190ms var(--rm-motion-ease), box-shadow 190ms ease, background-color 190ms ease; }
+[data-experience="storefront"] [class*="ctaMain"]:hover,
+[data-experience="storefront"] [class*="ctaGhost"]:hover { transform: translateY(-2px); }
+
+/* Auth, profile, orders: restrained entrance and staggered item feedback. */
+[data-experience="auth"] [class*="authCard"],
+[data-experience="auth"] [class*="heroShowcase"] {
+  animation: rm-motion-rise-in 560ms var(--rm-motion-ease) both;
+}
+[data-experience="auth"] [class*="authCard"] { animation-delay: 70ms; }
+[data-experience="profile"] [class*="profileHeaderCard"] {
+  animation: rm-motion-rise-in 440ms var(--rm-motion-ease) both;
+}
+[data-experience="profile"] [class*="profileMenuCard"] > * {
+  animation: rm-motion-rise-in 360ms var(--rm-motion-ease) both;
+}
+[data-experience="profile"] [class*="profileMenuCard"] > :nth-child(1) { animation-delay: 35ms; }
+[data-experience="profile"] [class*="profileMenuCard"] > :nth-child(2) { animation-delay: 65ms; }
+[data-experience="profile"] [class*="profileMenuCard"] > :nth-child(3) { animation-delay: 95ms; }
+[data-experience="profile"] [class*="profileMenuCard"] > :nth-child(4) { animation-delay: 125ms; }
+[data-experience="profile"] [class*="profileMenuCard"] > :nth-child(5) { animation-delay: 155ms; }
+[data-experience="profile"] [class*="profileMenuCard"] > :nth-child(6) { animation-delay: 185ms; }
+[data-experience="profile"] [class*="profileMenuCard"] > :nth-child(7) { animation-delay: 215ms; }
+[data-experience="orders"] .orders-fk-stat {
+  animation: rm-motion-rise-in 380ms var(--rm-motion-ease) both;
+}
+[data-experience="orders"] .orders-fk-stat:nth-child(2) { animation-delay: 45ms; }
+[data-experience="orders"] .orders-fk-stat:nth-child(3) { animation-delay: 90ms; }
+[data-experience="orders"] .orders-fk-stat:nth-child(4) { animation-delay: 135ms; }
+[data-experience="orders"] .orders-fk-card {
+  transition: transform 200ms var(--rm-motion-ease), box-shadow 200ms ease, border-color 200ms ease;
+}
+[data-experience="orders"] .orders-fk-card:hover {
+  transform: translateY(-2px);
+}
+[data-experience="order-tracking"] [class*="timelineCard"],
+[data-experience="order-tracking"] [class*="statusCard"],
+[data-experience="order-tracking"] [class*="itemsCard"],
+[data-experience="order-tracking"] [class*="addressCard"] {
+  animation: rm-motion-rise-in 380ms var(--rm-motion-ease) both;
+}
+[data-experience="order-tracking"] [class*="statusCard"] { animation-delay: 55ms; }
+[data-experience="order-tracking"] [class*="itemsCard"] { animation-delay: 100ms; }
+[data-experience="order-tracking"] [class*="addressCard"] { animation-delay: 145ms; }
+
+
+
+/* Dedicated shop discovery, AI shopping and contact surfaces. */
+[data-experience="shop-discovery"] [class*="hero"] {
+  animation: rm-motion-rise-in 520ms var(--rm-motion-ease) both;
+}
+[data-experience="shop-discovery"] [class*="filterRow"] {
+  animation: rm-motion-rise-in 420ms var(--rm-motion-ease) 60ms both;
+}
+[data-experience="shop-discovery"] [class*="grid"] > [class*="card"] {
+  animation: rm-motion-rise-in 390ms var(--rm-motion-ease) both;
+  transition: transform 190ms var(--rm-motion-ease), box-shadow 190ms ease, border-color 190ms ease;
+}
+[data-experience="shop-discovery"] [class*="grid"] > [class*="card"]:nth-child(3n+2) { animation-delay: 55ms; }
+[data-experience="shop-discovery"] [class*="grid"] > [class*="card"]:nth-child(3n+3) { animation-delay: 105ms; }
+[data-experience="shop-discovery"] [class*="card"]:hover { transform: translateY(-3px); }
+[data-experience="shop-discovery"] [class*="filter"]:not(:disabled) {
+  transition: transform 170ms var(--rm-motion-ease), background-color 170ms ease, box-shadow 170ms ease;
+}
+[data-experience="shop-discovery"] [class*="filter"]:active { transform: scale(.97); }
+[data-experience="shop-discovery"] [class*="empty"] {
+  animation: rm-motion-soft-pop 360ms var(--rm-motion-ease) both;
+}
+[data-experience="ai-shopping"] [class*="heroInner"] {
+  animation: rm-motion-rise-in 560ms var(--rm-motion-ease) both;
+}
+[data-experience="ai-shopping"] [class*="showroomStage"] {
+  animation: rm-motion-soft-pop 720ms var(--rm-motion-ease) 80ms both;
+}
+[data-experience="ai-shopping"] [class*="exampleStrip"] {
+  animation: rm-motion-rise-in 420ms var(--rm-motion-ease) 140ms both;
+}
+[data-experience="contact"] [class*="header"] {
+  animation: rm-motion-rise-in 420ms var(--rm-motion-ease) both;
+}
+[data-experience="contact"] [class*="formSection"],
+[data-experience="contact"] [class*="aside"] {
+  animation: rm-motion-rise-in 460ms var(--rm-motion-ease) 70ms both;
+}
+[data-experience="contact"] [class*="aside"] { animation-delay: 125ms; }
+[data-experience="contact"] [class*="directEmail"] {
+  transition: transform 180ms var(--rm-motion-ease), color 180ms ease;
+}
+[data-experience="contact"] [class*="directEmail"]:hover { transform: translateY(-1px); }
+
+[data-entry-screen="splash"] [class*="floatBag"] { animation: rm-motion-float 5.2s ease-in-out 220ms infinite; }
+[data-entry-screen="splash"] [class*="floatLeaf"] { animation: rm-motion-float 6s ease-in-out 500ms infinite; }
+[data-entry-screen="onboarding"] [class*="smallCard"] { animation: rm-motion-rise-in 400ms var(--rm-motion-ease) both; }
+[data-entry-screen="onboarding"] [class*="nearbyCard"] { animation-delay: 100ms; }
+[data-entry-screen="onboarding"] [class*="freshCard"] { animation-delay: 180ms; }
+
+/* Cart drawer and onboarding have their own spring-driven animations; this adds subtle idle polish only. */
+[data-entry-screen="splash"] [class*="sceneLabel"] { animation: rm-motion-rise-in 520ms var(--rm-motion-ease) 230ms both; }
+[data-entry-screen="splash"] [class*="logoWrap"] { animation: rm-motion-soft-pop 560ms var(--rm-motion-spring) 70ms both; }
+[data-entry-screen="onboarding"] [class*="feature"] { transition: transform 220ms var(--rm-motion-ease), background-color 220ms ease; }
+[data-entry-screen="onboarding"] [class*="arrowButton"]:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(49,87,213,.08); }
+
+@media (hover: hover) and (pointer: fine) {
+  [data-experience="marketplace"] [class*="categoryButton"]:hover { transform: translateY(-2px); }
+  [data-experience="marketplace"] [class*="artBasket"]:hover { animation-play-state: paused; }
+  [data-experience="marketplace"] [class*="productCard"]:hover { transform: translateY(-3px); }
+  [data-experience="storefront"] [class*="cat"]:hover { transform: translateY(-1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    transition-delay: 0ms !important;
+  }
+  main.page-transition > :first-child:not([data-entry-screen]),
+  [data-experience] *,
+  [data-entry-screen] * {
+    animation: none !important;
+  }
+  :where(.page-transition) :where(button:not(:disabled):active) { scale: 1; }
+  [data-experience="marketplace"] [class*="artBasket"],
+  [data-experience="marketplace"] [class*="artHalo"],
+  [data-experience="marketplace"] [class*="artTileOne"],
+  [data-experience="marketplace"] [class*="artTileTwo"],
+  [data-experience="marketplace"] [class*="artTileThree"] { animation: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-experience="marketplace"] [class*="categoryButton"]:hover,
+  [data-experience="marketplace"] [class*="productCard"]:hover,
+  [data-experience="storefront"] [class*="cat"]:hover,
+  [data-experience="storefront"] [class*="ctaMain"]:hover,
+  [data-experience="storefront"] [class*="ctaGhost"]:hover,
+  [data-experience="shop-discovery"] [class*="card"]:hover,
+  [data-experience="contact"] [class*="directEmail"]:hover,
+  [data-experience="orders"] .orders-fk-card:hover {
+    transform: none !important;
+  }
+}

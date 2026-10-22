@@ -43,10 +43,11 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
   const rated = Boolean(shop.rating_count);
   return (
     <motion.div
-      initial={reduceMotion ? false : { opacity: 0, y: 40, rotateX: -8 }}
-      whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={reduceMotion ? { duration: 0 } : { duration: 0.65, delay: (index % 4) * 0.08, ease: EASE }}
+      initial={reduceMotion ? false : { opacity: 0, y: 18, scale: 0.985 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={reduceMotion ? undefined : { y: -3, transition: { duration: 0.18, ease: EASE } }}
+      viewport={{ once: true, margin: '-35px' }}
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.48, delay: (index % 3) * 0.055, ease: EASE }}
       style={{ transformPerspective: 1100 }}
     >
       <Tilt3D className={styles.tiltFill}>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { Check, Package2, Plus, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
@@ -20,6 +20,7 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, shopId, inCartCount, justAdded, onAddToCart }: ProductCardProps) {
+  const reduceMotion = Boolean(useReducedMotion());
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [flyingToCart, setFlyingToCart] = useState(false);
   const discount = product.original_price && product.original_price > product.price
@@ -37,7 +38,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     const rect = event.currentTarget.getBoundingClientRect();
     const source = event.currentTarget.closest('article')?.querySelector<HTMLElement>(`.${styles.media}`) || event.currentTarget;
     try {
-      await flyProductToCart(source, product.image_url);
+      if (!reduceMotion) await flyProductToCart(source, product.image_url);
     } catch (error) {
       console.error('Could not animate product into the cart.', error);
     } finally {
@@ -108,7 +109,7 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
               className={`${styles.add} ${state === 'added' ? styles.added : ''}`}
               onClick={handleAdd}
               disabled={isOutOfStock || flyingToCart}
-              whileTap={{ scale: 0.94 }}
+              whileTap={reduceMotion ? undefined : { scale: 0.96 }}
               aria-label={`Add ${product.name} to cart`}
             >
               <AnimatePresence mode="wait" initial={false}>

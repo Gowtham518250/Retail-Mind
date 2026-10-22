@@ -58,3 +58,18 @@
   .media::after, .image { transition: none; }
   .wrap:hover .image { transform: none; }
 }
+
+
+/* Keep card hover motion graceful; the 3D wrapper handles pointer tilt separately. */
+.card { transform-origin: center top; transition: transform 220ms cubic-bezier(.2,.75,.25,1), border-color 260ms ease, box-shadow 300ms ease; }
+.wrap:hover .card { transform: translateY(-2px); }
+.wrap:focus-within .card { border-color: rgba(49,87,213,.44); box-shadow: 0 0 0 3px rgba(49,87,213,.1), 0 14px 34px rgba(60,45,20,.08); }
+.add:active:not(:disabled) { transform: scale(.97); }
+@media (hover: none) {
+  .wrap:hover .card { transform: none; }
+  .wrap:hover .image { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .image, .media::after, .add { transition: none !important; }
+  .wrap:hover .card, .wrap:hover .image, .add:hover:not(:disabled) { transform: none; }
+}
