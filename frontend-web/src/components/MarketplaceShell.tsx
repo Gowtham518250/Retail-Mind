@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap, Apple, Milk, Coffee, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
+import { useCart } from '../context/CartContext';
 
 // WebGL is client-only and heavy: load it after first paint.
 const HeroScene3D = dynamic(() => import('./HeroScene3D'), { ssr: false });
@@ -143,7 +144,7 @@ export default function MarketplaceShell() {
   const showcaseProducts = useMemo<FeaturedProduct[]>(() => {
     // When the customer searches specifically for products, showcase those actual
     // results. Otherwise use the cross-shop featured product feed.
-    const source: any[] = mode === 'products' && query.trim() && products.length
+    const source: any[] = query.trim() && mode !== 'shops' && products.length
       ? products
       : featuredProducts;
     return source.map((product: any) => ({
@@ -155,7 +156,7 @@ export default function MarketplaceShell() {
       image_url: typeof product.image_url === 'string' ? product.image_url : null,
       category: String(product.category ?? '').trim(),
       description: String(product.description ?? ''),
-      stock_available: Number(product.stock_available ?? product.current_stock ?? 0),
+      stock_available: product.stock_available == null && product.current_stock == null ? undefined : Number(product.stock_available ?? product.current_stock),
     })).filter((product) => Number.isFinite(product.product_id) && product.product_id > 0);
   }, [mode, query, products, featuredProducts]);
 
@@ -344,320 +345,261 @@ export default function MarketplaceShell() {
   };
 
 
-  const heroRef = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
-  const copyY = useTransform(scrollYProgress, [0, 1], [0, 70]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.2]);
+  const { addToCart, itemCount, toggleCart } = useCart();
 
   const searchModes: { id: ResultMode; label: string; icon?: React.ReactNode }[] = [
-    { id: 'all', label: 'Everything' },
+    { id: 'all', label: 'All' },
     { id: 'shops', label: 'Shops', icon: <Store size={14} /> },
     { id: 'products', label: 'Products', icon: <Boxes size={14} /> },
   ];
 
+  const categories = [
+    { label: 'Groceries', icon: <ShoppingBasket size={22} />, tone: 'blue' },
+    { label: 'Snacks', icon: <Croissant size={22} />, tone: 'peach' },
+    { label: 'Beverages', icon: <Coffee size={22} />, tone: 'purple' },
+    { label: 'Fruits', icon: <Apple size={22} />, tone: 'pink' },
+    { label: 'Vegetables', icon: <Leaf size={22} />, tone: 'green' },
+    { label: 'Dairy', icon: <Milk size={22} />, tone: 'yellow' },
+  ];
+
+  const addProduct = (product: FeaturedProduct) => {
+    const image = product.image_url ? resolveLogo(product.image_url) : undefined;
+    addToCart({
+      id: product.product_id,
+      name: product.product_name,
+      price: product.price,
+      description: product.description,
+      stock_available: product.stock_available,
+      category: product.category,
+      image_url: image,
+      shop_id: product.shop_id,
+    });
+  };
+
   return (
     <div className={styles.page} data-experience="marketplace">
-      {/* ───────── HERO ───────── */}
-      <section className={styles.hero} ref={heroRef}>
-        <div className={styles.heroBg} aria-hidden="true" />
-        <div className={styles.heroGrain} aria-hidden="true" />
-
-        <motion.div className={styles.heroCopy} style={{ y: shouldReduceMotion ? 0 : copyY, opacity: shouldReduceMotion ? 1 : copyOpacity }}>
-          <motion.div className={styles.eyebrow} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
-            <span className={styles.pulse} />
-            Local commerce, reimagined
-          </motion.div>
-
-          <h1 className={styles.title}>
-            <span className={styles.titleLine}><Words text="Shop local." base={0.1} /></span>
-            <span className={styles.titleLine}><Words text="Think smarter." base={0.35} /></span>
-            <span className={styles.titleLine}><Words text="Move faster." base={0.6} className={styles.titleAccent} /></span>
-          </h1>
-
-          <motion.p className={styles.lead} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.9, ease: EASE }}>
-            Discover online-enabled shops, compare products across stores, and use AI to find the right value — all from one connected marketplace.
-          </motion.p>
-
-          <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 1.05, ease: EASE }}>
-            <div className={styles.search}>
-              <Search size={20} className={styles.searchIcon} />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => { if (event.key === 'Enter') void performSearch(mode, query, true); }}
-                placeholder="Search products, shops or categories"
-                aria-label="Search products, shops or categories"
-              />
-              <button onClick={() => void performSearch(mode, query, true)} disabled={searching}>
-                {searching ? 'Finding…' : 'Explore'} <ArrowRight size={16} />
-              </button>
-            </div>
-
-            <div className={styles.modes} role="group" aria-label="Search scope">
-              {searchModes.map((m) => (
-                <button
-                  key={m.id}
-                  className={mode === m.id ? styles.modeOn : styles.mode}
-                  onClick={() => { setMode(m.id); void performSearch(m.id, query, true); }}
-                >
-                  {mode === m.id && <motion.span layoutId="modePill" className={styles.modePill} transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-                  <span className={styles.modeLabel}>{m.icon}{m.label}</span>
-                </button>
-              ))}
-              <button className={styles.modeAi} onClick={performAiSearch}><Bot size={14} /> Ask AI</button>
-            </div>
-          </motion.div>
-
-          <motion.ul className={styles.trust} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.3, duration: 0.8 }}>
-            <li><ShieldCheck size={15} /> Secure checkout</li>
-            <li><Truck size={15} /> Local dispatch</li>
-            <li><Zap size={15} /> Stock-aware</li>
-          </motion.ul>
-        </motion.div>
-
-        <div className={styles.stage}>
-          <div className={styles.stageGlow} aria-hidden="true" />
-          <HeroScene3D className={styles.canvas} />
-
-          <motion.div className={`${styles.chip} ${styles.chipA}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -12, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
-            <span className={styles.chipIcon} style={{ background: '#f3ca4f' }}><Zap size={15} /></span>
-            <span><b>{shops.length > 0 && !query.trim() ? `${shops.length} shops online` : 'Live availability'}</b><small>Updated in real time</small></span>
-          </motion.div>
-          <motion.div className={`${styles.chip} ${styles.chipB}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, 14, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}>
-            <span className={styles.chipIcon} style={{ background: '#e8541e', color: '#fff' }}><Sparkles size={15} /></span>
-            <span><b>AI shopping</b><small>Describe it, we find it</small></span>
-          </motion.div>
-          <motion.div className={`${styles.chip} ${styles.chipC}`} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -10, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}>
-            <span className={styles.chipIcon} style={{ background: '#cfe3c6' }}><Truck size={15} /></span>
-            <span><b>Track every order</b><small>From shelf to door</small></span>
-          </motion.div>
-          <div className={styles.hint}><MousePointer2 size={13} /> Move your cursor · tap the bag</div>
+      <div className={styles.marketHeader}>
+        <div className={styles.locationGroup}>
+          <span className={styles.locationIcon}><MapPin size={18} /></span>
+          <span className={styles.locationCopy}>
+            <small>SHOP LOCAL, SHOP SMART</small>
+            <strong>Find stores near you</strong>
+          </span>
         </div>
-      </section>
+        <div className={styles.headerActions}>
+          <Link href="/profile" className={styles.accountButton} aria-label="My profile">
+            <UserRound size={18} />
+          </Link>
+          <button type="button" className={styles.headerCart} onClick={toggleCart} aria-label={'Open cart, ' + itemCount + ' items'}>
+            <ShoppingCart size={18} />
+            <span>Cart</span>
+            {itemCount > 0 && <b>{itemCount}</b>}
+          </button>
+        </div>
+      </div>
 
-      {/* ───────── BENTO ───────── */}
-      <section className={styles.section}>
-        <Reveal className={styles.bento}>
-          <Tilt3D className={`${styles.bentoWide}`}>
-            <button className={`${styles.bentoTile} ${styles.tileYellow}`} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
-              <span className={styles.tileKicker}>01 · Discover</span>
-              <strong>Local storefronts</strong>
-              <p>Meet verified shops near you and order straight from their shelves.</p>
-              <span className={styles.tileGo}>Browse shops <ArrowRight size={16} /></span>
-              <div className={styles.stack} aria-hidden="true"><i /><i /><i /></div>
-            </button>
-          </Tilt3D>
-          <Tilt3D>
-            <button className={`${styles.bentoTile} ${styles.tilePaper}`} onClick={() => { setMode('products'); void performSearch('products', '', true); }}>
-              <span className={styles.tileIcon}><Boxes size={22} /></span>
-              <strong>Compare products</strong>
-              <p>See prices across stores.</p>
-              <span className={styles.tileGo}><ArrowUpRight size={18} /></span>
-            </button>
-          </Tilt3D>
-          <Tilt3D>
-            <button className={`${styles.bentoTile} ${styles.tileDark}`} onClick={() => router.push('/ai-shopping')}>
-              <span className={styles.tileIcon}><Sparkles size={22} /></span>
-              <strong>AI shopping</strong>
-              <p>Describe what you need.</p>
-              <span className={styles.tileGo}><ArrowUpRight size={18} /></span>
-            </button>
-          </Tilt3D>
-          <Tilt3D>
-            <Link href="/orders" className={`${styles.bentoTile} ${styles.tileOrange}`}>
-              <span className={styles.tileIcon}><Truck size={22} /></span>
-              <strong>Order centre</strong>
-              <p>Returns, reviews &amp; history.</p>
-              <span className={styles.tileGo}><ArrowUpRight size={18} /></span>
-            </Link>
-          </Tilt3D>
-        </Reveal>
-      </section>
+      <div className={styles.marketContent}>
+        <form
+          className={styles.marketSearch}
+          role="search"
+          onSubmit={(event) => { event.preventDefault(); void performSearch(mode, query, true); }}
+        >
+          <Search size={19} className={styles.marketSearchIcon} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search for products or shops..."
+            aria-label="Search for products or shops"
+          />
+          <button type="submit" aria-label="Search marketplace" disabled={searching}>
+            <Search size={18} />
+          </button>
+        </form>
 
-      {/* ───────── CUSTOMER EXPERIENCE HIGHLIGHTS ───────── */}
-      <section className={styles.sellerPromoSection}>
-        <Reveal>
-          <Tilt3D>
-            <div className={styles.sellerPromoCard}>
-              <div className={styles.sellerPromoLeft}>
-                <div className={styles.sellerPromoBadge}>
-                  <Sparkles size={14} />
-                  <span>The RetailMind Promise</span>
-                </div>
-                <h2 className={styles.sellerPromoTitle}>
-                  Real Shops. Real Stock. <b>Direct to You.</b>
-                </h2>
-                <p className={styles.sellerPromoText}>
-                  Order directly from verified neighbourhood stores with zero markups. Enjoy live shelf updates, direct local dispatch, and transparent payment on delivery with Cash or UPI.
-                </p>
-                <div className={styles.sellerPromoPerks}>
-                  <span><ShieldCheck size={16} /> 100% Verified Stores</span>
-                  <span><Zap size={16} /> Real-time Stock Checked</span>
-                  <span><Truck size={16} /> Swift Local Delivery</span>
-                </div>
-              </div>
+        <div className={styles.searchControls}>
+          <div className={styles.searchModes} role="group" aria-label="Search by">
+            {searchModes.map((searchMode) => (
               <button
+                key={searchMode.id}
                 type="button"
-                onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}
-                className={styles.sellerPromoBtn}
+                className={mode === searchMode.id ? styles.searchModeActive : styles.searchMode}
+                onClick={() => { setMode(searchMode.id); void performSearch(searchMode.id, query, true); }}
               >
-                <Store size={18} />
-                <span>Explore Local Shops</span>
-                <ArrowRight size={16} />
-              </button>
-            </div>
-          </Tilt3D>
-        </Reveal>
-      </section>
-
-      {/* ───────── QUICK DISCOVERY ───────── */}
-      <section className={styles.section}>
-        <Reveal className={styles.discovery}>
-          <div>
-            <div className={styles.kicker}>Quick discovery</div>
-            <h2 className={styles.h2}>Jump into a shopping mood.</h2>
-            <p className={styles.sub}>Pick a category, or let Retail Mind turn a sentence into a shortlist.</p>
-          </div>
-          <div className={styles.presets}>
-            {[
-              { label: 'Groceries', note: 'Everyday essentials', icon: <ShoppingBasket size={20} /> },
-              { label: 'Bakery', note: 'Freshly baked', icon: <Croissant size={20} /> },
-              { label: 'Personal care', note: 'Beauty & wellness', icon: <Flower2 size={20} /> },
-            ].map((p) => (
-              <button key={p.label} className={styles.preset} onClick={() => preset(p.label)}>
-                <span className={styles.presetIcon}>{p.icon}</span>
-                <b>{p.label}</b>
-                <small>{p.note}</small>
+                {searchMode.icon}
+                {searchMode.label}
               </button>
             ))}
-            <button className={`${styles.preset} ${styles.presetAi}`} onClick={() => router.push('/ai-shopping')}>
-              <span className={styles.presetIcon}><Sparkles size={20} /></span>
-              <b>Find with AI</b>
-              <small>Ask naturally</small>
+          </div>
+          <button type="button" className={styles.aiSearch} onClick={performAiSearch}>
+            <Sparkles size={14} /> Ask AI
+          </button>
+        </div>
+
+        <section className={styles.freshBanner} aria-labelledby="fresh-banner-title">
+          <div className={styles.freshBannerCopy}>
+            <span className={styles.freshBadge}><CheckCircle2 size={13} /> Fresh & local</span>
+            <h1 id="fresh-banner-title">Fresh products<br /><span>from local shops.</span></h1>
+            <p>Fast · Reliable · Nearby</p>
+            <button type="button" className={styles.freshCta} onClick={() => { setMode('shops'); void performSearch('shops', '', true); }}>
+              Start shopping <ArrowRight size={16} />
             </button>
           </div>
-        </Reveal>
-      </section>
-
-      {error && (
-        <section className={styles.section}>
-          <div className={styles.banner} role="alert">
-            <span className={styles.bannerIcon}>!</span>
-            <div><strong>Marketplace connection issue</strong><p>{error}</p></div>
-            <button
-              type="button"
-              className={styles.bannerRetry}
-              onClick={() => void performSearch(mode, query, true)}
-              disabled={searching}
-            >
-              {searching ? 'Retrying…' : 'Try again'}
-            </button>
+          <div className={styles.freshArtwork} aria-hidden="true">
+            <span className={styles.artHalo} />
+            <span className={styles.artTile + ' ' + styles.artTileOne}><Apple size={36} /></span>
+            <span className={styles.artTile + ' ' + styles.artTileTwo}><Milk size={34} /></span>
+            <span className={styles.artTile + ' ' + styles.artTileThree}><Leaf size={35} /></span>
+            <span className={styles.artBasket}><ShoppingBasket size={82} strokeWidth={1.5} /></span>
           </div>
         </section>
-      )}
-      {aiMessage && (
-        <section className={styles.section}>
-          <div className={`${styles.banner} ${styles.bannerAi}`}>
-            <span className={styles.bannerIcon}><Sparkles size={17} /></span>
+
+        {error && (
+          <div className={styles.connectionNotice} role="alert">
+            <span className={styles.noticeIcon}><Zap size={17} /></span>
+            <div><strong>Marketplace connection issue</strong><p>{error}</p></div>
+            <button type="button" onClick={() => void performSearch(mode, query, true)} disabled={searching}>
+              {searching ? 'Retrying…' : 'Retry'}
+            </button>
+          </div>
+        )}
+
+        {aiMessage && (
+          <div className={styles.aiNotice}>
+            <span className={styles.noticeIcon}><Sparkles size={17} /></span>
             <div><strong>Retail Mind AI</strong><p>{aiMessage}</p></div>
           </div>
-        </section>
-      )}
+        )}
 
-      {/* ───────── RESULTS ───────── */}
-      <section className={styles.section} id="shops">
-        {loading ? (
-          <>
-            <div className={styles.head}><div><div className={styles.kicker}>Discover</div><h2 className={styles.h2}>Loading nearby shops</h2></div></div>
-            <div className={styles.grid}>{Array.from({ length: 8 }).map((_, i) => <div className={styles.skeleton} key={i} />)}</div>
-          </>
-        ) : aiResults.length ? (
-          <>
-            <div className={styles.head}><div><div className={styles.kicker}>AI curated</div><h2 className={styles.h2}>Recommended for you</h2></div><span className={styles.count}>{aiResults.length} picks</span></div>
-            <div className={styles.list}>
+        <section className={styles.marketSection} aria-labelledby="category-heading">
+          <div className={styles.sectionHeader}>
+            <div><span className={styles.sectionEyebrow}>EXPLORE THE MARKET</span><h2 id="category-heading">Shop by category</h2></div>
+          </div>
+          <div className={styles.categoryGrid}>
+            {categories.map((category) => (
+              <button key={category.label} type="button" className={styles.categoryButton} onClick={() => preset(category.label)}>
+                <span className={styles.categoryIcon + ' ' + styles['category' + category.tone]}>
+                  {category.icon}
+                </span>
+                <span>{category.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.marketSection} id="shops" aria-labelledby="shops-heading">
+          <div className={styles.sectionHeader}>
+            <div>
+              <span className={styles.sectionEyebrow}>{query.trim() ? 'YOUR SEARCH' : 'GOOD STORES, CLOSE TO HOME'}</span>
+              <h2 id="shops-heading">{query.trim() ? (mode === 'shops' ? 'Shops matching your search' : 'Search results') : 'Nearby shops'}</h2>
+              <p>{query.trim() ? 'Explore matching local stores and the products they offer.' : 'Discover neighbourhood stores ready for your next order.'}</p>
+            </div>
+            <Link href="/shops" className={styles.viewAllLink}>View all <ChevronRight size={16} /></Link>
+          </div>
+
+          {loading ? (
+            <div className={styles.shopsGrid}>
+              {Array.from({ length: 3 }).map((_, index) => <div className={styles.marketSkeleton} key={index} />)}
+            </div>
+          ) : shops.length ? (
+            <div className={styles.shopsGrid}>
+              {shops.slice(0, query.trim() ? 12 : 6).map((shop, index) => <ShopCard key={shop.shop_id} shop={shop} index={index} />)}
+            </div>
+          ) : (
+            <div className={styles.emptyMarketplace}>
+              <span><Store size={26} /></span>
+              <strong>{error ? 'Shops are temporarily unavailable' : 'No online shops to show yet'}</strong>
+              <p>{error ? 'Check your connection and try again.' : 'Please check back soon, or search for another category.'}</p>
+              <button type="button" onClick={() => void performSearch('shops', '', true)} disabled={searching}>
+                {searching ? 'Checking…' : 'Refresh shops'}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {aiResults.length > 0 && (
+          <section className={styles.marketSection} aria-labelledby="ai-results-heading">
+            <div className={styles.sectionHeader}>
+              <div><span className={styles.sectionEyebrow}>PERSONALISED PICKS</span><h2 id="ai-results-heading">Recommended for you</h2></div>
+            </div>
+            <div className={styles.productGrid}>
               {aiResults.map((item, index) => (
-                <Reveal key={String(item.product_id) + '-' + String(item.shop_id) + '-' + String(index)} delay={index * 0.04}>
-                  <ProductRow
-                    href={'/shop/' + item.shop_id}
-                    rank={index + 1}
-                    title={item.product_name}
-                    shop={item.shop_name}
-                    price={item.price}
-                    meta={<><Star size={12} fill="currentColor" /> {item.rating_count ? item.rating : 'New'} · {item.rating_count || 0} reviews</>}
-                  />
-                </Reveal>
+                <article className={styles.productCard} key={String(item.product_id) + '-' + String(item.shop_id) + '-' + String(index)}>
+                  <div className={styles.productPicture}><ShoppingBasket size={34} /></div>
+                  <div className={styles.productCardBody}>
+                    <small>{item.shop_name || 'Local shop'}</small>
+                    <strong>{item.product_name}</strong>
+                    <div className={styles.productCardFooter}><b>₹{Number(item.price || 0).toFixed(0)}</b><Link href={'/shop/' + item.shop_id} aria-label={'View ' + item.product_name}><ArrowUpRight size={17} /></Link></div>
+                  </div>
+                </article>
               ))}
             </div>
-          </>
-        ) : error ? (
-          <div className={styles.empty} role="status">
-            <span><Search size={24} /></span>
-            <strong>Marketplace results are temporarily unavailable</strong>
-            <p>We couldn’t load shops or products. Use “Try again” above to refresh.</p>
-          </div>
-        ) : query.trim() ? (
-          <>
-            <div className={styles.head}>
-              <div>
-                <div className={styles.kicker}>Results</div>
-                <h2 className={styles.h2}>{mode === 'shops' ? 'Shops matching your search' : mode === 'products' ? 'Products matching your search' : 'Shops and products'}</h2>
-              </div>
-            </div>
-
-            {mode !== 'products' && shops.length > 0 && (
-              <div className={styles.grid}>{shops.map((shop, i) => <ShopCard key={shop.shop_id} shop={shop} index={i} />)}</div>
-            )}
-
-            {mode !== 'shops' && products.length > 0 && (
-              <div className={styles.list}>
-                {products.map((product, i) => (
-                  <Reveal key={String(product.product_id) + '-' + String(product.shop_id)} delay={Math.min(i, 8) * 0.03}>
-                    <ProductRow
-                      href={'/shop/' + product.shop_id + '/product/' + product.product_id}
-                      icon
-                      title={product.product_name}
-                      shop={product.shop_name}
-                      price={product.price}
-                      meta={<><Star size={12} fill="currentColor" /> {product.rating_count ? product.rating : 'New'} · {product.stock_available > 0 ? 'In stock' : 'Out of stock'}</>}
-                    />
-                  </Reveal>
-                ))}
-              </div>
-            )}
-
-            {!shops.length && !products.length && (
-              <div className={styles.empty}><span><Search size={24} /></span><strong>No matches yet</strong><p>Try a broader shop, category or product keyword.</p></div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className={styles.head}>
-              <div>
-                <div className={styles.kicker}><Sparkles size={12} /> Local storefronts</div>
-                <h2 className={styles.h2}>Find your next favourite shop</h2>
-                <p className={styles.sub}>Meet the neighbourhood stores bringing everyday essentials closer to you.</p>
-              </div>
-              <span className={styles.count}>{shops.length} {shops.length === 1 ? 'shop' : 'shops'}</span>
-            </div>
-            <div className={styles.grid}>{shops.map((shop, i) => <ShopCard key={shop.shop_id} shop={shop} index={i} />)}</div>
-            {!shops.length && (
-              <div className={styles.empty} role="status">
-                <span><Store size={24} /></span>
-                <strong>No online shops are showing right now</strong>
-                <p>There are no shops available to browse yet. Check again in a moment.</p>
-                <button
-                  type="button"
-                  className={styles.emptyRetry}
-                  onClick={() => void performSearch('shops', '', true)}
-                  disabled={searching}
-                >
-                  {searching ? 'Checking shops…' : 'Refresh shops'}
-                </button>
-              </div>
-            )}
-          </>
+          </section>
         )}
-      </section>
+
+        <section className={styles.marketSection} aria-labelledby="products-heading">
+          <div className={styles.sectionHeader}>
+            <div>
+              <span className={styles.sectionEyebrow}>{query.trim() ? 'MATCHING ITEMS' : 'HANDPICKED FOR YOU'}</span>
+              <h2 id="products-heading">{query.trim() && mode === 'products' ? 'Products matching your search' : 'Popular products'}</h2>
+              <p>Everyday essentials from your local stores.</p>
+            </div>
+            <Link href="/shops" className={styles.viewAllLink}>Explore <ChevronRight size={16} /></Link>
+          </div>
+
+          {productCategories.length > 1 && (
+            <div className={styles.productCategoryRow}>
+              {productCategories.map((category) => (
+                <button key={category} type="button" className={activeProductCategory === category ? styles.productCategoryActive : styles.productCategory} onClick={() => setActiveProductCategory(category)}>
+                  {category}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filteredFeaturedProducts.length ? (
+            <div className={styles.productGrid}>
+              {filteredFeaturedProducts.slice(0, 8).map((product) => {
+                const image = product.image_url ? resolveLogo(product.image_url) : '';
+                const outOfStock = product.stock_available === 0;
+                return (
+                  <article className={styles.productCard} key={product.shop_id + ':' + product.product_id}>
+                    <Link className={styles.productImageLink} href={'/shop/' + product.shop_id + '/product/' + product.product_id} aria-label={'View ' + product.product_name}>
+                      <div className={styles.productPicture}>
+                        {image ? <img src={image} alt={product.product_name} loading="lazy" /> : <ShoppingBasket size={38} />}
+                      </div>
+                      {outOfStock ? <span className={styles.stockBadge}>Out of stock</span> : <span className={styles.stockBadge + ' ' + styles.stockBadgeAvailable}>Local pick</span>}
+                    </Link>
+                    <div className={styles.productCardBody}>
+                      <small>{product.shop_name}</small>
+                      <Link href={'/shop/' + product.shop_id + '/product/' + product.product_id} className={styles.productTitle}>{product.product_name}</Link>
+                      {product.category && <span className={styles.productCategoryLabel}>{product.category}</span>}
+                      <div className={styles.productCardFooter}>
+                        <b>₹{Number(product.price || 0).toFixed(0)}</b>
+                        <button type="button" className={styles.addProductButton} onClick={() => addProduct(product)} disabled={outOfStock} aria-label={'Add ' + product.product_name + ' to cart'}>
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className={styles.emptyProducts}>
+              <span><ShoppingBasket size={24} /></span>
+              <strong>{loading ? 'Finding fresh products…' : query.trim() && mode !== 'shops' ? 'No matching products yet' : 'More local products are coming soon'}</strong>
+              <p>{loading ? 'We are checking the local shelves.' : 'Browse a shop to discover the items available today.'}</p>
+            </div>
+          )}
+        </section>
+
+        <div className={styles.trustStrip}>
+          <span><ShieldCheck size={16} /> Secure checkout</span>
+          <span><Truck size={16} /> Local delivery</span>
+          <span><Zap size={16} /> Stock-aware shopping</span>
+        </div>
+      </div>
     </div>
   );
+
 }
