@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import logging
 
 from db import get_db
-from models import Invoice, InvoiceLineItem, Customer, Product, StockMovement
+from models import Invoice, InvoiceStatus, InvoiceLineItem, Customer, Product, StockMovement
 from security import get_current_user as check_current_user
 
 router = APIRouter(prefix="/api/sales-restore", tags=["sales restoration"])
@@ -57,7 +57,10 @@ def restore_all_sales(
         logger.info(f"Starting sales restoration for user {user_id}")
         
         # Build query with date filters
-        query = db.query(Invoice).filter(Invoice.user_id == user_id)
+        query = db.query(Invoice).filter(
+            Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
+        )
         
         if request.start_date:
             start_date = datetime.strptime(request.start_date, "%Y-%m-%d").date()
@@ -173,35 +176,44 @@ def get_restore_summary(
     """
     try:
         # Get invoice counts by status
-        total_invoices = db.query(Invoice).filter(Invoice.user_id == user_id).count()
+        total_invoices = db.query(Invoice).filter(
+            Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
+        ).count()
         
         paid_count = db.query(Invoice).filter(
             Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
             Invoice.payment_status == "PAID"
         ).count()
         
         unpaid_count = db.query(Invoice).filter(
             Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
             Invoice.payment_status == "UNPAID"
         ).count()
         
         partial_count = db.query(Invoice).filter(
             Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
             Invoice.payment_status == "PARTIAL"
         ).count()
         
         # Get date range
         oldest_invoice = db.query(Invoice).filter(
-            Invoice.user_id == user_id
+            Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
         ).order_by(Invoice.created_at).first()
         
         newest_invoice = db.query(Invoice).filter(
-            Invoice.user_id == user_id
+            Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
         ).order_by(desc(Invoice.created_at)).first()
         
         # Get total revenue
         total_revenue = db.query(func.sum(Invoice.total_amount)).filter(
-            Invoice.user_id == user_id
+            Invoice.user_id == user_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
         ).scalar() or 0
         
         # Get customer count
