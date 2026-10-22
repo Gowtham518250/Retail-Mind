@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Apple, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Leaf, MapPin, ShieldCheck, ShoppingBasket, Sparkles, Truck } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -34,6 +34,10 @@ const slides = [
 ];
 
 export default function OnboardingPage() {
+  useEffect(() => {
+    try { window.localStorage.setItem('retailMindIntroSeen', '1'); } catch { /* optional preference */ }
+  }, []);
+
   const [active, setActive] = useState(0);
   const reduceMotion = Boolean(useReducedMotion());
   const slide = slides[active];
