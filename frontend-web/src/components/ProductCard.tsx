@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import confetti from 'canvas-confetti';
 import { Check, Package2, Plus, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 import type { ShopProduct } from '../lib/types';
@@ -35,7 +34,6 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
   const handleAdd = async (event: React.MouseEvent<HTMLButtonElement>) => {
     if (flyingToCart) return;
     setFlyingToCart(true);
-    const rect = event.currentTarget.getBoundingClientRect();
     const source = event.currentTarget.closest('article')?.querySelector<HTMLElement>(`.${styles.media}`) || event.currentTarget;
     try {
       if (!reduceMotion) await flyProductToCart(source, product.image_url);
@@ -46,24 +44,13 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
     }
     const added = onAddToCart(product);
     if (!added) return;
-    confetti({
-      particleCount: 26,
-      spread: 70,
-      startVelocity: 24,
-      scalar: 0.75,
-      ticks: 110,
-      gravity: 1.1,
-      zIndex: 1200,
-      disableForReducedMotion: true,
-      colors: ['#e8541e', '#f3ca4f', '#2b4436', '#fbf6ec'],
-      origin: { x: (rect.left + rect.width / 2) / window.innerWidth, y: rect.top / window.innerHeight },
-    });
+
   };
 
   const state = justAdded ? 'added' : inCartCount > 0 ? 'incart' : 'add';
 
   return (
-    <Tilt3D className={styles.wrap} max={7} lift={8}>
+    <Tilt3D className={styles.wrap} max={1.5} lift={0.7}>
       <article className={styles.card}>
         <Link href={href} className={styles.media} aria-label={`View ${product.name}`}>
           {product.image_url && failedImageUrl !== product.image_url ? (
