@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_cancel_and_reject_remove_order_sale_and_invoice():
     source = (ROOT / "online_store.py").read_text(encoding="utf-8")
     helper_start = source.index("def _reverse_online_order_financials")
-    helper_end = source.index("# =====================\n# CUSTOMER AUTH SCHEMAS", helper_start)
+    helper_end = source.index("# =====================\\n# CUSTOMER AUTH SCHEMAS", helper_start)
     helper = source[helper_start:helper_end]
 
     assert 'sales.reference_order_id == order.id' in helper
@@ -21,7 +21,7 @@ def test_cancel_and_reject_remove_order_sale_and_invoice():
 def test_real_payment_evidence_is_preserved_when_invoice_is_removed():
     source = (ROOT / "online_store.py").read_text(encoding="utf-8")
     helper_start = source.index("def _reverse_online_order_financials")
-    helper_end = source.index("# =====================\n# CUSTOMER AUTH SCHEMAS", helper_start)
+    helper_end = source.index("# =====================\\n# CUSTOMER AUTH SCHEMAS", helper_start)
     helper = source[helper_start:helper_end]
 
     assert 'category == "PAYMENT"' in helper
