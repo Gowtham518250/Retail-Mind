@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Apple, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Leaf, MapPin, ShieldCheck, ShoppingBasket, ShoppingCart, Sparkles, Truck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Leaf, MapPin, ShieldCheck, Sparkles } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import styles from './onboarding.module.css';
 
@@ -12,24 +12,24 @@ const slides = [
     title: <>Everything You Need<br />From <span>Local Shops</span></>,
     description: 'Fresh groceries, daily essentials, and more from nearby shops.',
     feature: 'One simple place for your everyday needs',
-    icon: ShoppingBasket,
-    tone: 'blue',
+    illustration: '/illustrations/onboarding-cart.svg',
+    illustrationAlt: 'Blue shopping cart filled with fresh groceries and produce',
   },
   {
     eyebrow: 'FRESH PICKS, CLOSE BY',
     title: <>Good Things.<br /><span>Close to Home.</span></>,
     description: 'Discover neighbourhood stores and browse what they have available.',
     feature: 'Explore products from local favourites',
-    icon: Apple,
-    tone: 'green',
+    illustration: '/illustrations/onboarding-local-shops.svg',
+    illustrationAlt: 'Illustrated neighbourhood store with fresh goods in its windows',
   },
   {
     eyebrow: 'SIMPLE FROM START TO DOOR',
     title: <>Shopping Made<br /><span>Easy for You.</span></>,
     description: 'Keep your cart together, place your order, and follow its progress.',
     feature: 'Clear checkout and order updates',
-    icon: Truck,
-    tone: 'violet',
+    illustration: '/illustrations/onboarding-delivery.svg',
+    illustrationAlt: 'Local delivery rider carrying a customer order',
   },
 ];
 
@@ -41,7 +41,6 @@ export default function OnboardingPage() {
   const [active, setActive] = useState(0);
   const reduceMotion = Boolean(useReducedMotion());
   const slide = slides[active];
-  const Icon = slide.icon;
 
   const previous = () => setActive((current) => (current + slides.length - 1) % slides.length);
   const next = () => setActive((current) => (current + 1) % slides.length);
@@ -65,19 +64,14 @@ export default function OnboardingPage() {
           transition={{ duration: .28 }}
         >
           <div className={styles.halo} />
+          <img
+            src={slide.illustration}
+            alt={slide.illustrationAlt}
+            className={styles.illustrationImage}
+            loading="eager"
+          />
           <span className={styles.sparkleOne}><Sparkles size={18} /></span>
           <span className={styles.sparkleTwo}><Leaf size={20} /></span>
-          <div className={styles.heroProductCard}>
-            <div className={styles.productHead}><span /> <span /> <span /></div>
-            <div className={styles.productArt}>
-              <div className={styles.blueCart}><ShoppingCart size={104} strokeWidth={1.7} /></div>
-              <div className={styles.floatingProduct + ' ' + styles.productOne}><Apple size={28} /></div>
-              <div className={styles.floatingProduct + ' ' + styles.productTwo}><Leaf size={29} /></div>
-              <div className={styles.floatingProduct + ' ' + styles.productThree}><ShoppingBasket size={25} /></div>
-              <div className={styles.floatingProduct + ' ' + styles.productFour}><Icon size={25} /></div>
-            </div>
-            <div className={styles.fakeLines}><span /><span /><i /></div>
-          </div>
           <div className={styles.smallCard + ' ' + styles.nearbyCard}>
             <span className={styles.smallCardIcon}><MapPin size={14} /></span>
             <span><b>Nearby shops</b><small>Ready for you</small></span>

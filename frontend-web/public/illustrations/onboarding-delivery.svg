@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 330" fill="none">
+<defs><linearGradient id="sky" x1="220" y1="0" x2="220" y2="330" gradientUnits="userSpaceOnUse"><stop stop-color="#eef4ff"/><stop offset="1" stop-color="#e5f8f1"/></linearGradient><linearGradient id="bike" x1="105" y1="172" x2="316" y2="255" gradientUnits="userSpaceOnUse"><stop stop-color="#ffb24e"/><stop offset="1" stop-color="#f07850"/></linearGradient><filter id="sh" x="25" y="20" width="390" height="290" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="8"/></filter></defs>
+<circle cx="220" cy="158" r="132" fill="#edf2ff"/><circle cx="220" cy="158" r="103" fill="url(#sky)" stroke="#d8e6f5" stroke-width="2"/>
+<ellipse cx="217" cy="270" rx="122" ry="17" fill="#1b4379" opacity=".14" filter="url(#sh)"/>
+<!-- road -->
+<path d="M0 268c94-25 155-16 220 0 65 15 132 13 220-1v63H0v-62Z" fill="#d1e2ee"/><path d="M106 284h58m38 0h58m40 0h58" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+<!-- wheels -->
+<circle cx="132" cy="246" r="35" fill="#243f87"/><circle cx="132" cy="246" r="21" fill="#eef4ff"/><circle cx="132" cy="246" r="8" fill="#91aadf"/>
+<circle cx="303" cy="246" r="35" fill="#243f87"/><circle cx="303" cy="246" r="21" fill="#eef4ff"/><circle cx="303" cy="246" r="8" fill="#91aadf"/>
+<!-- scooter body -->
+<path d="M124 219c18-24 35-37 61-42l37 41h48l27 25H160c-18 0-31-8-36-24Z" fill="url(#bike)" stroke="#e36d48" stroke-width="3" stroke-linejoin="round"/>
+<path d="M195 177c-2-28 10-45 30-43 23 2 26 27 12 46l-16 16" fill="#f6c86d" stroke="#e5a84b" stroke-width="3"/>
+<path d="M193 181h30" stroke="#d78c48" stroke-width="4" stroke-linecap="round"/>
+<!-- rider -->
+<path d="M211 166 192 197l26 23 28-29-11-25-24 0Z" fill="#3157d5"/>
+<path d="M203 169c-11-3-15-17-7-26l11-8 22 10-1 25-25-1Z" fill="#e7a879"/>
+<path d="M192 145c-5-16 4-31 20-32 17-1 27 14 21 28l-10-5-5-10-11 14-15 5Z" fill="#30251f"/>
+<path d="M205 168l-25 16-22-8" stroke="#e7a879" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M228 165l19 18 24-6" stroke="#e7a879" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M206 196l18 18-7 21h-24l-7-24" fill="#d8e5ff"/>
+<path d="M190 234h28" stroke="#273f85" stroke-width="7" stroke-linecap="round"/>
+<!-- delivery box -->
+<path d="M271 153h53v52h-53v-52Z" fill="#f2a052" stroke="#db8538" stroke-width="3" stroke-linejoin="round"/><path d="M271 168h53" stroke="#ffdfaa" stroke-width="3"/><path d="M288 153v52" stroke="#db8538" stroke-width="3"/><path d="M285 178h22" stroke="#fff4da" stroke-width="3" stroke-linecap="round"/>
+<!-- decorative circles and house -->
+<circle cx="91" cy="89" r="31" fill="#ffe8a7"/><path d="m70 92 20-18 21 18v24H70V92Z" fill="#fff" stroke="#b5cbe3" stroke-width="3" stroke-linejoin="round"/><path d="m64 91 26-23 26 23" stroke="#3157d5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><rect x="84" y="97" width="13" height="19" rx="2" fill="#d3eaff"/>
+<g transform="rotate(8 351 83)"><rect x="319" y="49" width="65" height="63" rx="18" fill="#fff" stroke="#e0e9f6" stroke-width="3"/><path d="M351 66v28m-12-12 12-12 12 12" stroke="#20a56b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g transform="rotate(-9 350 222)"><rect x="324" y="192" width="51" height="48" rx="15" fill="#e6f5a9" stroke="#fff" stroke-width="3"/><path d="M347 224c-15-7-10-20-1-18 7-6 15 2 10 13-3 4-6 6-9 5Z" fill="#238650"/><path d="M347 224c1-5 4-9 9-12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></g>
+</svg>

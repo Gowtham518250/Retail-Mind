@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Apple, Carrot, Leaf, ShoppingBag, ShoppingBasket, Store, Trees } from 'lucide-react';
+import { ArrowRight, Leaf, ShoppingBag, Sparkles } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import styles from './splash.module.css';
 
@@ -38,47 +38,20 @@ export default function SplashPage() {
 
         <motion.div
           className={styles.scene}
-          aria-label="Illustration of a neighbourhood store"
-          initial={reduceMotion ? false : { opacity: 0, scale: .96 }}
-          animate={{ opacity: 1, scale: 1 }}
+          aria-label="Illustration of a friendly local grocery store"
+          initial={reduceMotion ? false : { opacity: 0, y: 10, scale: .97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: .65, delay: .08 }}
         >
-          <div className={styles.sun} />
-          <div className={styles.cloud + ' ' + styles.cloudOne} />
-          <div className={styles.cloud + ' ' + styles.cloudTwo} />
-          <Trees className={styles.treeLeft} size={64} strokeWidth={1.45} />
-          <Trees className={styles.treeRight} size={76} strokeWidth={1.45} />
-          <div className={styles.storefront}>
-            <div className={styles.storeRoof} />
-            <div className={styles.storeSign}><Store size={15} /> YOUR NEIGHBOURHOOD STORE</div>
-            <div className={styles.awning}>
-              {Array.from({ length: 7 }).map((_, i) => <span key={i} className={i % 2 ? styles.awningBlue : styles.awningWhite} />)}
-            </div>
-            <div className={styles.shopBody}>
-              <div className={styles.shopWindow}>
-                <span className={styles.shelfLine} />
-                <Apple size={21} />
-                <Carrot size={22} />
-                <Leaf size={21} />
-                <span className={styles.shelfLine} />
-              </div>
-              <div className={styles.shopDoor}>
-                <span className={styles.doorGlass} />
-                <span className={styles.doorHandle} />
-              </div>
-              <div className={styles.shopWindow + ' ' + styles.rightWindow}>
-                <span className={styles.shelfLine} />
-                <ShoppingBasket size={22} />
-                <Apple size={21} />
-                <span className={styles.shelfLine} />
-              </div>
-            </div>
-          </div>
-          <div className={styles.walkway} />
-          <span className={styles.floatBag}><ShoppingBag size={24} /></span>
-          <span className={styles.floatLeaf}><Leaf size={24} /></span>
-          <div className={styles.person + ' ' + styles.personOne}><span /><i /></div>
-          <div className={styles.person + ' ' + styles.personTwo}><span /><i /></div>
+          <img
+            src="/illustrations/splash-local-market.svg"
+            alt="A colourful neighbourhood shop with fresh produce and local shoppers"
+            className={styles.sceneIllustration}
+            loading="eager"
+          />
+          <span className={styles.sceneLabel}><Sparkles size={12} /> Your neighbourhood, one tap away</span>
+          <span className={styles.floatBag}><ShoppingBag size={22} /></span>
+          <span className={styles.floatLeaf}><Leaf size={22} /></span>
         </motion.div>
       </section>
 

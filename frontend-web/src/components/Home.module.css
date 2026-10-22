@@ -955,3 +955,74 @@
 @media (prefers-reduced-motion: reduce) {
   .categoryButton, .categoryIcon img { transition: none; }
 }
+
+
+/* Turn shop cards into miniature illustrated storefront tiles. */
+.shopVisual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  isolation: isolate;
+  min-height: 138px;
+  padding-left: 20px;
+  overflow: hidden;
+  background-image: linear-gradient(135deg,var(--shop-tone-start,#e9efff),var(--shop-tone-end,#dce7ff));
+}
+.shopInitial { display: none; }
+.shopArt {
+  position: absolute;
+  z-index: 0;
+  right: -1%;
+  bottom: -8%;
+  width: 67%;
+  height: 112%;
+  object-fit: contain;
+  object-position: right bottom;
+  opacity: .96;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 6px rgba(25,44,81,.08));
+  transition: transform .35s ease, opacity .35s ease;
+}
+.shopCard:hover .shopArt { transform: translateY(-3px) scale(1.04); opacity: 1; }
+.shopOrbOne,.shopOrbTwo { z-index: 1; pointer-events: none; }
+.liveTag { z-index: 4; color: #fff !important; background: rgba(17,35,67,.78) !important; backdrop-filter: blur(7px); }
+.shopTile {
+  position: relative;
+  z-index: 3;
+  width: 72px;
+  height: 72px;
+  margin-top: 9px;
+  margin-left: 4px;
+  border-radius: 22px;
+  border: 3px solid rgba(255,255,255,.9);
+  background: rgba(255,255,255,.94);
+  color: #3157d5;
+  box-shadow: 0 8px 19px rgba(12,34,72,.13);
+  animation: none;
+}
+.shopTile img { object-fit: contain; padding: 4px; }
+.shopBody { background: #fff; }
+.shopName { text-transform: none; letter-spacing: -.025em; }
+.shopCard { overflow: hidden; background: #fff; border-color: #e0e7f3; }
+.productPicture img {
+  filter: drop-shadow(0 5px 5px rgba(18,37,70,.055));
+  transition: transform .25s ease;
+}
+.productCard:hover .productPicture img { transform: scale(1.045); }
+@media(max-width:900px) {
+  .shopVisual { min-height: 102px; padding-left: 11px; }
+  .shopTile { width: 57px; height: 57px; border-radius: 18px; }
+  .shopArt { width: 70%; height: 112%; }
+}
+@media(max-width:620px) {
+  .shopVisual { height: 88px; min-height: 88px; padding-left: 7px; }
+  .shopTile { width: 43px; height: 43px; margin-top: 9px; margin-left: 0; border-radius: 14px; border-width: 2px; }
+  .shopTile img { padding: 2px; }
+  .shopArt { width: 67%; height: 111%; right: -3%; bottom: -8%; }
+  .liveTag { top: 6px; left: 6px; padding: 3px 5px; font-size: 6px; }
+  .shopCard:hover .shopArt,.productCard:hover .productPicture img { transform: none; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .shopArt,.productPicture img { transition: none; }
+}
