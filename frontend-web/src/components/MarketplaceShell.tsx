@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, ArrowUpRight, Boxes, Croissant, MapPin, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Zap, Apple, Milk, Coffee, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, MapPin, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Zap, Apple, Milk, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
@@ -316,13 +316,13 @@ export default function MarketplaceShell({
   ];
 
   const categories = [
-    { label: 'All', icon: <Boxes size={22} />, tone: 'purple' },
-    { label: 'Groceries', icon: <ShoppingBasket size={22} />, tone: 'blue' },
-    { label: 'Snacks', icon: <Croissant size={22} />, tone: 'peach' },
-    { label: 'Beverages', icon: <Coffee size={22} />, tone: 'purple' },
-    { label: 'Fruits', icon: <Apple size={22} />, tone: 'pink' },
-    { label: 'Vegetables', icon: <Leaf size={22} />, tone: 'green' },
-    { label: 'Dairy', icon: <Milk size={22} />, tone: 'yellow' },
+    { label: 'All', image: '/categories/category-all.svg', tone: 'purple' },
+    { label: 'Groceries', image: '/categories/category-groceries.svg', tone: 'blue' },
+    { label: 'Snacks', image: '/categories/category-snacks.svg', tone: 'peach' },
+    { label: 'Beverages', image: '/categories/category-beverages.svg', tone: 'purple' },
+    { label: 'Fruits', image: '/categories/category-fruits.svg', tone: 'pink' },
+    { label: 'Vegetables', image: '/categories/category-vegetables.svg', tone: 'green' },
+    { label: 'Dairy', image: '/categories/category-dairy.svg', tone: 'yellow' },
   ];
 
   const addProduct = (product: FeaturedProduct) => {
@@ -393,7 +393,7 @@ export default function MarketplaceShell({
             <span className={styles.artTile + ' ' + styles.artTileOne}><Apple size={36} /></span>
             <span className={styles.artTile + ' ' + styles.artTileTwo}><Milk size={34} /></span>
             <span className={styles.artTile + ' ' + styles.artTileThree}><Leaf size={35} /></span>
-            <span className={styles.artBasket}><ShoppingBasket size={82} strokeWidth={1.5} /></span>
+            <span className={styles.artBasket}><img src="/categories/hero-grocery-basket.svg" alt="" loading="eager" /></span>
           </div>
         </section>
 
@@ -433,7 +433,7 @@ export default function MarketplaceShell({
                 }}
               >
                 <span className={styles.categoryIcon + ' ' + styles['category' + category.tone]}>
-                  {category.icon}
+                  <img src={category.image} alt="" loading="lazy" />
                 </span>
                 <span>{category.label}</span>
               </button>
