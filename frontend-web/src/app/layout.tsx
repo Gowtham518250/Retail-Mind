@@ -5,6 +5,7 @@ import './storefront-polish.css';
 import './premium-v3.css';
 import './retail-redesign.css';
 import './experience-motion.css';
+import './customer-web-refresh.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
 import NativeAppPerformance from '../components/NativeAppPerformance';
