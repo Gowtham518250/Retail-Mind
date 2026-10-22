@@ -280,7 +280,7 @@ export default function SmartShopPage() {
         )}
 
         <section className="smart3d-stats">
-          <motion.article className="smart3d-stat smart3d-stat-gold" whileHover={{ y: -4 }}>
+          <motion.article className="smart3d-stat smart3d-stat-gold" whileHover={shouldReduceMotion ? undefined : { y: -4 }}>
             <div className="smart3d-stat-icon"><Trophy size={18} /></div>
             <div><span>LOYALTY WALLET</span><strong>{loyalty?.points_balance ?? 0} pts</strong><p>{loyalty?.tier || 'Build your first tier'}</p></div>
             <Gift size={18} />
