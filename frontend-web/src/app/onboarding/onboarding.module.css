@@ -41,3 +41,38 @@
 @media(min-width:700px) { .screen { min-height:min(900px,100svh);height:100svh;border-left:1px solid #e3eaf6;border-right:1px solid #e3eaf6;box-shadow:0 0 45px rgba(8,20,43,.06);padding-left:26px;padding-right:26px; }.illustration { height:clamp(280px,42vh,370px); } }
 @media(max-height:700px) { .screen { padding-top:max(8px,env(safe-area-inset-top));padding-bottom:max(9px,env(safe-area-inset-bottom)); }.header { grid-template-columns:32px 1fr 32px; }.backButton { width:30px;height:30px; }.content { gap:8px; }.illustration { height:clamp(175px,31vh,230px); }.heroProductCard { width:54%;height:83%; }.blueCart { width:76px;height:76px; }.blueCart svg { width:58px;height:58px; }.smallCard { padding:6px 7px; }.copy h1 { font-size:24px;margin:7px 0; }.copy p { font-size:10px; }.feature { margin-top:7px;padding:6px 8px; }.footer { gap:7px;padding-top:7px; }.primaryButton { min-height:41px; } }
 @media(prefers-reduced-motion:reduce) { .primaryButton,.arrowButton { transition:none; } }
+
+/* Lead with the shopping cart illustration, rather than a browser-window mockup. */
+.heroProductCard {
+  width: 72%;
+  height: 84%;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.productHead, .fakeLines { display: none; }
+.productArt {
+  height: 100%;
+  overflow: visible;
+  background: transparent;
+}
+.blueCart {
+  width: 144px;
+  height: 130px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #3157d5;
+}
+.blueCart svg {
+  width: 114px;
+  height: 114px;
+  filter: drop-shadow(0 6px 2px rgba(49,87,213,.12));
+}
+.floatingProduct { border-width: 2px; }
+.productOne { top: 2%; left: 10%; background: #fff0dc; }
+.productTwo { top: 0; right: 8%; background: #e4f9b6; }
+.productThree { bottom: 4%; right: 5%; background: #fff; }
