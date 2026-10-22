@@ -3,16 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
-import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, ArrowUpRight, Bot, Boxes, Croissant, MapPin, MousePointer2, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Flower2, Zap, Apple, Milk, Coffee, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ArrowRight, ArrowUpRight, Boxes, Croissant, MapPin, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Zap, Apple, Milk, Coffee, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
 import { useCart } from '../context/CartContext';
-
-// WebGL is client-only and heavy: load it after first paint.
-const HeroScene3D = dynamic(() => import('./HeroScene3D'), { ssr: false });
 
 const EASE = [0.2, 0.75, 0.25, 1] as const;
 
@@ -26,41 +22,6 @@ const SHOP_TONES = [
 ];
 
 const resolveLogo = (url?: string) => (url ? (url.startsWith('http') ? url : API_BASE + url) : '');
-
-function Words({ text, base = 0, className }: { text: string; base?: number; className?: string }) {
-  const reduceMotion = Boolean(useReducedMotion());
-  return (
-    <>
-      {text.split(' ').map((word, i) => (
-        <span key={i + word}><span className={styles.wordMask}>
-          <motion.span
-            className={`${styles.word} ${className || ''}`}
-            initial={reduceMotion ? false : { y: '115%', rotate: 4 }}
-            animate={{ y: 0, rotate: 0 }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.85, delay: base + i * 0.09, ease: EASE }}
-          >
-            {word}
-          </motion.span>
-        </span>{' '}</span>
-      ))}
-    </>
-  );
-}
-
-function Reveal({ children, delay = 0, className }: { children: React.ReactNode; delay?: number; className?: string }) {
-  const reduceMotion = Boolean(useReducedMotion());
-  return (
-    <motion.div
-      className={className}
-      initial={reduceMotion ? false : { opacity: 0, y: 36, rotateX: -2 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-70px' }}
-      transition={reduceMotion ? { duration: 0 } : { duration: 0.7, delay, ease: EASE }}
-    >
-      {children}
-    </motion.div>
-  );
-}
 
 function ShopCard({ shop, index }: { shop: any; index: number }) {
   const reduceMotion = Boolean(useReducedMotion());
@@ -102,21 +63,6 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
         </Link>
       </Tilt3D>
     </motion.div>
-  );
-}
-
-function ProductRow({ href, rank, title, shop, meta, price, icon }: { href: string; rank?: number; title: string; shop: string; meta: React.ReactNode; price: number; icon?: boolean }) {
-  return (
-    <Link href={href} className={styles.row}>
-      <span className={styles.rowMark}>{icon ? <Boxes size={18} /> : rank}</span>
-      <div className={styles.rowMain}>
-        <strong>{title}</strong>
-        <span>{shop}</span>
-        <small>{meta}</small>
-      </div>
-      <div className={styles.rowPrice}>₹{Number(price || 0).toFixed(2)}</div>
-      <ArrowUpRight size={16} className={styles.rowArrow} />
-    </Link>
   );
 }
 
