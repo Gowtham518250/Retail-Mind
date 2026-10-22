@@ -222,11 +222,11 @@ export default function SmartShopPage() {
             <motion.div
               className="smart3d-core"
               animate={shouldReduceMotion ? { y: 0, rotateX: 0, rotateY: 0 } : {
-                y: [0, -12, 0],
-                rotateX: [-3, 3, -3],
-                rotateY: [5, -5, 5],
+                y: [0, -4, 0],
+                rotateX: [-0.5, 0.5, -0.5],
+                rotateY: [1, -1, 1],
               }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 8, repeat: Infinity, ease: 'easeInOut' }}
             >
               <div className="smart3d-core-inner">
                 <Bot size={42} />
@@ -236,8 +236,8 @@ export default function SmartShopPage() {
 
             <motion.div
               className="smart3d-float smart3d-float-a"
-              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -12, 0], rotateZ: [-2, 1, -2] }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -3, 0], rotateZ: [-0.3, 0.3, -0.3] }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 7.2, repeat: Infinity, ease: 'easeInOut' }}
             >
               <Trophy size={15} />
               <div><strong>{loyalty?.points_balance ?? 0}</strong><span>points</span></div>
@@ -245,8 +245,8 @@ export default function SmartShopPage() {
 
             <motion.div
               className="smart3d-float smart3d-float-b"
-              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, 11, 0], rotateZ: [2, -1, 2] }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.8, repeat: Infinity, ease: 'easeInOut', delay: .4 }}
+              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, 3, 0], rotateZ: [0.3, -0.3, 0.3] }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 7.6, repeat: Infinity, ease: 'easeInOut', delay: .25 }}
             >
               <Heart size={15} />
               <div><strong>{recommendations.length}</strong><span>smart picks</span></div>
@@ -254,8 +254,8 @@ export default function SmartShopPage() {
 
             <motion.div
               className="smart3d-float smart3d-float-c"
-              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -9, 0], rotateZ: [1, -1, 1] }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 5, repeat: Infinity, ease: 'easeInOut', delay: .8 }}
+              animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -2, 0], rotateZ: [0.2, -0.2, 0.2] }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 7.4, repeat: Infinity, ease: 'easeInOut', delay: .5 }}
             >
               <RotateCcw size={15} />
               <div><strong>{returnCount}</strong><span>returns</span></div>
