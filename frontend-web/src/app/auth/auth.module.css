@@ -592,3 +592,75 @@
   .submitBtn,
   .spinner { animation: none; transition: none; }
 }
+
+/* Reference login/sign-up screen: white form card, quiet outlines, royal-blue primary action. */
+.authMain {
+  --auth-forest: #3157d5;
+  --auth-forest-deep: #08142b;
+  --auth-leaf: #28c9bb;
+  --auth-coral: #6657f5;
+  --auth-ink: #101a34;
+  --auth-muted: #64718a;
+  --auth-line: #dfe6f3;
+  background: #f7f9ff;
+  color: #101a34;
+}
+.orb1, .orb2 { opacity: .2; }
+.heroShowcase {
+  border-color: rgba(255,255,255,.12);
+  background: linear-gradient(145deg,#111e40,#3157d5);
+  box-shadow: 0 22px 48px rgba(8,20,43,.14);
+}
+.brandPill { border-color: rgba(40,201,187,.32); color: #bafff3; }
+.heroGradientText { background: linear-gradient(95deg,#28c9bb,#d8e4ff); -webkit-background-clip:text; background-clip:text; }
+.authCard { border-color: #e0e7f3; border-radius: 22px; background: #fff; box-shadow: 0 14px 40px rgba(8,20,43,.075); }
+.cardGlowBar { background: linear-gradient(90deg,#3157d5,#28c9bb,#6657f5); }
+.authBrand { color: #101a34; }
+.authBrand b { color: #3157d5; }
+.authBrandIcon { background: linear-gradient(135deg,#3157d5,#6657f5); color: #fff; box-shadow: 0 5px 14px rgba(49,87,213,.2); }
+.authTitle { color: #101a34; font-weight: 850; letter-spacing: -.035em; text-transform: none; }
+.authSubtitle { color: #64718a; }
+.modeTabs { border-color: #e5eaf4; }
+.modeTabBtn { color: #7b88a1; }
+.modeTabActive { color: #3157d5; }
+.modeIndicator { background: #3157d5; }
+.label { color: #46536d; }
+.inputWrap { border-color: #dfe6f3; border-radius: 11px; background: #f9fbff; }
+.inputWrap:focus-within { border-color: #3157d5; box-shadow: 0 0 0 3px rgba(49,87,213,.11); }
+.inputIcon { color: #8491a8; }
+.input { color: #101a34; background: transparent; }
+.input::placeholder { color: #9aa5b8; }
+.eyeBtn { color: #8491a8; }
+.eyeBtn:hover { color: #3157d5; background: #eef2ff; }
+.forgotLink, .switchAction { color: #3157d5; }
+.submitBtn { background: linear-gradient(110deg,#3157d5,#434fe7); border-radius: 11px; box-shadow: 0 7px 17px rgba(49,87,213,.2); }
+.submitBtn:not(:disabled):hover { background: #2445bd; box-shadow: 0 10px 20px rgba(49,87,213,.23); }
+.switchRow { border-top-color: #e6ebf4; color: #7b88a1; }
+@media(max-width:640px) {
+  .authMain {
+    min-height: 100dvh;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: max(18px,env(safe-area-inset-top)) max(17px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(17px,env(safe-area-inset-left));
+    background: linear-gradient(180deg,#f8faff 0%,#fff 45%,#fff 100%);
+  }
+  .authContainer { width: min(100%,410px); margin: auto; }
+  .authCard { padding: 24px 19px 20px; border-radius: 18px; box-shadow: 0 8px 25px rgba(8,20,43,.055); }
+  .authBrand { justify-content: center; margin: 0 0 19px; font-size: 18px; }
+  .authBrandIcon { width: 43px; height: 43px; border-radius: 14px; }
+  .cardGlowBar { left: 22px; right: 22px; height: 3px; }
+  .cardHeader { text-align: center; margin-bottom: 18px; }
+  .authTitle { font-size: 23px; line-height: 1.15; }
+  .authSubtitle { font-size: 11px; line-height: 1.45; }
+  .modeTabs { margin-bottom: 16px; }
+  .modeTabBtn { min-height: 39px; font-size: 11px; }
+  .form { gap: 13px; }
+  .label { font-size: 10px; }
+  .inputWrap { min-height: 43px; padding: 0 10px; gap: 8px; }
+  .input { height: 41px; font-size: 13px; }
+  .inputIcon { width: 15px; height: 15px; }
+  .forgotLink { font-size: 10px; }
+  .submitBtn { min-height: 44px; padding: 10px 14px; font-size: 12px; }
+  .switchRow { margin-top: 15px; padding-top: 14px; font-size: 10px; }
+  .switchAction { font-size: 10px; }
+}
