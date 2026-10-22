@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Apple, Carrot, Leaf, ShoppingBag, ShoppingBasket, Store, Trees } from 'lucide-react';
@@ -7,6 +8,10 @@ import { motion, useReducedMotion } from 'framer-motion';
 import styles from './splash.module.css';
 
 export default function SplashPage() {
+  useEffect(() => {
+    try { window.localStorage.setItem('retailMindIntroSeen', '1'); } catch { /* optional preference */ }
+  }, []);
+
   const reduceMotion = Boolean(useReducedMotion());
 
   return (
