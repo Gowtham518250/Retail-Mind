@@ -139,8 +139,10 @@ jobs:
         run: |
           heads="$(alembic heads)"
           echo "$heads"
-          count="$(echo "$heads" | grep -c '^040_fractional_stock_units')"
-          test "$count" -eq 1
+          test -n "$heads"
+          # Validate a single migration head without freezing the graph at a
+          # specific revision number. New additive migrations should advance
+          # the head without making this CI check stale.
           head_count="$(echo "$heads" | grep -c '(head)')"
           test "$head_count" -eq 1
       - name: Apply migrations to an empty test database
