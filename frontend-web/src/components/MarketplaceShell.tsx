@@ -45,11 +45,10 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
     <motion.div
       initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
-      whileHover={reduceMotion ? undefined : { y: -1 }}
       viewport={{ once: true, margin: '-25px' }}
       transition={reduceMotion ? { duration: 0 } : { duration: 0.28, delay: (index % 3) * 0.025, ease: EASE }}
     >
-      <Tilt3D className={styles.tiltFill}>
+      <Tilt3D className={styles.tiltFill} max={1.5} lift={0.7}>
         <Link href={'/shop/' + shop.shop_id} className={styles.shopCard}>
           <div className={styles.shopVisual} style={{ background: `linear-gradient(135deg, ${from}, ${to})`, color: ink }}>
             <img src={shopIllustration} alt="" aria-hidden="true" className={styles.shopArt} loading="lazy" />
