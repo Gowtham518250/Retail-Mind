@@ -59,12 +59,12 @@ export function flyProductToCart(source: HTMLElement, imageUrl?: string): Promis
       [
         { transform: 'translate3d(0, 0, 0) scale(1)', opacity: 1, offset: 0 },
         {
-          transform: \`translate3d(\${deltaX * 0.7}px, \${deltaY * 0.7}px, 0) scale(.62)\`,
+          transform: `translate3d(${deltaX * 0.7}px, ${deltaY * 0.7}px, 0) scale(.62)`,
           opacity: .92,
           offset: 0.7,
         },
         {
-          transform: \`translate3d(\${deltaX}px, \${deltaY}px, 0) scale(.22)\`,
+          transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(.22)`,
           opacity: 0,
           offset: 1,
         },
@@ -79,5 +79,5 @@ export function flyProductToCart(source: HTMLElement, imageUrl?: string): Promis
       flyer.remove();
       resolve();
     };
-  });;
+  });
 }
