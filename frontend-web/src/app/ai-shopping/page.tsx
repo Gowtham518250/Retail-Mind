@@ -235,11 +235,11 @@ export default function AiShoppingPage() {
               <motion.div
                 className={styles.retailPod}
                 animate={shouldReduceMotion ? { y: 0, rotateY: 0, rotateZ: 0 } : {
-                  y: [0, -10, 0],
-                  rotateY: [-5, 5, -5],
-                  rotateZ: [-2, 1, -2],
+                  y: [0, -3, 0],
+                  rotateY: [-1, 1, -1],
+                  rotateZ: [-0.4, 0.4, -0.4],
                 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 6.2, repeat: Infinity, ease: 'easeInOut' }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 8.5, repeat: Infinity, ease: 'easeInOut' }}
               >
                 <div className={styles.retailPodTop}>
                   <span>RETAIL MIND</span>
@@ -254,8 +254,8 @@ export default function AiShoppingPage() {
 
               <motion.div
                 className={styles.productPod + ' ' + styles.productPodA}
-                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -10, 0], rotateZ: [-3, 1, -3] }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
+                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -3, 0], rotateZ: [-0.5, 0.5, -0.5] }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 7.5, repeat: Infinity, ease: 'easeInOut' }}
               >
                 <span>01</span>
                 <Package size={24} />
@@ -264,8 +264,8 @@ export default function AiShoppingPage() {
 
               <motion.div
                 className={styles.productPod + ' ' + styles.productPodB}
-                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, 11, 0], rotateZ: [3, -1, 3] }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.3, repeat: Infinity, ease: 'easeInOut', delay: .4 }}
+                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, 3, 0], rotateZ: [0.5, -0.5, 0.5] }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 7.8, repeat: Infinity, ease: 'easeInOut', delay: .25 }}
               >
                 <span>02</span>
                 <Star size={22} fill="currentColor" />
@@ -274,8 +274,8 @@ export default function AiShoppingPage() {
 
               <motion.div
                 className={styles.productPod + ' ' + styles.productPodC}
-                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -9, 0], rotateZ: [2, -1, 2] }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 5.1, repeat: Infinity, ease: 'easeInOut', delay: .8 }}
+                animate={shouldReduceMotion ? { y: 0, rotateZ: 0 } : { y: [0, -2, 0], rotateZ: [0.35, -0.35, 0.35] }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 7.2, repeat: Infinity, ease: 'easeInOut', delay: .5 }}
               >
                 <span>03</span>
                 <Sparkles size={22} />
@@ -451,11 +451,11 @@ export default function AiShoppingPage() {
                 <motion.article
                   className={styles.result}
                   key={String(item.product_id) + '-' + String(item.shop_id)}
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 18, rotateX: 5 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0, rotateX: 0 }}
                   transition={shouldReduceMotion ? { duration: 0 } : {
-                    duration: .42,
-                    delay: Math.min(index * .06, .3),
+                    duration: .28,
+                    delay: Math.min(index * .035, .18),
                     ease: [.22, .7, .25, 1],
                   }}
                 >

@@ -73,3 +73,26 @@
   .card, .image, .media::after, .add { transition: none !important; }
   .wrap:hover .card, .wrap:hover .image, .add:hover:not(:disabled) { transform: none; }
 }
+
+
+/* Revised motion: shorter timings, no glossy sweep, and a very small image zoom. */
+.card {
+  transition: transform 180ms cubic-bezier(.2,.75,.25,1),
+    border-color 180ms ease, box-shadow 180ms ease;
+}
+.wrap:hover .card {
+  border-color: rgba(43,68,54,.25);
+  box-shadow: 0 12px 28px rgba(60,45,20,.11);
+  transform: translateY(-2px);
+}
+.media::after { display: none !important; }
+.image { transition: transform 200ms cubic-bezier(.2,.75,.25,1); }
+.wrap:hover .image { transform: scale(1.035); }
+@media (hover:none) {
+  .wrap:hover .card { transform: none; }
+  .wrap:hover .image { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card,.image,.media::after,.add { transition: none !important; }
+  .wrap:hover .card,.wrap:hover .image,.add:hover:not(:disabled) { transform: none !important; }
+}
