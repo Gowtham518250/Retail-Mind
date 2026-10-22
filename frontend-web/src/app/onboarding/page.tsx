@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Apple, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Leaf, MapPin, ShieldCheck, ShoppingBasket, Sparkles, Truck } from 'lucide-react';
+import { Apple, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Leaf, MapPin, ShieldCheck, ShoppingBasket, ShoppingCart, Sparkles, Truck } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import styles from './onboarding.module.css';
 
@@ -70,7 +70,7 @@ export default function OnboardingPage() {
           <div className={styles.heroProductCard}>
             <div className={styles.productHead}><span /> <span /> <span /></div>
             <div className={styles.productArt}>
-              <div className={styles.blueCart}><Icon size={84} strokeWidth={1.55} /></div>
+              <div className={styles.blueCart}><ShoppingCart size={104} strokeWidth={1.7} /></div>
               <div className={styles.floatingProduct + ' ' + styles.productOne}><Apple size={28} /></div>
               <div className={styles.floatingProduct + ' ' + styles.productTwo}><Leaf size={29} /></div>
               <div className={styles.floatingProduct + ' ' + styles.productThree}><ShoppingBasket size={25} /></div>
