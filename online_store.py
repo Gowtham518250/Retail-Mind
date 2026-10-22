@@ -110,14 +110,118 @@ def _record_online_order_stock_movements(db: Session, order: OnlineOrder, items:
         ))
 
 
-def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
-    """Restore reserved stock and reverse all sale-side effects for a cancelled/rejected order.
+def _online_order_invoice_candidates(db: Session, order: OnlineOrder, shop_id: int):
+    """Find every invoice form used by current and legacy online-order code."""
+    prefix = f"ONL-{order.id}"
+    return db.query(Invoice).filter(
+        Invoice.user_id == shop_id,
+        or_(
+            Invoice.notes.ilike(f"%Online Order #{order.id}%"),
+            Invoice.invoice_number == prefix,
+            Invoice.invoice_number.like(f"{prefix}-%"),
+        ),
+    ).all()
 
-    A cancelled online order must not continue to be reported as a sale. If an
-    invoice existed, remove it from the invoice list rather than leaving a
-    cancelled/paid invoice behind. Keep payment journal evidence because the
-    receipt may be real and a refund may still be outstanding.
-    """
+
+def _cleanup_online_order_financials(
+    db: Session,
+    order: OnlineOrder,
+    shop_id: int,
+    reason: str,
+):
+    """Delete sale documents for a cancelled order, retaining real receipts as refund-pending."""
+    invoices = _online_order_invoice_candidates(db, order, shop_id)
+    invoice_numbers = [str(invoice.invoice_number) for invoice in invoices if invoice.invoice_number]
+    invoice_snapshots = [
+        {
+            "id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "total_amount": float(invoice.total_amount or 0),
+            "paid_amount": float(invoice.paid_amount or 0),
+            "payment_status": str(getattr(invoice.payment_status, "value", invoice.payment_status)),
+            "status": "DELETED",
+            "source": "ONLINE_ORDER_CANCELLATION",
+        }
+        for invoice in invoices
+    ]
+
+    received_amount = max(
+        (Decimal(str(invoice.paid_amount or 0)) for invoice in invoices),
+        default=Decimal("0"),
+    )
+    payment_status = str(getattr(order.payment_status, "value", order.payment_status) or "").upper()
+    if payment_status in {"PAID", "REFUND_REQUIRED"}:
+        received_amount = max(received_amount, Decimal(str(order.total_amount or 0)))
+
+    payment_predicates = [
+        UniversalTransaction.reference_id == f"ONL-{order.id}-PAYMENT",
+        UniversalTransaction.description.ilike(f"%online order #{order.id}%"),
+    ]
+    if invoice_numbers:
+        payment_predicates.append(UniversalTransaction.reference_id.in_(invoice_numbers))
+    payment_events = db.query(UniversalTransaction).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.category.in_(["PAYMENT", "REFUND_REQUIRED"]),
+        or_(*payment_predicates),
+    ).all()
+
+    # Keep genuine receipt evidence, but reclassify it so dashboards do not
+    # report a cancelled order's collection as sale revenue.
+    for payment_event in payment_events:
+        payment_event.category = "REFUND_REQUIRED"
+        original_description = payment_event.description or "Payment receipt retained"
+        payment_event.description = (
+            f"Refund required for cancelled online order #{order.id}; {original_description}"
+        )[:200]
+
+    if received_amount > Decimal("0") and not payment_events:
+        db.add(UniversalTransaction(
+            shop_id=shop_id,
+            tx_type="INCOME",
+            category="REFUND_REQUIRED",
+            amount=float(received_amount),
+            reference_id=invoice_numbers[0] if invoice_numbers else f"ONL-{order.id}-PAYMENT",
+            description=f"Refund required for cancelled online order #{order.id}",
+            tx_date=getattr(order, "payment_confirmed_at", None) or datetime.utcnow(),
+        ))
+    if received_amount > Decimal("0"):
+        order.payment_status = "REFUND_REQUIRED"
+
+    sale_predicates = [
+        UniversalTransaction.reference_id == f"ONL-{order.id}",
+        UniversalTransaction.description.ilike(f"%online order #{order.id}%"),
+    ]
+    if invoice_numbers:
+        sale_predicates.append(UniversalTransaction.reference_id.in_(invoice_numbers))
+    sale_transactions = db.query(UniversalTransaction).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.category == "SALE",
+        or_(*sale_predicates),
+    ).all()
+    for sale_transaction in sale_transactions:
+        db.delete(sale_transaction)
+
+    # Earlier cancellation code wrote a synthetic reversal expense. It is not
+    # a real cash expense, so remove it instead of leaving it in dashboard totals.
+    db.query(UniversalTransaction).filter(
+        UniversalTransaction.shop_id == shop_id,
+        UniversalTransaction.reference_id == f"ONL-{order.id}-REVERSAL",
+        UniversalTransaction.category == "SALE_REVERSAL",
+    ).delete(synchronize_session=False)
+
+    db.query(sales).filter(
+        sales.shopkeeper_id == shop_id,
+        sales.reference_order_id == order.id,
+    ).delete(synchronize_session=False)
+
+    for invoice in invoices:
+        db.delete(invoice)
+
+    return invoice_snapshots
+
+
+def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
+    """Restore reserved stock once, then remove the cancelled order's financial artifacts."""
     try:
         items = json.loads(order.items_json or "[]")
         if not isinstance(items, list):
@@ -132,8 +236,6 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
         if not product_id or quantity <= Decimal("0"):
             continue
 
-        # A repeated cancellation/rejection must never put the same units back
-        # into stock twice.
         restore_key = f"ONL-{order.id}-STOCK-IN-{line_index}"
         existing_restore = db.query(StockMovement).filter(
             StockMovement.idempotency_key == restore_key
@@ -161,110 +263,8 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
                 "new_stock": float(product.current_stock),
             })
 
-    tagged_sales = db.query(sales).filter(
-        sales.shopkeeper_id == shop_id,
-        sales.reference_order_id == order.id,
-    ).all()
-
-    invoice = db.query(Invoice).filter(
-        Invoice.source == "ONLINE_ORDER",
-        Invoice.notes.like(f"%Online Order #{order.id}%"),
-        Invoice.user_id == shop_id,
-    ).first()
-
-    sale_reference = f"ONL-{order.id}"
-    sale_transaction = db.query(UniversalTransaction).filter(
-        UniversalTransaction.shop_id == shop_id,
-        UniversalTransaction.reference_id == sale_reference,
-        UniversalTransaction.category == "SALE",
-    ).first()
-
-    # Preserve proof of any money actually received before deleting an invoice.
-    # Invoice deletion cascades its Payment rows, while the universal journal
-    # has no invoice FK and remains the durable receipt/refund audit trail.
-    received_amount = Decimal("0")
-    if invoice is not None:
-        received_amount = max(
-            received_amount,
-            Decimal(str(getattr(invoice, "paid_amount", 0) or 0)),
-        )
-    if (order.payment_status or "").upper() == "PAID":
-        received_amount = max(received_amount, Decimal(str(order.total_amount or 0)))
-
-    if received_amount > Decimal("0"):
-        payment_reference = (
-            f"ONL-{order.id}-PAYMENT" if invoice is None
-            else str(invoice.invoice_number)
-        )
-        payment_event = db.query(UniversalTransaction).filter(
-            UniversalTransaction.shop_id == shop_id,
-            UniversalTransaction.reference_id == payment_reference,
-            UniversalTransaction.category == "PAYMENT",
-        ).first()
-        if payment_event is None:
-            db.add(UniversalTransaction(
-                shop_id=shop_id,
-                tx_type="INCOME",
-                category="PAYMENT",
-                amount=float(received_amount),
-                reference_id=payment_reference,
-                description=(
-                    f"Payment received for online order #{order.id}; "
-                    "invoice removed after cancellation; refund follow-up required"
-                ),
-                tx_date=(
-                    getattr(order, "payment_confirmed_at", None)
-                    or datetime.utcnow()
-                ),
-            ))
-
-    if tagged_sales:
-        db.query(sales).filter(
-            sales.shopkeeper_id == shop_id,
-            sales.reference_order_id == order.id,
-        ).delete(synchronize_session=False)
-
-    # Remove the synthetic sale income that was written when an order was
-    # accepted/delivered. Do not remove PAYMENT transactions: those may reflect
-    # real money already received.
-    if sale_transaction is not None:
-        db.delete(sale_transaction)
-
-    invoice_snapshot = None
-    if invoice is not None:
-        invoice_snapshot = {
-            "id": invoice.id,
-            "invoice_number": invoice.invoice_number,
-            "total_amount": float(invoice.total_amount or 0),
-            "paid_amount": float(invoice.paid_amount or 0),
-            "payment_status": str(
-                getattr(invoice.payment_status, "value", invoice.payment_status)
-            ),
-            "status": "DELETED",
-            "source": "ONLINE_ORDER_CANCELLATION",
-        }
-        db.delete(invoice)
-
-    # Keep a durable reversal audit event when a sale had been recorded. It is
-    # an expense/reversal entry, not a positive sale.
-    if tagged_sales or invoice_snapshot or sale_transaction is not None:
-        reversal_ref = f"ONL-{order.id}-REVERSAL"
-        existing_reversal = db.query(UniversalTransaction).filter(
-            UniversalTransaction.shop_id == shop_id,
-            UniversalTransaction.reference_id == reversal_ref,
-        ).first()
-        if not existing_reversal:
-            db.add(UniversalTransaction(
-                shop_id=shop_id,
-                tx_type="EXPENSE",
-                category="SALE_REVERSAL",
-                amount=float(order.total_amount or 0),
-                reference_id=reversal_ref,
-                description=f"{reason}: Online Order #{order.id}",
-                tx_date=datetime.utcnow(),
-            ))
-
-    return restored_inventory, invoice_snapshot
+    invoice_snapshots = _cleanup_online_order_financials(db, order, shop_id, reason)
+    return restored_inventory, invoice_snapshots
 
 
 # =====================
@@ -1956,13 +1956,11 @@ def cancel_customer_order(
 
     previous_status = order.order_status
     shop_id = order.shop_id
-    restored_inventory, cancelled_invoice = _reverse_online_order_financials(
+    restored_inventory, cancelled_invoices = _reverse_online_order_financials(
         db, order, shop_id, "Customer cancellation"
     )
 
     order.order_status = "CANCELLED"
-    if str(order.payment_status or "").upper() == "PAID":
-        order.payment_status = "REFUND_REQUIRED"
     realtime_events = [{
         "event_id": str(uuid4()),
         "type": "order.status_changed",
@@ -1974,7 +1972,7 @@ def cancel_customer_order(
         "payment_status": order.payment_status,
         "total_amount": float(order.total_amount),
     }]
-    if cancelled_invoice is not None:
+    for cancelled_invoice in cancelled_invoices:
         realtime_events.append({
             "event_id": str(uuid4()),
             "type": "invoice.deleted",
@@ -2784,6 +2782,7 @@ def update_order_status(
     previous_status = order.order_status
     restored_inventory = []
     linked_invoice = None
+    deleted_invoice_snapshots = []
     pending_payment_events = []
 
     current_status = str(
@@ -3133,11 +3132,9 @@ def update_order_status(
     # Rejecting an order reverses prior accepted sales/invoice rows and
     # restores reserved stock through the same helper as customer cancellation.
     if new_status == "REJECTED":
-        restored_inventory, linked_invoice = _reverse_online_order_financials(
+        restored_inventory, deleted_invoice_snapshots = _reverse_online_order_financials(
             db, order, shop_id, "Owner rejected order"
         )
-        if str(order.payment_status or "").upper() == "PAID":
-            order.payment_status = "REFUND_REQUIRED"
 
     order.order_status = new_status
     realtime_events = [{
@@ -3165,17 +3162,18 @@ def update_order_status(
             "source": "ONLINE_ORDER",
             "reference_id": f"ONL-{order.id}",
         })
-    if linked_invoice is not None and new_status == "REJECTED":
-        realtime_events.append({
-            "event_id": str(uuid4()),
-            "type": "invoice.deleted",
-            "shop_id": shop_id,
-            "invoice_id": linked_invoice["id"],
-            "invoice_number": linked_invoice["invoice_number"],
-            "total_amount": linked_invoice["total_amount"],
-            "source": "ONLINE_ORDER_REJECTION",
-            "reference_id": f"ONL-{order.id}",
-        })
+    if new_status == "REJECTED":
+        for deleted_invoice in deleted_invoice_snapshots:
+            realtime_events.append({
+                "event_id": str(uuid4()),
+                "type": "invoice.deleted",
+                "shop_id": shop_id,
+                "invoice_id": deleted_invoice["id"],
+                "invoice_number": deleted_invoice["invoice_number"],
+                "total_amount": deleted_invoice["total_amount"],
+                "source": "ONLINE_ORDER_REJECTION",
+                "reference_id": f"ONL-{order.id}",
+            })
     if linked_invoice is not None and new_status == "DELIVERED":
         if order.payment_status == "PAID":
             realtime_events.append({
@@ -3268,16 +3266,17 @@ def update_order_status(
                     f"invoice payment status is {linked_invoice.payment_status}"
                 ),
             )
-        elif linked_invoice is not None and new_status == "REJECTED":
-            AuditService.log_action(
-                db=db,
-                user_id=shop_id,
-                action=AuditAction.DELETE,
-                table_name="invoices",
-                record_id=linked_invoice["id"],
-                old_values=linked_invoice,
-                description=f"Invoice deleted for rejected online order #{order.id}",
-            )
+        elif new_status == "REJECTED":
+            for deleted_invoice in deleted_invoice_snapshots:
+                AuditService.log_action(
+                    db=db,
+                    user_id=shop_id,
+                    action=AuditAction.DELETE,
+                    table_name="invoices",
+                    record_id=deleted_invoice["id"],
+                    old_values=deleted_invoice,
+                    description=f"Invoice deleted for rejected online order #{order.id}",
+                )
     except Exception as audit_error:
         logger.warning(
             "Online order audit logging failed after commit: %s",
