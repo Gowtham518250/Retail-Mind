@@ -241,7 +241,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
             />
             <AnimatePresence>
               {search && (
-                <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className={styles.clear} onClick={() => setSearch('')} aria-label="Clear search" type="button">
+                <motion.button initial={shouldReduceMotion ? false : { scale: 0 }} animate={{ scale: 1 }} exit={shouldReduceMotion ? undefined : { scale: 0 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16 }} className={styles.clear} onClick={() => setSearch('')} aria-label="Clear search" type="button">
                   <X size={14} />
                 </motion.button>
               )}
@@ -261,7 +261,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
           <div className={styles.cats} role="group" aria-label="Filter products by category">
             {categories.map((category) => (
               <button key={category} type="button" aria-pressed={activeCategory === category} className={`${styles.cat} ${activeCategory === category ? styles.catOn : ''}`} onClick={() => setActiveCategory(category)}>
-                {activeCategory === category && <motion.span layoutId="catPill" className={styles.catPill} transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+                {activeCategory === category && (shouldReduceMotion ? <span className={styles.catPill} /> : <motion.span layoutId="catPill" className={styles.catPill} transition={{ type: 'spring', stiffness: 420, damping: 34 }} />)}
                 <span className={styles.catLabel}>{category}</span>
               </button>
             ))}
