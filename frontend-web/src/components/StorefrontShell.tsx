@@ -31,24 +31,8 @@ function StarRating({ value }: { value: number }) {
   );
 }
 
-function Words({ text, base = 0 }: { text: string; base?: number }) {
-  const reduceMotion = Boolean(useReducedMotion());
-  return (
-    <>
-      {text.split(' ').map((word, i) => (
-        <span key={i + word}><span className={styles.wordMask}>
-          <motion.span
-            className={styles.word}
-            initial={reduceMotion ? false : { y: '112%', opacity: 0 }}
-            animate={{ y: 0, opacity: 1, rotate: 0 }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.52, delay: base + i * 0.045, ease: EASE }}
-          >
-            {word}
-          </motion.span>
-        </span>{' '}</span>
-      ))}
-    </>
-  );
+function Words({ text }: { text: string }) {
+  return <>{text}</>;
 }
 
 export default function StorefrontShell({ shopId, initialData = null }: StorefrontShellProps) {
@@ -190,7 +174,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
             </div>
           </motion.div>
 
-          <h1 className={styles.title}><Words text={shop?.shop_name || 'Retail Mind Storefront'} base={0.1} /></h1>
+          <h1 className={styles.title}><Words text={shop?.shop_name || 'Retail Mind Storefront'} /></h1>
 
           <motion.p className={styles.tagline} initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5, ease: EASE }}>
             {shop?.shop_tagline || shop?.shop_description || 'Discover fresh essentials, daily deals, and a delightful shopping experience built for modern customers.'}
@@ -219,7 +203,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
         <div className={styles.stage}>
           <div className={styles.stageGlow} aria-hidden="true" />
           <HeroScene3D lite className={styles.canvas} />
-          <motion.div className={styles.floatChip} animate={shouldReduceMotion ? { y: 0 } : { y: [0, -13, 0] }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
+          <motion.div className={styles.floatChip} animate={{ y: 0 }} transition={{ duration: 0 }}>
             <span className={styles.floatIcon}><PackageCheck size={16} /></span>
             <span><b>{loading ? 'Loading shelves…' : `${products.length} products`}</b><small>Ready to order</small></span>
           </motion.div>
@@ -324,10 +308,10 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
                 <motion.div
                   key={product.id}
                   layout
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 36, scale: 0.94 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
-                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.5, delay: Math.min(index, 10) * 0.04, ease: EASE }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.28, delay: Math.min(index, 5) * 0.025, ease: EASE }}
                   className={styles.cell}
                 >
                   <ProductCard
