@@ -59,9 +59,9 @@ export default function OnboardingPage() {
         <motion.div
           className={styles.illustration}
           key={'illustration-' + active}
-          initial={reduceMotion ? false : { opacity: 0, y: 8, scale: .97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: .28 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: .22 }}
         >
           <div className={styles.halo} />
           <img
@@ -86,9 +86,9 @@ export default function OnboardingPage() {
         <motion.div
           className={styles.copy}
           key={'copy-' + active}
-          initial={reduceMotion ? false : { opacity: 0, y: 7 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: .25 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: .2 }}
         >
           <span className={styles.eyebrow}>{slide.eyebrow}</span>
           <h1>{slide.title}</h1>
