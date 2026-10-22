@@ -154,3 +154,47 @@
   .word { display: none; }
   .bottomNavTrackSignedIn .bottomNavItem { font-size: 9px; }
 }
+
+
+/* Customer app reference palette: clean white navigation with blue active states. */
+.wrap {
+  padding: calc(8px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+}
+.nav {
+  --deep: #101a34;
+  --paper: #ffffff;
+  --orange: #3157d5;
+  width: min(100%, 1180px);
+  padding: 7px 8px 7px 13px;
+  border: 1px solid #e0e7f3;
+  border-radius: 19px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 8px 26px rgba(8,20,43,.055);
+}
+.scrolled { background: rgba(255,255,255,.97); border-color: #d8e2f3; box-shadow: 0 12px 32px rgba(8,20,43,.085); }
+.logo { background: linear-gradient(135deg,#3157d5,#6657f5); color: #fff; border-radius: 12px; }
+.brand:hover .logo { transform: translateY(-1px) scale(1.03); }
+.word { color: #101a34; font: 850 1.38rem/1 var(--font-display, Inter, sans-serif); text-transform: none; letter-spacing: -.055em; }
+.word b { color: #3157d5; }
+.link { color: #64718a; border-radius: 12px; }
+.link:hover:not(.active) { background: #f1f4ff; color: #3157d5; }
+.activePill { border-radius: 12px; background: linear-gradient(135deg,#3157d5,#6657f5); }
+.active { color: #fff; }
+.cart { min-height: 42px; padding: 10px 15px; border-radius: 13px; background: #3157d5; box-shadow: 0 7px 17px rgba(49,87,213,.22); }
+.cart:hover { background: #6657f5; box-shadow: 0 10px 22px rgba(49,87,213,.25); transform: translateY(-1px); }
+.badge { background: #28c9bb; color: #08142b; }
+.mobileBottomNav {
+  background: rgba(255,255,255,.97);
+  border-top: 1px solid #dfe6f3;
+  box-shadow: 0 -8px 26px rgba(8,20,43,.09);
+}
+.bottomNavItem { color: #7b88a1; border-radius: 13px; }
+.bottomNavItemActive { color: #3157d5; background: #eef2ff; box-shadow: inset 0 1px 0 rgba(49,87,213,.08); }
+.bottomActiveDot { background: #28c9bb; box-shadow: none; }
+@media (max-width: 768px) {
+  .wrap { padding: calc(7px + env(safe-area-inset-top, 0px)) 12px 0; }
+  .nav { width: 100%; border-radius: 16px; }
+  .word { font-size: 1.28rem; }
+  .cart { border-radius: 12px; }
+  .bottomNavItem { gap: 3px; }
+}
