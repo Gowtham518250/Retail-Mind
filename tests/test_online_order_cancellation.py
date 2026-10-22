@@ -41,3 +41,33 @@ def test_sales_restore_omits_legacy_cancelled_invoices_and_summary_totals():
     source = (ROOT / "sales_restore_service.py").read_text(encoding="utf-8")
     assert "Invoice.status != InvoiceStatus.CANCELLED" in source
     assert "from models import Invoice, InvoiceStatus," in source
+
+
+
+def test_online_checkout_deducts_stock_and_persists_out_movements():
+    source = (ROOT / "online_store.py").read_text(encoding="utf-8")
+    authenticated_start = source.index('@router.post("/order")')
+    guest_start = source.index('@router.post("/guest-order")')
+    my_orders_start = source.index('@router.get("/my-orders")')
+    authenticated = source[authenticated_start:guest_start]
+    guest = source[guest_start:my_orders_start]
+
+    assert "product.current_stock -= item.quantity" in authenticated
+    assert "product.current_stock -= item.quantity" in guest
+    assert "_record_online_order_stock_movements(db, order, order_items)" in authenticated
+    assert "_record_online_order_stock_movements(db, order, order_items)" in guest
+    assert 'movement_type="OUT"' in source
+    assert 'reason="ONLINE_ORDER"' in source
+    assert "STOCK-OUT-{line_index}" in source
+
+
+def test_cancel_or_reject_restores_stock_with_idempotent_in_movement():
+    source = (ROOT / "online_store.py").read_text(encoding="utf-8")
+    helper_start = source.index("def _reverse_online_order_financials")
+    helper_end = source.index("# =====================\n# CUSTOMER AUTH SCHEMAS", helper_start)
+    helper = source[helper_start:helper_end]
+
+    assert 'movement_type="IN"' in helper
+    assert 'reason="ONLINE_ORDER_RESTORED"' in helper
+    assert "STOCK-IN-{line_index}" in helper
+    assert "existing_restore is not None" in helper

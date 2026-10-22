@@ -48,6 +48,7 @@ from models import (
     OnlineOrderReturn,
     CustomerPasswordReset,
     CustomerPasswordResetOtp,
+    StockMovement,
     sales,
 )
 from security import (
@@ -92,6 +93,23 @@ def _add_stock_quantity(current_stock, quantity) -> Decimal:
     return Decimal(str(current_stock or 0)) + Decimal(str(quantity or 0))
 
 
+def _record_online_order_stock_movements(db: Session, order: OnlineOrder, items: list[dict]) -> None:
+    """Record each stock reservation alongside the online order in its transaction."""
+    for line_index, item in enumerate(items):
+        product_id = item.get("product_id")
+        quantity = Decimal(str(item.get("quantity", 0) or 0))
+        if not product_id or quantity <= Decimal("0"):
+            continue
+        db.add(StockMovement(
+            product_id=int(product_id),
+            movement_type="OUT",
+            quantity=quantity,
+            reason="ONLINE_ORDER",
+            reference_id=f"ONLINE-ORDER-{order.id}",
+            idempotency_key=f"ONL-{order.id}-STOCK-OUT-{line_index}",
+        ))
+
+
 def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
     """Restore reserved stock and reverse all sale-side effects for a cancelled/rejected order.
 
@@ -108,17 +126,35 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
         items = []
 
     restored_inventory = []
-    for item in items:
+    for line_index, item in enumerate(items):
         product_id = item.get("product_id")
         quantity = Decimal(str(item.get("quantity", 0) or 0))
         if not product_id or quantity <= Decimal("0"):
             continue
+
+        # A repeated cancellation/rejection must never put the same units back
+        # into stock twice.
+        restore_key = f"ONL-{order.id}-STOCK-IN-{line_index}"
+        existing_restore = db.query(StockMovement).filter(
+            StockMovement.idempotency_key == restore_key
+        ).first()
+        if existing_restore is not None:
+            continue
+
         product = db.query(Product).with_for_update().filter(
             Product.id == int(product_id),
             Product.user_id == shop_id,
         ).first()
         if product:
             product.current_stock = _add_stock_quantity(product.current_stock, quantity)
+            db.add(StockMovement(
+                product_id=int(product.id),
+                movement_type="IN",
+                quantity=quantity,
+                reason="ONLINE_ORDER_RESTORED",
+                reference_id=f"ONLINE-ORDER-{order.id}",
+                idempotency_key=restore_key,
+            ))
             restored_inventory.append({
                 "product_id": int(product.id),
                 "quantity": float(quantity),
@@ -1413,6 +1449,7 @@ def place_order(
         # Persist the order and its change-feed events atomically. Redis is
         # only the low-latency signal; /api/sync/changes is the recovery path.
         db.flush()
+        _record_online_order_stock_movements(db, order, order_items)
         durable_events = [
             append_sync_event(db, {
                 "event_id": str(uuid4()),
@@ -1722,6 +1759,7 @@ def place_guest_order(
         # Persist the order and its change-feed events atomically. Redis is
         # only the low-latency signal; /api/sync/changes is the recovery path.
         db.flush()
+        _record_online_order_stock_movements(db, order, order_items)
         durable_events = [
             append_sync_event(db, {
                 "event_id": str(uuid4()),
