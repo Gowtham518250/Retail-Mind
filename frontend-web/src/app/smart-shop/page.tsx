@@ -286,13 +286,13 @@ export default function SmartShopPage() {
             <Gift size={18} />
           </motion.article>
 
-          <motion.article className="smart3d-stat smart3d-stat-green" whileHover={{ y: -4 }}>
+          <motion.article className="smart3d-stat smart3d-stat-green" whileHover={shouldReduceMotion ? undefined : { y: -2 }}>
             <div className="smart3d-stat-icon"><Heart size={18} /></div>
             <div><span>PERSONALIZED PICKS</span><strong>{recommendations.length} suggestions</strong><p>Chosen from your shopping patterns</p></div>
             <ChevronRight size={18} />
           </motion.article>
 
-          <motion.article className="smart3d-stat smart3d-stat-blue" whileHover={{ y: -4 }}>
+          <motion.article className="smart3d-stat smart3d-stat-blue" whileHover={shouldReduceMotion ? undefined : { y: -2 }}>
             <div className="smart3d-stat-icon"><RotateCcw size={18} /></div>
             <div><span>RETURNS</span><strong>{returnCount} open request{returnCount === 1 ? '' : 's'}</strong><p>{formatMoney(totalReturnValue)} pending value</p></div>
             <ArrowRight size={18} />
@@ -333,7 +333,7 @@ export default function SmartShopPage() {
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 16, rotateX: 8 }}
                   animate={{ opacity: 1, y: 0, rotateX: 0 }}
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: .4, delay: Math.min(index * .05, .2) }}
-                  whileHover={shouldReduceMotion ? undefined : { y: -4, rotateY: -1 }}
+                  whileHover={shouldReduceMotion ? undefined : { y: -2 }}
                 >
                   <div className="smart3d-product-art">
                     <span>{String(index + 1).padStart(2, '0')}</span>
