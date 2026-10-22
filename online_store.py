@@ -3098,10 +3098,7 @@ def update_order_status(
         restored_inventory, linked_invoice = _reverse_online_order_financials(
             db, order, shop_id, "Owner rejected order"
         )
-        if (
-            (order.payment_method or "").upper() == "UPI"
-            and (order.payment_status or "").upper() == "PAID"
-        ):
+        if str(order.payment_status or "").upper() == "PAID":
             order.payment_status = "REFUND_REQUIRED"
 
     order.order_status = new_status
