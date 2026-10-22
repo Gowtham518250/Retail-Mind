@@ -74,6 +74,7 @@ export default function OnboardingPage() {
               <div className={styles.floatingProduct + ' ' + styles.productOne}><Apple size={28} /></div>
               <div className={styles.floatingProduct + ' ' + styles.productTwo}><Leaf size={29} /></div>
               <div className={styles.floatingProduct + ' ' + styles.productThree}><ShoppingBasket size={25} /></div>
+              <div className={styles.floatingProduct + ' ' + styles.productFour}><Icon size={25} /></div>
             </div>
             <div className={styles.fakeLines}><span /><span /><i /></div>
           </div>
