@@ -356,9 +356,10 @@ export default function AuthPage() {
             {success && (
               <motion.div
                 key="ok"
-                initial={{ opacity: 0, height: 0 }}
+                initial={reduceMotion ? false : { opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.18 }}
                 className={styles.successBanner}
               >
                 <CheckCircle size={17} style={{ flexShrink: 0 }} />
@@ -444,10 +445,10 @@ export default function AuthPage() {
                 key="reg-form"
                 onSubmit={handleRegister}
                 className={styles.form}
-                initial={{ opacity: 0, y: 12 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
               >
                 <div className={styles.fieldGroup}>
                   <label className={styles.label} htmlFor="customer-name">Name</label>
@@ -550,10 +551,10 @@ export default function AuthPage() {
                 key="reset-form"
                 onSubmit={handleReset}
                 className={styles.form}
-                initial={{ opacity: 0, y: 12 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
               >
                 {resetStep === 'request' && (
                   <div className={styles.fieldGroup}>
@@ -654,8 +655,8 @@ export default function AuthPage() {
                 )}
 
                 <motion.button
-                  whileHover={{ scale: 1.015 }}
-                  whileTap={{ scale: 0.985 }}
+                  whileHover={reduceMotion ? undefined : { scale: 1.01 }}
+                  whileTap={reduceMotion ? undefined : { scale: 0.99 }}
                   type="submit"
                   disabled={loading}
                   className={styles.submitBtn}
