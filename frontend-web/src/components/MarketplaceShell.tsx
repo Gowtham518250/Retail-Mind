@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, ArrowUpRight, MapPin, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Zap, Apple, Milk, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Boxes, ArrowUpRight, MapPin, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Zap, Apple, Milk, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
