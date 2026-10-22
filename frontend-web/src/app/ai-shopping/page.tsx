@@ -235,11 +235,11 @@ export default function AiShoppingPage() {
               <motion.div
                 className={styles.retailPod}
                 animate={shouldReduceMotion ? { y: 0, rotateY: 0, rotateZ: 0 } : {
-                  y: [0, -10, 0],
-                  rotateY: [-5, 5, -5],
-                  rotateZ: [-2, 1, -2],
+                  y: [0, -3, 0],
+                  rotateY: [-1, 1, -1],
+                  rotateZ: [-0.4, 0.4, -0.4],
                 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 6.2, repeat: Infinity, ease: 'easeInOut' }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 8.5, repeat: Infinity, ease: 'easeInOut' }}
               >
                 <div className={styles.retailPodTop}>
                   <span>RETAIL MIND</span>
