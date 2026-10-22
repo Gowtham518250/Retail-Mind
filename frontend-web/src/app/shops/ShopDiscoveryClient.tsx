@@ -133,7 +133,7 @@ export default function ShopDiscoveryClient({ initialShops }: { initialShops: Sh
   }, [shops, query, category]);
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-experience="shop-discovery">
       <div className={styles.shell}>
         <header className={styles.hero}>
           <div className={styles.heroTopline}>
