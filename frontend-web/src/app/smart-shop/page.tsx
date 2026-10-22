@@ -330,10 +330,10 @@ export default function SmartShopPage() {
                   key={item.product_id + '-' + item.shop_id}
                   className="smart3d-product-card"
                   onClick={() => router.push('/shop/' + item.shop_id + '/product/' + item.product_id)}
-                  initial={{ opacity: 0, y: 16, rotateX: 8 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 16, rotateX: 8 }}
                   animate={{ opacity: 1, y: 0, rotateX: 0 }}
-                  transition={{ duration: .4, delay: Math.min(index * .05, .2) }}
-                  whileHover={{ y: -6, rotateY: -1.5 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: .4, delay: Math.min(index * .05, .2) }}
+                  whileHover={shouldReduceMotion ? undefined : { y: -4, rotateY: -1 }}
                 >
                   <div className="smart3d-product-art">
                     <span>{String(index + 1).padStart(2, '0')}</span>
@@ -377,10 +377,10 @@ export default function SmartShopPage() {
                 <motion.article
                   key={item.product_id + '-' + item.shop_id}
                   className="smart3d-rec-card"
-                  initial={{ opacity: 0, y: 18 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: .42, delay: Math.min(index * .05, .2) }}
-                  whileHover={{ y: -6 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: .38, delay: Math.min(index * .05, .2) }}
+                  whileHover={shouldReduceMotion ? undefined : { y: -4 }}
                 >
                   <div className="smart3d-rec-top">
                     <div className="smart3d-rec-icon"><Store size={18} /></div>
