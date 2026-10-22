@@ -200,3 +200,11 @@ main.page-transition > :first-child:not([data-entry-screen]) {
 [data-experience="storefront"] [class*="ctaMain"]:hover svg {
   transform: translateX(2px) !important;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopTile"],
+  [data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopOrbOne"],
+  [data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopOrbTwo"] {
+    transform: none !important;
+  }
+}
