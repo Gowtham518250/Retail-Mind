@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { AnimatePresence, motion, useSpring, useTransform } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion, useSpring, useTransform } from 'framer-motion';
 import { ArrowRight, Loader2, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import styles from './CartDrawer.module.css';
@@ -16,6 +16,7 @@ function Money({ value }: { value: number }) {
 }
 
 export default function CartDrawer() {
+  const reduceMotion = Boolean(useReducedMotion());
   const {
     cartItems,
     isCartOpen,
@@ -154,7 +155,7 @@ export default function CartDrawer() {
               )}
               {cartItems.length === 0 ? (
                 <div className={styles.empty}>
-                  <motion.div className={styles.emptyBag} animate={{ y: [0, -12, 0], rotate: [-4, 4, -4] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
+                  <motion.div className={styles.emptyBag} animate={reduceMotion ? { y: 0, rotate: 0 } : { y: [0, -8, 0], rotate: [-2, 2, -2] }} transition={reduceMotion ? { duration: 0 } : { duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}>
                     <ShoppingBag size={44} strokeWidth={1.5} />
                   </motion.div>
                   <strong>Nothing here yet</strong>
