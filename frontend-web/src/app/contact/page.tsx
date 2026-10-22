@@ -26,7 +26,7 @@ export default function ContactPage() {
   };
 
   return (
-    <main className={`container ${styles.page}`}>
+    <main className={`container ${styles.page}`} data-experience="contact">
       <JsonLd data={breadcrumbJsonLd} />
       {SUPPORT_EMAIL && (
         <JsonLd data={{
