@@ -51,7 +51,8 @@ export default function AuthPage() {
     if (typeof window === 'undefined') return;
 
     const params = new URLSearchParams(window.location.search);
-    const resetRequested = params.get('view') === 'reset';
+    const requestedView = params.get('view');
+    const resetRequested = requestedView === 'reset';
     const emailParam = params.get('email') || '';
     const safeNext = safeNextPath(params.get('next'));
 
@@ -65,6 +66,10 @@ export default function AuthPage() {
       setView('reset');
       setResetStep('request');
       return;
+    }
+
+    if (requestedView === 'register') {
+      setView('register');
     }
 
     if (localStorage.getItem('customerToken')) {

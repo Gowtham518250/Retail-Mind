@@ -50,7 +50,7 @@ export default function Navbar() {
     };
   }, []);
 
-  if (pathname === '/auth') return null;
+  if (pathname === '/auth' || pathname === '/splash' || pathname === '/onboarding') return null;
 
   const desktopLinks = [
     { href: '/ai-shopping', label: 'AI Shop', icon: Sparkles, show: true },
