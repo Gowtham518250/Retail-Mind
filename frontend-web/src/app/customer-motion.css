@@ -178,3 +178,25 @@ main.page-transition > :first-child:not([data-entry-screen]) {
 [data-experience="storefront"] [class*="canvas"] {
   transition: opacity 220ms ease !important;
 }
+
+
+/* Keep inner shop-card decorations from swinging independently of the card. */
+[data-experience="marketplace"] [class*="shopCard"] {
+  transition: transform 170ms var(--rm-motion-ease), box-shadow 170ms ease, border-color 170ms ease;
+}
+[data-experience="marketplace"] [class*="shopCard"]:hover {
+  border-color: rgba(49,87,213,.24) !important;
+  box-shadow: 0 14px 32px rgba(8,20,43,.09) !important;
+}
+[data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopTile"] {
+  transform: scale(1.02) !important;
+}
+[data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopOrbOne"] {
+  transform: translate(4px,3px) scale(1.02) !important;
+}
+[data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopOrbTwo"] {
+  transform: translate(-3px,2px) scale(.98) !important;
+}
+[data-experience="storefront"] [class*="ctaMain"]:hover svg {
+  transform: translateX(2px) !important;
+}
