@@ -17,7 +17,7 @@ def test_cancel_and_reject_remove_order_sale_and_invoice():
     assert "db.delete(invoice)" in helper
     assert "for invoice in invoices" in helper
     assert "SALE_REVERSAL" in helper
-    assert 'category == "REFUND_REQUIRED"' in helper
+    assert 'payment_event.category = "REFUND_REQUIRED"' in helper
 
 
 def test_real_payment_evidence_is_preserved_when_invoice_is_removed():
@@ -80,6 +80,7 @@ def test_cancellation_removes_all_legacy_invoice_variants_and_journal_reversals(
     source = (ROOT / "online_store.py").read_text(encoding="utf-8")
     assert "def _online_order_invoice_candidates" in source
     assert "Invoice.invoice_number == prefix" in source
+    assert 'Invoice.notes.ilike(f"%Online Order #{order.id} |%")' in source
     assert 'Invoice.invoice_number.like(f"{prefix}-%")' in source
     assert "cancelled_invoices = _reverse_online_order_financials" in source
     assert "for deleted_invoice in deleted_invoice_snapshots" in source
