@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Leaf, ShoppingBag, ShoppingBasket, Sparkles } from 'lucide-react';
+import { ArrowRight, Leaf, ShoppingBag, Sparkles } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import styles from './splash.module.css';
 
