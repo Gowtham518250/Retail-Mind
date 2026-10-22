@@ -20,9 +20,6 @@ branch_labels = None
 depends_on = None
 
 
-TERMINAL_STATUSES = ("CANCELLED", "REJECTED", "RETURNED")
-
-
 def upgrade():
     conn = op.get_bind()
     tables = set(sa.inspect(conn).get_table_names())
@@ -44,6 +41,7 @@ def upgrade():
         WHERE user_id = :shop_id
           AND (
               LOWER(COALESCE(notes, '')) LIKE :note_pattern
+              OR LOWER(COALESCE(notes, '')) LIKE :note_exact_pattern
               OR invoice_number = :prefix
               OR invoice_number LIKE :prefix_dash
           )
@@ -56,8 +54,9 @@ def upgrade():
           AND category IN ('PAYMENT', 'REFUND_REQUIRED')
           AND (
               reference_id = :fallback_ref
+              OR reference_id = :order_ref
+              OR reference_id LIKE :prefix_dash
               OR reference_id IN :invoice_numbers
-              OR LOWER(COALESCE(description, '')) LIKE :description_pattern
           )
     """).bindparams(sa.bindparam("invoice_numbers", expanding=True))
 
@@ -68,8 +67,8 @@ def upgrade():
           AND category = 'SALE'
           AND (
               reference_id = :sale_ref
+              OR reference_id LIKE :prefix_dash
               OR reference_id IN :invoice_numbers
-              OR LOWER(COALESCE(description, '')) LIKE :description_pattern
           )
     """).bindparams(sa.bindparam("invoice_numbers", expanding=True))
 
@@ -77,13 +76,15 @@ def upgrade():
         order_id = int(order["id"])
         shop_id = int(order["shop_id"])
         prefix = f"ONL-{order_id}"
-        note_pattern = f"%online order #{order_id}%"
-        description_pattern = note_pattern
+        note_pattern = f"%online order #{order_id} |%"
+        note_exact_pattern = f"%online order #{order_id}"
+        prefix_dash = f"{prefix}-%"
         params = {
             "shop_id": shop_id,
             "note_pattern": note_pattern,
+            "note_exact_pattern": note_exact_pattern,
             "prefix": prefix,
-            "prefix_dash": f"{prefix}-%",
+            "prefix_dash": prefix_dash,
         }
         invoices = conn.execute(invoice_query, params).mappings().all()
         invoice_ids = [int(row["id"]) for row in invoices]
@@ -105,8 +106,9 @@ def upgrade():
         payment_params = {
             "shop_id": shop_id,
             "fallback_ref": f"{prefix}-PAYMENT",
+            "order_ref": prefix,
+            "prefix_dash": prefix_dash,
             "invoice_numbers": invoice_numbers,
-            "description_pattern": description_pattern,
         }
         payment_rows = conn.execute(payment_query, payment_params).mappings().all()
         for payment in payment_rows:
@@ -144,8 +146,8 @@ def upgrade():
         sale_params = {
             "shop_id": shop_id,
             "sale_ref": prefix,
+            "prefix_dash": prefix_dash,
             "invoice_numbers": invoice_numbers,
-            "description_pattern": description_pattern,
         }
         sale_rows = conn.execute(sale_query, sale_params).mappings().all()
         for sale_row in sale_rows:
