@@ -280,7 +280,7 @@ export default function SmartShopPage() {
         )}
 
         <section className="smart3d-stats">
-          <motion.article className="smart3d-stat smart3d-stat-gold" whileHover={shouldReduceMotion ? undefined : { y: -4 }}>
+          <motion.article className="smart3d-stat smart3d-stat-gold" whileHover={shouldReduceMotion ? undefined : { y: -2 }}>
             <div className="smart3d-stat-icon"><Trophy size={18} /></div>
             <div><span>LOYALTY WALLET</span><strong>{loyalty?.points_balance ?? 0} pts</strong><p>{loyalty?.tier || 'Build your first tier'}</p></div>
             <Gift size={18} />
@@ -330,8 +330,8 @@ export default function SmartShopPage() {
                   key={item.product_id + '-' + item.shop_id}
                   className="smart3d-product-card"
                   onClick={() => router.push('/shop/' + item.shop_id + '/product/' + item.product_id)}
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 16, rotateX: 8 }}
-                  animate={{ opacity: 1, y: 0, rotateX: 0 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: .4, delay: Math.min(index * .05, .2) }}
                   whileHover={shouldReduceMotion ? undefined : { y: -2 }}
                 >
@@ -380,7 +380,7 @@ export default function SmartShopPage() {
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: .38, delay: Math.min(index * .05, .2) }}
-                  whileHover={shouldReduceMotion ? undefined : { y: -4 }}
+                  whileHover={shouldReduceMotion ? undefined : { y: -2 }}
                 >
                   <div className="smart3d-rec-top">
                     <div className="smart3d-rec-icon"><Store size={18} /></div>
