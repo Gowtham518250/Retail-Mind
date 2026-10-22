@@ -39,9 +39,9 @@ function Words({ text, base = 0 }: { text: string; base?: number }) {
         <span key={i + word}><span className={styles.wordMask}>
           <motion.span
             className={styles.word}
-            initial={false}
-            animate={{ y: 0, rotate: 0 }}
-            transition={{ duration: 0 }}
+            initial={reduceMotion ? false : { y: '112%', opacity: 0 }}
+            animate={{ y: 0, opacity: 1, rotate: 0 }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.52, delay: base + i * 0.045, ease: EASE }}
           >
             {word}
           </motion.span>
