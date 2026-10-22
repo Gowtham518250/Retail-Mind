@@ -6,6 +6,8 @@ import './premium-v3.css';
 import './retail-redesign.css';
 import './experience-motion.css';
 import './customer-web-refresh.css';
+import './reference-design.css';
+import './customer-reference-ui.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
 import NativeAppPerformance from '../components/NativeAppPerformance';
@@ -64,7 +66,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: '#143b2c',
+  themeColor: '#3157d5',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
