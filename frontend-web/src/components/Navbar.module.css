@@ -224,3 +224,26 @@
   .bottomNavIconWrap { position: relative; width: 22px; height: 21px; display: grid; place-items: center; }
   .bottomActiveDot { position: absolute; bottom: -3px; width: 3px; height: 3px; background: #28c9bb; box-shadow: none; }
 }
+
+
+/* Navigation feedback: soft, quick and never hover-dependent for essential actions. */
+.brand, .logo, .link, .cart, .accountButton, .bottomNavItem, .mobileMenuButton {
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease,
+    box-shadow 180ms ease, transform 180ms cubic-bezier(.2,.75,.25,1);
+}
+.logo { transform-origin: center; }
+.brand:hover .logo { transform: translateY(-1px) rotate(-3deg); }
+.link:hover:not(.active) { transform: translateY(-1px); }
+.cart:active, .accountButton:active { transform: scale(.97); }
+.bottomNavItem:active { transform: scale(.97); }
+@media (hover: none) {
+  .brand:hover .logo, .link:hover:not(.active) { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand, .logo, .link, .cart, .accountButton, .bottomNavItem, .mobileMenuButton {
+    transition: none !important;
+  }
+  .brand:hover .logo, .link:hover:not(.active), .cart:active, .accountButton:active, .bottomNavItem:active {
+    transform: none !important;
+  }
+}
