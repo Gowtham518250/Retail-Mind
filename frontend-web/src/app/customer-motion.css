@@ -149,3 +149,32 @@ main.page-transition > :first-child:not([data-entry-screen]) {
 [data-experience="auth"] [class*="orb2"] {
   animation: none !important;
 }
+
+
+/* The home hero, shop tile, and storefront scene had legacy infinite CSS loops. */
+[data-experience="marketplace"] [class*="stage"]::before,
+[data-experience="marketplace"] [class*="stage"]::after,
+[data-experience="storefront"] [class*="stage"]::before,
+[data-experience="storefront"] [class*="stage"]::after {
+  animation: none !important;
+  rotate: none !important;
+}
+[data-experience="marketplace"] [class*="stageGlow"],
+[data-experience="storefront"] [class*="stageGlow"] {
+  animation: none !important;
+}
+[data-experience="marketplace"] [class*="pulse"],
+[data-experience="marketplace"] [class*="liveTag"] i,
+[data-experience="marketplace"] [class*="shopTile"],
+[data-experience="marketplace"] [class*="marqueeTrack"],
+[data-experience="marketplace"] [class*="stack"] i,
+[data-experience="storefront"] [class*="pulse"],
+[data-experience="storefront"] [class*="skeleton"] {
+  animation: none !important;
+}
+[data-experience="marketplace"] [class*="shopTile"] {
+  translate: none !important;
+}
+[data-experience="storefront"] [class*="canvas"] {
+  transition: opacity 220ms ease !important;
+}
