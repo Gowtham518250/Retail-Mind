@@ -45,12 +45,17 @@ main.page-transition > :first-child:not([data-entry-screen]) {
 }
 .hero3d-fallback-item { animation: none !important; }
 .hero3d-fallback-orbit { animation: none !important; opacity: .3; }
+[data-experience="auth"] [class*="orb1"],
+[data-experience="auth"] [class*="orb2"],
+[data-experience="profile"] [class*="orbA"],
+[data-experience="profile"] [class*="orbB"] {
+  animation: none !important;
+}
 [data-experience="auth"] [class*="orb1"]::after,
 [data-experience="auth"] [class*="orb2"]::after,
 [data-experience="profile"] [class*="orbA"]::after,
 [data-experience="profile"] [class*="orbB"]::after {
-  animation: none !important;
-  opacity: .26;
+  display: none !important;
 }
 [data-experience="checkout"]::before,
 [data-experience="checkout"]::after,
