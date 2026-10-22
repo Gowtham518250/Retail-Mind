@@ -116,7 +116,8 @@ def _online_order_invoice_candidates(db: Session, order: OnlineOrder, shop_id: i
     return db.query(Invoice).filter(
         Invoice.user_id == shop_id,
         or_(
-            Invoice.notes.ilike(f"%Online Order #{order.id}%"),
+            Invoice.notes.ilike(f"%Online Order #{order.id} |%"),
+            Invoice.notes.ilike(f"%Online Order #{order.id}"),
             Invoice.invoice_number == prefix,
             Invoice.invoice_number.like(f"{prefix}-%"),
         ),
@@ -153,9 +154,11 @@ def _cleanup_online_order_financials(
     if payment_status in {"PAID", "REFUND_REQUIRED"}:
         received_amount = max(received_amount, Decimal(str(order.total_amount or 0)))
 
+    payment_prefix = f"ONL-{order.id}"
     payment_predicates = [
-        UniversalTransaction.reference_id == f"ONL-{order.id}-PAYMENT",
-        UniversalTransaction.description.ilike(f"%online order #{order.id}%"),
+        UniversalTransaction.reference_id == f"{payment_prefix}-PAYMENT",
+        UniversalTransaction.reference_id == payment_prefix,
+        UniversalTransaction.reference_id.like(f"{payment_prefix}-%"),
     ]
     if invoice_numbers:
         payment_predicates.append(UniversalTransaction.reference_id.in_(invoice_numbers))
@@ -187,9 +190,10 @@ def _cleanup_online_order_financials(
     if received_amount > Decimal("0"):
         order.payment_status = "REFUND_REQUIRED"
 
+    sale_prefix = f"ONL-{order.id}"
     sale_predicates = [
-        UniversalTransaction.reference_id == f"ONL-{order.id}",
-        UniversalTransaction.description.ilike(f"%online order #{order.id}%"),
+        UniversalTransaction.reference_id == sale_prefix,
+        UniversalTransaction.reference_id.like(f"{sale_prefix}-%"),
     ]
     if invoice_numbers:
         sale_predicates.append(UniversalTransaction.reference_id.in_(invoice_numbers))
