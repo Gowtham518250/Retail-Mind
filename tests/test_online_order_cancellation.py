@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_cancel_and_reject_remove_order_sale_and_invoice():
     source = (ROOT / "online_store.py").read_text(encoding="utf-8")
-    helper_start = source.index("def _reverse_online_order_financials")
+    helper_start = source.index("def _online_order_invoice_candidates")
     helper_end = source.index("# =====================\n# CUSTOMER AUTH SCHEMAS", helper_start)
     helper = source[helper_start:helper_end]
 
@@ -22,7 +22,7 @@ def test_cancel_and_reject_remove_order_sale_and_invoice():
 
 def test_real_payment_evidence_is_preserved_when_invoice_is_removed():
     source = (ROOT / "online_store.py").read_text(encoding="utf-8")
-    helper_start = source.index("def _reverse_online_order_financials")
+    helper_start = source.index("def _online_order_invoice_candidates")
     helper_end = source.index("# =====================\n# CUSTOMER AUTH SCHEMAS", helper_start)
     helper = source[helper_start:helper_end]
 
@@ -65,7 +65,7 @@ def test_online_checkout_deducts_stock_and_persists_out_movements():
 
 def test_cancel_or_reject_restores_stock_with_idempotent_in_movement():
     source = (ROOT / "online_store.py").read_text(encoding="utf-8")
-    helper_start = source.index("def _reverse_online_order_financials")
+    helper_start = source.index("def _online_order_invoice_candidates")
     helper_end = source.index("# =====================\n# CUSTOMER AUTH SCHEMAS", helper_start)
     helper = source[helper_start:helper_end]
 
@@ -91,3 +91,13 @@ def test_profit_and_loss_excludes_payment_and_cancellation_artifact_categories()
     assert 'excluded_income_categories = ["PAYMENT", "REFUND_REQUIRED", "SALE_REVERSAL"]' in source
     assert 'notin_(["SALE_REVERSAL", "REFUND_REQUIRED"])' in source
     assert 'notin_(["PAYMENT", "REFUND_REQUIRED", "SALE_REVERSAL"])' in source
+
+
+
+def test_legacy_cancelled_order_migration_removes_old_invoice_and_reversal_records():
+    migration = (ROOT / "alembic/versions/032_cancelled_online_order_financial_cleanup.py").read_text(encoding="utf-8")
+    assert "CANCELLED', 'REJECTED', 'RETURNED" in migration
+    assert "DELETE FROM invoices" in migration
+    assert "DELETE FROM universal_transactions" in migration
+    assert "category = 'REFUND_REQUIRED'" in migration
+    assert "category = 'SALE_REVERSAL'" in migration
