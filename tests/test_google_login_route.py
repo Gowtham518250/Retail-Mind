@@ -22,7 +22,7 @@ def test_google_login_uses_google_verified_identity_not_client_email():
     assert 'headers={"Authorization": f"Bearer {google_token}"}' in source
     assert 'google_profile.get("email_verified", "")' in source
     assert 'func.lower(User.email) == google_email' in source
-    assert "data.email, data.name, or data.photo_url" in source
+    assert "email/name supplied by the browser as proof of account ownership" in source
 
 
 def test_google_login_returns_the_normal_access_and_refresh_session():
