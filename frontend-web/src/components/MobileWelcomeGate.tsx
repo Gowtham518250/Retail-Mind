@@ -10,9 +10,8 @@ export default function MobileWelcomeGate({ children }: { children: React.ReactN
   useEffect(() => {
     if (pathname !== '/') return;
     try {
-      const isSmallScreen = window.matchMedia('(max-width: 768px)').matches;
       const introAlreadySeen = window.localStorage.getItem('retailMindIntroSeen') === '1';
-      if (isSmallScreen && !introAlreadySeen) {
+      if (!introAlreadySeen) {
         router.replace('/splash');
       }
     } catch {
