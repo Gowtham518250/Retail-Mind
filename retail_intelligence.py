@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 
 from db import get_db
 from models import (
@@ -607,11 +607,18 @@ def get_profit_and_loss(
     end_dt = datetime.combine(end_date, datetime.max.time())
 
     # Total income from universal journal
+    # PAYMENT rows are cash-receipt evidence, not a second sale; refund-required
+    # receipts are kept for audit but must not inflate revenue after cancellation.
+    excluded_income_categories = ["PAYMENT", "REFUND_REQUIRED", "SALE_REVERSAL"]
     income = db.query(func.sum(UniversalTransaction.amount)).filter(
         UniversalTransaction.shop_id == shop_id,
         UniversalTransaction.tx_type == "INCOME",
         UniversalTransaction.tx_date >= start_dt,
         UniversalTransaction.tx_date <= end_dt,
+        or_(
+            UniversalTransaction.category.is_(None),
+            UniversalTransaction.category.notin_(excluded_income_categories),
+        ),
     ).scalar() or 0
 
     # Total expenses
@@ -620,6 +627,10 @@ def get_profit_and_loss(
         UniversalTransaction.tx_type == "EXPENSE",
         UniversalTransaction.tx_date >= start_dt,
         UniversalTransaction.tx_date <= end_dt,
+        or_(
+            UniversalTransaction.category.is_(None),
+            UniversalTransaction.category.notin_(["SALE_REVERSAL", "REFUND_REQUIRED"]),
+        ),
     ).scalar() or 0
 
     # Breakdown by category
@@ -632,6 +643,10 @@ def get_profit_and_loss(
         UniversalTransaction.shop_id == shop_id,
         UniversalTransaction.tx_date >= start_dt,
         UniversalTransaction.tx_date <= end_dt,
+        or_(
+            UniversalTransaction.category.is_(None),
+            UniversalTransaction.category.notin_(["PAYMENT", "REFUND_REQUIRED", "SALE_REVERSAL"]),
+        ),
     ).group_by(UniversalTransaction.category, UniversalTransaction.tx_type).all()
 
     net_profit = float(income) - float(expenses)
