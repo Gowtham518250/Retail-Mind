@@ -111,6 +111,11 @@ def upgrade():
             "invoice_numbers": invoice_numbers,
         }
         payment_rows = conn.execute(payment_query, payment_params).mappings().all()
+        journal_received_amount = sum(
+            (Decimal(str(payment["amount"] or 0)) for payment in payment_rows),
+            Decimal("0"),
+        )
+        received_amount = max(received_amount, journal_received_amount)
         for payment in payment_rows:
             description = (
                 f"Refund required for cancelled online order #{order_id}; "
