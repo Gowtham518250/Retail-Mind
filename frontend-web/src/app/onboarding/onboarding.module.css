@@ -76,3 +76,5 @@
 .productOne { top: 2%; left: 10%; background: #fff0dc; }
 .productTwo { top: 0; right: 8%; background: #e4f9b6; }
 .productThree { bottom: 4%; right: 5%; background: #fff; }
+
+.productFour { left: 2%; bottom: 25%; background: #f0edff; color: #6657f5; transform: rotate(-8deg); }
