@@ -1314,6 +1314,12 @@ export default function MyOrdersPage() {
                         <span>{deliveryDetails.address || order.delivery_address}</span>
                       </div>
                       <div className="orders-fk-details-actions">
+                        <button
+                          className="orders-fk-details-btn"
+                          onClick={() => router.push('/orders/' + order.order_id)}
+                        >
+                          Track order <Truck size={14} />
+                        </button>
                         {(order.can_cancel ?? REVERSIBLE_STATUSES.includes(order.status)) && (
                           <button
                             className="orders-fk-details-btn danger"
