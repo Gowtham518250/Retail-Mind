@@ -227,3 +227,16 @@ main.page-transition > :first-child:not([data-entry-screen]) {
   [data-experience="marketplace"] [class*="artTileTwo"],
   [data-experience="marketplace"] [class*="artTileThree"] { animation: none !important; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-experience="marketplace"] [class*="categoryButton"]:hover,
+  [data-experience="marketplace"] [class*="productCard"]:hover,
+  [data-experience="storefront"] [class*="cat"]:hover,
+  [data-experience="storefront"] [class*="ctaMain"]:hover,
+  [data-experience="storefront"] [class*="ctaGhost"]:hover,
+  [data-experience="shop-discovery"] [class*="card"]:hover,
+  [data-experience="contact"] [class*="directEmail"]:hover,
+  [data-experience="orders"] .orders-fk-card:hover {
+    transform: none !important;
+  }
+}
