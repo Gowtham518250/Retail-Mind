@@ -208,3 +208,25 @@ main.page-transition > :first-child:not([data-entry-screen]) {
     transform: none !important;
   }
 }
+
+
+/* One brief entrance for the home hero; no movement is layered on its contents. */
+@keyframes rm-simple-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+[data-experience="marketplace"] [class*="freshBannerCopy"] {
+  animation: rm-simple-fade-in 340ms ease-out both;
+}
+[data-experience="marketplace"] [class*="freshArtwork"] {
+  animation: rm-simple-fade-in 380ms ease-out 45ms both;
+}
+[data-experience="marketplace"] [class*="categoryButton"] {
+  animation: rm-simple-fade-in 220ms ease-out both;
+}
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(2) { animation-delay: 20ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(3) { animation-delay: 40ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(4) { animation-delay: 60ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(5) { animation-delay: 80ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(6) { animation-delay: 100ms; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(7) { animation-delay: 120ms; }
