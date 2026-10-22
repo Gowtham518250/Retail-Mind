@@ -19,21 +19,21 @@ interface Tilt3DProps {
  * sit on different depth layers (the wrapper preserves 3D).
  * Touch input and reduced-motion users get a static element.
  */
-export default function Tilt3D({ children, className, max = 9, lift = 10 }: Tilt3DProps) {
+export default function Tilt3D({ children, className, max = 2.5, lift = 2.5 }: Tilt3DProps) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const px = useMotionValue(0.5);
   const py = useMotionValue(0.5);
   const hover = useMotionValue(0);
 
-  const spring = { stiffness: 190, damping: 18, mass: 0.6 };
+  const spring = { stiffness: 260, damping: 30, mass: 0.55 };
   const rotateY = useSpring(useTransform(px, [0, 1], [-max, max]), spring);
   const rotateX = useSpring(useTransform(py, [0, 1], [max, -max]), spring);
   const z = useSpring(useTransform(hover, [0, 1], [0, lift]), spring);
 
   const gx = useTransform(px, (v) => `${v * 100}%`);
   const gy = useTransform(py, (v) => `${v * 100}%`);
-  const glare = useMotionTemplate`radial-gradient(420px circle at ${gx} ${gy}, rgba(255,255,255,0.38), transparent 45%)`;
+  const glare = useMotionTemplate`radial-gradient(420px circle at ${gx} ${gy}, rgba(255,255,255,0.16), transparent 52%)`;
   const glareOpacity = useSpring(hover, { stiffness: 140, damping: 20 });
 
   if (reduce) return <div className={className}>{children}</div>;
