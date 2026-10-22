@@ -10,7 +10,7 @@ export default function SplashPage() {
   const reduceMotion = Boolean(useReducedMotion());
 
   return (
-    <main className={styles.screen}>
+    <main className={styles.screen} data-entry-screen="splash">
       <div className={styles.topline}>
         <span className={styles.statusDot} />
         <span>LOCAL SHOPPING, MADE SIMPLE</span>
