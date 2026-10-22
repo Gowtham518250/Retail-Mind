@@ -13,9 +13,11 @@ def test_cancel_and_reject_remove_order_sale_and_invoice():
 
     assert 'sales.reference_order_id == order.id' in helper
     assert 'UniversalTransaction.category == "SALE"' in helper
-    assert "db.delete(sale_transaction)" in helper
+    assert "for sale_transaction in sale_transactions" in helper
     assert "db.delete(invoice)" in helper
-    assert 'category="SALE_REVERSAL"' in helper
+    assert "for invoice in invoices" in helper
+    assert "SALE_REVERSAL" in helper
+    assert 'category == "REFUND_REQUIRED"' in helper
 
 
 def test_real_payment_evidence_is_preserved_when_invoice_is_removed():
@@ -24,10 +26,10 @@ def test_real_payment_evidence_is_preserved_when_invoice_is_removed():
     helper_end = source.index("# =====================\n# CUSTOMER AUTH SCHEMAS", helper_start)
     helper = source[helper_start:helper_end]
 
-    assert 'category == "PAYMENT"' in helper
-    assert 'category="PAYMENT"' in helper
-    assert "payment_reference" in helper
-    assert "refund follow-up required" in helper
+    assert 'category.in_(["PAYMENT", "REFUND_REQUIRED"])' in helper
+    assert 'category = "REFUND_REQUIRED"' in helper
+    assert "Refund required for cancelled online order" in helper
+    assert "received_amount" in helper
 
 
 def test_customer_cancel_and_owner_reject_publish_invoice_deleted():
@@ -71,3 +73,20 @@ def test_cancel_or_reject_restores_stock_with_idempotent_in_movement():
     assert 'reason="ONLINE_ORDER_RESTORED"' in helper
     assert "STOCK-IN-{line_index}" in helper
     assert "existing_restore is not None" in helper
+
+
+
+def test_cancellation_removes_all_legacy_invoice_variants_and_journal_reversals():
+    source = (ROOT / "online_store.py").read_text(encoding="utf-8")
+    assert "def _online_order_invoice_candidates" in source
+    assert "Invoice.invoice_number == prefix" in source
+    assert 'Invoice.invoice_number.like(f"{prefix}-%")' in source
+    assert "cancelled_invoices = _reverse_online_order_financials" in source
+    assert "for deleted_invoice in deleted_invoice_snapshots" in source
+
+
+def test_profit_and_loss_excludes_payment_and_cancellation_artifact_categories():
+    source = (ROOT / "retail_intelligence.py").read_text(encoding="utf-8")
+    assert 'excluded_income_categories = ["PAYMENT", "REFUND_REQUIRED", "SALE_REVERSAL"]' in source
+    assert 'notin_(["SALE_REVERSAL", "REFUND_REQUIRED"])' in source
+    assert 'notin_(["PAYMENT", "REFUND_REQUIRED", "SALE_REVERSAL"])' in source
