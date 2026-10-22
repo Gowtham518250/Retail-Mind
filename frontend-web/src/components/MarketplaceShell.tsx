@@ -9,6 +9,7 @@ import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
 import { useCart } from '../context/CartContext';
+import type { PublicProductPreview, PublicShop } from '../lib/publicCatalog';
 
 const EASE = [0.2, 0.75, 0.25, 1] as const;
 
@@ -70,18 +71,26 @@ type ResultMode = 'all' | 'shops' | 'products';
 
 type FeaturedProduct = { product_id: number; product_name: string; shop_id: number; shop_name: string; price: number; image_url?: string | null; category?: string; description?: string; stock_available?: number };
 
-export default function MarketplaceShell() {
+type MarketplaceShellProps = {
+  initialShops: PublicShop[];
+  initialFeaturedProducts: PublicProductPreview[];
+};
+
+export default function MarketplaceShell({
+  initialShops,
+  initialFeaturedProducts,
+}: MarketplaceShellProps) {
   const router = useRouter();
   const shouldReduceMotion = Boolean(useReducedMotion());
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<ResultMode>('all');
-  const [shops, setShops] = useState<any[]>([]);
+  const [shops, setShops] = useState<any[]>(initialShops);
   const [products, setProducts] = useState<any[]>([]);
-  const [featuredProducts, setFeaturedProducts] = useState<FeaturedProduct[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<FeaturedProduct[]>(initialFeaturedProducts);
   const [activeProductCategory, setActiveProductCategory] = useState('All');
   const [aiMessage, setAiMessage] = useState('');
   const [aiResults, setAiResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialShops.length === 0);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
   const requestIdRef = useRef(0);
