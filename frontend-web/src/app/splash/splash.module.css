@@ -53,3 +53,94 @@
 @media(min-width:700px) { .screen { min-height:min(900px,100svh);height:100svh;border-left:1px solid #e3eaf6;border-right:1px solid #e3eaf6;box-shadow:0 0 45px rgba(8,20,43,.06);padding-left:26px;padding-right:26px; }.scene { height:clamp(300px,43vh,420px); } }
 @media(max-height:700px) { .screen { padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(10px,env(safe-area-inset-bottom)); }.logoWrap { width:76px;height:76px;border-radius:21px; }.logo { width:70px;height:70px; }.brandBlock h1 { font-size:24px;margin:6px 0 4px; }.brandBlock p { font-size:11px; }.scene { height:clamp(205px,36vh,270px);margin-top:13px; }.storefront { bottom:29px; }.footer { gap:8px; }.primaryButton { min-height:42px; } }
 @media(prefers-reduced-motion:reduce) { .primaryButton { transition:none; } }
+
+
+/* Polished storefront art and welcoming composition. */
+.screen {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(232,241,255,.7), transparent 43%),
+    linear-gradient(180deg,#f8faff 0%,#fff 66%,#edf6ff 100%);
+}
+.logoWrap {
+  position: relative;
+  width: 114px;
+  height: 114px;
+  border-radius: 30px;
+  border-color: rgba(255,255,255,.95);
+  background: linear-gradient(145deg,#fff 0%,#f6f8ff 100%);
+  box-shadow: 0 17px 34px rgba(31,54,112,.11), inset 0 1px 0 #fff;
+}
+.logo { width: 101px; height: 101px; }
+.brandBlock h1 {
+  margin: 11px 0 7px;
+  font-size: clamp(29px,7vw,34px);
+  letter-spacing: -.065em;
+  color: #182f79;
+}
+.brandBlock p { font-size: 13px; color: #3e4e74; }
+.scene {
+  width: 100%;
+  height: clamp(270px, 40vh, 370px);
+  margin-top: 19px;
+  border: 1px solid #dfe8f7;
+  border-radius: 24px;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(180deg,#eaf2ff 0%,#f9fbff 63%,#dff2e9 100%);
+  box-shadow: 0 18px 34px rgba(20,48,91,.095);
+}
+.sceneIllustration {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.sceneLabel {
+  position: absolute;
+  z-index: 6;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: calc(100% - 24px);
+  padding: 7px 9px;
+  border: 1px solid rgba(255,255,255,.85);
+  border-radius: 999px;
+  background: rgba(255,255,255,.88);
+  color: #3157d5;
+  box-shadow: 0 4px 12px rgba(15,37,77,.08);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .015em;
+}
+.floatBag,.floatLeaf { z-index: 5; width: 43px; height: 43px; border-radius: 14px; border-width: 2px; }
+.floatBag { top: auto; right: 12px; bottom: 18%; background: #6657f5; }
+.floatLeaf { top: 47%; left: 12px; background: #dff8a7; }
+.footer { gap: 10px; padding-top: 11px; }
+.primaryButton {
+  min-height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(105deg,#3157d5 0%,#4c5df0 100%);
+  box-shadow: 0 10px 21px rgba(49,87,213,.22);
+}
+.primaryButton:hover { background: #2547be; }
+.secondaryLink { padding: 2px 4px; }
+@media(min-width:700px) {
+  .screen { width: min(100%,560px); padding-left: 28px; padding-right: 28px; }
+  .scene { height: clamp(300px,42vh,400px); }
+}
+@media(max-height:700px) {
+  .logoWrap { width: 82px; height: 82px; border-radius: 24px; }
+  .logo { width: 75px; height: 75px; }
+  .brandBlock h1 { font-size: 24px; margin: 6px 0 4px; }
+  .brandBlock p { font-size: 10px; }
+  .scene { height: clamp(205px,35vh,265px); margin-top: 11px; }
+  .sceneLabel { top: 7px; left: 7px; padding: 5px 7px; font-size: 7px; }
+  .floatBag,.floatLeaf { width: 34px; height: 34px; border-radius: 11px; }
+  .floatBag svg,.floatLeaf svg { width: 18px; height: 18px; }
+}
