@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -143,7 +144,7 @@ export default function ProfilePage() {
         <section className={styles.profileHeaderCard} aria-label="Customer profile">
           <div className={styles.userInfoArea}>
             <div className={styles.avatarAura}>
-              <div className={styles.avatarInner}>{displayName.charAt(0).toUpperCase()}</div>
+              <div className={styles.avatarInner}><Image src="/icons/customer-avatar.svg" alt="" width={44} height={44} className={styles.profileAvatarImage} priority /></div>
             </div>
             <div className={styles.userMeta}>
               <h2 className={styles.userName}>{displayName}</h2>
