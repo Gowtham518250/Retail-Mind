@@ -168,8 +168,7 @@ main.page-transition > :first-child:not([data-entry-screen]) {
 [data-experience="marketplace"] [class*="shopTile"],
 [data-experience="marketplace"] [class*="marqueeTrack"],
 [data-experience="marketplace"] [class*="stack"] i,
-[data-experience="storefront"] [class*="pulse"],
-[data-experience="storefront"] [class*="skeleton"] {
+[data-experience="storefront"] [class*="pulse"] {
   animation: none !important;
 }
 [data-experience="marketplace"] [class*="shopTile"] {
