@@ -167,6 +167,13 @@ def _cleanup_online_order_financials(
         UniversalTransaction.category.in_(["PAYMENT", "REFUND_REQUIRED"]),
         or_(*payment_predicates),
     ).all()
+    # If the invoice was already removed by an older handler, the surviving
+    # journal amounts are still the best evidence of money received.
+    journal_received_amount = sum(
+        (Decimal(str(event.amount or 0)) for event in payment_events),
+        Decimal("0"),
+    )
+    received_amount = max(received_amount, journal_received_amount)
 
     # Keep genuine receipt evidence, but reclassify it so dashboards do not
     # report a cancelled order's collection as sale revenue.
