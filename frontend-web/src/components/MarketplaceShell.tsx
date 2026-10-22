@@ -18,11 +18,11 @@ const EASE = [0.2, 0.75, 0.25, 1] as const;
 
 // Deterministic colourways so every shop gets its own identity.
 const SHOP_TONES = [
-  ['#f3ca4f', '#e8541e', '#182820'],
-  ['#cfe3c6', '#2b4436', '#fbf6ec'],
-  ['#ffd9c7', '#e8541e', '#fff'],
-  ['#e7dcc2', '#8a6a2f', '#fbf6ec'],
-  ['#d7e6f0', '#2b4436', '#fbf6ec'],
+  ['#e9efff', '#cddcff', '#142857'],
+  ['#e3faf4', '#bfeee1', '#17483e'],
+  ['#f0edff', '#d9d3ff', '#2b255f'],
+  ['#fff4df', '#ffe0ad', '#654b13'],
+  ['#e7f6ff', '#c8eaff', '#163d5f'],
 ];
 
 const resolveLogo = (url?: string) => (url ? (url.startsWith('http') ? url : API_BASE + url) : '');
@@ -305,7 +305,7 @@ export default function MarketplaceShell() {
             image_url: typeof product.image_url === 'string' ? product.image_url : null,
             category: String(product.category ?? '').trim(),
             description: String(product.description ?? ''),
-            stock_available: Number(product.stock_available ?? product.current_stock ?? 0),
+            stock_available: product.stock_available == null && product.current_stock == null ? undefined : Number(product.stock_available ?? product.current_stock),
           })).filter((product: FeaturedProduct) =>
             Number.isFinite(product.product_id) && product.product_id > 0 && product.product_name !== 'Product'
           );
