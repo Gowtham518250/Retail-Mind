@@ -8,6 +8,7 @@ import './experience-motion.css';
 import './customer-web-refresh.css';
 import './reference-design.css';
 import './customer-reference-ui.css';
+import './customer-motion.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
 import NativeAppPerformance from '../components/NativeAppPerformance';
