@@ -2820,20 +2820,11 @@ def update_order_status(
         customer_name = customer.user_name if customer else "Online Customer"
         customer_phone = customer.phone if customer else ""
 
-        # 1. Write one sales row per item → appears in Sales Dashboard
-        for item in items:
-            sale_entry = sales(
-                shopkeeper_id=shop_id,
-                product_name=item.get("product_name", "Online Item"),
-                price=item.get("unit_price", 0),
-                quantity=item.get("quantity", 1),
-                total=item.get("line_total", 0),
-                sale_date=date.today(),
-                reference_order_id=order.id,
-            )
-            db.add(sale_entry)
+        # Acceptance reserves the order and creates a pending invoice, but is
+        # not a completed sale. Sales rows and the SALE journal entry are only
+        # created at DELIVERED, so cancelled orders never inflate sales totals.
 
-        # 2. Create Invoice (ACCEPTED = COD/pending payment)
+        # Create Invoice (ACCEPTED = order accepted, payment may still be pending)
         invoice_num = f"ONL-{order.id}-{int(datetime.now().timestamp())}"
         order_already_paid = (order.payment_status or "").upper() == "PAID"
         invoice = Invoice(
@@ -2900,18 +2891,6 @@ def update_order_status(
                     description=f"Payment received for online order #{order.id}",
                     tx_date=payment_date,
                 ))
-
-        # 4. Write to universal P&L journal
-        tx = UniversalTransaction(
-            shop_id=shop_id,
-            tx_type="INCOME",
-            category="SALE",
-            amount=float(order.total_amount),
-            reference_id=f"ONL-{order.id}",
-            description=f"Online Order Accepted: #{order.id} | {customer_name}",
-            tx_date=datetime.now(),
-        )
-        db.add(tx)
 
     # 🟢 On DELIVER: verify the OTP emailed to the customer, then mark invoice as PAID.
     if new_status == "DELIVERED":
