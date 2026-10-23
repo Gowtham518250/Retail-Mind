@@ -74,13 +74,10 @@ def restore_all_sales(
         invoices = query.order_by(desc(Invoice.created_at)).all()
         # Keep provisional online invoices available for the invoice/order UI,
         # but exclude them from the sales totals until the order is DELIVERED.
-        invoice_ids = [invoice.id for invoice in invoices]
-        if invoice_ids:
+        if invoices:
             recognized_invoice_ids = {
                 row[0]
-                for row in db.query(Invoice.id).filter(
-                    Invoice.user_id == user_id,
-                    Invoice.id.in_(invoice_ids),
+                for row in query.with_entities(Invoice.id).filter(
                     *recognized_invoice_filters(),
                 ).all()
             }
