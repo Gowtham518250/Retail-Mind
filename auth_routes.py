@@ -802,6 +802,8 @@ def google_login(data: GoogleLoginRequest, request: Request, db: Session = Depen
         display_name = google_email.split("@", 1)[0][:100]
 
     db_user = db.query(User).filter(func.lower(User.email) == google_email).first()
+    # Communicate to the client whether this verified email was already in the database.
+    is_new_user = db_user is None
     if db_user is None:
         # First Google sign-in provisions a normal owner account and shop profile.
         # Existing database roles are always retained and never taken from input.
@@ -872,7 +874,9 @@ def google_login(data: GoogleLoginRequest, request: Request, db: Session = Depen
         "role": user_role,
         "user_type": user_role,
         "user_id": db_user.id,
+        "email": db_user.email,
         "username": db_user.user_name,
+        "is_new_user": is_new_user,
         "shop_profile": {
             "id": shop_profile.id,
             "shop_id": shop_profile.shop_id,

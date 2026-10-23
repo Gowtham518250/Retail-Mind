@@ -44,3 +44,18 @@ def test_endpoint_audit_lists_google_sign_in_for_client_and_server():
 
     assert "'POST /auth/google': 'authentication_router'" in source
     assert "'/auth/google': 'googleSignInEndpoint'" in source
+
+
+def test_google_login_reports_existing_account_vs_auto_registration():
+    source = (ROOT / "auth_routes.py").read_text(encoding="utf-8")
+    route_start = source.index('@router.post("/google")')
+    route_end = source.index('@router.post("/login")', route_start)
+    route = source[route_start:route_end]
+
+    # Existing accounts are selected by Google's verified email, while absent
+    # emails are provisioned by this same endpoint.
+    assert "is_new_user = db_user is None" in route
+    assert "db_user = db.query(User).filter(func.lower(User.email) == google_email).first()" in route
+    assert '"is_new_user": is_new_user' in route
+    assert '"email": db_user.email' in route
+    assert "ShopProfile(" in route
