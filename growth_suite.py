@@ -71,50 +71,17 @@ def _json_order_items(order: OnlineOrder):
         return []
 
 def _reverse_accepted_online_order(db: Session, order: OnlineOrder, shop_id: int, reason: str) -> None:
-    """Reverse stock, sales, invoice and P&L side effects for an accepted order."""
-    items = _json_order_items(order)
+    """Use the canonical idempotent online-order reversal for every cancellation path.
 
-    for item in items:
-        product_id = item.get("product_id")
-        quantity = float(item.get("quantity", 0) or 0)
-        if not product_id or quantity <= 0:
-            continue
-        product = db.query(Product).with_for_update().filter(
-            Product.id == int(product_id),
-            Product.user_id == shop_id,
-        ).first()
-        if product:
-            product.current_stock = (product.current_stock or 0) + quantity
+    The former implementation independently incremented stock, cancelled only the
+    first matching invoice, and wrote a synthetic SALE_REVERSAL expense. That
+    diverged from the customer-cancellation path and could leave sales/transactions
+    behind or restore stock more than once on retries.
+    """
+    # Import locally to avoid module-initialization coupling between API routers.
+    from online_store import _reverse_online_order_financials
 
-    db.query(sales).filter(
-        sales.shopkeeper_id == shop_id,
-        sales.reference_order_id == order.id,
-    ).delete(synchronize_session=False)
-
-    invoice = db.query(Invoice).filter(
-        Invoice.source == "ONLINE_ORDER",
-        Invoice.notes.like(f"%Online Order #{order.id}%"),
-        Invoice.user_id == shop_id,
-    ).first()
-    if invoice:
-        invoice.status = "CANCELLED"
-        invoice.payment_status = "UNPAID"
-        invoice.paid_amount = 0
-
-    reversal_ref = f"ONL-{order.id}-REVERSAL"
-    if not db.query(UniversalTransaction).filter(
-        UniversalTransaction.shop_id == shop_id,
-        UniversalTransaction.reference_id == reversal_ref,
-    ).first():
-        db.add(UniversalTransaction(
-            shop_id=shop_id,
-            tx_type="EXPENSE",
-            category="SALE_REVERSAL",
-            amount=float(order.total_amount or 0),
-            reference_id=reversal_ref,
-            description=f"{reason}: Online Order #{order.id}",
-            tx_date=datetime.now(),
-        ))
+    _reverse_online_order_financials(db, order, shop_id, reason)
 
 
 def _coupon_value(coupon: RetailCoupon, subtotal: float) -> float:
