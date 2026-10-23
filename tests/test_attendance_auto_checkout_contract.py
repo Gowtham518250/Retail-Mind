@@ -260,3 +260,36 @@ def test_huggingface_cache_directories_are_initialized_before_app_import():
     assert production_boot.RENDER_CACHE_DIR.is_dir()
     assert production_boot.HF_CACHE_DIR.is_dir()
     assert production_boot.HF_CACHE_DIR.parent == production_boot.RENDER_CACHE_DIR
+
+
+def test_legacy_checkout_uses_latest_evening_checkin_not_stale_morning_metadata():
+    notes = json.dumps({
+        "_retail_mind_sessions": {
+            "active_session": "evening",
+            "morning": {
+                "check_in_time": "2026-10-23T08:30:00+05:30",
+                "check_out_time": None,
+                "working_hours": 0,
+            },
+            "evening": {
+                "check_in_time": "2026-10-23T19:07:00+05:30",
+                "check_out_time": None,
+                "working_hours": 0,
+            },
+        },
+    })
+    key, checkout, hours, updated_notes = production_boot._legacy_checkout_details(
+        date(2026, 10, 23), datetime(2026, 10, 23, 19, 7), notes
+    )
+    assert key == "evening"
+    assert checkout == datetime(2026, 10, 24, 0, 0)
+    assert round(hours, 2) == 4.88
+    updated = json.loads(updated_notes)["_retail_mind_sessions"]["evening"]
+    assert updated["check_in_time"] == "2026-10-23T19:07:00+05:30"
+    assert updated["check_out_time"] == "2026-10-24T00:00:00+05:30"
+
+
+def test_scheduler_has_separate_afternoon_and_evening_end_times():
+    assert production_boot.SHIFT_WINDOWS["MORNING"][1].isoformat() == "12:00:00"
+    assert production_boot.SHIFT_WINDOWS["AFTERNOON"][1].isoformat() == "17:00:00"
+    assert production_boot.SHIFT_WINDOWS["EVENING"][1].isoformat() == "23:00:00"
