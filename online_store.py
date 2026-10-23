@@ -244,7 +244,7 @@ def _invalidate_online_order_caches(shop_id: int, order_id: int, reason: str) ->
 
         for key in ("analytics:today_sales", "analytics:monthly_sales"):
             cache_manager.delete(key)
-        for pattern in ("analytics:", "get_dashboard_summary:", "get_top_products:"):
+        for pattern in ("analytics:", "get_dashboard_summary:", "get_top_products:", "product:"):
             cache_manager.delete_pattern(pattern)
         logger.info(
             "ONLINE_ORDER_CACHE_INVALIDATED shop_id=%s order_id=%s reason=%s",
@@ -2023,6 +2023,8 @@ def cancel_customer_order(
         "status": "CANCELLED",
         "payment_status": order.payment_status,
         "total_amount": float(order.total_amount),
+        "analytics_invalidated": True,
+        "authoritative_refresh_required": True,
     }]
     for cancelled_invoice in cancelled_invoices:
         realtime_events.append({
@@ -3179,6 +3181,8 @@ def update_order_status(
         "status": new_status,
         "payment_status": order.payment_status,
         "total_amount": float(order.total_amount),
+        "analytics_invalidated": True,
+        "authoritative_refresh_required": True,
     }]
     if new_status == "ACCEPTED" and linked_invoice is not None:
         realtime_events.append({
@@ -3193,6 +3197,8 @@ def update_order_status(
             "status": str(linked_invoice.status),
             "source": "ONLINE_ORDER",
             "reference_id": f"ONL-{order.id}",
+            "counts_as_sale": False,
+            "financial_state": "PROVISIONAL_UNTIL_DELIVERED",
         })
     if new_status == "REJECTED":
         for deleted_invoice in deleted_invoice_snapshots:
