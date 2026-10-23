@@ -14,6 +14,7 @@ import logging
 from db import get_db
 from models import Invoice, InvoiceStatus, InvoiceLineItem, Customer, Product, StockMovement
 from security import get_current_user as check_current_user
+from sales_recognition import recognized_invoice_filters
 
 router = APIRouter(prefix="/api/sales-restore", tags=["sales restoration"])
 logger = logging.getLogger(__name__)
@@ -71,7 +72,18 @@ def restore_all_sales(
             query = query.filter(Invoice.invoice_date <= end_date)
         
         invoices = query.order_by(desc(Invoice.created_at)).all()
-        
+        # Keep provisional online invoices available for the invoice/order UI,
+        # but exclude them from the sales totals until the order is DELIVERED.
+        if invoices:
+            recognized_invoice_ids = {
+                row[0]
+                for row in query.with_entities(Invoice.id).filter(
+                    *recognized_invoice_filters(),
+                ).all()
+            }
+        else:
+            recognized_invoice_ids = set()
+
         restored_invoices = []
         total_line_items = 0
         customers_restored = set()
@@ -100,6 +112,7 @@ def restore_all_sales(
                 "payment_method": invoice.payment_method,
                 "source": invoice.source,
                 "notes": invoice.notes,
+                "counts_as_sale": invoice.id in recognized_invoice_ids,
                 "created_at": invoice.created_at.isoformat() if invoice.created_at else None,
                 "updated_at": invoice.updated_at.isoformat() if invoice.updated_at else None,
                 "line_items": [
@@ -128,18 +141,25 @@ def restore_all_sales(
                 db, user_id, invoices, background_tasks
             )
         
-        # Calculate summary
-        total_revenue = sum(float(inv['total_amount']) for inv in restored_invoices)
-        total_paid = sum(float(inv['paid_amount']) for inv in restored_invoices)
-        unpaid_count = sum(1 for inv in restored_invoices if inv['payment_status'] in ['UNPAID', 'PARTIAL'])
-        
+        # The restore payload includes open invoices, but sales KPIs must not
+        # count accepted/undelivered online orders as completed revenue.
+        recognized_invoices = [
+            inv for inv in restored_invoices if inv["counts_as_sale"]
+        ]
+        total_revenue = sum(float(inv["total_amount"]) for inv in recognized_invoices)
+        total_paid = sum(float(inv["paid_amount"]) for inv in recognized_invoices)
+        unpaid_count = sum(
+            1 for inv in recognized_invoices
+            if inv["payment_status"] in ["UNPAID", "PARTIAL"]
+        )
+
         summary = {
             "total_revenue": total_revenue,
             "total_paid": total_paid,
             "outstanding_amount": total_revenue - total_paid,
             "unpaid_invoices": unpaid_count,
-            "paid_invoices": len(restored_invoices) - unpaid_count,
-            "average_invoice_value": total_revenue / len(restored_invoices) if restored_invoices else 0,
+            "paid_invoices": len(recognized_invoices) - unpaid_count,
+            "average_invoice_value": total_revenue / len(recognized_invoices) if recognized_invoices else 0,
             "date_range": {
                 "start": request.start_date,
                 "end": request.end_date,

@@ -231,6 +231,47 @@ def _cleanup_online_order_financials(
     return invoice_snapshots
 
 
+def _invalidate_online_order_caches(shop_id: int, order_id: int, reason: str) -> None:
+    """Best-effort invalidation after the order transaction commits.
+
+    Cache keys are currently shared across shop analytics, so invalidate the
+    affected shared summaries and query-result entries. Cache failures must
+    never undo a committed sale/cancellation; durable sync events remain the
+    recovery signal for connected/offline clients.
+    """
+    try:
+        from caching_system import cache_manager
+
+        for key in ("analytics:today_sales", "analytics:monthly_sales"):
+            cache_manager.delete(key)
+        for pattern in ("analytics:", "get_dashboard_summary:", "get_top_products:", "product:"):
+            cache_manager.delete_pattern(pattern)
+        logger.info(
+            "ONLINE_ORDER_CACHE_INVALIDATED shop_id=%s order_id=%s reason=%s",
+            shop_id, order_id, reason,
+        )
+    except Exception as cache_error:
+        logger.warning(
+            "Online-order cache invalidation failed shop_id=%s order_id=%s reason=%s error_type=%s",
+            shop_id, order_id, reason, type(cache_error).__name__,
+        )
+
+
+def _online_order_sales_updated_event(shop_id: int, order: OnlineOrder, reason: str) -> dict:
+    """Build a durable client invalidation event; clients must reload canonical API data."""
+    return {
+        "event_id": str(uuid4()),
+        "type": "sales.updated",
+        "shop_id": int(shop_id),
+        "order_id": int(order.id),
+        "source": "ONLINE_ORDER",
+        "reference_id": f"ONL-{order.id}",
+        "reason": reason,
+        "invalidate": ["sales", "analytics", "invoices", "inventory"],
+        "authoritative_refresh_required": True,
+    }
+
+
 def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
     """Restore reserved stock once, then remove the cancelled order's financial artifacts."""
     try:
@@ -1982,6 +2023,8 @@ def cancel_customer_order(
         "status": "CANCELLED",
         "payment_status": order.payment_status,
         "total_amount": float(order.total_amount),
+        "analytics_invalidated": True,
+        "authoritative_refresh_required": True,
     }]
     for cancelled_invoice in cancelled_invoices:
         realtime_events.append({
@@ -2003,6 +2046,12 @@ def cancel_customer_order(
             "reference_id": str(order.id),
             "changes": restored_inventory,
         })
+    # A device may have cached the provisional invoice/sales total before the
+    # cancellation. Send an explicit invalidation event in the same transaction
+    # as the reversal so connected and polling clients can converge.
+    realtime_events.append(
+        _online_order_sales_updated_event(shop_id, order, "CUSTOMER_CANCELLATION")
+    )
 
     try:
         durable_events = [append_sync_event(db, event) for event in realtime_events]
@@ -2011,12 +2060,7 @@ def cancel_customer_order(
         db.rollback()
         raise HTTPException(status_code=500, detail="Unable to cancel order right now.")
 
-    try:
-        from caching_system import cache_manager
-        cache_manager.delete("analytics:today_sales")
-        cache_manager.delete("analytics:monthly_sales")
-    except Exception as cache_error:
-        logger.warning("Analytics cache invalidation failed after online-order cancellation (%s)", type(cache_error).__name__)
+    _invalidate_online_order_caches(shop_id, order.id, "CUSTOMER_CANCELLATION")
 
     for event in durable_events:
         publish_realtime_event(event)
@@ -3137,6 +3181,8 @@ def update_order_status(
         "status": new_status,
         "payment_status": order.payment_status,
         "total_amount": float(order.total_amount),
+        "analytics_invalidated": True,
+        "authoritative_refresh_required": True,
     }]
     if new_status == "ACCEPTED" and linked_invoice is not None:
         realtime_events.append({
@@ -3151,6 +3197,8 @@ def update_order_status(
             "status": str(linked_invoice.status),
             "source": "ONLINE_ORDER",
             "reference_id": f"ONL-{order.id}",
+            "counts_as_sale": False,
+            "financial_state": "PROVISIONAL_UNTIL_DELIVERED",
         })
     if new_status == "REJECTED":
         for deleted_invoice in deleted_invoice_snapshots:
@@ -3164,6 +3212,14 @@ def update_order_status(
                 "source": "ONLINE_ORDER_REJECTION",
                 "reference_id": f"ONL-{order.id}",
             })
+    if new_status in {"DELIVERED", "REJECTED"}:
+        realtime_events.append(
+            _online_order_sales_updated_event(
+                shop_id,
+                order,
+                "ORDER_DELIVERED" if new_status == "DELIVERED" else "OWNER_REJECTION",
+            )
+        )
     if linked_invoice is not None and new_status == "DELIVERED":
         if order.payment_status == "PAID":
             realtime_events.append({
@@ -3208,13 +3264,9 @@ def update_order_status(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update order status: {str(e)}")
 
-    if new_status == "REJECTED":
-        try:
-            from caching_system import cache_manager
-            cache_manager.delete("analytics:today_sales")
-            cache_manager.delete("analytics:monthly_sales")
-        except Exception as cache_error:
-            logger.warning("Analytics cache invalidation failed after online-order rejection (%s)", type(cache_error).__name__)
+    # An order state transition can change pending-order summaries; delivery
+    # and rejection can also change revenue. Invalidate only after commit.
+    _invalidate_online_order_caches(shop_id, order.id, f"OWNER_{new_status}")
 
     loyalty_points_awarded = 0
     if new_status == "DELIVERED":
