@@ -101,3 +101,16 @@ def test_legacy_cancelled_order_migration_removes_old_invoice_and_reversal_recor
     assert "DELETE FROM universal_transactions" in migration
     assert "category = 'REFUND_REQUIRED'" in migration
     assert "category = 'SALE_REVERSAL'" in migration
+
+
+def test_cancelled_order_migration_types_empty_invoice_reference_lists_as_text():
+    migration = (
+        ROOT
+        / "alembic/versions/041_cancelled_online_order_financial_cleanup.py"
+    ).read_text(encoding="utf-8")
+
+    # Empty expanding IN lists must produce a string-typed empty relation because
+    # universal_transactions.reference_id is VARCHAR on PostgreSQL.
+    assert migration.count(
+        'sa.bindparam("invoice_numbers", expanding=True, type_=sa.String())'
+    ) == 2
