@@ -1,17 +1,17 @@
 """ASGI entrypoint used by Render's Gunicorn command.
 
-Schema migrations run in Render's pre-deploy command. Because Gunicorn imports
-this module directly (without entering app.py's FastAPI startup lifecycle),
-start the auto-checkout reconciler explicitly here.
+Database migrations and compatibility DDL run in Render's pre-deploy command.
+Start the attendance reconciler here as a guarded fallback for this entrypoint.
 """
 import os
+
 os.environ["RETAIL_MIND_BOOTSTRAP_COMPLETE"] = "1"
 
-from production_boot import _patch_routes, _ensure_shift_table, _start_attendance_auto_checkout  # noqa: E402
+from production_boot import _patch_routes, _start_attendance_auto_checkout  # noqa: E402
 from app import api as app  # noqa: E402
 
 try:
-    _ensure_shift_table()
+    # The startup hook may also request this; the helper is idempotent per process.
     _start_attendance_auto_checkout()
 except Exception:
     import logging
