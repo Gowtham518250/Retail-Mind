@@ -17,6 +17,7 @@ import os
 
 from db import get_db
 from models import User, Product, Invoice
+from sales_recognition import recognized_invoice_filters
 from security import get_current_user as check_current_user
 
 router = APIRouter(prefix="/api/observability", tags=["observability"])
@@ -255,11 +256,13 @@ def get_business_overview(
         try:
             today_revenue = db.query(func.sum(Invoice.total_amount)).filter(
                 Invoice.user_id == current_user_id,
-                Invoice.invoice_date == today
+                Invoice.invoice_date == today,
+                *recognized_invoice_filters(),
             ).scalar() or 0
             month_revenue = db.query(func.sum(Invoice.total_amount)).filter(
                 Invoice.user_id == current_user_id,
-                Invoice.invoice_date >= month_start
+                Invoice.invoice_date >= month_start,
+                *recognized_invoice_filters(),
             ).scalar() or 0
             overview["today_revenue"] = float(today_revenue)
             overview["month_revenue"] = float(month_revenue)
@@ -269,11 +272,13 @@ def get_business_overview(
         try:
             today_sales = db.query(func.count(Invoice.id)).filter(
                 Invoice.user_id == current_user_id,
-                Invoice.invoice_date == today
+                Invoice.invoice_date == today,
+                *recognized_invoice_filters(),
             ).scalar() or 0
             month_sales = db.query(func.count(Invoice.id)).filter(
                 Invoice.user_id == current_user_id,
-                Invoice.invoice_date >= month_start
+                Invoice.invoice_date >= month_start,
+                *recognized_invoice_filters(),
             ).scalar() or 0
             overview["today_sales_count"] = today_sales
             overview["month_sales_count"] = month_sales
