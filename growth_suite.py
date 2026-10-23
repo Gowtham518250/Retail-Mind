@@ -40,6 +40,7 @@ from models import (
     sales,
 )
 from audit_logging import AuditLog
+from sales_recognition import recognized_invoice_filters
 
 
 router = APIRouter(prefix="/growth", tags=["Retail Growth Suite"])
@@ -169,9 +170,11 @@ def growth_overview(
 ):
     branch = _owner_branch(db, user_id, branch_id)
 
+    # Accepted online orders have provisional invoices. They count as revenue
+    # only after the linked order is delivered.
     invoice_q = db.query(Invoice).filter(
         Invoice.user_id == user_id,
-        Invoice.status != InvoiceStatus.CANCELLED,
+        *recognized_invoice_filters(),
     )
     online_q = db.query(OnlineOrder).filter(OnlineOrder.shop_id == user_id)
     expense_q = db.query(ShopExpense).filter(ShopExpense.shop_id == user_id)
@@ -263,7 +266,7 @@ def growth_analytics(
     ).filter(
         Invoice.user_id == user_id,
         Invoice.created_at >= since,
-        Invoice.status != InvoiceStatus.CANCELLED,
+        *recognized_invoice_filters(),
     )
     if branch:
         invoice_q = invoice_q.filter(Invoice.branch_id == branch.id)
@@ -284,11 +287,9 @@ def growth_analytics(
     ).filter(
         OnlineOrder.shop_id == user_id,
         OnlineOrder.created_at >= since,
-        OnlineOrder.order_status.notin_([
-            OnlineOrderStatus.CANCELLED,
-            OnlineOrderStatus.RETURNED,
-            OnlineOrderStatus.REJECTED,
-        ]),
+        # Revenue analytics should include completed sales, not merely accepted
+        # or dispatched orders. Those pending amounts must not look like revenue.
+        OnlineOrder.order_status == OnlineOrderStatus.DELIVERED,
     )
     if branch:
         online_q = online_q.filter(OnlineOrder.branch_id == branch.id)
@@ -320,7 +321,7 @@ def growth_analytics(
         .filter(
             Invoice.user_id == user_id,
             Invoice.created_at >= since,
-            Invoice.status != InvoiceStatus.CANCELLED,
+            *recognized_invoice_filters(),
         )
     )
     if branch:
