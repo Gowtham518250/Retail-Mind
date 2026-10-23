@@ -65,12 +65,7 @@ def _attendance_ist_iso(value):
 
 
 def _legacy_checkout_details(attendance_date, check_in_time, notes):
-    """Build a safe automatic checkout for a legacy daily Attendance row.
-
-    Older app versions store sessions in attendance.notes as JSON. Morning
-    attendance closes at 14:00 IST; the afternoon/evening session closes at
-    midnight. If legacy notes are absent, infer the session from check-in time.
-    """
+    """Build checkout data using the active session's original check-in time."""
     raw_notes = notes or ""
     try:
         meta = json.loads(raw_notes) if raw_notes else {}
@@ -79,50 +74,56 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     if not isinstance(meta, dict):
         meta = {"note": str(raw_notes)} if raw_notes else {}
 
-    session_history = meta.get(LEGACY_SESSION_META_KEY)
-    if not isinstance(session_history, dict):
-        session_history = {}
-    active_session = session_history.get("active_session")
+    sessions = meta.get(LEGACY_SESSION_META_KEY)
+    if not isinstance(sessions, dict):
+        sessions = {}
+    active_session = sessions.get("active_session")
     if active_session not in {"morning", "evening"}:
         active_session = "morning" if check_in_time.time() < time(14, 0) else "evening"
+
+    session = sessions.get(active_session)
+    if not isinstance(session, dict):
+        session = {}
+
+    scalar_check_in = check_in_time.replace(tzinfo=None) if check_in_time.tzinfo else check_in_time
+    try:
+        session_check_in = datetime.fromisoformat(
+            str(session.get("check_in_time") or "").replace("Z", "+00:00")
+        )
+        if session_check_in.tzinfo is not None:
+            session_check_in = session_check_in.astimezone(IST).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        session_check_in = scalar_check_in
+
+    # Ignore metadata from a prior session if it does not describe the current
+    # scalar check-in. This prevents a late check-in from inheriting an old
+    # morning record and receiving a 14:00 checkout.
+    if session_check_in.date() != attendance_date or abs((session_check_in - scalar_check_in).total_seconds()) > 60:
+        session_check_in = scalar_check_in
+        active_session = "morning" if session_check_in.time() < time(14, 0) else "evening"
+        session = sessions.get(active_session)
+        if not isinstance(session, dict):
+            session = {}
 
     if active_session == "morning":
         checkout_at = datetime.combine(attendance_date, time(14, 0))
         label, window = "Morning", "Before 2:00 PM"
     else:
-        checkout_at = datetime.combine(
-            attendance_date + timedelta(days=1),
-            time.min,
-        )
+        checkout_at = datetime.combine(attendance_date + timedelta(days=1), time.min)
         label, window = "Afternoon", "2:00 PM onward"
 
-    normalized_check_in = (
-        check_in_time.replace(tzinfo=None)
-        if check_in_time.tzinfo is not None
-        else check_in_time
-    )
-    hours = max(0.0, (checkout_at - normalized_check_in).total_seconds() / 3600.0)
-
-    session = session_history.get(active_session)
-    if not isinstance(session, dict):
-        session = {}
+    hours = max(0.0, (checkout_at - session_check_in).total_seconds() / 3600.0)
     session.update({
-        "label": session.get("label") or label,
-        "window": session.get("window") or window,
-        "check_in_time": session.get("check_in_time") or _attendance_ist_iso(check_in_time),
+        "label": label,
+        "window": window,
+        "check_in_time": _attendance_ist_iso(session_check_in),
         "check_out_time": _attendance_ist_iso(checkout_at),
         "working_hours": hours,
     })
-    session_history[active_session] = session
-    session_history.pop("active_session", None)
-    meta[LEGACY_SESSION_META_KEY] = session_history
-
-    return (
-        active_session,
-        checkout_at,
-        hours,
-        json.dumps(meta, separators=(",", ":"), default=str),
-    )
+    sessions[active_session] = session
+    sessions.pop("active_session", None)
+    meta[LEGACY_SESSION_META_KEY] = sessions
+    return active_session, checkout_at, hours, json.dumps(meta, separators=(",", ":"), default=str)
 
 
 def _auto_checkout_expired_shifts(now=None, log_summary=False):
@@ -288,7 +289,11 @@ def _run_attendance_auto_checkout_once(log_summary=False):
 
 
 def _start_attendance_auto_checkout():
-    """Run an immediate reconciliation and start a lock-coordinated poller."""
+    """Start at most one reconciliation loop per process."""
+    global _attendance_auto_checkout_thread
+    existing = globals().get("_attendance_auto_checkout_thread")
+    if existing is not None and existing.is_alive():
+        return
     _run_attendance_auto_checkout_once(log_summary=True)
 
     def loop():
@@ -301,6 +306,7 @@ def _start_attendance_auto_checkout():
         name="attendance-auto-checkout",
         daemon=True,
     )
+    _attendance_auto_checkout_thread = thread
     thread.start()
     print("[ATTENDANCE] lock-coordinated auto-checkout worker started", flush=True)
 

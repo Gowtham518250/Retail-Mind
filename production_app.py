@@ -1,18 +1,21 @@
-"""ASGI application entrypoint for Render's multi-instance web service.
+"""ASGI entrypoint used by Render's Gunicorn command.
 
-Database migrations and legacy compatibility DDL are handled by predeploy_db.py
-through Render's pre-deploy command. Importing this module must not run schema
-mutations: every serving instance should only import and serve the prepared app.
+Database migrations and compatibility DDL run in Render's pre-deploy command.
+Start the attendance reconciler here as a guarded fallback for this entrypoint.
 """
 import os
 
-# app.py contains a legacy development-only schema repair path. In this
-# production entrypoint, schema preparation is the responsibility of the
-# configured Render pre-deploy command.
 os.environ["RETAIL_MIND_BOOTSTRAP_COMPLETE"] = "1"
 
-from production_boot import _patch_routes  # noqa: E402
+from production_boot import _patch_routes, _start_attendance_auto_checkout  # noqa: E402
+from app import api as app  # noqa: E402
+
+try:
+    # The startup hook may also request this; the helper is idempotent per process.
+    _start_attendance_auto_checkout()
+except Exception:
+    import logging
+    logging.getLogger(__name__).exception("Attendance auto-checkout scheduler failed to initialize")
 
 app = _patch_routes()
-# Retain the alias used by older tooling and tests that refer to api.
 api = app
