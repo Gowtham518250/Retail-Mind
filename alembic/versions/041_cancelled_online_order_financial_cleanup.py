@@ -47,6 +47,10 @@ def upgrade():
           )
     """)
 
+    # reference_id is a VARCHAR column. Explicitly type the expanding bind
+    # parameters as strings: SQLAlchemy otherwise compiles an empty invoice list
+    # to "IN (SELECT CAST(NULL AS INTEGER) WHERE 1!=1)", which PostgreSQL rejects
+    # as varchar = integer when a cancelled order has no matching invoices.
     payment_query = sa.text("""
         SELECT id, amount, reference_id, description
         FROM universal_transactions
@@ -58,7 +62,9 @@ def upgrade():
               OR reference_id LIKE :prefix_dash
               OR reference_id IN :invoice_numbers
           )
-    """).bindparams(sa.bindparam("invoice_numbers", expanding=True))
+    """).bindparams(
+        sa.bindparam("invoice_numbers", expanding=True, type_=sa.String())
+    )
 
     sale_query = sa.text("""
         SELECT id
@@ -70,7 +76,9 @@ def upgrade():
               OR reference_id LIKE :prefix_dash
               OR reference_id IN :invoice_numbers
           )
-    """).bindparams(sa.bindparam("invoice_numbers", expanding=True))
+    """).bindparams(
+        sa.bindparam("invoice_numbers", expanding=True, type_=sa.String())
+    )
 
     for order in orders:
         order_id = int(order["id"])
