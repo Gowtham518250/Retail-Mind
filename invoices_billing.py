@@ -175,6 +175,10 @@ def _resolve_invoice_sync_payment_state(
 class InvoiceLineItemCreate(BaseModel):
     product_id: Optional[int] = None
     product_name: str
+    # When false, this is a cashier-reviewed custom invoice line (not an
+    # inventory SKU). Keep the flag through sync so name-based lookups cannot
+    # accidentally link it to similarly named stock.
+    stock_tracked: bool = True
     # Decimal is intentional: Product.current_stock is PostgreSQL NUMERIC,
     # so quantities must use the same numeric type during inventory arithmetic.
     quantity: Decimal = Field(..., gt=0)
@@ -851,25 +855,26 @@ def sync_offline_invoice(
                 flash_reason = ""
                 product = None
 
-                if item.product_id:
-                    product = (
-                        db.query(Product)
-                        .filter(
-                            Product.id == item.product_id,
-                            Product.user_id == shop_id,
+                if item.stock_tracked:
+                    if item.product_id:
+                        product = (
+                            db.query(Product)
+                            .filter(
+                                Product.id == item.product_id,
+                                Product.user_id == shop_id,
+                            )
+                            .first()
                         )
-                        .first()
-                    )
-                if product is None:
-                    product = (
-                        db.query(Product)
-                        .filter(
-                            func.lower(Product.product_name) ==
-                            item.product_name.lower().strip(),
-                            Product.user_id == shop_id,
+                    if product is None:
+                        product = (
+                            db.query(Product)
+                            .filter(
+                                func.lower(Product.product_name) ==
+                                item.product_name.lower().strip(),
+                                Product.user_id == shop_id,
+                            )
+                            .first()
                         )
-                        .first()
-                    )
 
                 if active_flash_sale and product:
                     sale_category = (
@@ -1013,9 +1018,11 @@ def sync_offline_invoice(
                 Decimal("0"),
                 (item.quantity * item.unit_price) - discount_amount,
             )
-            product_id = item.product_id or (
-                prepared["product"].id if prepared["product"] else None
-            )
+            product_id = (
+                item.product_id or (
+                    prepared["product"].id if prepared["product"] else None
+                )
+            ) if item.stock_tracked else None
 
             db_line = InvoiceLineItem(
                 invoice_id=invoice.id,
@@ -1028,7 +1035,9 @@ def sync_offline_invoice(
             )
             db.add(db_line)
 
-            if product_id:
+            if not item.stock_tracked:
+                product = None
+            elif product_id:
                 product = db.query(Product).filter(
                     Product.id == product_id,
                     Product.user_id == shop_id
@@ -1414,24 +1423,25 @@ def create_invoice(
             flash_reason = ""
             product = None
 
-            if item.product_id:
-                product = (
-                    db.query(Product)
-                    .filter(
-                        Product.id == item.product_id,
-                        Product.user_id == shop_id,
+            if item.stock_tracked:
+                if item.product_id:
+                    product = (
+                        db.query(Product)
+                        .filter(
+                            Product.id == item.product_id,
+                            Product.user_id == shop_id,
+                        )
+                        .first()
                     )
-                    .first()
-                )
-            if product is None:
-                product = (
-                    db.query(Product)
-                    .filter(
-                        func.lower(Product.product_name) == item.product_name.lower().strip(),
-                        Product.user_id == shop_id,
+                if product is None:
+                    product = (
+                        db.query(Product)
+                        .filter(
+                            func.lower(Product.product_name) == item.product_name.lower().strip(),
+                            Product.user_id == shop_id,
+                        )
+                        .first()
                     )
-                    .first()
-                )
 
             if active_flash_sale and product:
                 sale_category = (active_flash_sale.category or "").strip().lower()
@@ -1547,9 +1557,11 @@ def create_invoice(
             )
             db_line = InvoiceLineItem(
                 invoice_id=invoice.id,
-                product_id=item.product_id or (
-                    prepared["product"].id if prepared["product"] else None
-                ),
+                product_id=(
+                    item.product_id or (
+                        prepared["product"].id if prepared["product"] else None
+                    )
+                ) if item.stock_tracked else None,
                 description=sanitize_input(item.product_name, "product_name"),
                 quantity=item.quantity,
                 unit_price=item.unit_price,
@@ -1558,11 +1570,15 @@ def create_invoice(
             )
             db.add(db_line)
 
-            product_id = item.product_id or (
-                prepared["product"].id if prepared["product"] else None
-            )
+            product_id = (
+                item.product_id or (
+                    prepared["product"].id if prepared["product"] else None
+                )
+            ) if item.stock_tracked else None
 
-            if product_id:
+            if not item.stock_tracked:
+                product = None
+            elif product_id:
                 product = (
                     db.query(Product)
                     .with_for_update()
