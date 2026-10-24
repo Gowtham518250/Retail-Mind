@@ -287,11 +287,11 @@ def test_payment_verification_migration_is_versioned_and_fail_closed():
         Path(__file__).resolve().parents[1]
         / "alembic"
         / "versions"
-        / "040_payment_verification_provenance.py"
+        / "042_payment_verification_provenance.py"
     ).read_text(encoding="utf-8")
 
-    assert 'revision = "040_payment_verification_provenance"' in migration
-    assert 'down_revision = "039_payment_idempotency_key"' in migration
+    assert 'revision = "042_payment_verification_provenance"' in migration
+    assert 'down_revision = "041_cancelled_online_order_financial_cleanup"' in migration
     assert '"LEGACY_UNVERIFIED"' in migration
     assert '"LEGACY_UNKNOWN"' in migration
 
