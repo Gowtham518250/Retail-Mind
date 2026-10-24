@@ -1,0 +1,159 @@
+/* ═══════════════════════════════════════════════════════════════
+   Retail Mind — "Fresh Market" design system (final layer)
+   Blue = action, green = fresh/trust, amber = deals, red = sale/alert.
+   Loaded last: tokens here win over every earlier layer.
+══════════════════════════════════════════════════════════════════ */
+:root {
+  --blue: #2458e6;
+  --blue-deep: #1b3fb0;
+  --blue-tint: #eaf0ff;
+  --green: #0f9d58;
+  --green-deep: #0a6e3d;
+  --green-tint: #e5f6ec;
+  --amber: #ffb400;
+  --amber-tint: #fff4d6;
+  --red: #e5483b;
+  --red-tint: #fdeae8;
+  --ink: #0e1a3a;
+  --ink-soft: #35426a;
+  --muted: #627092;
+  --line: #e2e8f5;
+  --paper: #f3f8f6;
+  --paper-2: #f6f8fd;
+  --surface: #fff;
+
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --r-s: 10px; --r-m: 16px; --r-l: 24px;
+  --shadow-s: 0 1px 2px rgba(14,26,58,.06), 0 2px 8px -2px rgba(14,26,58,.06);
+  --shadow-m: 0 10px 28px -10px rgba(14,26,58,.22);
+  --shadow-l: 0 28px 56px -18px rgba(14,26,58,.34);
+
+  --topbar-h: 68px;
+  --sidebar-w: 236px;
+
+  /* map every earlier token onto this palette */
+  --rm-paper: var(--paper); --rm-paper-2: var(--surface); --rm-ink: var(--ink); --rm-muted: var(--muted); --rm-line: var(--line);
+  --rm-green-deep: var(--ink); --rm-green: var(--blue); --rm-green-soft: var(--blue-tint);
+  --rm-orange: var(--blue); --rm-orange-dark: var(--blue-deep); --rm-lime: var(--amber);
+  --rm-navy: var(--ink); --rm-blue: var(--blue); --rm-violet: var(--blue); --rm-teal: var(--green); --rm-sky: var(--blue-tint);
+  --indigo: var(--blue); --indigo-dark: var(--blue-deep); --fk-blue: var(--blue); --fk-blue-dark: var(--blue-deep);
+}
+
+html { background: var(--paper); }
+body {
+  min-height: 100vh; color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(60% 40% at 0% 0%, rgba(15,157,88,.10), transparent 70%),
+    radial-gradient(50% 40% at 100% 0%, rgba(36,88,230,.08), transparent 70%);
+  background-attachment: fixed;
+}
+h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -.02em; }
+button, input, select, textarea { font-family: var(--font-body); }
+::selection { background: var(--blue); color: #fff; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 8px; }
+
+/* ── app shell ─────────────────────────────────────────────── */
+@media (min-width: 900px) {
+  body[data-shell] main, body[data-shell] .site-footer { margin-left: var(--sidebar-w); }
+  body[data-shell] main { padding-top: var(--topbar-h); }
+}
+@media (max-width: 899px) {
+  body[data-dock] main { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+}
+
+.site-footer {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; margin-top: 40px; padding: 18px 16px;
+  border-top: 1px solid var(--line); background: rgba(255,255,255,.7);
+}
+.site-footer a, .site-footer button {
+  min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; background: none; border: 0; cursor: pointer;
+  color: var(--ink-soft); font: 600 .9rem var(--font-body); text-decoration: none;
+}
+.site-footer a:hover, .site-footer button:hover { color: var(--blue); }
+@media (max-width: 899px) { .site-footer { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); } }
+
+/* ── shared buttons on global-class pages ──────────────────── */
+.store-cart-btn, .hero-cta, .checkout-summary .place-order-btn {
+  background: var(--blue) !important; color: #fff !important; border-radius: 14px; min-height: 50px; font-weight: 700;
+  box-shadow: 0 10px 20px -10px rgba(36,88,230,.8);
+}
+.store-cart-btn:hover:not(:disabled), .hero-cta:hover, .checkout-summary .place-order-btn:hover { background: var(--blue-deep) !important; }
+.store-link-btn { border: 1.5px solid var(--blue); color: var(--blue); border-radius: 14px; background: #fff; font-weight: 700; }
+.store-link-btn:hover { background: var(--blue-tint); }
+
+/* ── product detail ────────────────────────────────────────── */
+.product-back { color: var(--blue); font-weight: 700; min-height: 44px; }
+.product-visual { background: linear-gradient(150deg, var(--green-tint), var(--blue-tint)) !important; border: 1px solid var(--line); box-shadow: none; }
+.product-glow { display: none !important; }
+.product-orbit { opacity: .25 !important; }
+.product-image-frame { background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-m); backdrop-filter: none; }
+.product-floating-badge {
+  position: absolute !important; top: 14px !important; left: 14px !important; right: auto !important; bottom: auto !important;
+  width: auto !important; height: auto !important; min-height: 0 !important; display: inline-flex !important; align-items: center; gap: 6px;
+  padding: 6px 12px !important; border-radius: 999px !important; font-size: .85rem !important;
+  background: var(--green) !important; color: #fff !important;
+}
+.product-copy h1 { color: var(--ink); font: 800 clamp(2rem, 4.2vw, 3.2rem)/1.06 var(--font-display); letter-spacing: -.03em; max-width: 16ch; }
+.product-main-price { color: var(--ink); font: 800 clamp(2rem, 3vw, 2.7rem)/1 var(--font-display); }
+.product-save-pill { background: var(--green-tint); color: var(--green-deep); }
+.product-benefits > div { background: #fff; border: 1px solid var(--line); border-radius: 14px; color: var(--ink-soft); font-size: .9rem; }
+.product-benefits svg { color: var(--blue); }
+.product-availability .available { color: var(--green-deep); }
+.product-availability .unavailable { color: var(--red); }
+.product-reviews-panel, .product-review-card { border-color: var(--line); background: #fff; box-shadow: var(--shadow-s); }
+.product-review-stars { color: var(--amber); }
+
+/* ── checkout ──────────────────────────────────────────────── */
+.checkout-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow-s); }
+.checkout-card-title { color: var(--ink); font: 800 1.3rem/1.1 var(--font-display); }
+.checkout-field label { color: var(--ink-soft); font-weight: 700; font-size: .92rem; }
+.checkout-field input, .checkout-field textarea, .checkout-coupon-row input {
+  min-height: 50px; border: 1.5px solid var(--line); border-radius: 14px; background: #fff; color: var(--ink); font-size: 1rem;
+}
+.checkout-field input:focus, .checkout-field textarea:focus, .checkout-coupon-row input:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(36,88,230,.14); }
+.checkout-step.is-active > span, .checkout-step.is-complete > span { background: var(--blue); border-color: var(--blue); color: #fff; }
+.checkout-summary { background: #fff !important; color: var(--ink) !important; border: 1px solid var(--line) !important; border-radius: var(--r-l); box-shadow: var(--shadow-m) !important; }
+.checkout-summary .checkout-card-title, .checkout-summary .checkout-coupon-heading, .checkout-summary .checkout-coupon-heading strong { color: var(--ink) !important; }
+.checkout-summary .summary-row, .checkout-summary .summary-item, .checkout-summary .checkout-trust, .checkout-summary .checkout-coupon-heading small { color: var(--muted) !important; }
+.checkout-summary .summary-items, .checkout-summary .summary-row { border-color: var(--line) !important; }
+.checkout-summary .summary-row.total { color: var(--ink) !important; font: 800 1.3rem var(--font-display); }
+.checkout-coupon { background: var(--paper-2) !important; border-color: var(--line) !important; }
+.checkout-coupon-row button { background: var(--blue); color: #fff; }
+.checkout-account-card { background: var(--blue-tint); border-color: var(--line); }
+
+/* ── sticky cart bar (shop pages) ──────────────────────────── */
+.rm-cartbar {
+  position: fixed; z-index: 280; left: 50%; transform: translateX(-50%);
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px)); width: min(calc(100% - 24px), 560px);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 18px;
+  border-radius: 18px; background: var(--blue); color: #fff; box-shadow: var(--shadow-l);
+}
+.rm-cartbar strong { font: 800 1.05rem var(--font-display); }
+.rm-cartbar span { color: rgba(255,255,255,.82); font-size: .9rem; }
+.rm-cartbar button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 12px; background: #fff; color: var(--blue); font: 800 .95rem var(--font-body); cursor: pointer; }
+.rm-cartbar-text { display: grid; line-height: 1.2; }
+@media (min-width: 900px) { .rm-cartbar { bottom: 24px; left: calc(50% + var(--sidebar-w) / 2); } }
+
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto !important; } *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+@media (max-width: 520px) { .rm-cartbar span { display: none; } .rm-cartbar { padding-left: 16px; } }
+
+/* ── Smart Hub: one calm gradient hero, no 3D block ───────── */
+.smart3d-page { background: transparent !important; color: var(--ink) !important; }
+.smart3d-bg, .smart3d-grid-floor, .smart3d-hero-visual, .smart3d-return-visual { display: none !important; }
+.smart3d-hero {
+  min-height: 0 !important; border-radius: var(--r-l); overflow: hidden; margin-top: 18px;
+  background: linear-gradient(120deg, #0a7a43 0%, #12a05c 55%, #2458e6 140%) !important; box-shadow: var(--shadow-m);
+}
+.smart3d-hero-copy { max-width: 720px; }
+.smart3d-hero h1 { font: 800 clamp(2rem, 5vw, 3.2rem)/1.06 var(--font-display); letter-spacing: -.03em; color: #fff; }
+.smart3d-hero h1 span, .smart3d-hero h1 em { color: inherit !important; }
+.smart3d-primary { background: #fff !important; color: var(--blue) !important; border-radius: 14px; min-height: 50px; box-shadow: none; }
+.smart3d-secondary { border: 1.5px solid rgba(255,255,255,.55) !important; color: #fff !important; background: transparent !important; border-radius: 14px; min-height: 50px; }
+.smart3d-avatar { background: #fff !important; color: var(--blue) !important; }
+.smart3d-bottom-cta { background: linear-gradient(120deg, #1b3fb0, #2458e6) !important; border-radius: var(--r-l); }
+.smart3d-light-btn { background: #fff !important; color: var(--blue) !important; }
+.smart3d-section, .smart3d-stat { border-color: var(--line) !important; border-radius: var(--r-l); box-shadow: var(--shadow-s); }
+.smart3d-stat-icon { color: var(--blue); }

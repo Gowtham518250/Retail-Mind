@@ -1,0 +1,131 @@
+/* ═══════════════════════════════════════════════════════════════
+   Retail Mind — "Corner Market" design layer (loaded last)
+   Warm paper, deep-green ink, tomato for sales, saffron for stars.
+   Serif headlines, flat surfaces, hairline borders. No glows, no gradients.
+══════════════════════════════════════════════════════════════════ */
+:root {
+  --paper: #f7f2e8;
+  --paper-2: #fbf8f1;
+  --surface: #fffdf8;
+  --ink: #1c1a15;
+  --ink-soft: #46423a;
+  --muted: #7a7466;
+  --line: #e4dcc9;
+  --line-strong: #cfc4aa;
+
+  --green: #1e4d3a;          /* primary action */
+  --green-deep: #133528;
+  --green-tint: #e5ede4;
+  --tomato: #d1451f;         /* sale / alert */
+  --tomato-tint: #fbe6df;
+  --saffron: #e5a21b;        /* stars / highlights */
+  --saffron-tint: #fbf0d0;
+
+  /* legacy names used by the older page layers all map onto the new palette */
+  --blue: var(--green);
+  --blue-deep: var(--green-deep);
+  --blue-tint: var(--green-tint);
+  --amber: var(--saffron);
+  --amber-tint: var(--saffron-tint);
+  --red: var(--tomato);
+  --red-tint: var(--tomato-tint);
+  --paper-3: #efe8d8;
+  --grad-brand: var(--green);
+  --grad-fresh: var(--green);
+  --grad-ink: var(--green-deep);
+  --violet: var(--green);
+  --cyan: var(--green);
+  --indigo: var(--green); --indigo-dark: var(--green-deep); --fk-blue: var(--green); --fk-blue-dark: var(--green-deep);
+  --rm-paper: var(--paper); --rm-paper-2: var(--surface); --rm-ink: var(--ink); --rm-muted: var(--muted); --rm-line: var(--line);
+  --rm-green-deep: var(--green-deep); --rm-green: var(--green); --rm-green-soft: var(--green-tint);
+  --rm-orange: var(--tomato); --rm-orange-dark: #a8341a; --rm-lime: var(--saffron);
+  --rm-navy: var(--ink); --rm-blue: var(--green); --rm-violet: var(--green); --rm-teal: var(--green); --rm-sky: var(--green-tint);
+
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --r-s: 8px; --r-m: 14px; --r-l: 20px;
+  --shadow-s: 0 1px 0 rgba(28, 26, 21, .04), 0 2px 6px -2px rgba(28, 26, 21, .08);
+  --shadow-m: 0 1px 0 rgba(28, 26, 21, .04), 0 10px 24px -12px rgba(28, 26, 21, .22);
+  --shadow-l: 0 2px 0 rgba(28, 26, 21, .04), 0 28px 50px -24px rgba(28, 26, 21, .32);
+  --glow: var(--shadow-m);
+
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --topbar-h: 68px;
+  --sidebar-w: 232px;
+}
+
+html { background: var(--paper); }
+body {
+  color: var(--ink); background-color: var(--paper); background-image: none;
+  font-feature-settings: 'ss01', 'cv11';
+}
+/* a whisper of paper grain */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .5; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .45  0 0 0 0 .38  0 0 0 0 .25  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+body::after { content: none; }
+
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: -.02em; }
+::selection { background: var(--green); color: #fff; }
+:focus-visible { outline: 3px solid var(--saffron); outline-offset: 3px; border-radius: 8px; }
+
+/* ── page transition ────────────────────────────────────────── */
+main.page-transition { animation: rm-page-in .55s var(--ease-out) both; }
+@keyframes rm-page-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+@keyframes rm-sheen { from { transform: translateX(-130%) skewX(-18deg); } to { transform: translateX(300%) skewX(-18deg); } }
+@keyframes rm-marquee { to { transform: translateX(-50%); } }
+
+/* ── buttons on the older global-class pages ────────────────── */
+.store-cart-btn, .hero-cta, .checkout-summary .place-order-btn, .retry {
+  background: var(--green) !important; color: #fff !important; border: 0; border-radius: 12px; min-height: 52px; font-weight: 700; letter-spacing: .01em;
+  box-shadow: 0 3px 0 var(--green-deep);
+  transition: transform .2s var(--ease-out), box-shadow .2s, background .2s;
+}
+.store-cart-btn:hover:not(:disabled), .hero-cta:hover, .checkout-summary .place-order-btn:hover { background: #266147 !important; transform: translateY(-2px); box-shadow: 0 5px 0 var(--green-deep); }
+.store-cart-btn:active:not(:disabled), .hero-cta:active, .checkout-summary .place-order-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--green-deep); }
+.store-link-btn { border: 1.5px solid var(--green); color: var(--green); border-radius: 12px; background: transparent; font-weight: 700; transition: background .2s, color .2s; }
+.store-link-btn:hover { background: var(--green); color: #fff; }
+
+/* ── surfaces on global-class pages ─────────────────────────── */
+.checkout-card, .checkout-summary, .product-image-frame, .product-reviews-panel, .product-review-card, .smart3d-section, .smart3d-stat {
+  background: var(--surface) !important; backdrop-filter: none; -webkit-backdrop-filter: none;
+  border: 1px solid var(--line) !important; box-shadow: var(--shadow-s) !important; border-radius: var(--r-l);
+}
+.product-visual { background: var(--paper-3) !important; border: 1px solid var(--line); border-radius: var(--r-l); }
+.product-glow, .product-orbit { display: none !important; }
+.product-image-frame { overflow: hidden; padding: 0; animation: none !important; transform: none !important; }
+.product-image-frame img { width: 100%; height: 100%; object-fit: cover; }
+.product-floating-badge { background: var(--surface) !important; color: var(--green) !important; border: 1px solid var(--line); box-shadow: var(--shadow-s); }
+.product-copy h1 { background: none; color: var(--ink); -webkit-text-fill-color: currentColor; font-weight: 600; }
+.product-main-price { color: var(--ink); font-family: var(--font-display); }
+.product-save-pill { background: var(--tomato-tint); color: var(--tomato); }
+.checkout-field input:focus, .checkout-field textarea:focus, .checkout-coupon-row input:focus { border-color: var(--green); box-shadow: 0 0 0 4px rgba(30, 77, 58, .14); }
+.checkout-step.is-active > span, .checkout-step.is-complete > span { background: var(--green); border-color: var(--green); color: #fff; }
+.checkout-coupon-row button { background: var(--green); }
+.checkout-account-card { background: var(--green-tint); }
+.smart3d-hero { background: var(--green-deep) !important; }
+.smart3d-bottom-cta { background: var(--green) !important; }
+.smart3d-primary { color: var(--green) !important; }
+
+/* ── sticky cart bar ────────────────────────────────────────── */
+.rm-cartbar { background: var(--ink); border-radius: 16px; box-shadow: var(--shadow-l); }
+.rm-cartbar button { background: var(--saffron); color: var(--ink); border-radius: 11px; font-weight: 800; transition: transform .2s var(--ease-spring); }
+.rm-cartbar button:hover { transform: scale(1.05); }
+.rm-cartbar button:active { transform: scale(.95); }
+@media (max-width: 899px) {
+  .rm-cartbar { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
+  body[data-dock] main { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ── footer ─────────────────────────────────────────────────── */
+.site-footer { background: var(--paper-2); border-top: 1px solid var(--line); }
+.site-footer a, .site-footer button { color: var(--ink-soft); }
+.site-footer a:hover, .site-footer button:hover { color: var(--green); text-decoration: underline; text-underline-offset: 4px; }
+
+@supports (scrollbar-width: thin) { * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; } }
+
+@media (prefers-reduced-motion: reduce) { main.page-transition { animation: none !important; } }
