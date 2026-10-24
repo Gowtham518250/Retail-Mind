@@ -288,6 +288,49 @@ class PaymentWriteRequest(BaseModel):
     source: str = Field(default="PAYMENT_DETECTION", max_length=50)
     timestamp: Optional[str] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    # Detection is not settlement proof. Public payment writes must explicitly
+    # identify a merchant-confirmed event; provider verification is server-only.
+    verification_status: str = Field(default="PENDING", max_length=30)
+    verification_method: str = Field(default="UNVERIFIED", max_length=30)
+
+
+def _validate_payment_verification(data: PaymentWriteRequest) -> tuple[str, str]:
+    """Fail closed unless an authorized operator explicitly confirmed receipt.
+
+    A client-supplied UTR, trusted-app name, sender string, or confidence score is
+    not independent bank verification. Provider-verified writes must be performed
+    by a future trusted server-side provider integration, never this public API.
+    """
+    status = str(data.verification_status or "PENDING").strip().upper()
+    method = str(data.verification_method or "UNVERIFIED").strip().upper()
+
+    if status == "PROVIDER_VERIFIED":
+        raise HTTPException(
+            status_code=403,
+            detail="Provider-verified status can only be set by a trusted server-side payment integration.",
+        )
+    if status != "MERCHANT_CONFIRMED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Payment is pending verification. A notification or SMS cannot "
+                "settle an invoice; confirm receipt in the merchant app first."
+            ),
+        )
+
+    aliases = {
+        "MANUAL_CONFIRMATION": "MERCHANT_CONFIRMATION",
+        "OWNER_CONFIRMATION": "MERCHANT_CONFIRMATION",
+        "MERCHANT_CONFIRMATION": "MERCHANT_CONFIRMATION",
+        "MANUAL_ENTRY": "MANUAL_ENTRY",
+    }
+    normalized_method = aliases.get(method)
+    if normalized_method is None:
+        raise HTTPException(
+            status_code=400,
+            detail="verification_method must identify an explicit merchant confirmation or manual entry.",
+        )
+    return status, normalized_method
 
 
 def _payment_status_for(invoice: Invoice) -> PaymentStatus:
@@ -413,12 +456,50 @@ def _record_below_cost_sale_loss(
     return loss_amount
 
 
+def _payment_actor_id(current_user) -> Optional[int]:
+    """Extract the authenticated actor identifier without trusting request data."""
+    raw = (
+        current_user.get("user_id") or current_user.get("sub") or current_user.get("id")
+        if isinstance(current_user, dict)
+        else getattr(current_user, "id", None)
+    )
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _payment_retry_matches(
+    *,
+    existing: Payment,
+    existing_invoice: Invoice,
+    data: PaymentWriteRequest,
+    mode: str,
+) -> bool:
+    """Only treat an idempotency replay as a duplicate when business facts match."""
+    if data.invoice_id is not None and existing_invoice.id != data.invoice_id:
+        return False
+    if data.invoice_number and existing_invoice.invoice_number != data.invoice_number.strip():
+        return False
+    if mode == "delta" and data.amount is not None:
+        requested = Decimal(str(data.amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        recorded = Decimal(str(existing.amount or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if requested != recorded:
+            return False
+    requested_reference = (data.reference_id or "").strip()
+    recorded_reference = (existing.reference_number or "").strip()
+    if requested_reference and requested_reference != recorded_reference:
+        return False
+    return True
+
+
 def _apply_payment_write(
     *,
     data: PaymentWriteRequest,
     db: Session,
     shop_id: int,
     mode: str,
+    verification_actor_id: Optional[int] = None,
     commit_transaction: bool = True,
 ):
     """Record a payment; callers may join it to a larger atomic transaction."""
@@ -426,6 +507,13 @@ def _apply_payment_write(
         raise HTTPException(
             status_code=400,
             detail="Provide either amount or paid_amount.",
+        )
+
+    verification_status, verification_method = _validate_payment_verification(data)
+    if verification_actor_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authenticated actor identity is required to confirm payment receipt.",
         )
 
     idempotency_key = (data.idempotency_key or "").strip() or None
@@ -450,6 +538,16 @@ def _apply_payment_write(
             )
             if existing_invoice is None:
                 raise HTTPException(status_code=404, detail="Payment invoice not found.")
+            if not _payment_retry_matches(
+                existing=existing,
+                existing_invoice=existing_invoice,
+                data=data,
+                mode=mode,
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency key was already used for different payment facts.",
+                )
             return {
                 "success": True,
                 "duplicate": True,
@@ -559,6 +657,9 @@ def _apply_payment_write(
             )
         ),
         idempotency_key=idempotency_key,
+        verification_status=verification_status,
+        verification_method=verification_method,
+        verification_actor_id=verification_actor_id,
     )
     db.add(payment)
 
@@ -613,6 +714,9 @@ def _apply_payment_write(
                 "payment_id": payment.id,
                 "reference_id": (data.reference_id or "").strip() or None,
                 "source": data.source,
+                "verification_status": verification_status,
+                "verification_method": verification_method,
+                "verification_actor_id": verification_actor_id,
             }),
             append_sync_event(db, {
                 "event_id": str(uuid.uuid4()),
@@ -651,6 +755,19 @@ def _apply_payment_write(
                     )
                     .first()
                 )
+
+                if existing_invoice is None:
+                    raise HTTPException(status_code=404, detail="Payment invoice not found.")
+                if not _payment_retry_matches(
+                    existing=existing,
+                    existing_invoice=existing_invoice,
+                    data=data,
+                    mode=mode,
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Idempotency key was already used for different payment facts.",
+                    )
                 return {
                     "success": True,
                     "duplicate": True,
@@ -692,6 +809,9 @@ def _apply_payment_write(
                     "payment_method": payment_method.value,
                     "reference_id": (data.reference_id or "").strip() or None,
                     "source": data.source,
+                    "verification_status": verification_status,
+                    "verification_method": verification_method,
+                    "verification_actor_id": verification_actor_id,
                 },
                 description=f"Payment recorded for invoice {invoice.invoice_number}",
             )
@@ -729,6 +849,9 @@ def _apply_payment_write(
         "applied_amount": float(delta),
         "paid_amount": float(invoice.paid_amount or 0),
         "payment_status": payment_status,
+        "verification_status": verification_status,
+        "verification_method": verification_method,
+        "verification_actor_id": verification_actor_id,
         "events": [] if commit_transaction else payment_events,
         "message": "Payment recorded successfully.",
     }
@@ -1733,7 +1856,10 @@ def create_invoice_payment(
     current_user: dict = Depends(worker_or_owner),
 ):
     shop_id = resolve_shop_id(current_user)
-    return _apply_payment_write(data=data, db=db, shop_id=shop_id, mode="delta")
+    return _apply_payment_write(
+        data=data, db=db, shop_id=shop_id, mode="delta",
+        verification_actor_id=_payment_actor_id(current_user),
+    )
 
 
 @router.put("/update_payment")
@@ -1743,7 +1869,10 @@ def update_invoice_payment(
     current_user: dict = Depends(worker_or_owner),
 ):
     shop_id = resolve_shop_id(current_user)
-    return _apply_payment_write(data=data, db=db, shop_id=shop_id, mode="target")
+    return _apply_payment_write(
+        data=data, db=db, shop_id=shop_id, mode="target",
+        verification_actor_id=_payment_actor_id(current_user),
+    )
 
 
 @router.get("/overdue")
@@ -1791,7 +1920,9 @@ def get_invoice_payments(
                 "amount": float(p.amount),
                 "payment_date": p.payment_date,
                 "reference_number": p.reference_number,
-                "notes": p.notes
+                "notes": p.notes,
+                "verification_status": getattr(p, "verification_status", "LEGACY_UNVERIFIED"),
+                "verification_method": getattr(p, "verification_method", "LEGACY_UNKNOWN")
             }
             for p in payments
         ],

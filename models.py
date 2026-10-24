@@ -557,6 +557,18 @@ class Payment(Base):
     # Retrying the same offline payment must never create a second Payment row.
     idempotency_key = Column(String(128), unique=True, nullable=True, index=True)
 
+    # Detection and verification are separate: legacy rows are explicitly
+    # labelled unknown, and new writes must persist the verification decision.
+    verification_status = Column(
+        String(30), nullable=False, default="PENDING",
+        server_default="LEGACY_UNVERIFIED",
+    )
+    verification_method = Column(
+        String(30), nullable=False, default="UNVERIFIED",
+        server_default="LEGACY_UNKNOWN",
+    )
+    verification_actor_id = Column(Integer, nullable=True)
+
     # Relationship
     invoice = relationship("Invoice", back_populates="payments")
 
