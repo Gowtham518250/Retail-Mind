@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "Retail Mind",
+  "short_name": "Retail Mind",
+  "description": "Shop everyday essentials from neighbourhood stores.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf6ec",
+  "theme_color": "#0f5b47",
+  "icons": [
+    {
+      "src": "/icons/retail-mind.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

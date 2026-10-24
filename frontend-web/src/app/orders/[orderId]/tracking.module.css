@@ -1,0 +1,750 @@
+/* ══════════════════════════════════════════════
+   ORDER TRACKING - MODERN RESPONSIVE DASHBOARD
+══════════════════════════════════════════════ */
+.page {
+  min-height: calc(100vh - 64px);
+  padding: 24px 16px 80px;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.shell {
+  width: min(calc(100% - 24px), 1080px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ══════════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════════ */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.backButton {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #475569;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.backButton:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+  transform: translateX(-2px);
+}
+
+.headerKicker {
+  display: block;
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.header h1 {
+  margin: 2px 0 0;
+  color: #0f172a;
+  font: 900 1.35rem / 1.1 var(--font-display, system-ui, sans-serif);
+  letter-spacing: -0.02em;
+}
+
+.shopSubline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.shopSubline svg {
+  color: #2563eb;
+}
+
+.refreshButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.refreshButton:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.refreshButton:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ══════════════════════════════════════════════
+   GRID LAYOUT
+══════════════════════════════════════════════ */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.leftColumn, .rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ══════════════════════════════════════════════
+   PROGRESS TIMELINE
+══════════════════════════════════════════════ */
+.timelineCard {
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.timelineHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.cardEyebrow {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.livePulseBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.pulseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start;
+  gap: 4px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stepTop {
+  display: flex;
+  align-items: center;
+}
+
+.stepNode {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #94a3b8;
+  transition: all 0.25s ease;
+}
+
+.stepDone {
+  border-color: #10b981;
+  background: #10b981;
+  color: #ffffff;
+}
+
+.stepCurrent {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+.stepLine {
+  height: 2px;
+  flex: 1;
+  min-width: 0;
+  margin: 0 4px;
+  background: #e2e8f0;
+}
+
+.lineDone {
+  background: #10b981;
+}
+
+.stepLabel {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.stepLabelDone {
+  color: #0f172a;
+}
+
+.stepLabelCurrent {
+  color: #2563eb;
+  font-weight: 800;
+}
+
+/* ══════════════════════════════════════════════
+   LIVE STATUS & DISPATCH VEHICLE
+══════════════════════════════════════════════ */
+.statusCard {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.05), transparent 40%),
+    #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.statusCopy {
+  flex: 1;
+  min-width: 0;
+}
+
+.statusBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.statusTag {
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.statusTime {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.statusCopy h2 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font: 800 1.35rem / 1.15 var(--font-display, system-ui, sans-serif);
+  letter-spacing: -0.02em;
+}
+
+.statusCopy p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.dispatchVehicleBox {
+  position: relative;
+  width: 100px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
+  border: 1px solid #bfdbfe;
+  flex: none;
+}
+
+.vehicleIcon {
+  color: #2563eb;
+  z-index: 2;
+  animation: vehicleBob 2.5s ease-in-out infinite;
+}
+
+@keyframes vehicleBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.vehicleBeacon {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+.vehicleRoad {
+  position: absolute;
+  bottom: 12px;
+  left: 10px;
+  right: 10px;
+  height: 3px;
+  background: #cbd5e1;
+  border-radius: 2px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.roadDash {
+  width: 12px;
+  height: 3px;
+  background: #ffffff;
+  border-radius: 1px;
+}
+
+/* ══════════════════════════════════════════════
+   ADDRESS & TERMINAL CARDS
+══════════════════════════════════════════════ */
+.addressCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+}
+
+.addressIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.addressCopy strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.85rem;
+}
+
+.addressCopy p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.terminalCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid #fecdd3;
+  border-radius: 18px;
+  background: #fff1f2;
+}
+
+.terminalIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #ffe4e6;
+  color: #e11d48;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.terminalCard strong {
+  display: block;
+  color: #9f1239;
+  font-size: 0.95rem;
+}
+
+.terminalCard p {
+  margin: 4px 0 0;
+  color: #881337;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+/* ══════════════════════════════════════════════
+   ITEMS & RECEIPT CARD
+══════════════════════════════════════════════ */
+.itemsCard {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sectionHeading h2 {
+  margin: 2px 0 0;
+  color: #0f172a;
+  font: 800 1.25rem / 1.1 var(--font-display, system-ui, sans-serif);
+}
+
+.itemsCountBadge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.itemsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.itemRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 22px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.itemThumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.itemImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+}
+
+.itemInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.itemInfo strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemInfo span {
+  display: block;
+  color: #64748b;
+  font-size: 0.76rem;
+  margin-top: 2px;
+}
+
+.itemTotal {
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Order Total Breakdown */
+.orderTotal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 22px;
+  background: #fafbfe;
+  border-top: 1px solid #e2e8f0;
+}
+
+.subtotalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.subtotalRow strong {
+  color: #0f172a;
+}
+
+.freeFee {
+  color: #059669 !important;
+  font-weight: 700;
+}
+
+.totalLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.totalLine b {
+  color: #0f172a;
+  font-size: 1.25rem;
+}
+
+.paymentMethodPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.sideActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.helpButton {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.helpButton:hover {
+  background: #dbeafe;
+}
+
+.footerNote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+/* ══════════════════════════════════════════════
+   LOADING & ERROR STATES
+══════════════════════════════════════════════ */
+.loadingCard, .errorCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 64px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.loadingOrb {
+  width: 44px;
+  height: 44px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loadingCard strong, .errorCard strong {
+  color: #0f172a;
+  font-size: 1.15rem;
+}
+
+.loadingCard p, .errorCard p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.88rem;
+  max-width: 40ch;
+}
+
+.errorIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: #fff1f2;
+  color: #e11d48;
+  display: grid;
+  place-items: center;
+}
+
+.errorActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.primaryButton {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 11px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.backLink {
+  color: #2563eb;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* ══════════════════════════════════════════════
+   RESPONSIVE DESIGN
+══════════════════════════════════════════════ */
+@media (max-width: 840px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+  .shell {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .refreshButton {
+    align-self: flex-start;
+  }
+  .statusCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .dispatchVehicleBox {
+    align-self: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vehicleIcon, .vehicleBeacon, .pulseDot {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,148 @@
+/* Retail Mind customer-web visual refresh — presentation-only overrides.
+   Scoped to the customer-facing Next.js app; API, cart, checkout and auth logic remain unchanged. */
+:root {
+  --rm-paper: #f9fefc;
+  --rm-paper-2: #ffffff;
+  --rm-ink: #192922;
+  --rm-muted: #6b867a;
+  --rm-line: #e4f2ec;
+  --rm-green-deep: #1c3429;
+  --rm-green: #246e4d;
+  --rm-green-soft: #edfcf5;
+  --rm-orange: #299f6a;
+  --rm-orange-dark: #2a6d4e;
+  --rm-lime: #df9f20;
+  --retail-forest: #246e4d;
+  --retail-deep: #1c3429;
+  --retail-mint: #edfcf5;
+  --retail-gold: #df9f20;
+  --retail-cream: #f9fefc;
+  --retail-ink: #192922;
+  --retail-muted: #6b867a;
+  --retail-line: #e4f2ec;
+  --retail-shadow: 0 18px 48px rgba(39,74,58, .09);
+  --bg: #f9fefc;
+}
+html, body { background: #f9fefc; color: #192922; }
+body {
+  background-image:
+    radial-gradient(ellipse 70% 32% at 88% -8%, rgba(41,159,106,.10), transparent 65%),
+    radial-gradient(ellipse 50% 28% at 0% 8%, rgba(223,159,32,.08), transparent 65%);
+  background-attachment: scroll;
+}
+::selection { background: rgba(41,159,106,.2); color: #1c3429; }
+:focus-visible { outline: 3px solid #df9f20; outline-offset: 3px; }
+button, input, select, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+.site-footer {
+  border-top: 1px solid #e4f2ec;
+  background: rgba(255,255,255,.85);
+  color: #6b867a;
+  padding: 22px max(18px, calc((100vw - 1240px)/2));
+}
+.site-footer a { color: #1a3c2d; font-weight: 700; }
+.page-transition { min-height: calc(100vh - 76px); }
+
+/* Rounded, translucent customer navigation */
+.navbar, .wrap { border-color: rgba(228,242,236,.8); }
+.navbar { background: rgba(249,254,252,.88); }
+.wrap { padding-top: max(10px, env(safe-area-inset-top)); }
+.nav {
+  border: 1px solid rgba(220,240,231,.9);
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 12px 32px rgba(39,74,58,.07);
+  border-radius: 22px;
+}
+.nav.scrolled { background: rgba(255,255,255,.96); box-shadow: 0 16px 38px rgba(39,74,58,.12); }
+.brand { color: #223c30; }
+.logo { background: linear-gradient(135deg,#24a269,#df9f20); color: white; border-radius: 13px; }
+.word { text-transform: none; letter-spacing: -.025em; }
+.word b { color: #289363; }
+.link { color: #587769; border-radius: 13px; }
+.link:hover:not(.active) { background: #f2fdf8; color: #265b43; }
+.activePill { background: linear-gradient(135deg,#24a269,#246e4d); }
+.active { color: white; }
+.cart { background: linear-gradient(135deg,#28a26b,#246e4d); border-radius: 14px; box-shadow: 0 9px 22px rgba(36,162,105,.23); }
+.cart:hover { box-shadow: 0 13px 26px rgba(36,162,105,.3); }
+.badge { background: #df9f20; color: #df9f20; }
+.mobileBottomNav { background: rgba(255,255,255,.94); border-top: 1px solid #e4f2ec; box-shadow: 0 -10px 30px rgba(39,74,58,.09); }
+.bottomNavItem { color: #819b8f; }
+.bottomNavItemActive { color: #297553; background: #f0fdf7; box-shadow: inset 0 1px 0 rgba(36,162,105,.08); }
+.bottomActiveDot { background: #df9f20; box-shadow: none; }
+
+/* Homepage: refined indigo hero with a mint accent, keeping all live data and actions intact. */
+.page { background: transparent; color: #192922; }
+.hero {
+  border-radius: 34px;
+  box-shadow: 0 28px 80px rgba(38,94,69,.18);
+}
+.heroBg {
+  background:
+    radial-gradient(55% 68% at 82% 24%, rgba(223,159,32,.31), transparent 62%),
+    radial-gradient(48% 52% at 60% 100%, rgba(91,232,168,.25), transparent 60%),
+    radial-gradient(55% 70% at 0% 0%, rgba(44,168,112,.38), transparent 62%),
+    linear-gradient(145deg,#254235 0%,#1c3429 52%,#295742 100%);
+}
+.titleAccent { background: linear-gradient(95deg,#f2d18f 8%,#bef6dd 90%); -webkit-background-clip:text; background-clip:text; }
+.lead { color: rgba(246,254,250,.78); }
+.search { border-radius: 18px; box-shadow: 0 20px 55px rgba(10,23,17,.28); }
+.search:focus-within { box-shadow: 0 24px 60px rgba(10,23,17,.32), inset 0 0 0 2px #df9f20; }
+.search button { background: linear-gradient(135deg,#29b375,#246e4d); box-shadow: 0 9px 22px rgba(36,162,105,.28); }
+.search button:hover:not(:disabled) { background: #297553; }
+.mode, .modeOn { border-color: rgba(255,255,255,.24); }
+.modeOn { color: #192922; }
+.modePill { background: #f9fefc; }
+.modeAi { background: linear-gradient(95deg,#df9f20,#24a269); }
+.quickSearches button { border-color: rgba(255,255,255,.23); }
+.quickSearches svg { color: #e6b24c; }
+.shopCard, .row { border-color: #e4f2ec; box-shadow: 0 12px 28px rgba(39,74,58,.055); }
+.shopCard:hover, .row:hover { border-color: #c8f7e2; box-shadow: 0 20px 42px rgba(39,74,58,.11); }
+.shopGo { color: #2a845b; }
+
+/* Store discovery, storefront, product, cart and customer account shared polish. */
+.shop-hero-card {
+  background:
+    radial-gradient(circle at 85% 10%,rgba(223,159,32,.21),transparent 25%),
+    radial-gradient(circle at 18% 0%,rgba(65,228,155,.26),transparent 34%),
+    linear-gradient(135deg,#254235,#1c3429 60%,#2b5844) !important;
+  box-shadow: 0 28px 68px rgba(39,74,58,.18) !important;
+  border-radius: 30px !important;
+}
+.hero-pill, .hero-meta-pill, .shop-stat-card { border-color: rgba(255,255,255,.15) !important; }
+.store-toolbar { border-radius: 18px !important; box-shadow: 0 12px 32px rgba(39,74,58,.06) !important; }
+.store-category-pill.active, .store-category-pill:hover { background: #24a269 !important; border-color: #24a269 !important; color: #ffffff !important; }
+.store-product-card { border-color: #e4f2ec !important; border-radius: 21px !important; box-shadow: 0 10px 28px rgba(39,74,58,.055) !important; }
+.store-product-card:hover { border-color: #caf7e3 !important; box-shadow: 0 20px 42px rgba(39,74,58,.12) !important; }
+.store-product-media { background: linear-gradient(145deg,#f3fdf9,#fcf5e8) !important; }
+.store-price, .product-main-price { color: #246e4d !important; }
+.hero-cta, .store-cart-btn, .place-order-btn, .orders-fk-primary-btn {
+  background: linear-gradient(135deg,#29b375,#246e4d) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  border-radius: 13px !important;
+  box-shadow: 0 8px 20px rgba(36,162,105,.18);
+}
+.hero-cta:hover, .store-cart-btn:hover, .place-order-btn:hover, .orders-fk-primary-btn:hover { background: #297151 !important; }
+.shop-secondary-cta, .store-link-btn { border-radius: 12px !important; }
+.product-detail, .checkout-card, .checkout-summary, .success-card, .account-card, .orders-fk-card, .orders-fk-toolbar, .orders-fk-empty, .smart-panel, .smart-section {
+  border-color: #e4f2ec !important;
+  box-shadow: 0 16px 42px rgba(39,74,58,.065) !important;
+}
+.product-visual { background: radial-gradient(circle at 50% 35%,rgba(223,159,32,.18),transparent 36%),linear-gradient(145deg,#f3fdf9,#fbf4e5) !important; }
+.product-floating-badge { background: #246e4d !important; }
+.checkout-step.is-active > span, .checkout-step.is-complete > span { background: #246e4d !important; border-color: #246e4d !important; }
+.checkout-field input:focus, .checkout-field textarea:focus, .checkout-coupon-row input:focus { outline-color: rgba(36,162,105,.22) !important; border-color: #29b375 !important; }
+.drawer-overlay { background: rgba(26,48,38,.48) !important; }
+.cart-drawer { background: #ffffff !important; border-color: #e4f2ec !important; }
+.cart-head, .cart-foot { background: #ffffff !important; border-color: #e4f2ec !important; }
+.cart-count-pill { background: #f0fdf7 !important; color: #2b684c !important; }
+.account-cover, .orders-fk-hero, .smart-shop-hero { background: linear-gradient(135deg,#254235,#246e4d 70%,#df9f20) !important; }
+@media(max-width: 768px) {
+  .hero { width: calc(100% - 16px); border-radius: 24px; padding: 26px 18px; }
+  .store-shell { padding-top: 14px !important; }
+  .shop-hero-card { border-radius: 22px !important; }
+  .site-footer { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+}
+@media(prefers-reduced-motion:reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

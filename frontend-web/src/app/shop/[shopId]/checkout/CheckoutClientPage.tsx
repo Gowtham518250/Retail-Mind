@@ -1,0 +1,729 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import {
+  ArrowLeft, MapPin, Home, Banknote, Phone, ClipboardList,
+  ShieldCheck, Loader2, AlertCircle, ShoppingBag, UserRound, LockKeyhole, Minus, Plus,
+  LocateFixed, CheckCircle2, Sparkles,
+} from 'lucide-react';
+import { useCart } from '../../../../context/CartContext';
+import { API_BASE } from '../../../../lib/api';
+import type { PlacedOrder } from '../../../../lib/types';
+import ProductImage from '../../../../components/ProductImage';
+
+interface FormState {
+  city: string;
+  pincode: string;
+  address: string;
+  landmark: string;
+  phone: string;
+  orderNotes: string;
+}
+
+interface CustomerProfile {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  address?: string | null;
+}
+
+const initialForm: FormState = {
+  city: '', pincode: '', address: '', landmark: '', phone: '', orderNotes: '',
+};
+
+export default function CheckoutClientPage() {
+  const params = useParams();
+  const router = useRouter();
+  const shopId = Number(params?.shopId || 8);
+  const { cartItems, cartTotal, clearCart, updateQuantity } = useCart();
+
+  const [form, setForm] = useState<FormState>(initialForm);
+  const [customer, setCustomer] = useState<CustomerProfile | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [submitError, setSubmitError] = useState('');
+  const [locationError, setLocationError] = useState('');
+  const [locationSuccess, setLocationSuccess] = useState('');
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [shopSettingsLoading, setShopSettingsLoading] = useState(true);
+  const [shopSettingsError, setShopSettingsError] = useState('');
+  const [shopSettingsRetry, setShopSettingsRetry] = useState(0);
+  const [onlineSetupFee, setOnlineSetupFee] = useState(0);
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [minOrder, setMinOrder] = useState(0);
+  const [offerDelivery, setOfferDelivery] = useState(true);
+  const [acceptCod, setAcceptCod] = useState(true);
+  const [acceptOnline, setAcceptOnline] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'UPI'>('COD');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponValidatedSubtotal, setCouponValidatedSubtotal] = useState(0);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+
+  const checkoutSessionKey = useMemo(
+    () => `retail-mind:checkout-idempotency:${shopId}:${cartItems
+      .map((item) => `${item.product.id}:${item.quantity}`)
+      .sort()
+      .join('|')}`,
+    [shopId, cartItems],
+  );
+
+  const grandTotal =
+    Math.max(0, cartTotal - couponDiscount)
+    + (offerDelivery ? deliveryFee : 0)
+    + onlineSetupFee;
+
+  useEffect(() => {
+    if (couponDiscount > 0 && couponValidatedSubtotal !== cartTotal) {
+      setCouponDiscount(0);
+      setCouponMessage('Cart changed. Apply the coupon again to update your discount.');
+    }
+  }, [cartTotal, couponDiscount, couponValidatedSubtotal]);
+
+  const changeCartQuantity = (productId: number, delta: number) => {
+    updateQuantity(productId, delta);
+    setSubmitError('');
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const requireCustomer = async () => {
+      const token = localStorage.getItem('customerToken');
+      if (!token) {
+        router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/store/customer/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('customerToken');
+          localStorage.removeItem('customerName');
+          localStorage.removeItem('customerEmail');
+          router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+          return;
+        }
+
+        const data = await res.json();
+        if (!res.ok || !data.customer) {
+          throw new Error(data.detail || 'Unable to load your customer account.');
+        }
+
+        if (cancelled) return;
+
+        const profile = data.customer as CustomerProfile;
+        const storedPincode = typeof window !== 'undefined' ? localStorage.getItem('retailMindPincode') : '';
+        const storedCity = typeof window !== 'undefined' ? localStorage.getItem('retailMindCity') : '';
+        const storedArea = typeof window !== 'undefined' ? localStorage.getItem('retailMindArea') : '';
+        setCustomer(profile);
+        setForm((prev) => ({
+          ...prev,
+          city: profile.city || prev.city || storedCity || '',
+          address: profile.address || prev.address || (storedArea ? storedArea : ''),
+          pincode: prev.pincode || storedPincode || '',
+          phone: profile.phone || prev.phone || '',
+        }));
+      } catch (error: any) {
+        if (!cancelled) {
+          setSubmitError(error?.message || 'Unable to verify your customer account.');
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthChecking(false);
+        }
+      }
+    };
+
+    void requireCustomer();
+
+    const loadShopSettings = async () => {
+      setShopSettingsLoading(true);
+      setShopSettingsError('');
+      try {
+        const response = await fetch(
+          API_BASE + '/store/shops/' + shopId + '/products?limit=1',
+          { cache: 'no-store', signal: controller.signal },
+        );
+        if (!response.ok) {
+          throw new Error(`Unable to load shop checkout details (${response.status}).`);
+        }
+        const data = await response.json();
+        if (cancelled) return;
+        setOnlineSetupFee(Math.max(0, Number(data.online_setup_fee || 0)));
+        setDeliveryFee(Math.max(0, Number(data.delivery_fee || 0)));
+        setMinOrder(Math.max(0, Number(data.min_order || 0)));
+        setOfferDelivery(data.offer_delivery !== false);
+        setAcceptCod(data.accept_cod !== false);
+        setAcceptOnline(data.accept_online === true);
+        setPaymentMethod(data.accept_cod !== false ? 'COD' : data.accept_online === true ? 'UPI' : 'COD');
+      } catch (error) {
+        if (!cancelled) {
+          setShopSettingsError(error instanceof TypeError
+            ? 'We couldn’t load this shop’s delivery and payment details. Check your connection and try again.'
+            : error instanceof Error
+              ? error.message
+              : 'Unable to load shop checkout details.');
+        }
+      } finally {
+        if (!cancelled) setShopSettingsLoading(false);
+      }
+    };
+
+    void loadShopSettings();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [router, shopId, shopSettingsRetry]);
+
+  const shippingAddress = useMemo(() => (
+    [form.address, form.landmark ? `Landmark: ${form.landmark}` : '', form.city, form.pincode]
+      .filter(Boolean)
+      .join(', ')
+  ), [form.address, form.landmark, form.city, form.pincode]);
+
+  // Existing API persists delivery_address on the order, so order-specific
+  // contact details remain attached to the order without a database migration.
+  const combinedAddress = useMemo(() => (
+    [
+      shippingAddress,
+      form.phone.trim() ? `Contact phone: ${form.phone.trim()}` : '',
+      form.orderNotes.trim() ? `Order notes: ${form.orderNotes.trim()}` : '',
+    ].filter(Boolean).join(' | ')
+  ), [shippingAddress, form.phone, form.orderNotes]);
+
+  const setField = (key: keyof FormState) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+    if (key === 'address' || key === 'city' || key === 'pincode') {
+      setLocationSuccess('');
+    }
+  };
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocationError('');
+    setLocationSuccess('');
+    setIsDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const res = await fetch(
+            `/api/location?lat=${coords.latitude}&lon=${coords.longitude}`
+          );
+          if (!res.ok) throw new Error('Location detection failed');
+          const data = await res.json();
+          if (!data.success && !data.city && !data.pincode) {
+            throw new Error(data.error || 'Unable to resolve your location');
+          }
+          const detectedAddress = data.address || data.road || '';
+          const detectedCity = data.city || '';
+          const detectedPincode = data.pincode || '';
+          setForm((prev) => ({
+            ...prev,
+            address: detectedAddress || prev.address,
+            city: detectedCity || prev.city,
+            pincode: detectedPincode || prev.pincode,
+          }));
+          if (detectedCity || detectedPincode) {
+            try {
+              if (detectedCity) localStorage.setItem('retailMindCity', detectedCity);
+              if (detectedPincode) localStorage.setItem('retailMindPincode', detectedPincode);
+              if (data.area) {
+                localStorage.setItem('retailMindArea', data.area);
+                window.dispatchEvent(new Event('retailmind:area'));
+              }
+            } catch { /* storage unavailable */ }
+            setLocationSuccess(`Location detected: ${data.area || detectedCity}. Please verify house/flat number.`);
+          } else {
+            setLocationError('Location found but address details could not be resolved. Please enter manually.');
+          }
+        } catch {
+          setLocationError('Unable to resolve your location. Please enter it manually.');
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      (err) => {
+        setIsDetectingLocation(false);
+        if (err.code === 1) {
+          setLocationError('Location access was denied. Please allow location permissions in your browser or type your pincode.');
+        } else {
+          setLocationError('Unable to detect location. Please enter your address manually.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  };
+
+  const validate = () => {
+    const next: Partial<Record<keyof FormState, string>> = {};
+    if (shopSettingsLoading || shopSettingsError) {
+      setSubmitError(shopSettingsError || 'Loading this shop’s checkout details. Please wait.');
+      return false;
+    }
+    if (!acceptCod && !acceptOnline) {
+      setSubmitError('This shop has not enabled a payment method yet.');
+      return false;
+    }
+    if (paymentMethod === 'COD' && !acceptCod) {
+      setSubmitError('This shop does not accept cash on delivery.');
+      return false;
+    }
+    if (paymentMethod === 'UPI' && !acceptOnline) {
+      setSubmitError('This shop does not accept UPI payment.');
+      return false;
+    }
+    if (minOrder > 0 && cartTotal < minOrder) {
+      setSubmitError(
+        'Minimum online order is ₹' + minOrder.toFixed(2) +
+        '. Add ₹' + Math.max(0, minOrder - cartTotal).toFixed(2) + ' more.',
+      );
+      return false;
+    }
+    if (offerDelivery) {
+      if (!form.city.trim()) next.city = 'City is required';
+      if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6-digit pincode';
+      if (form.address.trim().length < 5) next.address = 'Enter your full address';
+    }
+    if (!/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10-digit mobile number';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const applyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) {
+      setCouponMessage('Enter a coupon code.');
+      setCouponDiscount(0);
+      setCouponValidatedSubtotal(0);
+      return;
+    }
+    setCouponLoading(true);
+    setCouponMessage('');
+    try {
+      const res = await fetch(API_BASE + '/store/coupon/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop_id: shopId, code, subtotal: cartTotal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Coupon could not be applied.');
+      setCouponDiscount(Number(data.discount || 0));
+      setCouponValidatedSubtotal(cartTotal);
+      setCouponMessage(data.message || 'Coupon applied.');
+    } catch (error: any) {
+      setCouponDiscount(0);
+      setCouponValidatedSubtotal(0);
+      setCouponMessage(error?.message || 'Coupon could not be applied.');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!customer || !cartItems.length || !validate()) return;
+
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+      return;
+    }
+
+    setSubmitError('');
+    setIsSubmitting(true);
+
+    const payload = {
+      shop_id: shopId,
+      payment_method: paymentMethod,
+      items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+      delivery_address: combinedAddress,
+      coupon_code: couponCode.trim().toUpperCase() || undefined,
+      idempotency_key: (() => {
+        const existing = sessionStorage.getItem(checkoutSessionKey);
+        if (existing) return existing;
+        const created = 'web-' + shopId + '-' + crypto.randomUUID();
+        sessionStorage.setItem(checkoutSessionKey, created);
+        return created;
+      })(),
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/store/order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('customerToken');
+        router.replace(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.detail || data.message || 'Could not place your order. Please try again.');
+      }
+
+      const placedOrder: PlacedOrder = {
+        order_id: data.order_id,
+        shop_name: data.shop_name,
+        total_amount: Number(data.total_amount || grandTotal),
+        status: data.status || 'PENDING',
+        payment_method: paymentMethod,
+        customer_name: customer.name,
+        phone: form.phone.trim(),
+        delivery_address: combinedAddress,
+        order_notes: form.orderNotes.trim() || undefined,
+        items: cartItems.map((item) => ({
+          name: item.product.name,
+          quantity: item.quantity,
+          price: item.product.price,
+        })),
+        placed_at: new Date().toISOString(),
+      };
+
+      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
+      sessionStorage.removeItem(checkoutSessionKey);
+      clearCart();
+      router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
+    } catch (err: any) {
+      setSubmitError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (authChecking) {
+    return (
+      <div className="container" data-experience="checkout" style={{ padding: '72px 20px' }}>
+        <div className="checkout-auth-gate">
+          <div className="checkout-auth-icon"><LockKeyhole size={24} /></div>
+          <h1>Secure checkout</h1>
+          <p>Verifying your RetailShop customer account and loading your delivery details.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!customer) {
+    return (
+      <div className="container" data-experience="checkout" style={{ padding: '48px 20px' }}>
+        <div className="store-empty-state">
+          {submitError || 'Please sign in to continue to checkout.'}
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <button className="hero-cta" onClick={() => router.push(`/auth?next=${encodeURIComponent(`/shop/${shopId}/checkout`)}`)}>
+            <UserRound size={16} /> Sign in to checkout
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!cartItems.length) {
+    return (
+      <div className="container" data-experience="checkout" style={{ padding: '48px 20px' }}>
+        <div className="store-empty-state">Your cart is empty. Add a few products before checking out.</div>
+        <div style={{ marginTop: 18 }}>
+          <button className="hero-cta" onClick={() => router.push(`/shop/${shopId}`)}>
+            <ArrowLeft size={16} /> Back to shop
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container" data-experience="checkout" style={{ padding: '28px 20px 90px' }}>
+      <button className="hero-cta" style={{ width: 'fit-content', marginBottom: 20 }} onClick={() => router.push(`/shop/${shopId}`)}>
+        <ArrowLeft size={16} /> Back to shop
+      </button>
+
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="checkout-grid">
+        <div className="checkout-main">
+          <section className="checkout-card">
+            <h2 className="checkout-card-title"><MapPin size={18} /> Delivery details</h2>
+            <div className="checkout-account-card">
+              <div className="checkout-account-icon"><UserRound size={18} /></div>
+              <div className="checkout-account-copy">
+                <strong>{customer.name}</strong>
+                <span>{customer.email || 'Customer account'}</span>
+                {customer.phone && <span>+91 {customer.phone}</span>}
+              </div>
+              <span className="checkout-account-badge">Signed in</span>
+            </div>
+            <div className="checkout-field">
+              <label htmlFor="checkout-address"><Home size={14} /> Delivery address</label>
+              <div className="location-row">
+                <textarea id="checkout-address" value={form.address} onChange={setField('address')} placeholder="House / flat no, street, area" rows={2} />
+                <button type="button" className="location-button" onClick={detectLocation} disabled={isDetectingLocation}>
+                  <span className="location-button-icon">
+                    {isDetectingLocation
+                      ? <Loader2 size={17} className="spin" />
+                      : locationSuccess
+                        ? <CheckCircle2 size={17} />
+                        : <LocateFixed size={17} />}
+                  </span>
+                  <span className="location-button-copy">
+                    <strong>{isDetectingLocation ? 'Finding your address…' : locationSuccess ? 'Update detected address' : 'Use my current location'}</strong>
+                    <small>{isDetectingLocation ? 'Waiting for your device location' : 'Fill city and pincode automatically'}</small>
+                  </span>
+                  {!isDetectingLocation && <span className="location-button-tag">GPS</span>}
+                </button>
+              </div>
+              {locationSuccess && <span className="location-success"><CheckCircle2 size={14} /> {locationSuccess}</span>}
+              {errors.address && <span className="field-error">{errors.address}</span>}
+              {locationError && <span className="field-error">{locationError}</span>}
+            </div>
+            <div className="checkout-field-row">
+              <div className="checkout-field">
+                <label htmlFor="checkout-city">City</label>
+                <input id="checkout-city" value={form.city} onChange={setField('city')} placeholder="City" />
+                {errors.city && <span className="field-error">{errors.city}</span>}
+              </div>
+              <div className="checkout-field">
+                <label htmlFor="checkout-pincode">Pincode</label>
+                <input id="checkout-pincode" value={form.pincode} onChange={setField('pincode')} placeholder="6-digit pincode" inputMode="numeric" maxLength={6} />
+                {errors.pincode && <span className="field-error">{errors.pincode}</span>}
+              </div>
+            </div>
+            <div className="checkout-field">
+              <label htmlFor="checkout-landmark">Landmark <span className="field-optional">(optional)</span></label>
+              <input id="checkout-landmark" value={form.landmark} onChange={setField('landmark')} placeholder="Nearby landmark" />
+            </div>
+          </section>
+
+          <section className="checkout-card checkout-contact-card">
+            <h2 className="checkout-card-title"><Phone size={18} /> Contact details for this order</h2>
+            <p className="checkout-section-description">Confirm how the shop can reach you about this delivery. Your number and note will be saved with this order.</p>
+            <div className="checkout-field">
+              <label htmlFor="checkout-phone"><Phone size={14} /> Mobile number <span className="field-optional">(required)</span></label>
+              <input
+                id="checkout-phone"
+                type="tel"
+                value={form.phone}
+                onChange={setField('phone')}
+                placeholder="10-digit mobile number"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                maxLength={10}
+                aria-invalid={Boolean(errors.phone)}
+              />
+              {errors.phone && <span className="field-error">{errors.phone}</span>}
+            </div>
+            <div className="checkout-field">
+              <label htmlFor="checkout-notes"><ClipboardList size={14} /> Order details / delivery instructions <span className="field-optional">(optional)</span></label>
+              <textarea
+                id="checkout-notes"
+                value={form.orderNotes}
+                onChange={setField('orderNotes')}
+                placeholder="For example: call before arriving, leave with the security guard, or add a note for the shop."
+                rows={3}
+                maxLength={300}
+              />
+              <div className="checkout-notes-meta">{form.orderNotes.length}/300 characters</div>
+            </div>
+          </section>
+
+          <section className="checkout-card">
+            <h2 className="checkout-card-title"><Banknote size={18} /> Payment method</h2>
+            <div className="payment-options" role="radiogroup" aria-label="Payment method">
+              {acceptCod && (
+                <label className={`payment-option ${paymentMethod === 'COD' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="payment-method"
+                    value="COD"
+                    checked={paymentMethod === 'COD'}
+                    onChange={() => setPaymentMethod('COD')}
+                    style={{ width: 18, height: 18, accentColor: '#245b42', flex: 'none' }}
+                  />
+                  <Banknote size={20} />
+                  <div>
+                    <strong>Cash on Delivery</strong>
+                    <span>Pay when your order arrives</span>
+                  </div>
+                </label>
+              )}
+              {acceptOnline && (
+                <label className={`payment-option ${paymentMethod === 'UPI' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="payment-method"
+                    value="UPI"
+                    checked={paymentMethod === 'UPI'}
+                    onChange={() => setPaymentMethod('UPI')}
+                    style={{ width: 18, height: 18, accentColor: '#245b42', flex: 'none' }}
+                  />
+                  <ShieldCheck size={20} />
+                  <div>
+                    <strong>UPI payment</strong>
+                    <span>The shop confirms receipt before fulfilment.</span>
+                  </div>
+                </label>
+              )}
+              {!acceptCod && !acceptOnline && <p className="field-error">This shop has not enabled a payment method.</p>}
+            </div>
+          </section>
+        </div>
+
+        <aside className="checkout-summary">
+          <h2 className="checkout-card-title"><ShoppingBag size={18} /> Order summary</h2>
+          <div className="summary-items">
+            {cartItems.map((item) => (
+              <div key={item.product.id} className="summary-item">
+                <div className="summary-item-thumb">
+                  <ProductImage
+                    src={item.product.image_url}
+                    name={item.product.name}
+                    category={item.product.category}
+                  />
+                </div>
+                <div className="summary-item-info">
+                  <span>{item.product.name}</span>
+                  <span>₹{item.product.price.toFixed(2)} each</span>
+                </div>
+                <div className="summary-item-controls" aria-label={`Quantity for ${item.product.name}`}>
+                  <button
+                    type="button"
+                    onClick={() => changeCartQuantity(item.product.id, -1)}
+                    aria-label={item.quantity === 1
+                      ? `Remove ${item.product.name} from your order`
+                      : `Remove one ${item.product.name}`}
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <output aria-live="polite">{item.quantity}</output>
+                  <button
+                    type="button"
+                    onClick={() => changeCartQuantity(item.product.id, 1)}
+                    disabled={item.product.stock_available !== undefined && item.quantity >= item.product.stock_available}
+                    aria-label={`Add one ${item.product.name}`}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                <strong className="summary-item-total">₹{(item.product.price * item.quantity).toFixed(2)}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="summary-row"><span>Subtotal</span><span>₹{cartTotal.toFixed(2)}</span></div>
+          <div className="summary-row">
+            <span>Delivery</span>
+            <span>{shopSettingsLoading
+              ? 'Loading…'
+              : shopSettingsError
+                ? 'Unavailable'
+                : !offerDelivery
+                  ? 'Not offered'
+                  : deliveryFee === 0
+                    ? 'FREE'
+                    : '₹' + deliveryFee.toFixed(2)}</span>
+          </div>
+          <div className="summary-row">
+            <span>Online setup / service</span>
+            <span>{shopSettingsLoading ? 'Loading…' : shopSettingsError ? 'Unavailable' : '₹' + onlineSetupFee.toFixed(2)}</span>
+          </div>
+          {shopSettingsLoading && (
+            <div className="checkout-trust" role="status">Loading this shop’s delivery and payment details…</div>
+          )}
+          {shopSettingsError && (
+            <div className="cart-banner error" role="alert">
+              <AlertCircle size={15} />
+              <span>{shopSettingsError}</span>
+              <button type="button" onClick={() => setShopSettingsRetry((count) => count + 1)}>
+                Retry
+              </button>
+            </div>
+          )}
+          {minOrder > 0 && (
+            <div className="checkout-trust">
+              {cartTotal < minOrder
+                ? `Add ₹${(minOrder - cartTotal).toFixed(2)} more to meet this shop’s ₹${minOrder.toFixed(2)} minimum order.`
+                : `Shop minimum order of ₹${minOrder.toFixed(2)} met.`}
+            </div>
+          )}
+          <div className="checkout-coupon">
+            <div className="checkout-coupon-heading"><span className="checkout-coupon-icon"><Sparkles size={15} /></span><span><strong>Have a shop coupon?</strong><small>Enter a code shared by this shopkeeper to unlock your discount.</small></span></div>
+            <div className="checkout-coupon-row">
+              <input
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+                placeholder="Coupon code"
+                maxLength={50}
+                aria-label="Coupon code"
+              />
+              <button type="button" onClick={applyCoupon} disabled={couponLoading}>
+                {couponLoading ? 'Checking…' : 'Apply'}
+              </button>
+            </div>
+            {couponMessage && <div className={couponDiscount > 0 ? 'checkout-coupon-success' : 'checkout-coupon-message'}>{couponMessage}</div>}
+          </div>
+          {couponDiscount > 0 && (
+            <div className="summary-row discount"><span>Coupon discount</span><span>-₹{couponDiscount.toFixed(2)}</span></div>
+          )}
+          <div className="summary-row muted"><span>GST</span><span>Included</span></div>
+          <div className="summary-row total"><span>Total</span><span>₹{grandTotal.toFixed(2)}</span></div>
+          {submitError && <div className="cart-banner error"><AlertCircle size={15} /> {submitError}</div>}
+          <button
+            className="place-order-btn"
+            onClick={handlePlaceOrder}
+            disabled={isSubmitting || shopSettingsLoading || Boolean(shopSettingsError)}
+            aria-busy={isSubmitting || shopSettingsLoading}
+          >
+            {isSubmitting
+              ? <><Loader2 size={16} className="spin" /> Placing order…</>
+              : shopSettingsLoading
+                ? 'Loading details…'
+                : 'Place Order'}
+          </button>
+          <div className="checkout-trust"><ShieldCheck size={14} /> Secure account checkout · Your order will appear in My Orders</div>
+        </aside>
+      </motion.div>
+      <div className="checkout-mobile-action">
+        <div className="checkout-mobile-total">
+          <span>{shopSettingsLoading ? 'Loading total' : shopSettingsError ? 'Total unavailable' : 'Order total'}</span>
+          <strong>{shopSettingsLoading || shopSettingsError ? '—' : `₹${grandTotal.toFixed(2)}`}</strong>
+        </div>
+        <button
+          type="button"
+          className="place-order-btn"
+          onClick={handlePlaceOrder}
+          disabled={isSubmitting || shopSettingsLoading || Boolean(shopSettingsError)}
+          aria-busy={isSubmitting || shopSettingsLoading}
+        >
+          {isSubmitting
+            ? <><Loader2 size={16} className="spin" /> Placing order…</>
+            : shopSettingsLoading
+              ? 'Loading…'
+              : 'Place order'}
+        </button>
+      </div>
+    </div>
+  );
+}

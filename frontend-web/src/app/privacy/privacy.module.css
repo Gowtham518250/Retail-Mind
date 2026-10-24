@@ -1,0 +1,102 @@
+.page {
+  max-width: 900px;
+  padding-block: clamp(28px, 6vw, 64px) 90px;
+  color: #182820;
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  color: #68756a;
+  font-size: .82rem;
+}
+
+.breadcrumb a {
+  color: #245b42;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.header {
+  max-width: 760px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e5e0d1;
+}
+
+.header h1 {
+  margin: 8px 0 14px;
+  color: #143b2c;
+  font: 900 clamp(2.4rem, 6vw, 4.2rem)/.96 var(--font-display);
+  letter-spacing: -.025em;
+  text-wrap: balance;
+}
+
+.header > p {
+  color: #5e6b62;
+  font-size: .98rem;
+  line-height: 1.7;
+}
+
+.updated {
+  margin-top: 14px;
+  color: #7a847b !important;
+  font-size: .78rem !important;
+}
+
+.prose {
+  max-width: 760px;
+  padding-top: 8px;
+}
+
+.prose section {
+  padding-top: 26px;
+}
+
+.prose h2 {
+  margin: 0 0 10px;
+  color: #143b2c;
+  font: 850 1.4rem/1.2 var(--font-display);
+  letter-spacing: -.02em;
+}
+
+.prose p {
+  margin: 0 0 12px;
+  color: #4f5d54;
+  font-size: .94rem;
+  line-height: 1.72;
+}
+
+.prose strong {
+  color: #143b2c;
+}
+
+.prose a {
+  color: #245b42;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose a:focus-visible,
+.breadcrumb a:focus-visible {
+  outline: 3px solid #f16a45;
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .page {
+    padding-inline: 16px;
+  }
+
+  .header h1 {
+    font-size: 2.5rem;
+  }
+
+  .prose p {
+    font-size: .9rem;
+  }
+}

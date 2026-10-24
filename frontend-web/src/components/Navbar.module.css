@@ -1,0 +1,129 @@
+/* Retail Mind shell — Corner Market. Desktop = top bar + sidebar, mobile = bottom tab bar. */
+.topbar, .sidebar { display: none; }
+.dock { display: none; }
+
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; flex: none; }
+.logo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--green); color: #fff7e0; box-shadow: 0 3px 0 var(--green-deep); transition: transform .35s var(--ease-spring); }
+.brand:hover .logo { transform: rotate(-6deg) translateY(-1px); }
+.word { font: 700 1.5rem/1 var(--font-display); letter-spacing: -.03em; }
+.word b { font-weight: 700; font-style: italic; color: var(--green); }
+
+@media (min-width: 900px) {
+  .topbar {
+    position: fixed; inset: 0 0 auto 0; z-index: 250; height: var(--topbar-h);
+    display: flex; align-items: center; padding: 0 20px;
+    background: var(--paper-2); border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+  }
+
+  .topbarInner {
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .leftGroup {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .area {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    flex: none;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--green);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  }
+  .area:hover {
+    background: var(--green-tint);
+    border-color: rgba(30, 77, 58, 0.14);
+  }
+  .area:active {
+    transform: scale(0.98);
+  }
+  .area:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
+  }
+  .area span { display: grid; line-height: 1.15; }
+  .area small { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  .area strong { color: var(--ink); font: 700 .95rem var(--font-body); max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .areaPin { flex-shrink: 0; color: var(--green); }
+  .areaChevron { flex-shrink: 0; color: var(--muted); transition: transform 0.2s ease; margin-left: 2px; }
+  .area:hover .areaChevron { color: var(--ink); transform: translateY(1.5px); }
+
+  .search {
+    flex: 0 1 580px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 46px;
+    padding: 0 5px 0 14px;
+    background: var(--surface);
+    border: 1.5px solid var(--line-strong);
+    border-radius: 12px;
+    color: var(--muted);
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .search:focus-within { border-color: var(--green); box-shadow: 0 0 0 4px rgba(30,77,58,.13); color: var(--green); }
+  .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 500 .95rem var(--font-body); }
+  .search button { height: 36px; padding: 0 16px; border: 0; border-radius: 8px; background: var(--green); color: #fff; font: 700 .88rem var(--font-body); cursor: pointer; transition: background .2s, transform .15s; }
+  .search button:hover { background: #266147; }
+  .search button:active { transform: scale(.96); }
+
+  .topActions { flex: 1 1 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+  .signIn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 10px; color: var(--green); font: 700 .95rem var(--font-body); text-decoration: none; transition: background .2s; }
+  .signIn:hover { background: var(--green-tint); }
+  .cart { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--ink); color: #fff; font: 700 .95rem var(--font-body); cursor: pointer; box-shadow: 0 3px 0 #000; transition: transform .2s var(--ease-out), box-shadow .2s; }
+  .cart:hover { transform: translateY(-2px); box-shadow: 0 5px 0 #000; }
+  .cart:active { transform: translateY(2px); box-shadow: 0 1px 0 #000; }
+  .cart:hover svg { animation: wiggle .5s var(--ease-out); }
+  @keyframes wiggle { 30% { transform: rotate(-12deg); } 60% { transform: rotate(8deg); } }
+  .badge { min-width: 22px; height: 22px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--saffron); color: var(--ink); font-size: .78rem; font-weight: 800; }
+
+  .sidebar { position: fixed; z-index: 240; top: var(--topbar-h); left: 0; bottom: 0; width: var(--sidebar-w); display: flex; flex-direction: column; gap: 4px; padding: 20px 14px; overflow-y: auto; background: var(--paper-2); border-right: 1px solid var(--line); }
+  .sideLink { position: relative; display: flex; align-items: center; min-height: 46px; padding: 0 14px; border-radius: 10px; color: var(--ink-soft); font: 600 .96rem var(--font-body); text-decoration: none; transition: color .2s, transform .25s var(--ease-out); }
+  .sideLink:hover:not(.sideActive) { color: var(--green); transform: translateX(4px); }
+  .sideInner { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 12px; }
+  .sidePill { position: absolute; inset: 0; border-radius: 10px; background: var(--green-tint); box-shadow: inset 3px 0 0 var(--green); }
+  .sideActive { color: var(--green); font-weight: 700; }
+  .sideActive:not(:has(.sidePill)) { background: var(--green-tint); box-shadow: inset 3px 0 0 var(--green); }
+  .sideHelp { margin-top: auto; display: grid; gap: 6px; padding: 16px; border-radius: 14px; font-size: .9rem; line-height: 1.45; color: var(--ink-soft); background: var(--saffron-tint); border: 1px solid #ecd9a0; }
+  .sideHelp strong { color: var(--ink); font: 600 1.1rem var(--font-display); }
+  .sideHelp a { margin-top: 6px; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 10px; background: var(--ink); color: #fff; font-weight: 700; text-decoration: none; transition: transform .2s var(--ease-out); }
+  .sideHelp a:hover { transform: translateY(-2px); }
+}
+@media (min-width: 900px) and (max-width: 1150px) {
+  .area strong { max-width: 110px; }
+  .search { flex: 0 1 420px; }
+}
+
+@media (max-width: 899px) {
+  .dock { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 300; padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); background: var(--paper-2); border-top: 1px solid var(--line-strong); }
+  .dockTrack { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; max-width: 520px; margin: 0 auto; }
+  .dockItem { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 54px; padding: 6px 2px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font: 600 11.5px/1.2 var(--font-body); text-decoration: none; cursor: pointer; transition: color .2s, transform .2s var(--ease-spring); }
+  .dockItem:active { transform: scale(.92); }
+  .dockActive { color: var(--green); font-weight: 800; }
+  .dockActive::before { content: ''; position: absolute; top: -7px; left: 28%; right: 28%; height: 3px; border-radius: 0 0 3px 3px; background: var(--green); animation: tab .35s var(--ease-out); }
+  @keyframes tab { from { transform: scaleX(0); } }
+  .dockIcon { position: relative; display: grid; place-items: center; width: 26px; height: 24px; }
+  .dockDot { position: absolute; top: -7px; right: -11px; min-width: 17px; height: 17px; padding: 0 4px; display: grid; place-items: center; border: 2px solid var(--paper-2); border-radius: 999px; background: var(--tomato); color: #fff; font-size: 11px; font-weight: 800; line-height: 1; animation: dot .35s var(--ease-spring); }
+  @keyframes dot { from { transform: scale(0); } }
+}
+@media (prefers-reduced-motion: reduce) { .dockActive::before, .dockDot, .cart:hover svg { animation: none !important; } }
