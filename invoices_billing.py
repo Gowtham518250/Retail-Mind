@@ -10,10 +10,15 @@ Covers:
 
 from typing import Optional, List
 import re
+import hashlib
+import hmac
+import json
+import os
+import secrets
 from datetime import datetime, date, timedelta, timezone
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy import or_, and_, desc, func, cast, Integer, text
@@ -27,7 +32,7 @@ from db import get_db
 from models import (
     Invoice, InvoiceLineItem, Product, Customer, FlashSale,
     UniversalTransaction, StockMovement, ShopExpense, Payment, PaymentMethod,
-    PaymentStatus, InvoiceStatus, OnlineOrder
+    PaymentStatus, InvoiceStatus, OnlineOrder, ShopProfile, VerifiedPaymentIntent
 )
 from security import owner_only, worker_or_owner, sanitize_input, resolve_shop_id
 from realtime import publish_realtime_event
@@ -288,6 +293,106 @@ class PaymentWriteRequest(BaseModel):
     source: str = Field(default="PAYMENT_DETECTION", max_length=50)
     timestamp: Optional[str] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+
+class PaymentIntentCreate(BaseModel):
+    invoice_id: int = Field(..., gt=0)
+
+
+class ProviderPaymentWebhook(BaseModel):
+    """Normalized signed callback contract required from a bank/PSP adapter."""
+    provider: str = Field(..., min_length=2, max_length=40)
+    event_id: str = Field(..., min_length=1, max_length=128)
+    intent_reference: str = Field(..., min_length=8, max_length=64)
+    provider_transaction_id: str = Field(..., min_length=1, max_length=128)
+    amount_paise: int = Field(..., gt=0)
+    currency: str = Field(..., min_length=3, max_length=3)
+    destination_vpa: str = Field(..., min_length=3, max_length=100)
+    status: str = Field(..., min_length=1, max_length=32)
+
+
+def _require_payment_webhook_secret() -> str:
+    secret = os.getenv("PAYMENT_VERIFICATION_WEBHOOK_SECRET", "").strip()
+    if len(secret) < 32:
+        raise HTTPException(
+            status_code=503,
+            detail="Signed payment-provider verification is not configured.",
+        )
+    return secret
+
+
+def _verify_payment_webhook_signature(
+    raw_body: bytes,
+    supplied_signature: str,
+    secret: Optional[str] = None,
+) -> None:
+    """Verify HMAC-SHA256 over the exact raw request body."""
+    signing_secret = (secret or _require_payment_webhook_secret()).strip()
+    if len(signing_secret) < 32:
+        raise HTTPException(status_code=503, detail="Payment webhook secret is too short.")
+    candidate = (supplied_signature or "").strip()
+    if candidate.lower().startswith("sha256="):
+        candidate = candidate[7:]
+    expected = hmac.new(
+        signing_secret.encode("utf-8"), raw_body, hashlib.sha256
+    ).hexdigest()
+    if not candidate or not hmac.compare_digest(expected, candidate.lower()):
+        raise HTTPException(status_code=401, detail="Invalid payment-provider signature.")
+
+
+def _money_to_paise(value) -> int:
+    try:
+        amount = Decimal(str(value or 0))
+        if not amount.is_finite() or amount < 0:
+            raise ValueError("amount must be finite and non-negative")
+        return int(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) * 100)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid INR amount.") from exc
+
+
+def _normalize_payment_vpa(value: Optional[str]) -> str:
+    normalized = str(value or "").strip().casefold()
+    if not normalized or any(character.isspace() for character in normalized):
+        return ""
+    if normalized.count("@") != 1:
+        return ""
+    local_part, handle = normalized.split("@", 1)
+    if not local_part or not handle:
+        return ""
+    return normalized
+
+
+def _validate_payment_provider_fields(
+    payload: ProviderPaymentWebhook,
+    intent: VerifiedPaymentIntent,
+    shop_profile: ShopProfile,
+) -> None:
+    """Fail closed unless a signed PSP event matches the original intent exactly."""
+    if payload.provider.strip().casefold() != str(intent.provider or "").strip().casefold():
+        raise HTTPException(status_code=409, detail="Payment provider does not match intent.")
+    if payload.currency.strip().upper() != "INR" or str(intent.currency or "").upper() != "INR":
+        raise HTTPException(status_code=409, detail="Only exact INR payments can settle this intent.")
+    if int(payload.amount_paise) != int(intent.amount_paise):
+        raise HTTPException(status_code=409, detail="Payment amount does not match the invoice intent.")
+
+    expected_vpa = _normalize_payment_vpa(intent.destination_vpa)
+    callback_vpa = _normalize_payment_vpa(payload.destination_vpa)
+    current_vpa = _normalize_payment_vpa(getattr(shop_profile, "upi_id", None))
+    if not expected_vpa or callback_vpa != expected_vpa:
+        raise HTTPException(status_code=409, detail="Payment destination does not match the intent.")
+    if current_vpa != expected_vpa:
+        raise HTTPException(
+            status_code=409,
+            detail="Shop UPI destination changed after this intent was created.",
+        )
+
+
+def _payment_intent_ttl_minutes() -> int:
+    try:
+        configured = int(os.getenv("PAYMENT_INTENT_TTL_MINUTES", "15"))
+    except (TypeError, ValueError):
+        configured = 15
+    return max(5, min(configured, 60))
+
 
 
 def _payment_status_for(invoice: Invoice) -> PaymentStatus:
@@ -1724,6 +1829,250 @@ def create_invoice(
         ],
     }
     return JSONResponse(status_code=201, content=payload)
+
+
+
+@router.post("/payment-intents", status_code=201)
+def create_verified_payment_intent(
+    data: PaymentIntentCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    """Create a short-lived invoice-bound UPI intent; this alone never marks the invoice paid."""
+    _require_payment_webhook_secret()
+    shop_id = resolve_shop_id(current_user)
+    invoice = (
+        db.query(Invoice)
+        .filter(
+            Invoice.id == data.invoice_id,
+            Invoice.user_id == shop_id,
+            Invoice.status != InvoiceStatus.CANCELLED,
+        )
+        .with_for_update()
+        .first()
+    )
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    shop_profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
+    destination_vpa = _normalize_payment_vpa(
+        getattr(shop_profile, "upi_id", None) if shop_profile else None
+    )
+    if not destination_vpa:
+        raise HTTPException(
+            status_code=409,
+            detail="Configure a valid shop UPI destination before creating a payment intent.",
+        )
+
+    outstanding_paise = _money_to_paise(
+        Decimal(str(invoice.total_amount or 0)) - Decimal(str(invoice.paid_amount or 0))
+    )
+    if outstanding_paise <= 0:
+        raise HTTPException(status_code=409, detail="Invoice has no outstanding balance.")
+
+    provider = os.getenv("PAYMENT_VERIFICATION_PROVIDER", "bank_psp").strip().casefold()
+    if not provider or len(provider) > 40:
+        raise HTTPException(status_code=503, detail="Payment-provider configuration is invalid.")
+
+    intent = VerifiedPaymentIntent(
+        public_reference="RMP-" + secrets.token_urlsafe(24),
+        shop_id=shop_id,
+        invoice_id=invoice.id,
+        provider=provider,
+        amount_paise=outstanding_paise,
+        currency="INR",
+        destination_vpa=destination_vpa,
+        status="PENDING",
+        expires_at=datetime.utcnow() + timedelta(minutes=_payment_intent_ttl_minutes()),
+    )
+    db.add(intent)
+    try:
+        db.commit()
+        db.refresh(intent)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not create a unique payment intent.")
+
+    return {
+        "success": True,
+        "intent_id": intent.id,
+        "intent_reference": intent.public_reference,
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "amount_paise": int(intent.amount_paise),
+        "amount": float(Decimal(int(intent.amount_paise)) / Decimal("100")),
+        "currency": intent.currency,
+        "destination_vpa": intent.destination_vpa,
+        "provider": intent.provider,
+        "status": intent.status,
+        "expires_at": intent.expires_at.isoformat() + "Z",
+        "instructions": (
+            "Include the intent reference in the transfer note. The invoice remains unpaid "
+            "until a valid signed provider callback confirms this exact amount and destination."
+        ),
+    }
+
+
+@router.post("/payment-provider/webhook")
+async def verified_payment_provider_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Accept a normalized bank/PSP callback signed with PAYMENT_VERIFICATION_WEBHOOK_SECRET."""
+    raw_body = await request.body()
+    if len(raw_body) > 65536:
+        raise HTTPException(status_code=413, detail="Payment webhook payload is too large.")
+
+    _verify_payment_webhook_signature(
+        raw_body,
+        request.headers.get("x-payment-signature", ""),
+    )
+    try:
+        payload = ProviderPaymentWebhook.parse_obj(json.loads(raw_body.decode("utf-8")))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid payment-provider event payload.") from exc
+
+    success_statuses = {"SUCCESS", "CAPTURED", "PAID", "COMPLETED"}
+    if payload.status.strip().upper() not in success_statuses:
+        # Failed, pending, and processing events are acknowledged but never settle an invoice.
+        return {"success": True, "ignored": True, "reason": "provider_event_not_successful"}
+
+    try:
+        intent = (
+            db.query(VerifiedPaymentIntent)
+            .filter(VerifiedPaymentIntent.public_reference == payload.intent_reference.strip())
+            .with_for_update()
+            .first()
+        )
+        if intent is None:
+            raise HTTPException(status_code=404, detail="Payment intent not found.")
+
+        shop_profile = db.query(ShopProfile).filter(
+            ShopProfile.shop_id == intent.shop_id
+        ).first()
+        if shop_profile is None:
+            raise HTTPException(status_code=409, detail="Shop payment destination is unavailable.")
+        _validate_payment_provider_fields(payload, intent, shop_profile)
+
+        if intent.status == "PAID":
+            if intent.provider_transaction_id == payload.provider_transaction_id.strip():
+                return {
+                    "success": True,
+                    "duplicate": True,
+                    "intent_reference": intent.public_reference,
+                    "status": "PAID",
+                }
+            raise HTTPException(
+                status_code=409,
+                detail="This payment intent was already settled by a different transaction.",
+            )
+        if intent.status != "PENDING":
+            raise HTTPException(status_code=409, detail="Payment intent is not pending.")
+        if intent.expires_at and datetime.utcnow() > intent.expires_at:
+            raise HTTPException(status_code=409, detail="Payment intent expired; create a new intent.")
+
+        invoice = (
+            db.query(Invoice)
+            .filter(
+                Invoice.id == intent.invoice_id,
+                Invoice.user_id == intent.shop_id,
+                Invoice.status != InvoiceStatus.CANCELLED,
+            )
+            .with_for_update()
+            .first()
+        )
+        if invoice is None:
+            raise HTTPException(status_code=409, detail="Intent invoice is missing or cancelled.")
+
+        outstanding_paise = _money_to_paise(
+            Decimal(str(invoice.total_amount or 0)) - Decimal(str(invoice.paid_amount or 0))
+        )
+        if outstanding_paise != int(intent.amount_paise):
+            raise HTTPException(
+                status_code=409,
+                detail="Invoice balance changed. Reconcile it and create a fresh payment intent.",
+            )
+
+        provider = intent.provider
+        transaction_id = payload.provider_transaction_id.strip()
+        transaction_key = "gateway_" + hashlib.sha256(
+            f"{provider}:{transaction_id}".encode("utf-8")
+        ).hexdigest()
+        payment_result = _apply_payment_write(
+            data=PaymentWriteRequest(
+                invoice_id=invoice.id,
+                amount=float(Decimal(int(payload.amount_paise)) / Decimal("100")),
+                payment_method="ONLINE",
+                reference_id=transaction_id,
+                idempotency_key=transaction_key,
+                source="VERIFIED_PROVIDER_WEBHOOK",
+                notes=(
+                    f"Signed {provider} confirmation; event {payload.event_id}; "
+                    f"intent {intent.public_reference}"
+                )[:500],
+            ),
+            db=db,
+            shop_id=intent.shop_id,
+            mode="delta",
+            commit_transaction=False,
+        )
+        if payment_result.get("duplicate"):
+            # Do not let a transaction already used on another invoice settle this intent.
+            raise HTTPException(status_code=409, detail="Provider transaction was already recorded.")
+
+        intent.status = "PAID"
+        intent.provider_transaction_id = transaction_id
+        intent.confirmed_at = datetime.utcnow()
+        db.commit()
+        db.refresh(invoice)
+        payment_events = payment_result.get("events", [])
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error("Verified payment webhook failed safely: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Payment confirmation could not be recorded safely.")
+
+    for event in payment_events:
+        try:
+            publish_realtime_event(event)
+        except Exception as event_error:
+            logger.warning("Payment event publish failed after commit: %s", event_error)
+
+    try:
+        AuditService.log_action(
+            db=db,
+            user_id=intent.shop_id,
+            action=AuditAction.UPDATE,
+            table_name="verified_payment_intents",
+            record_id=intent.id,
+            new_values={
+                "status": "PAID",
+                "provider": intent.provider,
+                "provider_transaction_id": intent.provider_transaction_id,
+                "amount_paise": int(intent.amount_paise),
+                "destination_vpa": intent.destination_vpa,
+            },
+            description=f"Signed provider payment confirmed for invoice {invoice.invoice_number}",
+        )
+    except Exception as audit_error:
+        logger.warning("Verified payment audit logging failed after commit: %s", audit_error)
+
+    return {
+        "success": True,
+        "duplicate": False,
+        "intent_reference": intent.public_reference,
+        "provider_transaction_id": intent.provider_transaction_id,
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.invoice_number,
+        "paid_amount": float(invoice.paid_amount or 0),
+        "payment_status": (
+            invoice.payment_status.value
+            if hasattr(invoice.payment_status, "value")
+            else str(invoice.payment_status)
+        ),
+    }
 
 
 @router.post("/payments")
