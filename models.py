@@ -561,6 +561,39 @@ class Payment(Base):
     invoice = relationship("Invoice", back_populates="payments")
 
 
+class VerifiedPaymentIntent(Base):
+    """Server-created payment intent; only a signed provider callback can settle it."""
+    __tablename__ = "verified_payment_intents"
+
+    id = Column(Integer, primary_key=True)
+    public_reference = Column(String(64), nullable=False, unique=True, index=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(40), nullable=False, default="bank_psp")
+    amount_paise = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, default="INR")
+    destination_vpa = Column(String(100), nullable=False)
+    status = Column(String(24), nullable=False, default="PENDING", index=True)
+    provider_transaction_id = Column(String(128), nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    expires_at = Column(DateTime, nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "provider_transaction_id",
+            name="uq_verified_payment_provider_txn",
+        ),
+        Index(
+            "ix_verified_payment_shop_invoice_status",
+            "shop_id",
+            "invoice_id",
+            "status",
+        ),
+    )
+
+
 # ========== NOTIFICATION & ESCALATION ==========
 
 class Notification(Base):
