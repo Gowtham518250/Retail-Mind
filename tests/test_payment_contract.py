@@ -350,6 +350,6 @@ def test_verified_payment_intent_model_matches_migration():
         / "alembic" / "versions" / "042_verified_payment_intents.py"
     ).read_text(encoding="utf-8")
     assert 'revision = "042_verified_payment_intents"' in migration
-    assert 'down_revision = ("041_cancelled_online_order_financial_cleanup", "e7a9054db41d")' in migration
+    assert 'down_revision = "041_cancelled_online_order_financial_cleanup"' in migration
     assert '"verified_payment_intents"' in migration
     assert '"uq_verified_payment_provider_txn"' in migration
