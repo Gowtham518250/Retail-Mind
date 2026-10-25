@@ -1,7 +1,7 @@
 """Create invoice-bound payment intents for signed bank/PSP confirmation.
 
 Revision ID: 042_verified_payment_intents
-Revises: 041_cancelled_online_order_financial_cleanup, e7a9054db41d
+Revises: 041_cancelled_online_order_financial_cleanup
 
 The intent captures the exact outstanding INR amount and shop destination at
 creation time. Only a trusted callback with a valid HMAC, matching provider
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision = "042_verified_payment_intents"
-down_revision = ("041_cancelled_online_order_financial_cleanup", "e7a9054db41d")
+down_revision = "041_cancelled_online_order_financial_cleanup"
 branch_labels = None
 depends_on = None
 
