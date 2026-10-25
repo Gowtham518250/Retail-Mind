@@ -229,3 +229,127 @@ def test_payment_idempotency_model_has_a_matching_versioned_migration():
 
     assert re.search(r"""op\.add_column\(\s*["']payments["']""", migration)
     assert '"ix_payments_idempotency_key"' in migration
+
+
+def test_verified_payment_intent_and_webhook_routes_exist():
+    from invoices_billing import router
+
+    routes = {
+        (route.path, method)
+        for route in router.routes
+        for method in (route.methods or set())
+    }
+    assert ("/api/invoices/payment-intents", "POST") in routes
+    assert ("/api/invoices/payment-provider/webhook", "POST") in routes
+
+
+def test_provider_webhook_signature_is_bound_to_exact_raw_body():
+    import hashlib
+    import hmac
+    import pytest
+    from fastapi import HTTPException
+    from invoices_billing import _verify_payment_webhook_signature
+
+    secret = "test-secret-" + ("x" * 32)
+    raw_body = b'{"event_id":"event-1","amount_paise":1250}'
+    signature = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+
+    assert _verify_payment_webhook_signature(raw_body, "sha256=" + signature, secret) is None
+    with pytest.raises(HTTPException) as exc:
+        _verify_payment_webhook_signature(raw_body + b" ", signature, secret)
+    assert exc.value.status_code == 401
+
+
+def test_provider_webhook_rejects_amount_or_destination_mismatch():
+    from types import SimpleNamespace
+    import pytest
+    from fastapi import HTTPException
+    from invoices_billing import (
+        ProviderPaymentWebhook,
+        _validate_payment_provider_fields,
+    )
+
+    intent = SimpleNamespace(
+        provider="bank_psp",
+        currency="INR",
+        amount_paise=12345,
+        destination_vpa="retailshop@okaxis",
+    )
+    profile = SimpleNamespace(upi_id="RetailShop@OKAXIS")
+
+    def payload(amount_paise=12345, destination_vpa="retailshop@okaxis"):
+        return ProviderPaymentWebhook(
+            provider="bank_psp",
+            event_id="event-01",
+            intent_reference="RMP-reference-1234567890",
+            provider_transaction_id="bank-txn-001",
+            amount_paise=amount_paise,
+            currency="INR",
+            destination_vpa=destination_vpa,
+            status="SUCCESS",
+        )
+
+    assert _validate_payment_provider_fields(payload(), intent, profile) is None
+
+    with pytest.raises(HTTPException) as amount_error:
+        _validate_payment_provider_fields(payload(amount_paise=12344), intent, profile)
+    assert amount_error.value.status_code == 409
+
+    with pytest.raises(HTTPException) as destination_error:
+        _validate_payment_provider_fields(
+            payload(destination_vpa="attacker@upi"), intent, profile
+        )
+    assert destination_error.value.status_code == 409
+
+
+def test_provider_webhook_rejects_when_shop_destination_changes():
+    from types import SimpleNamespace
+    import pytest
+    from fastapi import HTTPException
+    from invoices_billing import (
+        ProviderPaymentWebhook,
+        _validate_payment_provider_fields,
+    )
+
+    intent = SimpleNamespace(
+        provider="bank_psp",
+        currency="INR",
+        amount_paise=2500,
+        destination_vpa="oldshop@okaxis",
+    )
+    payload = ProviderPaymentWebhook(
+        provider="bank_psp",
+        event_id="event-02",
+        intent_reference="RMP-reference-0987654321",
+        provider_transaction_id="bank-txn-002",
+        amount_paise=2500,
+        currency="INR",
+        destination_vpa="oldshop@okaxis",
+        status="CAPTURED",
+    )
+    profile = SimpleNamespace(upi_id="newshop@okaxis")
+    with pytest.raises(HTTPException) as exc:
+        _validate_payment_provider_fields(payload, intent, profile)
+    assert exc.value.status_code == 409
+
+
+def test_verified_payment_intent_model_matches_migration():
+    from pathlib import Path
+    from models import VerifiedPaymentIntent
+
+    table = VerifiedPaymentIntent.__table__
+    assert {"public_reference", "shop_id", "invoice_id", "amount_paise",
+            "destination_vpa", "provider_transaction_id", "status"} <= set(table.c.keys())
+    assert any(
+        index.unique and [column.name for column in index.columns] == ["public_reference"]
+        for index in table.indexes
+    )
+
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "alembic" / "versions" / "042_verified_payment_intents.py"
+    ).read_text(encoding="utf-8")
+    assert 'revision = "042_verified_payment_intents"' in migration
+    assert 'down_revision = ("041_cancelled_online_order_financial_cleanup", "e7a9054db41d")' in migration
+    assert '"verified_payment_intents"' in migration
+    assert '"uq_verified_payment_provider_txn"' in migration
