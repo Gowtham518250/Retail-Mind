@@ -33,7 +33,7 @@ httpcore2==2.13.1
 redis==5.0.1
 
 qrcode==8.0
-Pillow==12.3.0
+Pillow==13.0.0
 
 APScheduler==3.10.4
 
