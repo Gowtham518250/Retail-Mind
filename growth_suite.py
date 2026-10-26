@@ -805,7 +805,10 @@ def mark_return_refunded(
         raise HTTPException(status_code=400, detail="Return is not awaiting refund settlement.")
     ret.status = "REFUNDED"
     ret.owner_note = note
-    ret.processed_at = datetime.now(timezone.utc)
+    # Keep processed_at anchored to the original approval decision so historical
+    # daily return totals don't move to the later date the refund was settled.
+    if ret.processed_at is None:
+        ret.processed_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Return marked refunded.", "status": ret.status}
 

@@ -395,6 +395,132 @@ def _payment_intent_ttl_minutes() -> int:
 
 
 
+def _normalize_payment_reference(value: Optional[str]) -> Optional[str]:
+    """Normalize a transaction reference across SMS/notification formatting.
+
+    References shorter than eight alphanumeric characters are not treated as
+    strong identities because short numeric snippets collide too easily.
+    """
+    raw = str(value or "").strip().upper()
+    normalized = "".join(character for character in raw if character in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    if (
+        len(normalized) < 8
+        or not any(character.isdigit() for character in normalized)
+        or normalized in {"UNKNOWN", "NOTAVAILABLE", "NONE", "NULL", "NAN"}
+    ):
+        return None
+    return normalized
+
+
+def _find_payment_by_normalized_reference(
+    db: Session, shop_id: int, normalized_reference: str
+) -> Optional[Payment]:
+    """Find a tenant-owned payment by normalized UTR/ref, including legacy formatting."""
+    query = (
+        db.query(Payment)
+        .join(Invoice, Payment.invoice_id == Invoice.id)
+        .filter(
+            Invoice.user_id == shop_id,
+            Payment.reference_number.isnot(None),
+        )
+    )
+    if db.get_bind().dialect.name == "postgresql":
+        # Production PostgreSQL can normalize using an indexed/searchable SQL
+        # expression; the reference advisory lock below serializes concurrent
+        # retries before this query is performed.
+        return (
+            query.filter(
+                func.regexp_replace(
+                    func.upper(Payment.reference_number), r"[^A-Z0-9]", "", "g"
+                ) == normalized_reference
+            )
+            .order_by(Payment.id.asc())
+            .first()
+        )
+
+    # Portable fallback for SQLite-based regression tests and local dev.
+    candidates = query.order_by(Payment.id.desc()).limit(5000).all()
+    return next(
+        (
+            payment for payment in candidates
+            if _normalize_payment_reference(payment.reference_number) == normalized_reference
+        ),
+        None,
+    )
+
+
+def _payment_duplicate_response(existing: Payment, existing_invoice: Invoice) -> dict:
+    status = existing_invoice.payment_status
+    return {
+        "success": True,
+        "duplicate": True,
+        "payment_id": existing.id,
+        "invoice_id": existing_invoice.id,
+        "invoice_number": existing_invoice.invoice_number,
+        "applied_amount": float(existing.amount or 0),
+        "paid_amount": float(existing_invoice.paid_amount or 0),
+        "payment_status": status.value if hasattr(status, "value") else str(status),
+        "message": "Payment already recorded for this transaction reference.",
+    }
+
+
+def _validate_payment_replay(
+    existing: Payment,
+    existing_invoice: Invoice,
+    data: PaymentWriteRequest,
+    *,
+    mode: str,
+) -> None:
+    """Reject reuse of a transaction key/reference with conflicting facts."""
+    if data.invoice_id is not None and int(data.invoice_id) != int(existing.invoice_id):
+        raise HTTPException(
+            status_code=409,
+            detail="This payment identity is already linked to a different invoice.",
+        )
+    if data.invoice_number and data.invoice_number.strip() != existing_invoice.invoice_number:
+        raise HTTPException(
+            status_code=409,
+            detail="This payment identity is already linked to a different invoice.",
+        )
+
+    if mode == "delta" and data.amount is not None:
+        requested_amount = Decimal(str(data.amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        recorded_amount = Decimal(str(existing.amount or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if requested_amount != recorded_amount:
+            raise HTTPException(
+                status_code=409,
+                detail="This payment identity was reused with a different amount.",
+            )
+    elif mode != "delta" and data.paid_amount is not None:
+        requested_total = Decimal(str(data.paid_amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        current_total = Decimal(str(existing_invoice.paid_amount or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if requested_total != current_total:
+            raise HTTPException(
+                status_code=409,
+                detail="This payment identity was replayed with a conflicting paid total.",
+            )
+
+    requested_reference = _normalize_payment_reference(data.reference_id)
+    recorded_reference = _normalize_payment_reference(existing.reference_number)
+    if requested_reference != recorded_reference and (
+        requested_reference is not None or recorded_reference is not None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This idempotency key was reused with a different transaction reference.",
+        )
+
+    if data.payment_method:
+        requested_method = _normalize_invoice_payment_method(data.payment_method, default="ONLINE")
+        existing_method = getattr(existing.payment_method, "value", existing.payment_method)
+        recorded_method = _normalize_invoice_payment_method(str(existing_method), default="ONLINE")
+        if requested_method != recorded_method:
+            raise HTTPException(
+                status_code=409,
+                detail="This payment identity was reused with a different payment method.",
+            )
+
+
 def _payment_status_for(invoice: Invoice) -> PaymentStatus:
     total = Decimal(str(invoice.total_amount or 0))
     paid = Decimal(str(invoice.paid_amount or 0))
@@ -534,6 +660,19 @@ def _apply_payment_write(
         )
 
     idempotency_key = (data.idempotency_key or "").strip() or None
+    normalized_reference = _normalize_payment_reference(data.reference_id)
+
+    # In production, serialize writes for one shop/reference so concurrent SMS
+    # and notification callbacks cannot both pass the "not seen" check.
+    # This lock is transaction-scoped and only taken for strong references.
+    if normalized_reference and db.get_bind().dialect.name == "postgresql":
+        lock_material = f"{shop_id}:{normalized_reference}".encode("utf-8")
+        lock_id = int.from_bytes(hashlib.sha256(lock_material).digest()[:8], "big", signed=True)
+        db.connection().execute(
+            text("SELECT pg_advisory_xact_lock(:lock_id)"),
+            {"lock_id": lock_id},
+        )
+
     if idempotency_key:
         existing = (
             db.query(Payment)
@@ -555,21 +694,27 @@ def _apply_payment_write(
             )
             if existing_invoice is None:
                 raise HTTPException(status_code=404, detail="Payment invoice not found.")
-            return {
-                "success": True,
-                "duplicate": True,
-                "payment_id": existing.id,
-                "invoice_id": existing_invoice.id,
-                "invoice_number": existing_invoice.invoice_number,
-                "applied_amount": float(existing.amount or 0),
-                "paid_amount": float(existing_invoice.paid_amount or 0),
-                "payment_status": (
-                    existing_invoice.payment_status.value
-                    if hasattr(existing_invoice.payment_status, "value")
-                    else str(existing_invoice.payment_status)
-                ),
-                "message": "Payment already recorded (idempotent retry).",
-            }
+            _validate_payment_replay(existing, existing_invoice, data, mode=mode)
+            return _payment_duplicate_response(existing, existing_invoice)
+
+    # The transaction reference is a second identity beyond the client retry
+    # key: SMS and notification paths can generate different idempotency keys
+    # for the same UTR. Store a canonical reference for all new payment rows.
+    if normalized_reference:
+        existing = _find_payment_by_normalized_reference(db, shop_id, normalized_reference)
+        if existing is not None:
+            existing_invoice = (
+                db.query(Invoice)
+                .filter(
+                    Invoice.id == existing.invoice_id,
+                    Invoice.user_id == shop_id,
+                )
+                .first()
+            )
+            if existing_invoice is None:
+                raise HTTPException(status_code=404, detail="Payment invoice not found.")
+            _validate_payment_replay(existing, existing_invoice, data, mode=mode)
+            return _payment_duplicate_response(existing, existing_invoice)
 
     if data.invoice_id is None and not (data.invoice_number and data.invoice_number.strip()):
         raise HTTPException(
@@ -655,7 +800,7 @@ def _apply_payment_write(
         payment_method=payment_method,
         amount=delta,
         payment_date=_parse_client_timestamp(data.timestamp) or datetime.utcnow(),
-        reference_number=(data.reference_id or "").strip() or None,
+        reference_number=normalized_reference or ((data.reference_id or "").strip() or None),
         notes=(
             data.notes
             or (
@@ -716,7 +861,7 @@ def _apply_payment_write(
                 "paid_amount": float(invoice.paid_amount or 0),
                 "payment_status": payment_status,
                 "payment_id": payment.id,
-                "reference_id": (data.reference_id or "").strip() or None,
+                "reference_id": normalized_reference or ((data.reference_id or "").strip() or None),
                 "source": data.source,
             }),
             append_sync_event(db, {
@@ -756,21 +901,10 @@ def _apply_payment_write(
                     )
                     .first()
                 )
-                return {
-                    "success": True,
-                    "duplicate": True,
-                    "payment_id": existing.id,
-                    "invoice_id": existing.invoice_id,
-                    "invoice_number": existing_invoice.invoice_number if existing_invoice else None,
-                    "applied_amount": float(existing.amount or 0),
-                    "paid_amount": float(existing_invoice.paid_amount or 0) if existing_invoice else 0.0,
-                    "payment_status": (
-                        existing_invoice.payment_status.value
-                        if existing_invoice and hasattr(existing_invoice.payment_status, "value")
-                        else str(existing_invoice.payment_status) if existing_invoice else None
-                    ),
-                    "message": "Payment already recorded (idempotent retry).",
-                }
+                if existing_invoice is None:
+                    raise HTTPException(status_code=404, detail="Payment invoice not found.")
+                _validate_payment_replay(existing, existing_invoice, data, mode=mode)
+                return _payment_duplicate_response(existing, existing_invoice)
         raise HTTPException(status_code=409, detail="Payment write conflicted with another transaction.")
     except Exception as exc:
         db.rollback()
@@ -795,7 +929,7 @@ def _apply_payment_write(
                     "invoice_number": invoice.invoice_number,
                     "amount": float(delta),
                     "payment_method": payment_method.value,
-                    "reference_id": (data.reference_id or "").strip() or None,
+                    "reference_id": normalized_reference or ((data.reference_id or "").strip() or None),
                     "source": data.source,
                 },
                 description=f"Payment recorded for invoice {invoice.invoice_number}",

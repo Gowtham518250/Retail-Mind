@@ -14,7 +14,9 @@ def test_cancel_and_reject_remove_order_sale_and_invoice():
     assert 'sales.reference_order_id == order.id' in helper
     assert 'UniversalTransaction.category == "SALE"' in helper
     assert "for sale_transaction in sale_transactions" in helper
-    assert "db.delete(invoice)" in helper
+    assert "invoice.status = InvoiceStatus.CANCELLED" in helper
+    assert '"status": "CANCELLED"' in helper
+    assert "db.delete(invoice)" not in helper
     assert "for invoice in invoices" in helper
     assert "SALE_REVERSAL" in helper
     assert 'payment_event.category = "REFUND_REQUIRED"' in helper

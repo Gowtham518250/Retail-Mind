@@ -84,3 +84,86 @@ def test_stock_service_rejects_insufficient_stock(session):
     assert "Insufficient stock" in str(excinfo.value)
     assert session.query(StockMovement).count() == 0
     assert product.current_stock == 2
+
+
+
+def test_stock_service_ignores_replayed_reference_without_changing_stock(session):
+    product = Product(
+        user_id=session.query(User).first().id,
+        product_name="Widget",
+        sku="W-3",
+        current_stock=10,
+        min_stock=5,
+        unit_price=25,
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    first_product, first_movement = StockService.apply_stock_change(
+        session,
+        product_id=product.id,
+        user_id=product.user_id,
+        quantity=3,
+        movement_type="OUT",
+        reason="sale",
+        reference_id="invoice-replay-1",
+    )
+    session.commit()
+
+    second_product, second_movement = StockService.apply_stock_change(
+        session,
+        product_id=product.id,
+        user_id=product.user_id,
+        quantity=3,
+        movement_type="OUT",
+        reason="sale",
+        reference_id="invoice-replay-1",
+    )
+    session.commit()
+
+    assert second_product.current_stock == 7
+    assert second_movement.id == first_movement.id
+    assert getattr(second_movement, "_idempotent_replay", False) is True
+    assert session.query(StockMovement).count() == 1
+
+
+def test_stock_service_rejects_replayed_reference_with_changed_quantity(session):
+    product = Product(
+        user_id=session.query(User).first().id,
+        product_name="Widget",
+        sku="W-4",
+        current_stock=10,
+        min_stock=5,
+        unit_price=25,
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    StockService.apply_stock_change(
+        session,
+        product_id=product.id,
+        user_id=product.user_id,
+        quantity=3,
+        movement_type="OUT",
+        reason="sale",
+        reference_id="invoice-replay-2",
+    )
+    session.commit()
+
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as excinfo:
+        StockService.apply_stock_change(
+            session,
+            product_id=product.id,
+            user_id=product.user_id,
+            quantity=4,
+            movement_type="OUT",
+            reason="sale",
+            reference_id="invoice-replay-2",
+        )
+
+    assert excinfo.value.status_code == 409
+    assert product.current_stock == 7
+    assert session.query(StockMovement).count() == 1

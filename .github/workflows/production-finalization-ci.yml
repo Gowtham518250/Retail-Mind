@@ -215,6 +215,10 @@ jobs:
           pytest -q tests/test_voice_billing_parse_contract.py
           pytest -q tests/test_inventory_upload_ai_contract.py
           pytest -q tests/test_purchase_order_recommendations_contract.py
+          pytest -q tests/test_stock_service.py
+          pytest -q tests/test_online_order_cancellation.py
+          pytest -q tests/test_upi_ledger_idempotency.py
+          pytest -q tests/test_daily_business_summary_contract.py
           pytest -q tests/test_order_idempotency_contract.py
           pytest -q tests/test_rate_limiter_redis_recovery.py
           pytest -q tests/test_invoice_replay_guard.py

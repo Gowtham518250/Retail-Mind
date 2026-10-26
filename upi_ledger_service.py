@@ -8,9 +8,34 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
 from models import UpiLedger, UpiStatus
+
+
+def _normalize_reference(value: Optional[str]) -> Optional[str]:
+    """Normalize bank/UPI reference formatting across SMS and notifications."""
+    normalized = "".join(ch for ch in (value or "").strip().upper() if ch.isalnum())
+    if len(normalized) < 4 or normalized in {"NA", "NAN", "NONE", "NULL", "UNKNOWN", "NOTAVAILABLE"}:
+        return None
+    return normalized
+
+
+def _same_upi_payment(existing, *, shop_id: int, invoice_id: int, amount: Decimal, upi_id: str) -> bool:
+    try:
+        old_amount = Decimal(str(existing.amount))
+    except (TypeError, ValueError):
+        return False
+    old_upi_id = (existing.upi_id or "").strip().casefold()
+    new_upi_id = (upi_id or "").strip().casefold()
+    return (
+        int(existing.shop_id or 0) == int(shop_id)
+        and int(existing.invoice_id or 0) == int(invoice_id)
+        and abs(old_amount - amount) < Decimal("0.01")
+        and (not old_upi_id or not new_upi_id or old_upi_id == new_upi_id)
+    )
 
 
 def _status_total(
@@ -68,28 +93,100 @@ class UpiLedgerService:
         customer_upi: str = None,
         upi_reference: str = None,
     ) -> dict:
-        """Record a detected UPI payment as pending reconciliation."""
+        """Record a referenced receipt idempotently as pending reconciliation.
+
+        A notification without a usable bank/UPI reference is only a candidate;
+        do not write it as a financial ledger row until a merchant verifies it.
+        """
+        try:
+            normalized_amount = Decimal(str(amount))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="Invalid payment amount.")
+        if not normalized_amount.is_finite() or normalized_amount <= Decimal("0"):
+            raise HTTPException(status_code=422, detail="Payment amount must be positive.")
+
+        reference = _normalize_reference(upi_reference)
+        if reference is None:
+            return {
+                "ledger_id": None,
+                "status": "needs_confirmation",
+                "recorded": False,
+                "duplicate": False,
+                "reason": "missing_transaction_reference",
+                "amount": float(normalized_amount),
+            }
+
+        existing = db.query(UpiLedger).filter_by(upi_reference=reference).first()
+        if existing is not None:
+            if not _same_upi_payment(
+                existing,
+                shop_id=shop_id,
+                invoice_id=invoice_id,
+                amount=normalized_amount,
+                upi_id=upi_id,
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="This UPI reference already exists with different payment details. Review it manually.",
+                )
+            return {
+                "ledger_id": existing.id,
+                "status": "duplicate",
+                "recorded": True,
+                "duplicate": True,
+                "amount": float(normalized_amount),
+            }
+
         ledger_entry = UpiLedger(
             shop_id=shop_id,
             invoice_id=invoice_id,
             upi_id=upi_id,
-            amount=amount,
+            amount=normalized_amount,
             customer_upi=customer_upi,
-            upi_reference=upi_reference,
+            upi_reference=reference,
             status=UpiStatus.PENDING,
         )
         db.add(ledger_entry)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            # Concurrent replays can both pass the initial lookup. The unique
+            # reference constraint remains the final guard; reread after rollback.
+            db.rollback()
+            raced = db.query(UpiLedger).filter_by(upi_reference=reference).first()
+            if raced is not None and _same_upi_payment(
+                raced,
+                shop_id=shop_id,
+                invoice_id=invoice_id,
+                amount=normalized_amount,
+                upi_id=upi_id,
+            ):
+                return {
+                    "ledger_id": raced.id,
+                    "status": "duplicate",
+                    "recorded": True,
+                    "duplicate": True,
+                    "amount": float(normalized_amount),
+                }
+            raise HTTPException(
+                status_code=409,
+                detail="This UPI reference was recorded concurrently with conflicting details.",
+            )
         return {
             "ledger_id": ledger_entry.id,
             "status": "recorded",
-            "amount": amount,
+            "recorded": True,
+            "duplicate": False,
+            "amount": float(normalized_amount),
         }
 
     @staticmethod
     def confirm_upi_payment(db: Session, upi_reference: str) -> bool:
         """Confirm a pending ledger item; keep this operation idempotent."""
-        entry = db.query(UpiLedger).filter_by(upi_reference=upi_reference).first()
+        reference = _normalize_reference(upi_reference)
+        if reference is None:
+            return False
+        entry = db.query(UpiLedger).filter_by(upi_reference=reference).first()
         if entry is None:
             return False
         if entry.status == UpiStatus.CONFIRM:

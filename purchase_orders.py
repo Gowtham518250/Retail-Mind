@@ -11,15 +11,19 @@ import hashlib
 import json
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+import re
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import get_db
-from models import PurchaseOrder, PurchaseOrderStatus, Product, StockMovement, StockMovementType
+from models import PurchaseOrder, PurchaseOrderStatus, Product, StockMovement, StockMovementType, Invoice, InvoiceLineItem
+from sales_recognition import recognized_invoice_filters
 from security import owner_only, sanitize_input, resolve_shop_id
 from durable_sync import append_sync_event
 
@@ -472,20 +476,54 @@ def _reorder_number(value, default: float = 0.0) -> float:
         return default
 
 
-def _make_reorder_suggestion(product: Product) -> dict:
-    """Build a conservative shop-scoped suggestion from persisted stock settings."""
+def _make_reorder_suggestion(
+    product: Product,
+    *,
+    daily_velocity: Optional[float] = None,
+    observed_lead_time_days: Optional[int] = None,
+    sales_history_days: int = 30,
+) -> dict:
+    """Build a conservative reorder suggestion from recorded sales and receipts.
+
+    When history is available, target coverage uses realized invoice quantities
+    and observed purchase-order receipt lead time. With no usable history, fall
+    back to configured stock limits and label the fallback explicitly.
+    """
     current_stock = max(0.0, _reorder_number(product.current_stock))
     minimum = max(0.0, _reorder_number(product.min_stock))
     reorder_level = max(0.0, _reorder_number(product.reorder_level))
     trigger_stock = max(minimum, reorder_level)
-
-    # Return only products at or below their configured trigger.
-    target_stock = max(1, math.ceil(trigger_stock * 2))
     configured_max = _reorder_number(product.max_stock)
-    if configured_max > 0:
-        target_stock = min(target_stock, math.ceil(configured_max))
-    target_stock = max(target_stock, math.ceil(current_stock) + 1)
-    suggested_qty = max(1, math.ceil(target_stock - current_stock))
+
+    has_sales_history = daily_velocity is not None and math.isfinite(daily_velocity) and daily_velocity > 0
+    velocity = max(0.0, _reorder_number(daily_velocity))
+    lead_time_days = max(0, int(observed_lead_time_days)) if observed_lead_time_days is not None else 7
+    lead_time_basis = (
+        "observed_purchase_receipts"
+        if observed_lead_time_days is not None
+        else "seven_day_fallback_no_receipt_history"
+    )
+
+    if has_sales_history:
+        safety_days = max(3, math.ceil(lead_time_days * 0.20))
+        demand_target = math.ceil(velocity * (lead_time_days + safety_days))
+        target_stock = max(math.ceil(trigger_stock), demand_target)
+        if configured_max > 0:
+            target_stock = min(target_stock, math.ceil(configured_max))
+        target_stock = max(math.ceil(current_stock), target_stock)
+        suggested_qty = max(0, math.ceil(target_stock - current_stock))
+        basis = (
+            "30_day_realized_sales_and_observed_receipt_lead_time"
+            if observed_lead_time_days is not None
+            else "30_day_realized_sales_and_fallback_7_day_lead_time"
+        )
+    else:
+        target_stock = max(1, math.ceil(trigger_stock * 2))
+        if configured_max > 0:
+            target_stock = min(target_stock, math.ceil(configured_max))
+        target_stock = max(target_stock, math.ceil(current_stock) + 1)
+        suggested_qty = max(1, math.ceil(target_stock - current_stock))
+        basis = "configured_minimum_and_reorder_level_no_sales_history"
 
     if current_stock <= 0:
         urgency = "CRITICAL"
@@ -507,6 +545,11 @@ def _make_reorder_suggestion(product: Product) -> dict:
         "urgency": urgency,
         "recorded_purchase_price": round(_reorder_number(product.purchase_price), 2),
         "catalog_selling_price": round(_reorder_number(product.unit_price), 2),
+        "daily_sales_velocity": round(velocity, 4),
+        "sales_history_days": sales_history_days if has_sales_history else 0,
+        "lead_time_days": lead_time_days,
+        "lead_time_basis": lead_time_basis,
+        "recommendation_basis": basis,
         "currency": "INR",
         "online_offers": [],
         "best_offer": None,
@@ -516,7 +559,6 @@ def _make_reorder_suggestion(product: Product) -> dict:
         "price_comparison_status": "NOT_CHECKED",
         "online_lookup_message": None,
     }
-
 
 async def _search_online_supplier_prices(
     client: httpx.AsyncClient,
@@ -610,7 +652,11 @@ async def get_reorder_recommendations(
     db: Session = Depends(get_db),
     current_user: dict = Depends(owner_only),
 ):
-    """Return low-stock items, suggested replenishment quantities and verified listing prices."""
+    """Return demand-based low-stock suggestions from recorded sales and receipts.
+
+    When history is unavailable, suggestions explicitly identify their fallback
+    basis instead of claiming a data-driven forecast.
+    """
     shop_id = resolve_shop_id(current_user)
     products = (
         db.query(Product)
@@ -619,8 +665,106 @@ async def get_reorder_recommendations(
         .all()
     )
 
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    since = today - timedelta(days=29)
+    sales_rows = (
+        db.query(
+            InvoiceLineItem.product_id,
+            func.coalesce(func.sum(InvoiceLineItem.quantity), 0).label("qty_sold"),
+        )
+        .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+        .filter(
+            Invoice.user_id == shop_id,
+            Invoice.invoice_date >= since,
+            Invoice.invoice_date <= today,
+            InvoiceLineItem.product_id.isnot(None),
+            *recognized_invoice_filters(),
+        )
+        .group_by(InvoiceLineItem.product_id)
+        .all()
+    )
+    daily_velocity_by_product = {
+        int(product_id): max(0.0, _reorder_number(qty_sold)) / 30.0
+        for product_id, qty_sold in sales_rows
+        if product_id is not None
+    }
+
+    # Estimate supplier lead times from observed PO receipt movements; expected
+    # delivery dates are plans, not proof that goods arrived.
+    receipt_cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=365)
+    completed_pos = (
+        db.query(PurchaseOrder)
+        .filter(
+            PurchaseOrder.shop_id == shop_id,
+            PurchaseOrder.status.in_([
+                PurchaseOrderStatus.RECEIVED,
+                PurchaseOrderStatus.PARTIALLY_RECEIVED,
+                PurchaseOrderStatus.DELIVERED,
+            ]),
+            PurchaseOrder.created_at >= receipt_cutoff,
+        )
+        .order_by(PurchaseOrder.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    po_by_id = {int(po.id): po for po in completed_pos}
+    lead_days_by_product: dict[int, list[int]] = {}
+    if po_by_id:
+        receipt_movements = (
+            db.query(StockMovement)
+            .filter(
+                StockMovement.created_at >= receipt_cutoff,
+                StockMovement.reference_id.like("PO-%-R-%"),
+            )
+            .order_by(StockMovement.created_at.asc())
+            .limit(5000)
+            .all()
+        )
+        first_receipt_by_po: dict[int, date] = {}
+        po_product_ids: dict[int, set[int]] = {}
+        for po in completed_pos:
+            try:
+                po_items = json.loads(po.items_json or "[]")
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(po_items, list):
+                po_product_ids[int(po.id)] = {
+                    int(item["product_id"])
+                    for item in po_items
+                    if isinstance(item, dict) and item.get("product_id") is not None
+                }
+        for movement in receipt_movements:
+            match = re.match(r"^PO-(\d+)-R-", str(movement.reference_id or ""))
+            if not match:
+                continue
+            po_id = int(match.group(1))
+            po_record = po_by_id.get(po_id)
+            if po_record is None or movement.created_at is None:
+                continue
+            receipt_date = movement.created_at.date()
+            previous = first_receipt_by_po.get(po_id)
+            if previous is None or receipt_date < previous:
+                first_receipt_by_po[po_id] = receipt_date
+        for po_id, receipt_date in first_receipt_by_po.items():
+            po_record = po_by_id.get(po_id)
+            if po_record is None or po_record.created_at is None:
+                continue
+            lead_days = max(0, (receipt_date - po_record.created_at.date()).days)
+            for product_id in po_product_ids.get(po_id, set()):
+                lead_days_by_product.setdefault(product_id, []).append(lead_days)
+
+    observed_lead_time_by_product = {
+        product_id: sorted(days)[(len(days) - 1) // 2]
+        for product_id, days in lead_days_by_product.items()
+        if days
+    }
     items = [
-        _make_reorder_suggestion(product)
+        _make_reorder_suggestion(
+            product,
+            daily_velocity=daily_velocity_by_product.get(int(product.id)),
+            observed_lead_time_days=observed_lead_time_by_product.get(int(product.id)),
+            sales_history_days=30,
+        )
         for product in products
         if _reorder_number(product.current_stock) <= max(
             _reorder_number(product.min_stock),
