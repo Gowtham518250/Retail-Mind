@@ -901,21 +901,10 @@ def _apply_payment_write(
                     )
                     .first()
                 )
-                return {
-                    "success": True,
-                    "duplicate": True,
-                    "payment_id": existing.id,
-                    "invoice_id": existing.invoice_id,
-                    "invoice_number": existing_invoice.invoice_number if existing_invoice else None,
-                    "applied_amount": float(existing.amount or 0),
-                    "paid_amount": float(existing_invoice.paid_amount or 0) if existing_invoice else 0.0,
-                    "payment_status": (
-                        existing_invoice.payment_status.value
-                        if existing_invoice and hasattr(existing_invoice.payment_status, "value")
-                        else str(existing_invoice.payment_status) if existing_invoice else None
-                    ),
-                    "message": "Payment already recorded (idempotent retry).",
-                }
+                if existing_invoice is None:
+                    raise HTTPException(status_code=404, detail="Payment invoice not found.")
+                _validate_payment_replay(existing, existing_invoice, data, mode=mode)
+                return _payment_duplicate_response(existing, existing_invoice)
         raise HTTPException(status_code=409, detail="Payment write conflicted with another transaction.")
     except Exception as exc:
         db.rollback()
