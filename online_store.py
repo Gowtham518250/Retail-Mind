@@ -38,6 +38,7 @@ from models import (
     Product,
     OnlineOrder,
     Invoice,
+    InvoiceStatus,
     InvoiceLineItem,
     UniversalTransaction,
     Payment,
@@ -130,7 +131,7 @@ def _cleanup_online_order_financials(
     shop_id: int,
     reason: str,
 ):
-    """Delete sale documents for a cancelled order, retaining real receipts as refund-pending."""
+    """Void provisional sale documents for a cancelled order, preserving audit history and receipts."""
     invoices = _online_order_invoice_candidates(db, order, shop_id)
     invoice_numbers = [str(invoice.invoice_number) for invoice in invoices if invoice.invoice_number]
     invoice_snapshots = [
@@ -140,7 +141,7 @@ def _cleanup_online_order_financials(
             "total_amount": float(invoice.total_amount or 0),
             "paid_amount": float(invoice.paid_amount or 0),
             "payment_status": str(getattr(invoice.payment_status, "value", invoice.payment_status)),
-            "status": "DELETED",
+            "status": "CANCELLED",
             "source": "ONLINE_ORDER_CANCELLATION",
         }
         for invoice in invoices
@@ -225,8 +226,19 @@ def _cleanup_online_order_financials(
         sales.reference_order_id == order.id,
     ).delete(synchronize_session=False)
 
+    # Keep a voided invoice as an auditable business record. The API still
+    # emits invoice.deleted to legacy clients so it disappears from active
+    # lists, while backend history retains the original totals and payments.
     for invoice in invoices:
-        db.delete(invoice)
+        invoice.status = InvoiceStatus.CANCELLED
+        cancellation_note = f"[CANCELLED: {reason}]"
+        existing_notes = (invoice.notes or "").strip()
+        if cancellation_note not in existing_notes:
+            invoice.notes = (
+                f"{existing_notes}\n{cancellation_note}".strip()
+                if existing_notes
+                else cancellation_note
+            )
 
     return invoice_snapshots
 

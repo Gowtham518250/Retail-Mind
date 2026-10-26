@@ -905,6 +905,9 @@ class StockMovementCreate(BaseModel):
     quantity: Decimal = Field(..., ge=0, description="Fractional quantities are allowed, up to 3 decimal places.")
     reason: Optional[str] = None
     reference_id: Optional[str] = None
+    # Stable client-generated key for retries; reference_id is a backwards-
+    # compatible idempotency identity where one is already supplied.
+    idempotency_key: Optional[str] = Field(default=None, max_length=128)
 
     @field_validator("quantity")
     @classmethod
@@ -1153,7 +1156,7 @@ def create_stock_movement(
         raise HTTPException(status_code=400, detail="Invalid movement_type. Must be one of: ['IN', 'OUT', 'ADJUSTMENT']")
 
     try:
-        product, _ = StockService.apply_stock_change(
+        product, stock_movement = StockService.apply_stock_change(
             db,
             product_id=movement.product_id,
             user_id=user_id,
@@ -1161,29 +1164,39 @@ def create_stock_movement(
             movement_type=movement_type,
             reason=movement.reason,
             reference_id=movement.reference_id,
+            idempotency_key=movement.idempotency_key,
         )
-        sync_event = _queue_inventory_change(
-            db,
-            user_id,
-            "stock_movement",
-            product_id=movement.product_id,
-            movement_type=movement_type,
-            quantity=float(movement.quantity),
-            current_stock=float(product.current_stock),
-            reason=str(movement.reason or ""),
-            reference_id=str(movement.reference_id or ""),
-        )
+        is_duplicate = bool(getattr(stock_movement, "_idempotent_replay", False))
+        sync_event = None
+        if not is_duplicate:
+            sync_event = _queue_inventory_change(
+                db,
+                user_id,
+                "stock_movement",
+                product_id=movement.product_id,
+                movement_type=movement_type,
+                quantity=float(movement.quantity),
+                current_stock=float(product.current_stock),
+                reason=str(movement.reason or ""),
+                reference_id=str(movement.reference_id or ""),
+            )
         db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Stock movement failed: {str(e)}")
 
-    publish_realtime_event(sync_event)
+    if sync_event is not None:
+        publish_realtime_event(sync_event)
     return {
-        "message": "Stock movement recorded",
+        "message": "Duplicate stock movement ignored" if is_duplicate else "Stock movement recorded",
         "product_id": movement.product_id,
         "current_stock": product.current_stock,
-        "movement_type": movement_type
+        "movement_type": movement_type,
+        "duplicate": is_duplicate,
+        "idempotency_key": stock_movement.idempotency_key,
     }
 
 @router.get("/stock-movements/{product_id}")
