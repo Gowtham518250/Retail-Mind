@@ -38,6 +38,29 @@ def _payload(*, total=110, tax=10, name="Cash Customer", phone=None, day="2026-1
     )
 
 
+def test_invoice_line_schema_accepts_explicit_custom_untracked_item():
+    item = InvoiceLineItemCreate(
+        product_id=None,
+        product_name="Chicken",
+        quantity=1,
+        unit_price=150,
+        stock_tracked=False,
+    )
+    assert item.product_name == "Chicken"
+    assert item.product_id is None
+    assert item.stock_tracked is False
+
+
+def test_invoice_line_schema_defaults_to_stock_tracked_for_legacy_clients():
+    item = InvoiceLineItemCreate(
+        product_id=None,
+        product_name="Chicken",
+        quantity=1,
+        unit_price=150,
+    )
+    assert item.stock_tracked is True
+
+
 def test_invoice_retry_accepts_same_immutable_sale_even_after_payment_changes():
     existing = _existing_invoice(lines=[SimpleNamespace(description="Rice", quantity=Decimal("2"), unit_price=Decimal("50"))])
     data = _payload(lines=[InvoiceLineItemCreate(product_name="Rice", quantity=2, unit_price=50)])
