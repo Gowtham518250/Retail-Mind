@@ -82,6 +82,8 @@ def _profile_payload(profile):
         "state": profile.state,
         "city": profile.city,
         "postal_code": profile.postal_code,
+        "latitude": profile.latitude,
+        "longitude": profile.longitude,
         "gst_number": profile.gst_number,
         "primary_upi_id": profile.upi_id,
         "upi_ids": _safe_json_list(profile.upi_ids),

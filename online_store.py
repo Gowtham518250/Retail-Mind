@@ -1293,6 +1293,9 @@ def browse_shop_products(
         "shop_city": profile.city or "",
         "shop_state": profile.state or "",
         "shop_postal_code": profile.postal_code or "",
+        # Public shop coordinates power a direct customer directions link.
+        "shop_latitude": profile.latitude,
+        "shop_longitude": profile.longitude,
         "shop_logo_url": profile.logo_url,
         "shop_categories": profile.shop_categories or "",
         "rating": round(float(getattr(profile, "rating_score", 0.0) or 0.0), 2),

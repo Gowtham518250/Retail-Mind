@@ -23,6 +23,8 @@ export interface ShopResponse {
   shop_city?: string;
   shop_state?: string;
   shop_postal_code?: string;
+  shop_latitude?: number | null;
+  shop_longitude?: number | null;
   shop_logo_url?: string;
   shop_categories?: string;
   rating?: number;
