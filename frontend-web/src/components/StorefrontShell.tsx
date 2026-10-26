@@ -141,6 +141,17 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
 
   const logo = shop?.shop_logo_url ? (shop.shop_logo_url.startsWith('http') ? shop.shop_logo_url : API_BASE + shop.shop_logo_url) : '';
   const rating = Number(shop?.rating || 0);
+  const latitude = shop?.shop_latitude;
+  const longitude = shop?.shop_longitude;
+  const coordinates = latitude != null && longitude != null && Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? `${latitude},${longitude}`
+    : null;
+  const mapsQuery = [shop?.shop_name, shop?.shop_address, shop?.shop_city, shop?.shop_state, shop?.shop_postal_code]
+    .filter((part): part is string => Boolean(part && part.trim()))
+    .join(', ');
+  const mapsUrl = coordinates
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(coordinates)}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery || shop?.shop_name || 'Local shop')}`;
 
   return (
     <div className={styles.page} data-experience="storefront">
@@ -185,6 +196,17 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
 
           <motion.div className={styles.ctas} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, duration: 0.6, ease: EASE }}>
             <Link href="#products" className={styles.ctaMain}>Shop now <ArrowRight size={18} /></Link>
+            {shop && (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.ctaGhost}
+                aria-label={coordinates ? 'Get directions to this shop in Google Maps' : 'Find this shop on Google Maps'}
+              >
+                <MapPin size={18} /> {coordinates ? 'Get directions' : 'Find on Google Maps'}
+              </a>
+            )}
             <Link href="/orders" className={styles.ctaGhost}>My orders</Link>
           </motion.div>
           <p className={styles.note}>Browse freely · Sign in only when you checkout</p>
