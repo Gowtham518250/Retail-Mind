@@ -35,3 +35,14 @@ def test_daily_report_returns_audit_sources_and_operational_alerts():
 def test_refund_settlement_does_not_rewrite_return_decision_date():
     source = (ROOT / "growth_suite.py").read_text(encoding="utf-8")
     assert "if ret.processed_at is None:" in source
+
+
+
+def test_daily_report_exposes_tenant_scoped_expiry_alerts():
+    source = (ROOT / "report_service.py").read_text(encoding="utf-8")
+    assert "db.query(ProductBatch, Product)" in source
+    assert "Product.user_id == user_id" in source
+    assert "ProductBatch.expiry_date <= expiry_cutoff" in source
+    assert '"expiry_alerts"' in source
+    assert '"expired_stock_units"' in source
+    assert '"expiring_stock_units_next_30_days"' in source

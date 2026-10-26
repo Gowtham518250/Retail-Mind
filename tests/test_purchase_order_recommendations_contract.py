@@ -126,3 +126,31 @@ def test_online_price_lookup_reports_missing_provider_key(monkeypatch):
     assert result["configured"] is False
     assert result["offers"] == []
     assert "SERPAPI_API_KEY" in result["message"]
+
+
+
+def test_reorder_suggestion_uses_real_sales_and_observed_lead_time():
+    suggestion = _make_reorder_suggestion(
+        _product(current_stock=4, min_stock=5, reorder_level=10, max_stock=100),
+        daily_velocity=2.0,
+        observed_lead_time_days=10,
+        sales_history_days=30,
+    )
+    # 2 units/day * (10-day observed supplier lead time + 3-day minimum buffer).
+    assert suggestion["target_stock"] == 26
+    assert suggestion["suggested_reorder_qty"] == 22
+    assert suggestion["daily_sales_velocity"] == 2.0
+    assert suggestion["lead_time_days"] == 10
+    assert suggestion["lead_time_basis"] == "observed_purchase_receipts"
+    assert suggestion["recommendation_basis"] == "30_day_realized_sales_and_observed_receipt_lead_time"
+
+
+def test_reorder_suggestion_makes_no_claim_of_observed_lead_time_when_unknown():
+    suggestion = _make_reorder_suggestion(
+        _product(current_stock=3, min_stock=8, reorder_level=20, max_stock=50),
+        daily_velocity=1.0,
+        observed_lead_time_days=None,
+    )
+    assert suggestion["lead_time_days"] == 7
+    assert suggestion["lead_time_basis"] == "seven_day_fallback_no_receipt_history"
+    assert "fallback" in suggestion["recommendation_basis"]

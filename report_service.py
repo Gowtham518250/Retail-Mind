@@ -4,7 +4,7 @@ Generate daily WhatsApp reports with revenue, expenses, profit, top product
 """
 
 from sqlalchemy.orm import Session
-from models import DailyReport, Invoice, Payment, Product, StockMovement, ShopExpense, InvoiceLineItem, OnlineOrderReturn, UniversalTransaction
+from models import DailyReport, Invoice, Payment, Product, ProductBatch, StockMovement, ShopExpense, InvoiceLineItem, OnlineOrderReturn, UniversalTransaction
 from sqlalchemy import func
 from datetime import date, datetime, timedelta, timezone, time
 from decimal import Decimal
@@ -231,6 +231,47 @@ class ReportService:
             "minimum_stock": float(product.min_stock or 0),
         } for product in low_stock_rows]
 
+        # Expiry alerts are scoped through the owning product/shop.
+        expiry_cutoff = report_date + timedelta(days=30)
+        expiry_rows = (
+            db.query(ProductBatch, Product)
+            .join(Product, Product.id == ProductBatch.product_id)
+            .filter(
+                Product.user_id == user_id,
+                Product.is_active.is_(True),
+                ProductBatch.quantity > 0,
+                ProductBatch.expiry_date.isnot(None),
+                ProductBatch.expiry_date <= expiry_cutoff,
+            )
+            .order_by(ProductBatch.expiry_date.asc(), Product.product_name.asc())
+            .limit(100)
+            .all()
+        )
+        expiry_alerts = []
+        expired_stock_units = Decimal("0")
+        expiring_stock_units = Decimal("0")
+        for batch, product in expiry_rows:
+            expiry_date = batch.expiry_date
+            if expiry_date is None:
+                continue
+            quantity = Decimal(str(batch.quantity or 0))
+            days_until_expiry = (expiry_date - report_date).days
+            expired = days_until_expiry < 0
+            if expired:
+                expired_stock_units += quantity
+            else:
+                expiring_stock_units += quantity
+            expiry_alerts.append({
+                "batch_id": int(batch.id),
+                "product_id": int(product.id),
+                "product_name": product.product_name,
+                "batch_number": batch.batch_number,
+                "expiry_date": expiry_date.isoformat(),
+                "days_until_expiry": days_until_expiry,
+                "quantity": float(quantity),
+                "expired": expired,
+            })
+
         # Keep refund-payable receipts distinct from sales and ordinary expenses.
         refund_required_rows = (
             db.query(UniversalTransaction)
@@ -282,6 +323,10 @@ class ReportService:
             "outstanding_invoice_count": len(outstanding_by_invoice),
             "stock_alert_count": len(low_stock),
             "low_stock_products": low_stock,
+            "expiry_alert_count": len(expiry_alerts),
+            "expiry_alerts": expiry_alerts,
+            "expired_stock_units": float(expired_stock_units),
+            "expiring_stock_units_next_30_days": float(expiring_stock_units),
             "refund_required_collections": float(refund_required_total),
             "refund_required_transaction_ids": [int(row.id) for row in refund_required_rows],
             "sources": {
