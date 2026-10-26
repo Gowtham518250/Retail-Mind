@@ -233,20 +233,37 @@ class ReportService:
 
         # Expiry alerts are scoped through the owning product/shop.
         expiry_cutoff = report_date + timedelta(days=30)
-        expiry_rows = (
-            db.query(ProductBatch, Product)
-            .join(Product, Product.id == ProductBatch.product_id)
-            .filter(
+        expiry_query = db.query(ProductBatch, Product).join(
+            Product, Product.id == ProductBatch.product_id
+        )
+        # Keep expired stock and upcoming batches in separate bounded queries;
+        # a large expired backlog must not hide near-term expiry warnings.
+        expired_rows = (
+            expiry_query.filter(
                 Product.user_id == user_id,
                 Product.is_active.is_(True),
                 ProductBatch.quantity > 0,
                 ProductBatch.expiry_date.isnot(None),
+                ProductBatch.expiry_date < report_date,
+            )
+            .order_by(ProductBatch.expiry_date.asc(), Product.product_name.asc())
+            .limit(100)
+            .all()
+        )
+        expiring_rows = (
+            expiry_query.filter(
+                Product.user_id == user_id,
+                Product.is_active.is_(True),
+                ProductBatch.quantity > 0,
+                ProductBatch.expiry_date.isnot(None),
+                ProductBatch.expiry_date >= report_date,
                 ProductBatch.expiry_date <= expiry_cutoff,
             )
             .order_by(ProductBatch.expiry_date.asc(), Product.product_name.asc())
             .limit(100)
             .all()
         )
+        expiry_rows = expired_rows + expiring_rows
         expiry_alerts = []
         expired_stock_units = Decimal("0")
         expiring_stock_units = Decimal("0")
