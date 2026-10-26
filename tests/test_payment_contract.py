@@ -353,3 +353,26 @@ def test_verified_payment_intent_model_matches_migration():
     assert 'down_revision = "041_cancelled_online_order_financial_cleanup"' in migration
     assert '"verified_payment_intents"' in migration
     assert '"uq_verified_payment_provider_txn"' in migration
+
+
+def test_payment_reference_normalization_is_stable_across_channel_formatting():
+    from invoices_billing import _normalize_payment_reference
+
+    assert _normalize_payment_reference("utr-1234 ab 5678") == "UTR1234AB5678"
+    assert _normalize_payment_reference("UTR 1234-AB-5678") == "UTR1234AB5678"
+    assert _normalize_payment_reference("unknown") is None
+    assert _normalize_payment_reference("1234") is None
+
+
+def test_payment_writer_serializes_reference_replays_and_checks_reused_keys():
+    import inspect
+    from invoices_billing import _apply_payment_write, _validate_payment_replay
+
+    writer = inspect.getsource(_apply_payment_write)
+    validator = inspect.getsource(_validate_payment_replay)
+    assert "pg_advisory_xact_lock" in writer
+    assert "_find_payment_by_normalized_reference" in writer
+    assert "reference_number=normalized_reference" in writer
+    assert "different amount" in validator
+    assert "different invoice" in validator
+    assert "different transaction reference" in validator
