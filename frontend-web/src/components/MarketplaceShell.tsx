@@ -414,12 +414,14 @@ export default function MarketplaceShell({
         >
           <span className={styles.locationIcon}><MapPin size={16} /></span>
           <span className={styles.locationCopy}>
-            <small>Deliver to</small>
+            <small>SHOPPING NEAR</small>
             <strong>{userArea || areaLabel}</strong>
           </span>
           <ChevronRight size={15} className={styles.locationChevron} />
         </button>
         <div className={styles.headerActions}>
+          <Link href="/shops" className={styles.desktopNavLink}><Store size={16} /> Shops</Link>
+          <Link href="/ai-shopping" className={styles.desktopNavLink}><Sparkles size={16} /> AI shopping</Link>
           <Link href="/profile" className={styles.accountButton} aria-label="My profile">
             <UserRound size={18} />
           </Link>
@@ -434,14 +436,14 @@ export default function MarketplaceShell({
       <div className={styles.marketContent}>
         <section className={styles.freshBanner} aria-labelledby="fresh-banner-title">
           <div className={styles.freshBannerCopy}>
-            <span className={styles.freshBadge}><CheckCircle2 size={14} /> Open now in your area</span>
+            <span className={styles.freshBadge}><CheckCircle2 size={14} /> LOCAL SHOPS · LIVE PRODUCTS · EASY CHECKOUT</span>
             <h1 id="fresh-banner-title">
-              <WordReveal text={mode === 'shops' ? 'Find shops ready for' : 'Fresh products from'} delay={0.1} />{' '}
-              <WordReveal text={mode === 'shops' ? 'your next order.' : 'your basket.'} className={styles.heroAccent} delay={0.5} />
+              <WordReveal text={mode === 'shops' ? 'Find your next' : 'Think it. Say it.'} delay={0.1} />{' '}
+              <WordReveal text={mode === 'shops' ? 'favourite shop.' : 'Shop it.'} className={styles.heroAccent} delay={0.5} />
             </h1>
             <p>{mode === 'shops'
-              ? 'Explore local storefronts, ratings and locations, then open the shop you want.'
-              : 'Browse everyday essentials from neighbourhood stores and add what you need to your basket.'}</p>
+              ? 'Explore nearby shops, compare ratings and discover products available around you.'
+              : 'Tell us what you need. Browse trusted neighbourhood stores and find everyday essentials in one place.'}</p>
             <form
               className={styles.marketSearch}
               role="search"
@@ -451,15 +453,15 @@ export default function MarketplaceShell({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={mode === 'shops' ? 'Search shops or locations' : 'Search products or categories'}
+                placeholder={mode === 'shops' ? 'Search shops or locations' : 'Try “best rated shampoo under ₹500”'}
                 aria-label={mode === 'shops' ? 'Search for shops or locations' : 'Search for products or categories'}
               />
               <motion.button
                 type="submit"
                 disabled={searching}
-                whileHover={reduceMotion || searching ? undefined : { scale: 1.05 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.95 }}
-              >{searching ? 'Searching…' : 'Search'}</motion.button>
+                whileHover={reduceMotion || searching ? undefined : { scale: 1.03 }}
+                whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+              >{searching ? 'Finding…' : 'Find matches'}</motion.button>
             </form>
             <div className={styles.discoveryControls} aria-label="Choose what to browse">
               <div className={styles.discoveryTabs} role="tablist" aria-label="Marketplace results">
@@ -482,6 +484,24 @@ export default function MarketplaceShell({
                 Ask AI to find it
                 <ArrowRight size={14} />
               </Link>
+            </div>
+            <div className={styles.quickChips} aria-label="Popular searches">
+              {['low price rice', 'best rated atta', 'milk under ₹80', 'low price ghee'].map((suggestion) => (
+                <button type="button" key={suggestion} onClick={() => preset(suggestion)}>{suggestion}</button>
+              ))}
+            </div>
+            <div className={styles.dashboardCtaRow}>
+              <Link
+                href="https://github.com/Gowtham518250/Retail-Mind/tree/frontend-web-launch"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.dashboardCta}
+              >
+                <Store size={17} />
+                Shop owner dashboard
+                <ArrowUpRight size={16} />
+              </Link>
+              <span className={styles.dashboardHint}>For shop owners</span>
             </div>
           </div>
           <div className={styles.freshArtwork} aria-hidden="true">
