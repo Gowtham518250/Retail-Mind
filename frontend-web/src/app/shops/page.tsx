@@ -1,8 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import ShopDiscoveryClient from './ShopDiscoveryClient';
 import JsonLd from '../../components/JsonLd';
 import { getPublicShops } from '../../lib/publicCatalog';
-import { absoluteSiteUrl } from '../../lib/seo';
+import { absoluteSiteUrl, publicPageMetadata } from '../../lib/seo';
+
+export const metadata: Metadata = publicPageMetadata({
+  title: 'Find Local Shops | Retail Mind',
+  description: 'Browse neighbourhood shops on Retail Mind, discover local products, compare shop details, and shop everyday essentials online.',
+  path: '/shops',
+});
 
 export default async function ShopDiscoveryPage() {
   const shops = await getPublicShops();
