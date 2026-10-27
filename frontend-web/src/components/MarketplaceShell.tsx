@@ -495,6 +495,7 @@ export default function MarketplaceShell({
                 href="https://github.com/Gowtham518250/Retail-Mind/tree/frontend-web-launch"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Open the shop owner dashboard code in GitHub in a new tab"
                 className={styles.dashboardCta}
               >
                 <Store size={17} />
