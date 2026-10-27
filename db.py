@@ -42,6 +42,29 @@ def _before_cursor_execute(conn, cursor, statement, parameters, context, execute
     if context is not None:
         context._retail_mind_sql_started_at = time.perf_counter()
 
+    # Track writes per SQLAlchemy transaction. The request dependency can then
+    # roll back read-only transactions instead of paying a remote COMMIT round
+    # trip after every GET. Unknown statements are treated as writes safely.
+    normalized = str(statement).lstrip()
+    while normalized.startswith("--") or normalized.startswith("/*"):
+        if normalized.startswith("--"):
+            newline = normalized.find("\n")
+            normalized = normalized[newline + 1:] if newline >= 0 else ""
+        else:
+            end_comment = normalized.find("*/", 2)
+            normalized = normalized[end_comment + 2:] if end_comment >= 0 else ""
+        normalized = normalized.lstrip()
+    match = re.match(r"([A-Za-z]+)", normalized)
+    keyword = match.group(1).upper() if match else ""
+    if keyword not in {"SELECT", "SHOW", "EXPLAIN", "PRAGMA", "SET"}:
+        conn.info["retail_mind_transaction_has_write"] = True
+
+
+def _reset_transaction_write_flag(connection):
+    # A pooled connection may be reused by another request. Never carry a
+    # previous transaction's write marker into a new transaction.
+    connection.info["retail_mind_transaction_has_write"] = False
+
 
 def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
     started = getattr(context, "_retail_mind_sql_started_at", None)
@@ -225,7 +248,10 @@ else:
 # statement_timeout; set DB_STATEMENT_TIMEOUT_MS=30000 to enable the app-side
 # guard when a database-side timeout is unavailable.
 if engine.dialect.name == "postgresql":
+    event.listen(engine, "begin", _reset_transaction_write_flag)
     event.listen(engine, "begin", _set_postgres_statement_timeout)
+else:
+    event.listen(engine, "begin", _reset_transaction_write_flag)
 
 # Separate SQL execution time from pool/setup/commit overhead in slow requests.
 # Bound parameters and full SQL text are intentionally omitted from logs.
@@ -249,17 +275,40 @@ def get_db():
         pending_new = len(db.new)
         pending_dirty = len(db.dirty)
         pending_deleted = len(db.deleted)
-        commit_started = time.perf_counter()
-        db.commit()
-        commit_ms = (time.perf_counter() - commit_started) * 1000
-        if commit_ms >= _slow_db_query_threshold_ms():
-            logger.warning(
-                "SLOW DB COMMIT duration_ms=%.2f new=%s dirty=%s deleted=%s",
-                commit_ms,
-                pending_new,
-                pending_dirty,
-                pending_deleted,
+        has_orm_changes = bool(pending_new or pending_dirty or pending_deleted)
+        has_transaction = db.in_transaction()
+        has_sql_writes = False
+        if has_transaction:
+            # The transaction already owns this connection; this does not
+            # create a new connection or issue another database query.
+            has_sql_writes = bool(
+                db.connection().info.get("retail_mind_transaction_has_write", False)
             )
+
+        if has_transaction and not has_orm_changes and not has_sql_writes:
+            # Read-only requests do not need a COMMIT. Rollback safely releases
+            # the read transaction and any row locks (for example SELECT FOR
+            # UPDATE) while avoiding a high-latency commit round trip.
+            cleanup_started = time.perf_counter()
+            db.rollback()
+            cleanup_ms = (time.perf_counter() - cleanup_started) * 1000
+            if cleanup_ms >= _slow_db_query_threshold_ms():
+                logger.warning(
+                    "SLOW DB READ TRANSACTION CLEANUP duration_ms=%.2f",
+                    cleanup_ms,
+                )
+        else:
+            commit_started = time.perf_counter()
+            db.commit()
+            commit_ms = (time.perf_counter() - commit_started) * 1000
+            if commit_ms >= _slow_db_query_threshold_ms():
+                logger.warning(
+                    "SLOW DB COMMIT duration_ms=%.2f new=%s dirty=%s deleted=%s",
+                    commit_ms,
+                    pending_new,
+                    pending_dirty,
+                    pending_deleted,
+                )
     except HTTPException:
         db.rollback()
         logger.debug("Expected HTTP error; database transaction rolled back")
