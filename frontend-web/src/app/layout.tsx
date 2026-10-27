@@ -83,9 +83,11 @@ export const metadata: Metadata = {
     description: FALLBACK_DESCRIPTION,
     images: [FALLBACK_SOCIAL_IMAGE],
   },
-  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
-    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
-    : undefined,
+  // Google Search Console HTML-tag verification token for
+  // https://retail-mind-1.onrender.com/. This is intentionally public in page source.
+  verification: {
+    google: 'jA1Q4FIEi7pMFeKgFMr2xcY_d8vDAIitA46zaIn31hA',
+  },
   manifest: '/manifest.json',
   icons: {
     icon: '/icons/retail-mind.svg',
