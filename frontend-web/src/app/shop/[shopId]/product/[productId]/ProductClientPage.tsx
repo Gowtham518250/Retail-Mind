@@ -11,8 +11,6 @@ import { flyProductToCart } from '../../../../../lib/cartFlight';
 import { useCart } from '../../../../../context/CartContext';
 import type { ShopProduct } from '../../../../../lib/types';
 import ProductImage from '../../../../../components/ProductImage';
-import JsonLd from '../../../../../components/JsonLd';
-import { absoluteSiteUrl, publicImageUrl } from '../../../../../lib/seo';
 
 export default function ProductClientPage({
   shopId,
@@ -170,34 +168,6 @@ export default function ProductClientPage({
 
   return (
     <main className="container product-page" data-experience="product">
-      <JsonLd data={{
-        '@context': 'https://schema.org',
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: absoluteSiteUrl('/') },
-          { '@type': 'ListItem', position: 2, name: 'Shops', item: absoluteSiteUrl('/shops') },
-          { '@type': 'ListItem', position: 3, name: shopName, item: absoluteSiteUrl(`/shop/${shopId}`) },
-          { '@type': 'ListItem', position: 4, name: product.name, item: absoluteSiteUrl(`/shop/${shopId}/product/${product.id}`) },
-        ],
-      }} />
-      <JsonLd data={{
-        '@context': 'https://schema.org',
-        '@type': 'Product',
-        name: product.name,
-        description: product.description || undefined,
-        image: [publicImageUrl(product.image_url)],
-        sku: String(product.id),
-        offers: {
-          '@type': 'Offer',
-          priceCurrency: 'INR',
-          price: Number(product.price).toFixed(2),
-          availability: product.stock_available === undefined || product.stock_available > 0
-            ? 'https://schema.org/InStock'
-            : 'https://schema.org/OutOfStock',
-          url: absoluteSiteUrl(`/shop/${shopId}/product/${product.id}`),
-          seller: { '@type': 'Organization', name: shopName },
-        },
-      }} />
       <nav aria-label="Breadcrumb" className="product-back">
         <Link href="/">Home</Link>
         <span aria-hidden="true"> / </span>
