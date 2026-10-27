@@ -52,28 +52,32 @@ export default async function ProductDetailPage({ params }: ProductRouteProps) {
           { '@type': 'ListItem', position: 4, name: product?.name || 'Product', item: productUrl },
         ],
       }} />
-      {product && (
-        <JsonLd data={{
-          '@context': 'https://schema.org',
-          '@type': 'Product',
-          name: product.name,
-          description: product.description || `${product.name} from ${shopName}.`,
-          url: productUrl,
-          ...(product.image_url ? { image: publicImageUrl(product.image_url) } : {}),
-          ...(product.category ? { category: product.category } : {}),
-          brand: { '@type': 'Brand', name: shopName },
-          offers: {
-            '@type': 'Offer',
+      {product &&
+        typeof product.image_url === 'string' &&
+        product.image_url.trim().length > 0 &&
+        Number.isFinite(Number(product.price)) &&
+        Number(product.price) > 0 && (
+          <JsonLd data={{
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: product.name,
+            description: product.description || `${product.name} from ${shopName}.`,
             url: productUrl,
-            price: Number(product.price || 0),
-            priceCurrency: 'INR',
-            availability: product.stock_available === 0
-              ? 'https://schema.org/OutOfStock'
-              : 'https://schema.org/InStock',
-            seller: { '@type': 'Organization', name: shopName },
-          },
-        }} />
-      )}
+            image: [publicImageUrl(product.image_url)],
+            ...(product.category ? { category: product.category } : {}),
+            brand: { '@type': 'Brand', name: shopName },
+            offers: {
+              '@type': 'Offer',
+              url: productUrl,
+              price: Number(product.price),
+              priceCurrency: 'INR',
+              availability: product.stock_available === 0
+                ? 'https://schema.org/OutOfStock'
+                : 'https://schema.org/InStock',
+              seller: { '@type': 'Organization', name: shopName },
+            },
+          }} />
+        )}
       <ProductClientPage
         shopId={Number(shopId)}
         productId={Number(productId)}

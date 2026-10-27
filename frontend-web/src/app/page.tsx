@@ -41,18 +41,13 @@ export default async function Home() {
           itemListElement: products.slice(0, 12).map((product, index) => ({
             '@type': 'ListItem',
             position: index + 1,
+            // This is a directory entry, not a product detail page. Keep
+            // Product/Offer markup on the linked page to avoid merchant-listing
+            // rich-result errors for a homepage that lists many products.
             item: {
-              '@type': 'Product',
+              '@type': 'WebPage',
               name: product.product_name,
               url: absoluteSiteUrl(`/shop/${product.shop_id}/product/${product.product_id}`),
-              offers: {
-                '@type': 'Offer',
-                price: product.price,
-                priceCurrency: 'INR',
-                availability: product.stock_available === 0
-                  ? 'https://schema.org/OutOfStock'
-                  : 'https://schema.org/InStock',
-              },
             },
           })),
         }} />
