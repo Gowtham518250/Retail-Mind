@@ -1,0 +1,54 @@
+/* Device-aware motion layer. Loaded last; only adds, never overrides layout. */
+
+/* ---- scroll progress (all devices) ---- */
+.rm-scroll-progress {
+  position: fixed; left: 0; right: 0; top: env(safe-area-inset-top, 0px); height: 3px;
+  z-index: 60; transform-origin: 0 50%; pointer-events: none;
+  background: linear-gradient(90deg, #1e4d3a, #4ade80);
+}
+
+/* ---- DESKTOP: mouse parallax, depth per layer ---- */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  [data-experience="marketplace"] [class*="freshArtwork"] { --px: 0; --py: 0; }
+  [data-experience="marketplace"] [class*="artTile"] {
+    translate: calc(var(--px) * 14px) calc(var(--py) * 10px);
+    transition: translate .35s cubic-bezier(.16, 1, .3, 1);
+  }
+  [data-experience="marketplace"] [class*="artTileTwo"] { translate: calc(var(--px) * -20px) calc(var(--py) * -14px); }
+  [data-experience="marketplace"] [class*="artHalo"] {
+    translate: calc(var(--px) * -8px) calc(var(--py) * -6px);
+    transition: translate .5s cubic-bezier(.16, 1, .3, 1);
+  }
+  [data-experience="marketplace"] [class*="artBasket"] {
+    translate: calc(var(--px) * 6px) calc(var(--py) * 4px);
+    transition: translate .45s cubic-bezier(.16, 1, .3, 1);
+  }
+  [data-experience="marketplace"] a[class*="shopCard"] { transition: box-shadow .3s ease; }
+  [data-experience="marketplace"] a[class*="shopCard"]:hover { box-shadow: 0 24px 48px -22px rgba(30, 77, 58, .45); }
+}
+
+/* ---- PHONE + TABLET (touch): tactile press feedback ---- */
+@media (pointer: coarse) and (prefers-reduced-motion: no-preference) {
+  [data-experience="marketplace"] a[class*="shopCard"],
+  [data-experience="marketplace"] button,
+  .site-footer a {
+    transition: transform .18s cubic-bezier(.16, 1, .3, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  [data-experience="marketplace"] a[class*="shopCard"]:active,
+  [data-experience="marketplace"] button:active { transform: scale(.97); }
+}
+
+/* ---- TABLET (portrait + landscape) ---- */
+@media (min-width: 768px) and (max-width: 1100px) {
+  [data-experience="marketplace"] [class*="freshArtwork"] { min-height: 210px; }
+  [data-experience="marketplace"] [class*="artTile"] { width: 58px; height: 58px; }
+}
+
+/* ---- ALL: respect reduced motion for this layer ---- */
+@media (prefers-reduced-motion: reduce) {
+  .rm-scroll-progress { display: none; }
+  [data-experience="marketplace"] [class*="artTile"],
+  [data-experience="marketplace"] [class*="artHalo"],
+  [data-experience="marketplace"] [class*="artBasket"] { translate: none !important; transition: none !important; }
+}

@@ -11,8 +11,11 @@ import './customer-reference-ui.css';
 import './customer-motion.css';
 import './fresh.css';
 import './redesign.css';
+import './device-motion.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
+import ScrollProgress from '../components/ScrollProgress';
+import HeroParallax from '../components/HeroParallax';
 import NativeAppPerformance from '../components/NativeAppPerformance';
 import { CartProvider } from '../context/CartContext';
 import CartDrawer from '../components/CartDrawer';
@@ -120,6 +123,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <NativeAppPerformance>
             <Navbar />
             <NavigationProgress />
+            <ScrollProgress />
+            <HeroParallax />
             <main id="main-content" tabIndex={-1} className="page-transition">{children}</main>
             <footer className="site-footer">
               <Link href="/shops">Browse shops</Link>

@@ -7,6 +7,7 @@ import { ArrowRight, Boxes, ArrowUpRight, MapPin, Search, ShoppingBasket, Shield
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
 import Tilt3D from './Tilt3D';
+import MarketScene from './MarketScene';
 import { Reveal, Stagger, StaggerItem, WordReveal } from './Reveal';
 import ProductImage from './ProductImage';
 import LocationModal from './LocationModal';
@@ -428,12 +429,7 @@ export default function MarketplaceShell({
             <span className={styles.artTile + ' ' + styles.artTileTwo}><Milk size={30} /></span>
             <span className={styles.artTile + ' ' + styles.artTileThree}><Leaf size={30} /></span>
             <div className={styles.artBasket}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=480&q=80"
-                alt="Fresh market produce"
-                loading="eager"
-              />
+              <MarketScene compact />
             </div>
           </div>
         </section>
