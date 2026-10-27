@@ -14,7 +14,7 @@ export const metadata: Metadata = publicPageMetadata({
 
 export default function PrivacyPage() {
   return (
-    <main className={`container ${styles.page}`}>
+    <main className={`container ${styles.page}`} data-experience="privacy">
       <JsonLd data={{
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',

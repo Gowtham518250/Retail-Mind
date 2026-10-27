@@ -3,8 +3,9 @@
 .dock { display: none; }
 
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; flex: none; }
-.logo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--green); color: #fff7e0; box-shadow: 0 3px 0 var(--green-deep); transition: transform .35s var(--ease-spring); }
-.brand:hover .logo { transform: rotate(-6deg) translateY(-1px); }
+.logo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--green); color: #fff7e0; box-shadow: 0 3px 0 var(--green-deep); transition: transform .35s var(--ease-spring); animation: logoFloat 4.8s ease-in-out infinite; }
+@keyframes logoFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.brand:hover .logo { animation: none; }
 .word { font: 700 1.5rem/1 var(--font-display); letter-spacing: -.03em; }
 .word b { font-weight: 700; font-style: italic; color: var(--green); }
 
@@ -122,8 +123,10 @@
   .dockActive { color: var(--green); font-weight: 800; }
   .dockActive::before { content: ''; position: absolute; top: -7px; left: 28%; right: 28%; height: 3px; border-radius: 0 0 3px 3px; background: var(--green); animation: tab .35s var(--ease-out); }
   @keyframes tab { from { transform: scaleX(0); } }
-  .dockIcon { position: relative; display: grid; place-items: center; width: 26px; height: 24px; }
+  .dockIcon { position: relative; display: grid; place-items: center; width: 28px; height: 28px; }
+  .dockPill { position: absolute; inset: -6px; border-radius: 12px; background: var(--green-tint); z-index: 0; }
+  .dockIcon > svg { position: relative; z-index: 1; }
   .dockDot { position: absolute; top: -7px; right: -11px; min-width: 17px; height: 17px; padding: 0 4px; display: grid; place-items: center; border: 2px solid var(--paper-2); border-radius: 999px; background: var(--tomato); color: #fff; font-size: 11px; font-weight: 800; line-height: 1; animation: dot .35s var(--ease-spring); }
   @keyframes dot { from { transform: scale(0); } }
 }
-@media (prefers-reduced-motion: reduce) { .dockActive::before, .dockDot, .cart:hover svg { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .dockActive::before, .dockDot, .cart:hover svg, .logo { animation: none !important; } }

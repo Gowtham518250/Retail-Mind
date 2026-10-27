@@ -93,7 +93,13 @@ export default function Navbar() {
         <div className={styles.topbarInner}>
           <div className={styles.leftGroup}>
             <Link href="/" className={styles.brand} aria-label="Retail Mind home">
-              <span className={styles.logo}><ShoppingBag size={20} strokeWidth={2.4} /></span>
+              <motion.span
+                className={styles.logo}
+                whileHover={reduceMotion ? undefined : { rotate: -10, scale: 1.08 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 16 }}
+              >
+                <ShoppingBag size={20} strokeWidth={2.4} />
+              </motion.span>
               <span className={styles.word}>Retail<b>Mind</b></span>
             </Link>
 
@@ -188,7 +194,12 @@ export default function Navbar() {
               const active = isActive(href);
               return (
                 <Link key={label} href={href} className={`${styles.dockItem} ${active ? styles.dockActive : ''}`} aria-current={active ? 'page' : undefined}>
-                  <span className={styles.dockIcon}><Icon size={22} strokeWidth={active ? 2.4 : 1.9} /></span>
+                  <span className={styles.dockIcon}>
+                    {active && !reduceMotion && (
+                      <motion.span layoutId="dockActive" className={styles.dockPill} transition={{ type: 'spring', stiffness: 420, damping: 32 }} />
+                    )}
+                    <Icon size={22} strokeWidth={active ? 2.4 : 1.9} />
+                  </span>
                   <span>{label}</span>
                 </Link>
               );

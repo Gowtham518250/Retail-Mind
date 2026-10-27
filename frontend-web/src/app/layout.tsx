@@ -12,6 +12,7 @@ import './customer-motion.css';
 import './fresh.css';
 import './redesign.css';
 import './device-motion.css';
+import './living-ui.css';
 import Navbar from '../components/Navbar';
 import NavigationProgress from '../components/NavigationProgress';
 import ScrollProgress from '../components/ScrollProgress';
@@ -41,6 +42,27 @@ export const metadata: Metadata = {
   },
   applicationName: 'Retail Mind',
   description: FALLBACK_DESCRIPTION,
+  keywords: [
+    'shop local online',
+    'local grocery delivery',
+    'neighbourhood shops',
+    'online grocery shopping',
+    'Retail Mind',
+  ],
+  category: 'shopping',
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,
@@ -119,6 +141,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             '@type': 'WebSite',
             name: SITE_NAME,
             url: SITE_URL,
+            description: FALLBACK_DESCRIPTION,
+            potentialAction: {
+              '@type': 'SearchAction',
+              target: {
+                '@type': 'EntryPoint',
+                urlTemplate: `${SITE_URL}/?q={search_term_string}`,
+              },
+              'query-input': 'required name=search_term_string',
+            },
           }} />
           <NativeAppPerformance>
             <Navbar />

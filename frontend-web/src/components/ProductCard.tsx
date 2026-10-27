@@ -51,7 +51,11 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
   };
 
   return (
-    <div className={styles.wrap}>
+    <motion.div
+      className={styles.wrap}
+      whileHover={reduceMotion ? undefined : { y: -8 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+    >
       <article className={styles.card}>
         <Link href={href} className={styles.media} aria-label={`View ${product.name}`}>
           <ProductImage src={product.image_url} name={product.name} category={product.category} onResolved={onResolved} />
@@ -104,6 +108,6 @@ export default function ProductCard({ product, shopId, inCartCount, justAdded, o
           </div>
         </div>
       </article>
-    </div>
+    </motion.div>
   );
 }

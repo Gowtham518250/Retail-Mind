@@ -1209,3 +1209,278 @@
     animation: none !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   AI SHOPPING REDESIGN
+   A calm local-shopping copilot with a light workspace and focused answer cards.
+══════════════════════════════════════════════════════════════ */
+.page {
+  --ai-ink: #14213d;
+  --ai-muted: #71809a;
+  --ai-line: #dfe6f2;
+  --ai-blue: #3157d5;
+  --ai-mint: #079b83;
+  min-height: 100svh;
+  overflow: hidden;
+  padding-bottom: 100px;
+  color: var(--ai-ink);
+  background:
+    radial-gradient(ellipse 45% 32% at 3% 0%, rgba(49, 87, 213, .09), transparent 72%),
+    radial-gradient(ellipse 38% 30% at 100% 20%, rgba(40, 201, 187, .08), transparent 72%),
+    #f5f7fb;
+}
+
+.noise,
+.gridFloor { display: none; }
+
+.ambient { opacity: .35; filter: blur(70px); }
+.ambientOne { background: rgba(49, 87, 213, .08); }
+.ambientTwo { background: rgba(40, 201, 187, .07); }
+.ambientThree { background: rgba(102, 87, 245, .06); }
+
+.hero {
+  padding-bottom: 54px;
+  border-bottom: 1px solid var(--ai-line);
+  background: transparent;
+}
+
+.navRow,
+.heroInner,
+.content {
+  width: min(1180px, calc(100% - 40px));
+}
+
+.navRow { padding-top: 22px; }
+.backLink { color: #61708a; }
+.backLink:hover { color: var(--ai-blue); }
+
+.liveBadge {
+  border-color: #bcebdc;
+  background: #e9fbf7;
+  color: #078b74;
+}
+
+.liveDot {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, .14);
+}
+
+.heroInner {
+  grid-template-columns: minmax(0, 1.04fr) minmax(390px, .96fr);
+  gap: clamp(32px, 6vw, 76px);
+  padding-top: 62px;
+}
+
+.kicker { color: var(--ai-blue); }
+.eyebrowLine { color: #93a0b4; }
+.eyebrowLine i { background: #c5cedc; }
+
+.hero h1 {
+  max-width: 10ch;
+  margin: 20px 0 18px;
+  color: var(--ai-ink);
+  font-size: clamp(3rem, 6vw, 5.4rem);
+  line-height: .93;
+  letter-spacing: -.055em;
+}
+
+.hero h1 span {
+  margin: 0 8px;
+  background: linear-gradient(110deg, #3157d5, #28c9bb);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.hero h1 em {
+  background: linear-gradient(110deg, #6657f5, #3157d5);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.heroLead { max-width: 50ch; color: #62718a; line-height: 1.7; }
+
+.commandBar {
+  max-width: 650px;
+  margin-top: 28px;
+  border-color: #d6dfed;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(20, 33, 61, .1);
+}
+
+.commandBar:focus-within {
+  border-color: #8ea5ee;
+  box-shadow: 0 0 0 4px rgba(49, 87, 213, .1), 0 20px 44px rgba(20, 33, 61, .12);
+}
+
+.commandPrefix { color: var(--ai-blue); }
+.commandBar input { color: var(--ai-ink); }
+.commandBar input::placeholder { color: #98a5b8; }
+
+.askButton {
+  background: linear-gradient(115deg, #3157d5, #4f61e5);
+  box-shadow: 0 7px 18px rgba(49, 87, 213, .24);
+}
+
+.askButton:hover:not(:disabled) { background: #2445bd; }
+
+.exampleStrip span { color: #93a0b4; }
+.exampleStrip button { border-color: #dfe6f2; background: #ffffff; color: #61708a; }
+.exampleStrip button:hover { border-color: #b7c6ef; background: #eef2ff; color: var(--ai-blue); }
+
+.trustRow { color: #71809a; }
+.trustRow svg { color: var(--ai-mint); }
+
+.visual { min-height: 470px; }
+
+.showroomStage {
+  max-width: 510px;
+  height: 450px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 78% 14%, rgba(102, 87, 245, .4), transparent 34%),
+    radial-gradient(circle at 10% 92%, rgba(40, 201, 187, .22), transparent 38%),
+    linear-gradient(145deg, #101c3b, #1b3261 58%, #15264f);
+  box-shadow: 0 30px 65px rgba(20, 33, 61, .2);
+}
+
+.showroomGlow { background: radial-gradient(circle, rgba(143, 238, 224, .15), transparent 70%); }
+.showroomRing { border-color: rgba(226, 235, 255, .16); }
+.showroomRingB { border-color: rgba(143, 238, 224, .22); }
+
+.aiCore {
+  border-color: rgba(255, 255, 255, .2);
+  border-radius: 22px;
+  background: rgba(10, 20, 51, .8);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+
+.aiCoreHeader { color: #8feee0; }
+.sparkleIcon { color: #8feee0; }
+.aiCoreAvatar { background: rgba(143, 238, 224, .13); border-color: rgba(143, 238, 224, .35); color: #8feee0; }
+.aiCoreBody p { color: rgba(225, 234, 255, .64); }
+
+.floatingChip {
+  border-color: rgba(255, 255, 255, .18);
+  border-radius: 15px;
+  background: rgba(10, 20, 51, .82);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, .24);
+}
+
+.chipIcon { background: rgba(143, 238, 224, .12); color: #8feee0; }
+.chipTag { background: rgba(143, 238, 224, .12); color: #8feee0; }
+.showroomStatsBar { border-color: rgba(255, 255, 255, .14); background: rgba(10, 20, 51, .58); }
+.statPill { color: rgba(225, 234, 255, .76); }
+.statPill svg { color: #8feee0; }
+
+.content { padding-top: 34px; }
+.recent button { border-color: #dfe6f2; background: #ffffff; color: #61708a; }
+.recent button:hover { border-color: #b7c6ef; background: #eef2ff; color: var(--ai-blue); }
+
+.responseStage,
+.introCard,
+.answerDeck,
+.result {
+  border-color: var(--ai-line);
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 18px 42px rgba(20, 33, 61, .07);
+}
+
+.responseStage { margin-bottom: 30px; }
+.responseIcon { background: #eef2ff; border-color: #d3dcfb; color: var(--ai-blue); }
+.responseCopy h2 { color: var(--ai-ink); }
+.responseCopy p { color: var(--ai-muted); }
+.thinkingSteps { color: #61708a; }
+.thinkingSteps i { background: var(--ai-mint); }
+
+.introGrid { gap: 14px; margin-bottom: 30px; }
+.introCard { backdrop-filter: blur(12px); }
+.introOrb { background: #eef2ff; color: var(--ai-blue); }
+.introCard h2 { color: var(--ai-ink); }
+.introCard p, .introCard > span { color: var(--ai-muted); }
+.introCard strong { color: var(--ai-ink); }
+.miniIcon { background: #e9fbf7; color: var(--ai-mint); }
+
+.answerDeck {
+  border-color: #c9d5f7;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(49, 87, 213, .1), transparent 44%),
+    #ffffff;
+}
+
+.answerBot { background: #eef2ff; color: var(--ai-blue); }
+.sectionLabel { color: var(--ai-blue); }
+.answerIntent { color: var(--ai-ink); }
+.livePill { border-color: #bcebdc; background: #e9fbf7; color: var(--ai-mint); }
+.answerMain h2 { color: var(--ai-ink); }
+.answerChips span { border-color: #dfe6f2; background: #f7f9fd; color: #61708a; }
+.answerSide > div { border-color: #dfe6f2; background: #f8faff; }
+.answerSide span { color: #93a0b4; }
+.answerSide strong { color: var(--ai-ink); }
+
+.resultsHeading h2 { color: var(--ai-ink); }
+.stockPill { border-color: #bcebdc; background: #e9fbf7; color: var(--ai-mint); }
+
+.result:hover { border-color: #bdc9eb; box-shadow: 0 22px 46px rgba(20, 33, 61, .12); }
+.resultImageFrame { background: linear-gradient(180deg, #eef2ff, #f8fbff); }
+.rankPill { border-color: #c9d5f7; background: rgba(255, 255, 255, .9); color: var(--ai-blue); }
+.resultCardContent { background: #ffffff; }
+.resultKicker { color: var(--ai-blue); }
+.resultTitleRow h3 { color: var(--ai-ink); }
+.price { color: var(--ai-blue); }
+.resultDescription { color: var(--ai-muted); }
+.shopRow { border-color: #e6ebf3; background: #f8faff; }
+.shopBadge { background: #eef2ff; color: var(--ai-blue); }
+.shopRow strong { color: var(--ai-ink); }
+.shopRow span { color: #8491a8; }
+.metrics > div { border-color: #e6ebf3; background: #f8faff; }
+.metrics span { color: #93a0b4; }
+.metrics strong { color: #53627f; }
+.goodStock { color: var(--ai-mint) !important; }
+.address { color: #8491a8; }
+.address svg { color: var(--ai-blue); }
+.actions { border-top-color: #e6ebf3; }
+.outlineButton { border-color: #dfe6f2; background: #ffffff; color: #53627f; }
+.outlineButton:hover { border-color: #bdc9eb; background: #eef2ff; color: var(--ai-blue); }
+.fillButton { background: linear-gradient(115deg, #3157d5, #4f61e5); box-shadow: 0 7px 16px rgba(49, 87, 213, .2); }
+.retryButton { background: #c54e61; }
+
+@media (max-width: 1050px) {
+  .heroInner { grid-template-columns: 1fr; gap: 28px; }
+  .hero h1 { max-width: 12ch; }
+  .visual { min-height: 390px; }
+  .showroomStage { margin: 0 auto; }
+}
+
+@media (max-width: 680px) {
+  .navRow, .heroInner, .content { width: calc(100% - 24px); }
+  .hero { padding-bottom: 34px; }
+  .heroInner { padding-top: 42px; }
+  .hero h1 { max-width: 10ch; font-size: clamp(2.75rem, 13vw, 4rem); }
+  .heroLead { font-size: .9rem; }
+  .commandBar { margin-top: 22px; }
+  .askButton { padding: 11px 14px; }
+  .visual { min-height: 340px; }
+  .showroomStage { height: 340px; border-radius: 24px; }
+  .showroomRingA { width: 300px; height: 300px; }
+  .showroomRingB { width: 210px; height: 210px; }
+  .aiCore { width: 220px; }
+  .floatingChip { transform: scale(.84); }
+  .chipA { left: -34px; }
+  .chipB { right: -42px; }
+  .chipC { left: -12px; }
+  .showroomStatsBar { display: none; }
+  .responseStage { align-items: flex-start; gap: 14px; padding: 22px; }
+  .thinkingSteps { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .answerDeck { align-items: flex-start; padding: 22px; }
+  .answerSide { gap: 8px; }
+  .answerSide > div { flex: 1; padding: 12px 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .showroomRingA,
+  .showroomRingB,
+  .liveDot,
+  .thinkingSteps i { animation: none !important; }
+}

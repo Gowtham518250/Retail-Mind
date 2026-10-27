@@ -28,10 +28,10 @@ export function Reveal({ children, className, delay = 0, y = 28, x = 0, as = 'di
       id={id}
       {...aria}
       className={className}
-      initial={reduce ? false : { opacity: 0, y, x, filter: 'blur(6px)' }}
+      initial={reduce ? false : { opacity: 0, y, x, filter: 'blur(8px)' }}
       whileInView={{ opacity: 1, y: 0, x: 0, filter: 'blur(0px)' }}
       viewport={{ once: true, margin: '-60px' }}
-      transition={{ duration: reduce ? 0 : 0.8, delay, ease: EASE }}
+      transition={{ duration: reduce ? 0 : 0.62, delay, ease: EASE }}
     >
       {children}
     </Tag>
@@ -44,8 +44,8 @@ const container = (stagger: number, delayChildren: number): Variants => ({
 });
 
 const item: Variants = {
-  hidden: { opacity: 0, y: 26, scale: 0.96 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.7, ease: EASE } },
+  hidden: { opacity: 0, y: 28, scale: 0.94, filter: 'blur(6px)' },
+  show: { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.58, ease: EASE } },
 };
 
 interface StaggerProps {

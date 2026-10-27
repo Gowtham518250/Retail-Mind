@@ -86,10 +86,18 @@
 .marketSearch input { flex: 1; min-width: 0; padding: 12px 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 500 16px var(--font-body); }
 .marketSearch input::placeholder { color: #8b93b0; }
 .marketSearch button {
+  position: relative; overflow: hidden;
   flex: 0 0 auto; min-height: 48px; padding: 0 24px; border: 0; border-radius: 16px; background: var(--grad-brand); background-size: 160% 100%; color: #fff;
-  font: 800 14px var(--font-body); cursor: pointer; box-shadow: 0 14px 24px -12px rgba(79,70,229,.9);
+  font: 800 14px var(--font-body); cursor: pointer; box-shadow: 0 14px 24px -12px rgba(30,77,58,.9);
   transition: background-position .5s, transform .3s var(--ease-spring);
 }
+.marketSearch button::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.4) 50%, transparent 65%);
+  transform: translateX(-130%);
+}
+.marketSearch button:hover:not(:disabled)::after { animation: sheen .8s var(--ease) forwards; }
+@keyframes sheen { to { transform: translateX(130%); } }
 .marketSearch button:hover:not(:disabled) { background-position: 100% 0; transform: scale(1.05); }
 .marketSearch button:active:not(:disabled) { transform: scale(.95); }
 .marketSearch button:disabled { opacity: .7; cursor: progress; }
@@ -292,4 +300,86 @@
 @media (max-width: 640px) {
   .freshBanner { grid-template-columns: minmax(0, 1fr); }
   .freshBannerCopy { max-width: 100%; }
+}
+
+/* ───────── focused browse switch ───────── */
+.discoveryControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.discoveryTabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 15px;
+  background: rgba(6, 13, 35, .32);
+  backdrop-filter: blur(12px);
+}
+
+.discoveryTab,
+.discoveryTabActive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: rgba(255, 255, 255, .68);
+  font: 750 12px var(--font-body);
+  cursor: pointer;
+  transition: background .25s, color .25s, transform .25s var(--ease-spring);
+}
+
+.discoveryTab:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, .1);
+  transform: translateY(-1px);
+}
+
+.discoveryTabActive {
+  background: #fff;
+  color: #243a91;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .18);
+}
+
+.aiShortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(165, 180, 252, .32);
+  border-radius: 14px;
+  background: rgba(99, 102, 241, .16);
+  color: #e9eaff;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: background .25s, border-color .25s, transform .25s var(--ease-spring);
+}
+
+.aiShortcut svg:first-child { color: #a5b4fc; }
+.aiShortcut svg:last-child { transition: transform .25s var(--ease-spring); }
+.aiShortcut:hover { border-color: rgba(165, 180, 252, .6); background: rgba(99, 102, 241, .3); transform: translateY(-2px); }
+.aiShortcut:hover svg:last-child { transform: translateX(3px); }
+
+@media (max-width: 560px) {
+  .discoveryControls { align-items: stretch; flex-direction: column; }
+  .discoveryTabs { width: 100%; }
+  .discoveryTab,
+  .discoveryTabActive { flex: 1; }
+  .aiShortcut { justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .discoveryTab:hover,
+  .aiShortcut:hover { transform: none; }
 }

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import ProductClientPage from './ProductClientPage';
+import JsonLd from '../../../../../components/JsonLd';
 import { getPublicShop, getPublicShopResult } from '../../../../../lib/publicCatalog';
-import { publicPageMetadata } from '../../../../../lib/seo';
+import { absoluteSiteUrl, publicImageUrl, publicPageMetadata } from '../../../../../lib/seo';
 import type { ShopProduct } from '../../../../../lib/types';
 
 type ProductRouteProps = { params: Promise<{ shopId: string; productId: string }> };
@@ -38,12 +39,47 @@ export default async function ProductDetailPage({ params }: ProductRouteProps) {
   const { shopId, productId } = await params;
   const { shopName, shop, product, notFound: productNotFound } = await getPublicProduct(shopId, productId);
   if (productNotFound || (shop && !product)) notFound();
+  const productUrl = absoluteSiteUrl(`/shop/${shopId}/product/${productId}`);
   return (
-    <ProductClientPage
-      shopId={Number(shopId)}
-      productId={Number(productId)}
-      initialProduct={product}
-      shopName={shopName}
-    />
+    <>
+      <JsonLd data={{
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: absoluteSiteUrl('/') },
+          { '@type': 'ListItem', position: 2, name: 'Shops', item: absoluteSiteUrl('/shops') },
+          { '@type': 'ListItem', position: 3, name: shopName, item: absoluteSiteUrl(`/shop/${shopId}`) },
+          { '@type': 'ListItem', position: 4, name: product?.name || 'Product', item: productUrl },
+        ],
+      }} />
+      {product && (
+        <JsonLd data={{
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: product.name,
+          description: product.description || `${product.name} from ${shopName}.`,
+          url: productUrl,
+          ...(product.image_url ? { image: publicImageUrl(product.image_url) } : {}),
+          ...(product.category ? { category: product.category } : {}),
+          brand: { '@type': 'Brand', name: shopName },
+          offers: {
+            '@type': 'Offer',
+            url: productUrl,
+            price: Number(product.price || 0),
+            priceCurrency: 'INR',
+            availability: product.stock_available === 0
+              ? 'https://schema.org/OutOfStock'
+              : 'https://schema.org/InStock',
+            seller: { '@type': 'Organization', name: shopName },
+          },
+        }} />
+      )}
+      <ProductClientPage
+        shopId={Number(shopId)}
+        productId={Number(productId)}
+        initialProduct={product}
+        shopName={shopName}
+      />
+    </>
   );
 }

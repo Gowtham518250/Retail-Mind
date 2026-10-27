@@ -1,0 +1,296 @@
+/* Retail Mind — living market motion (loaded last).
+   Restores cinematic motion that earlier layers flattened, and adds
+   aurora light, sheen, and springy hover without changing flows. */
+
+:root {
+  --grad-ink: linear-gradient(128deg, #10281f 0%, #1e4d3a 42%, #163a52 100%);
+  --grad-brand: linear-gradient(135deg, #1e4d3a 0%, #2f7a56 55%, #1e4d3a 100%);
+  --grad-fresh: linear-gradient(135deg, #2f7a56, #7ed39a);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.45, .64, 1);
+  --glow: 0 18px 40px -18px rgba(30, 77, 58, .45);
+}
+
+html { background: var(--paper); }
+
+body {
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(ellipse 70% 48% at 8% -8%, rgba(30, 77, 58, .16), transparent 58%),
+    radial-gradient(ellipse 55% 42% at 92% 0%, rgba(229, 162, 27, .12), transparent 52%),
+    radial-gradient(ellipse 40% 30% at 70% 100%, rgba(209, 69, 31, .06), transparent 60%);
+  background-attachment: fixed;
+  animation: living-wash 22s ease-in-out infinite alternate;
+}
+
+@keyframes living-wash {
+  to {
+    background-position: 12% 8%, 88% 12%, 60% 90%;
+  }
+}
+
+/* ── page enter ─────────────────────────────────────────────── */
+main.page-transition {
+  animation: living-page .62s var(--ease-out) both;
+}
+@keyframes living-page {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── navigation progress ────────────────────────────────────── */
+.navigation-progress span {
+  background: linear-gradient(90deg, #1e4d3a, #e5a21b, #d1451f, #1e4d3a);
+  background-size: 220% 100%;
+  animation: living-progress 1.1s linear infinite;
+}
+@keyframes living-progress {
+  to { background-position: 200% 0; }
+}
+
+/* ── sheen on primary actions ───────────────────────────────── */
+.store-cart-btn,
+.hero-cta,
+.checkout-summary .place-order-btn,
+.rm-cartbar button {
+  position: relative;
+  overflow: hidden;
+  background: var(--grad-brand) !important;
+  background-size: 180% 100% !important;
+  color: #fff !important;
+  box-shadow: 0 10px 24px -12px rgba(30, 77, 58, .7) !important;
+  transition: transform .28s var(--ease-spring), box-shadow .28s, background-position .5s !important;
+}
+.store-cart-btn::after,
+.hero-cta::after,
+.checkout-summary .place-order-btn::after,
+.rm-cartbar button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.38) 50%, transparent 65%);
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+.store-cart-btn:hover::after,
+.hero-cta:hover::after,
+.checkout-summary .place-order-btn:hover::after,
+.rm-cartbar button:hover::after {
+  animation: living-sheen .85s var(--ease-out);
+}
+@keyframes living-sheen {
+  to { transform: translateX(130%); }
+}
+
+/* ── marketplace hero ───────────────────────────────────────── */
+[data-experience="marketplace"] [class*="freshBanner"] {
+  background: var(--grad-ink) !important;
+  box-shadow:
+    0 40px 80px -36px rgba(16, 40, 31, .7),
+    inset 0 1px 0 rgba(255,255,255,.14) !important;
+}
+[data-experience="marketplace"] [class*="freshBanner"]::before,
+[data-experience="marketplace"] [class*="freshBanner"]::after {
+  animation: living-orb 14s ease-in-out infinite alternate !important;
+  opacity: .95 !important;
+}
+[data-experience="marketplace"] [class*="freshBanner"]::after {
+  animation-duration: 18s !important;
+  animation-direction: alternate-reverse !important;
+}
+@keyframes living-orb {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(-70px, 48px) scale(1.22); }
+}
+
+[data-experience="marketplace"] [class*="freshBannerCopy"] {
+  animation: living-rise .8s var(--ease-out) both !important;
+}
+[data-experience="marketplace"] [class*="freshArtwork"] {
+  animation: living-rise .9s var(--ease-out) .08s both !important;
+}
+@keyframes living-rise {
+  from { opacity: 0; transform: translateY(22px); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+[data-experience="marketplace"] [class*="heroAccent"] {
+  background: linear-gradient(100deg, #f4e27a, #9be7c4 40%, #7dd3fc, #f4e27a) !important;
+  background-size: 220% 100% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  animation: living-pan 7s linear infinite !important;
+}
+@keyframes living-pan {
+  to { background-position: 220% 50%; }
+}
+
+[data-experience="marketplace"] [class*="artHalo"] {
+  animation: living-spin 16s linear infinite !important;
+}
+@keyframes living-spin { to { transform: rotate(360deg); } }
+
+[data-experience="marketplace"] [class*="artBasket"],
+[data-experience="marketplace"] [class*="artTile"] {
+  animation: living-float 5.6s ease-in-out infinite !important;
+}
+[data-experience="marketplace"] [class*="artTileOne"] { animation-delay: -.8s !important; }
+[data-experience="marketplace"] [class*="artTileTwo"] { animation-delay: -2.2s !important; animation-duration: 6.4s !important; }
+[data-experience="marketplace"] [class*="artTileThree"] { animation-delay: -3.4s !important; animation-duration: 5.4s !important; }
+@keyframes living-float {
+  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+  50% { transform: translateY(-14px) rotate(calc(var(--r, 0deg) + 4deg)); }
+}
+
+[data-experience="marketplace"] [class*="locationIcon"]::after,
+[data-experience="marketplace"] [class*="freshBadge"] svg,
+[data-experience="marketplace"] [class*="liveTag"] i,
+[data-experience="storefront"] [class*="open"] i {
+  animation: living-ping 2.2s ease-out infinite !important;
+}
+@keyframes living-ping {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, .55); }
+  100% { box-shadow: 0 0 0 12px rgba(74, 222, 128, 0); }
+}
+
+[data-experience="marketplace"] [class*="shopTile"] {
+  animation: living-bob 5s ease-in-out infinite !important;
+  translate: none !important;
+}
+@keyframes living-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* ── cards ──────────────────────────────────────────────────── */
+@media (hover: hover) and (pointer: fine) {
+  [data-experience="marketplace"] [class*="shopCard"]:hover,
+  [data-experience="storefront"] article[class*="card"]:hover,
+  [data-experience="marketplace"] [class*="productCard"]:hover,
+  [data-experience="smart-hub"] .smart3d-product-card:hover,
+  [data-experience="profile"] [class*="navCard"]:hover,
+  [data-experience="orders"] .orders-fk-order-card:hover {
+    transform: translateY(-10px) !important;
+    box-shadow: 0 28px 50px -22px rgba(30, 77, 58, .45) !important;
+  }
+  [data-experience="marketplace"] [class*="categoryButton"]:hover {
+    transform: translateY(-8px) scale(1.03) !important;
+  }
+  [data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopTile"] {
+    transform: scale(1.12) rotate(-6deg) !important;
+  }
+  [data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopArt"] {
+    transform: scale(1.16) rotate(-8deg);
+  }
+  [data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopOrbOne"] {
+    transform: translate(18px, 12px) scale(1.18) !important;
+  }
+  [data-experience="marketplace"] [class*="shopCard"]:hover [class*="shopOrbTwo"] {
+    transform: translate(-12px, 10px) scale(.85) !important;
+  }
+}
+
+[data-experience="marketplace"] [class*="shopCard"],
+[data-experience="marketplace"] [class*="productCard"],
+[data-experience="storefront"] article[class*="card"] {
+  position: relative;
+  overflow: hidden;
+  transition: transform .45s var(--ease-out), box-shadow .45s var(--ease-out), border-color .25s !important;
+}
+[data-experience="marketplace"] [class*="shopCard"]::after,
+[data-experience="marketplace"] [class*="productCard"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 42%, rgba(255,255,255,.28) 50%, transparent 58%);
+  transform: translateX(-140%);
+}
+[data-experience="marketplace"] [class*="shopCard"]:hover::after,
+[data-experience="marketplace"] [class*="productCard"]:hover::after {
+  animation: living-sheen .9s var(--ease-out);
+}
+
+[data-experience="marketplace"] [class*="categoryButton"] {
+  animation: living-rise .55s var(--ease-out) both !important;
+}
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(2) { animation-delay: .04s !important; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(3) { animation-delay: .08s !important; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(4) { animation-delay: .12s !important; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(5) { animation-delay: .16s !important; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(6) { animation-delay: .2s !important; }
+[data-experience="marketplace"] [class*="categoryButton"]:nth-child(7) { animation-delay: .24s !important; }
+
+/* ── storefront cover ───────────────────────────────────────── */
+[data-experience="storefront"] [class*="cover"]::before,
+[data-experience="storefront"] [class*="cover"]::after,
+[data-experience="storefront"] [class*="hero"] [class*="cover"]::before {
+  animation: living-orb 12s ease-in-out infinite alternate !important;
+  opacity: .9 !important;
+}
+
+/* ── auth / profile ambient orbs ────────────────────────────── */
+[data-experience="auth"] [class*="orb1"],
+[data-experience="auth"] [class*="orb2"],
+[data-experience="profile"] [class*="orbA"],
+[data-experience="profile"] [class*="orbB"] {
+  animation: living-drift 16s ease-in-out infinite alternate !important;
+}
+[data-experience="auth"] [class*="orb2"],
+[data-experience="profile"] [class*="orbB"] {
+  animation-duration: 20s !important;
+  animation-direction: alternate-reverse !important;
+}
+@keyframes living-drift {
+  to { transform: translate3d(18px, 28px, 0) scale(1.08); }
+}
+
+[data-experience="ai-shopping"] [class*="ambient"],
+[data-experience="ai-shopping"] [class*="orbit"],
+[data-experience="ai-shopping"] [class*="showroomRing"] {
+  animation: living-spin 28s linear infinite !important;
+  opacity: .7 !important;
+}
+
+[data-experience="checkout"]::before,
+[data-experience="order-success"]::before {
+  animation: living-drift 18s ease-in-out infinite alternate !important;
+}
+
+/* ── cart bar ───────────────────────────────────────────────── */
+.rm-cartbar {
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  animation: living-rise .45s var(--ease-out) both;
+}
+.rm-cartbar button:hover {
+  transform: scale(1.06) !important;
+}
+
+/* ── footer ─────────────────────────────────────────────────── */
+.site-footer a,
+.site-footer button {
+  transition: color .2s, transform .28s var(--ease-spring);
+}
+.site-footer a:hover,
+.site-footer button:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition-duration: .01ms !important;
+  }
+  main.page-transition,
+  [data-experience="marketplace"] [class*="shopCard"]:hover,
+  [data-experience="marketplace"] [class*="productCard"]:hover,
+  [data-experience="marketplace"] [class*="categoryButton"]:hover,
+  [data-experience="storefront"] article[class*="card"]:hover {
+    transform: none !important;
+    filter: none !important;
+  }
+}

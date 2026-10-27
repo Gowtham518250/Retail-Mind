@@ -161,7 +161,7 @@ export default function SmartShopPage() {
   const returnCount = returns.length;
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-experience="smart-hub">
       <div className={styles.shell}>
         {/* ───────── Hero Banner ───────── */}
         <section className={styles.hero}>

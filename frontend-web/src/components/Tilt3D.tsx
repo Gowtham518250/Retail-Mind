@@ -19,7 +19,7 @@ interface Tilt3DProps {
  * sit on different depth layers (the wrapper preserves 3D).
  * Touch input and reduced-motion users get a static element.
  */
-export default function Tilt3D({ children, className, max = 1.8, lift = 1.2 }: Tilt3DProps) {
+export default function Tilt3D({ children, className, max = 8, lift = 12 }: Tilt3DProps) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const px = useMotionValue(0.5);

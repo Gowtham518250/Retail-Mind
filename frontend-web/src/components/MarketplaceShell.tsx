@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Boxes, ArrowUpRight, MapPin, Search, ShoppingBasket, ShieldCheck, Sparkles, Star, Store, Truck, Zap, Apple, Milk, Leaf, Plus, ShoppingCart, UserRound, ChevronRight, CheckCircle2 } from 'lucide-react';
 import styles from './Home.module.css';
 import { API_BASE } from '../lib/api';
@@ -43,7 +44,7 @@ function ShopCard({ shop, index }: { shop: any; index: number }) {
   const rated = Boolean(shop.rating_count);
   return (
     <StaggerItem className={styles.tiltFill}>
-      <Tilt3D className={styles.tiltFill} max={1.5} lift={0.7}>
+      <Tilt3D className={styles.tiltFill} max={9} lift={14}>
         <Link href={'/shop/' + shop.shop_id} className={styles.shopCard}>
           <div className={styles.shopVisual} style={{ background: `linear-gradient(135deg, ${from}, ${to})`, color: ink }}>
             <img src={shopIllustration} alt="" aria-hidden="true" className={styles.shopArt} loading="lazy" />
@@ -88,8 +89,9 @@ export default function MarketplaceShell({
   initialFeaturedProducts,
 }: MarketplaceShellProps) {
   const router = useRouter();
+  const reduceMotion = Boolean(useReducedMotion());
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<ResultMode>('all');
+  const [mode, setMode] = useState<ResultMode>('products');
   const [shops, setShops] = useState<any[]>(initialShops);
   const [products, setProducts] = useState<any[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<FeaturedProduct[]>(initialFeaturedProducts);
@@ -159,7 +161,7 @@ export default function MarketplaceShell({
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q');
-    if (q && q.trim()) { setQuery(q); void performSearch('all', q, true); }
+    if (q && q.trim()) { setMode('products'); setQuery(q); void performSearch('products', q, true); }
     // run once on arrival from the top-bar search
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -208,6 +210,12 @@ export default function MarketplaceShell({
 
     try {
       if (!value) {
+        if (requestedMode === 'products') {
+          setShops(initialShops);
+          setProducts([]);
+          setFeaturedProducts(initialFeaturedProducts);
+          return;
+        }
         const res = await fetch('/api/marketplace/search?mode=shops&limit=60', { cache: 'no-store', signal: controller.signal });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Marketplace API returned ' + res.status + '.');
@@ -217,7 +225,7 @@ export default function MarketplaceShell({
         return;
       }
 
-      const searchMode = requestedMode === 'shops' ? 'shops' : requestedMode === 'products' ? 'products' : 'all';
+      const searchMode = requestedMode === 'shops' ? 'shops' : 'products';
       const res = await fetch(
         '/api/marketplace/search?q=' + encodeURIComponent(value) + '&mode=' + searchMode + '&limit=30',
         { cache: 'no-store', signal: controller.signal }
@@ -243,6 +251,32 @@ export default function MarketplaceShell({
         setSearching(false);
       }
     }
+  };
+
+  const selectMode = (nextMode: 'products' | 'shops') => {
+    setMode(nextMode);
+    setActiveProductCategory('All');
+    setAiResults([]);
+    setAiMessage('');
+    setError('');
+
+    if (nextMode === 'shops') {
+      void performSearch('shops', query, true);
+      return;
+    }
+
+    if (query.trim()) {
+      void performSearch('products', query, true);
+      return;
+    }
+
+    requestIdRef.current += 1;
+    controllerRef.current?.abort();
+    setLoading(false);
+    setSearching(false);
+    setShops(initialShops);
+    setProducts([]);
+    setFeaturedProducts(initialFeaturedProducts);
   };
 
   const performAiSearch = async () => {
@@ -322,7 +356,7 @@ export default function MarketplaceShell({
         controllerRef.current?.abort();
       };
     }
-    void performSearch('all', '');
+    void performSearch('shops', '');
     return () => {
       requestIdRef.current += 1;
       controllerRef.current?.abort();
@@ -332,16 +366,14 @@ export default function MarketplaceShell({
   const preset = (value: string) => {
     setActiveProductCategory('All');
     setQuery(value);
-    // These chips come from real shop categories/types, so search both shops and products.
-    setMode('all');
-    void performSearch('all', value, true);
+    setMode('products');
+    void performSearch('products', value, true);
   };
 
 
   const { addToCart, itemCount, toggleCart } = useCart();
 
-  const searchModes: { id: ResultMode; label: string; icon?: React.ReactNode }[] = [
-    { id: 'all', label: 'All' },
+  const searchModes: { id: 'products' | 'shops'; label: string; icon?: React.ReactNode }[] = [
     { id: 'shops', label: 'Shops', icon: <Store size={14} /> },
     { id: 'products', label: 'Products', icon: <Boxes size={14} /> },
   ];
@@ -404,10 +436,12 @@ export default function MarketplaceShell({
           <div className={styles.freshBannerCopy}>
             <span className={styles.freshBadge}><CheckCircle2 size={14} /> Open now in your area</span>
             <h1 id="fresh-banner-title">
-              <WordReveal text="Groceries from the shops on" delay={0.1} />{' '}
-              <WordReveal text="your street." className={styles.heroAccent} delay={0.5} />
+              <WordReveal text={mode === 'shops' ? 'Find shops ready for' : 'Fresh products from'} delay={0.1} />{' '}
+              <WordReveal text={mode === 'shops' ? 'your next order.' : 'your basket.'} className={styles.heroAccent} delay={0.5} />
             </h1>
-            <p>Order from neighbourhood stores and get it delivered or ready for pickup.</p>
+            <p>{mode === 'shops'
+              ? 'Explore local storefronts, ratings and locations, then open the shop you want.'
+              : 'Browse everyday essentials from neighbourhood stores and add what you need to your basket.'}</p>
             <form
               className={styles.marketSearch}
               role="search"
@@ -417,20 +451,60 @@ export default function MarketplaceShell({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search groceries or shops"
-                aria-label="Search for products or shops"
+                placeholder={mode === 'shops' ? 'Search shops or locations' : 'Search products or categories'}
+                aria-label={mode === 'shops' ? 'Search for shops or locations' : 'Search for products or categories'}
               />
-              <button type="submit" disabled={searching}>{searching ? 'Searching…' : 'Search'}</button>
+              <motion.button
+                type="submit"
+                disabled={searching}
+                whileHover={reduceMotion || searching ? undefined : { scale: 1.05 }}
+                whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+              >{searching ? 'Searching…' : 'Search'}</motion.button>
             </form>
+            <div className={styles.discoveryControls} aria-label="Choose what to browse">
+              <div className={styles.discoveryTabs} role="tablist" aria-label="Marketplace results">
+                {searchModes.slice().reverse().map((searchMode) => (
+                  <button
+                    type="button"
+                    key={searchMode.id}
+                    role="tab"
+                    aria-selected={mode === searchMode.id}
+                    className={mode === searchMode.id ? styles.discoveryTabActive : styles.discoveryTab}
+                    onClick={() => selectMode(searchMode.id)}
+                  >
+                    {searchMode.icon}
+                    {searchMode.label}
+                  </button>
+                ))}
+              </div>
+              <Link href="/ai-shopping" className={styles.aiShortcut}>
+                <Sparkles size={15} />
+                Ask AI to find it
+                <ArrowRight size={14} />
+              </Link>
+            </div>
           </div>
           <div className={styles.freshArtwork} aria-hidden="true">
             <span className={styles.artHalo} />
-            <span className={styles.artTile + ' ' + styles.artTileOne}><Apple size={32} /></span>
-            <span className={styles.artTile + ' ' + styles.artTileTwo}><Milk size={30} /></span>
-            <span className={styles.artTile + ' ' + styles.artTileThree}><Leaf size={30} /></span>
-            <div className={styles.artBasket}>
+            <motion.span
+              className={styles.artTile + ' ' + styles.artTileOne}
+              whileHover={reduceMotion ? undefined : { scale: 1.12, rotate: 8 }}
+            ><Apple size={32} /></motion.span>
+            <motion.span
+              className={styles.artTile + ' ' + styles.artTileTwo}
+              whileHover={reduceMotion ? undefined : { scale: 1.12, rotate: -6 }}
+            ><Milk size={30} /></motion.span>
+            <motion.span
+              className={styles.artTile + ' ' + styles.artTileThree}
+              whileHover={reduceMotion ? undefined : { scale: 1.12, rotate: 10 }}
+            ><Leaf size={30} /></motion.span>
+            <motion.div
+              className={styles.artBasket}
+              whileHover={reduceMotion ? undefined : { scale: 1.05, rotate: 2 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+            >
               <MarketScene compact />
-            </div>
+            </motion.div>
           </div>
         </section>
 
@@ -451,7 +525,7 @@ export default function MarketplaceShell({
           </div>
         )}
 
-        <Reveal as="section" className={styles.marketSection} id="categories" aria-label="Shop by category">
+        {mode === 'products' && <Reveal as="section" className={styles.marketSection} id="categories" aria-label="Shop by category">
           <Stagger className={styles.categoryGrid} stagger={0.05}>
             {categories.map((category) => (
               <StaggerItem key={category.label}>
@@ -462,8 +536,8 @@ export default function MarketplaceShell({
                   setActiveProductCategory('All');
                   if (category.label === 'All') {
                     setQuery('');
-                    setMode('all');
-                    void performSearch('all', '', true);
+                    setMode('products');
+                    void performSearch('products', '', true);
                   } else {
                     preset(category.label);
                   }
@@ -478,9 +552,9 @@ export default function MarketplaceShell({
               </StaggerItem>
             ))}
           </Stagger>
-        </Reveal>
+        </Reveal>}
 
-        <Reveal as="section" className={styles.marketSection} id="shops" aria-labelledby="shops-heading">
+        {mode === 'shops' && <Reveal as="section" className={styles.marketSection} id="shops" aria-labelledby="shops-heading">
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.sectionEyebrow}>{query.trim() ? 'Your search' : 'Close to home'}</span>
@@ -508,9 +582,9 @@ export default function MarketplaceShell({
               </button>
             </div>
           )}
-        </Reveal>
+        </Reveal>}
 
-        {aiResults.length > 0 && (
+        {mode === 'products' && aiResults.length > 0 && (
           <section className={styles.marketSection} aria-labelledby="ai-results-heading">
             <div className={styles.sectionHeader}>
               <div><span className={styles.sectionEyebrow}>Picked for you</span><h2 id="ai-results-heading">Recommended for you</h2></div>
@@ -532,7 +606,7 @@ export default function MarketplaceShell({
           </section>
         )}
 
-        <Reveal as="section" className={styles.marketSection} aria-labelledby="products-heading">
+        {mode === 'products' && <Reveal as="section" className={styles.marketSection} aria-labelledby="products-heading">
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.sectionEyebrow}>{query.trim() ? 'Matching items' : 'Fresh on the shelves'}</span>
@@ -575,9 +649,17 @@ export default function MarketplaceShell({
                       {product.category && <span className={styles.productCategoryLabel}>{product.category}</span>}
                       <div className={styles.productCardFooter}>
                         <b>₹{Number(product.price || 0).toFixed(0)}</b>
-                        <button type="button" className={styles.addProductButton} onClick={() => addProduct(product)} disabled={outOfStock} aria-label={'Add ' + product.product_name + ' to cart'}>
+                        <motion.button
+                          type="button"
+                          className={styles.addProductButton}
+                          onClick={() => addProduct(product)}
+                          disabled={outOfStock}
+                          aria-label={'Add ' + product.product_name + ' to cart'}
+                          whileHover={reduceMotion || outOfStock ? undefined : { scale: 1.1, rotate: 90 }}
+                          whileTap={reduceMotion ? undefined : { scale: 0.9 }}
+                        >
                           <Plus size={18} />
-                        </button>
+                        </motion.button>
                       </div>
                     </div>
                   </article>
@@ -588,17 +670,17 @@ export default function MarketplaceShell({
           ) : (
             <div className={styles.emptyProducts}>
               <span><ShoppingBasket size={24} /></span>
-              <strong>{loading ? 'Finding fresh products…' : query.trim() && mode !== 'shops' ? 'No matching products yet' : 'More local products are coming soon'}</strong>
+              <strong>{loading ? 'Finding fresh products…' : query.trim() && mode === 'products' ? 'No matching products yet' : 'More local products are coming soon'}</strong>
               <p>{loading ? 'We are checking the local shelves.' : 'Browse a shop to discover the items available today.'}</p>
             </div>
           )}
-        </Reveal>
+        </Reveal>}
 
-        <div className={styles.trustStrip}>
-          <span><ShieldCheck size={16} /> Secure checkout</span>
-          <span><Truck size={16} /> Local delivery</span>
-          <span><Zap size={16} /> Stock-aware shopping</span>
-        </div>
+        <Stagger className={styles.trustStrip} stagger={0.08}>
+          <StaggerItem><span><ShieldCheck size={16} /> Secure checkout</span></StaggerItem>
+          <StaggerItem><span><Truck size={16} /> Local delivery</span></StaggerItem>
+          <StaggerItem><span><Zap size={16} /> Stock-aware shopping</span></StaggerItem>
+        </Stagger>
       </div>
 
       <LocationModal

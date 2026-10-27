@@ -156,15 +156,15 @@ export default function AiShoppingPage() {
           <div className={styles.copy}>
             <div className={styles.kicker}>
               <BrainCircuit size={14} />
-              RETAIL MIND / AI SHOPPING ENGINE
+              RETAIL MIND / PERSONAL SHOPPING COPILOT
             </div>
 
             <div className={styles.eyebrowLine}>
-              <span>REAL INVENTORY</span>
+              <span>LIVE PRODUCTS</span>
               <i />
               <span>LIVE RATINGS</span>
               <i />
-              <span>SHOP-READY</span>
+              <span>LOCAL CHECKOUT</span>
             </div>
 
             <h1>
@@ -174,9 +174,9 @@ export default function AiShoppingPage() {
             </h1>
 
             <p className={styles.heroLead}>
-              Describe the outcome you want — product, budget, shop or rating.
-              Retail Mind turns that sentence into a live shortlist from
-              online-enabled neighbourhood stores.
+              Tell us what you need, from a product and budget to a preferred
+              shop or rating. Retail Mind turns your words into a live shortlist
+              from neighbourhood stores.
             </p>
 
             <div className={styles.commandBar}>
@@ -205,7 +205,7 @@ export default function AiShoppingPage() {
                 ) : (
                   <>
                     <Zap size={15} />
-                    Ask AI
+                    Find matches
                   </>
                 )}
               </button>
@@ -248,8 +248,8 @@ export default function AiShoppingPage() {
                   <div className={styles.aiCoreAvatar}>
                     <Bot size={30} />
                   </div>
-                  <strong>Live Shopping Engine</strong>
-                  <p>Cross-checking real-time stock & prices across your neighbourhood</p>
+                    <strong>Local shopping copilot</strong>
+                    <p>Comparing live stock, prices and ratings near you</p>
                 </div>
               </motion.div>
 
@@ -435,8 +435,8 @@ export default function AiShoppingPage() {
 
             <div className={styles.resultsHeading}>
               <div>
-                <span className={styles.sectionLabel}>3D VALUE BOARD</span>
-                <h2>Options the AI wants you to see</h2>
+                  <span className={styles.sectionLabel}>SMART MATCHES</span>
+                  <h2>Best options for your basket</h2>
               </div>
               <span className={styles.stockPill}>
                 <span className={styles.liveDot} />

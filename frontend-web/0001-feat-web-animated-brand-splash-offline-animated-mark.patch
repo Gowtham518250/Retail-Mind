@@ -1,0 +1,1073 @@
+From 73e077b3509563af5022e51c5ca04f7f42c35878 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 01:31:21 +0000
+Subject: [PATCH] feat(web): animated brand splash, offline animated market
+ scene, device-aware motion, phone hero fixes
+
+---
+ frontend-web/src/app/device-motion.css        |  54 ++
+ frontend-web/src/app/layout.tsx               |   5 +
+ frontend-web/src/app/splash/page.tsx          | 147 +++---
+ frontend-web/src/app/splash/splash.module.css | 475 +++++-------------
+ frontend-web/src/components/HeroParallax.tsx  |  43 ++
+ frontend-web/src/components/Home.module.css   |  15 +
+ frontend-web/src/components/MarketScene.tsx   | 151 ++++++
+ .../src/components/MarketplaceShell.tsx       |   8 +-
+ .../src/components/ScrollProgress.tsx         |  12 +
+ 9 files changed, 489 insertions(+), 421 deletions(-)
+ create mode 100644 frontend-web/src/app/device-motion.css
+ create mode 100644 frontend-web/src/components/HeroParallax.tsx
+ create mode 100644 frontend-web/src/components/MarketScene.tsx
+ create mode 100644 frontend-web/src/components/ScrollProgress.tsx
+
+diff --git a/frontend-web/src/app/device-motion.css b/frontend-web/src/app/device-motion.css
+new file mode 100644
+index 0000000..6840852
+--- /dev/null
++++ b/frontend-web/src/app/device-motion.css
+@@ -0,0 +1,54 @@
++/* Device-aware motion layer. Loaded last; only adds, never overrides layout. */
++
++/* ---- scroll progress (all devices) ---- */
++.rm-scroll-progress {
++  position: fixed; left: 0; right: 0; top: env(safe-area-inset-top, 0px); height: 3px;
++  z-index: 60; transform-origin: 0 50%; pointer-events: none;
++  background: linear-gradient(90deg, #1e4d3a, #4ade80);
++}
++
++/* ---- DESKTOP: mouse parallax, depth per layer ---- */
++@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
++  [data-experience="marketplace"] [class*="freshArtwork"] { --px: 0; --py: 0; }
++  [data-experience="marketplace"] [class*="artTile"] {
++    translate: calc(var(--px) * 14px) calc(var(--py) * 10px);
++    transition: translate .35s cubic-bezier(.16, 1, .3, 1);
++  }
++  [data-experience="marketplace"] [class*="artTileTwo"] { translate: calc(var(--px) * -20px) calc(var(--py) * -14px); }
++  [data-experience="marketplace"] [class*="artHalo"] {
++    translate: calc(var(--px) * -8px) calc(var(--py) * -6px);
++    transition: translate .5s cubic-bezier(.16, 1, .3, 1);
++  }
++  [data-experience="marketplace"] [class*="artBasket"] {
++    translate: calc(var(--px) * 6px) calc(var(--py) * 4px);
++    transition: translate .45s cubic-bezier(.16, 1, .3, 1);
++  }
++  [data-experience="marketplace"] a[class*="shopCard"] { transition: box-shadow .3s ease; }
++  [data-experience="marketplace"] a[class*="shopCard"]:hover { box-shadow: 0 24px 48px -22px rgba(30, 77, 58, .45); }
++}
++
++/* ---- PHONE + TABLET (touch): tactile press feedback ---- */
++@media (pointer: coarse) and (prefers-reduced-motion: no-preference) {
++  [data-experience="marketplace"] a[class*="shopCard"],
++  [data-experience="marketplace"] button,
++  .site-footer a {
++    transition: transform .18s cubic-bezier(.16, 1, .3, 1);
++    -webkit-tap-highlight-color: transparent;
++  }
++  [data-experience="marketplace"] a[class*="shopCard"]:active,
++  [data-experience="marketplace"] button:active { transform: scale(.97); }
++}
++
++/* ---- TABLET (portrait + landscape) ---- */
++@media (min-width: 768px) and (max-width: 1100px) {
++  [data-experience="marketplace"] [class*="freshArtwork"] { min-height: 210px; }
++  [data-experience="marketplace"] [class*="artTile"] { width: 58px; height: 58px; }
++}
++
++/* ---- ALL: respect reduced motion for this layer ---- */
++@media (prefers-reduced-motion: reduce) {
++  .rm-scroll-progress { display: none; }
++  [data-experience="marketplace"] [class*="artTile"],
++  [data-experience="marketplace"] [class*="artHalo"],
++  [data-experience="marketplace"] [class*="artBasket"] { translate: none !important; transition: none !important; }
++}
+diff --git a/frontend-web/src/app/layout.tsx b/frontend-web/src/app/layout.tsx
+index 16d2e02..fdc37da 100644
+--- a/frontend-web/src/app/layout.tsx
++++ b/frontend-web/src/app/layout.tsx
+@@ -11,8 +11,11 @@ import './customer-reference-ui.css';
+ import './customer-motion.css';
+ import './fresh.css';
+ import './redesign.css';
++import './device-motion.css';
+ import Navbar from '../components/Navbar';
+ import NavigationProgress from '../components/NavigationProgress';
++import ScrollProgress from '../components/ScrollProgress';
++import HeroParallax from '../components/HeroParallax';
+ import NativeAppPerformance from '../components/NativeAppPerformance';
+ import { CartProvider } from '../context/CartContext';
+ import CartDrawer from '../components/CartDrawer';
+@@ -120,6 +123,8 @@ export default function RootLayout({ children }: { children: React.ReactNode })
+           <NativeAppPerformance>
+             <Navbar />
+             <NavigationProgress />
++            <ScrollProgress />
++            <HeroParallax />
+             <main id="main-content" tabIndex={-1} className="page-transition">{children}</main>
+             <footer className="site-footer">
+               <Link href="/shops">Browse shops</Link>
+diff --git a/frontend-web/src/app/splash/page.tsx b/frontend-web/src/app/splash/page.tsx
+index 61167b5..f6ba430 100644
+--- a/frontend-web/src/app/splash/page.tsx
++++ b/frontend-web/src/app/splash/page.tsx
+@@ -4,9 +4,12 @@ import { useEffect } from 'react';
+ import Image from 'next/image';
+ import Link from 'next/link';
+ import { ArrowRight, Sparkles, Store, ShieldCheck, Zap } from 'lucide-react';
+-import { motion, useReducedMotion } from 'framer-motion';
++import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion';
++import MarketScene from '../../components/MarketScene';
+ import styles from './splash.module.css';
+ 
++const EASE = [0.16, 1, 0.3, 1] as const;
++
+ export default function SplashPage() {
+   useEffect(() => {
+     try {
+@@ -16,13 +19,39 @@ export default function SplashPage() {
+     }
+   }, []);
+ 
+-  const reduceMotion = Boolean(useReducedMotion());
++  const reduce = Boolean(useReducedMotion());
++
++  // Pointer depth for the scene + chips (desktop mouse only; touch has no pointermove hover).
++  const mx = useMotionValue(0);
++  const my = useMotionValue(0);
++  const sx = useSpring(mx, { stiffness: 90, damping: 18 });
++  const sy = useSpring(my, { stiffness: 90, damping: 18 });
++  const sceneX = useTransform(sx, (v) => v * -10);
++  const sceneY = useTransform(sy, (v) => v * -8);
++  const chipX = useTransform(sx, (v) => v * 18);
++  const chipY = useTransform(sy, (v) => v * 14);
++
++  const onMove = (e: React.PointerEvent) => {
++    if (reduce || e.pointerType !== 'mouse') return;
++    const r = e.currentTarget.getBoundingClientRect();
++    mx.set(((e.clientX - r.left) / r.width - 0.5) * 2);
++    my.set(((e.clientY - r.top) / r.height - 0.5) * 2);
++  };
++
++  const rise = (delay: number) => ({
++    initial: reduce ? false : { opacity: 0, y: 26 },
++    animate: { opacity: 1, y: 0 },
++    transition: { duration: 0.8, delay, ease: EASE },
++  });
+ 
+   return (
+-    <main className={styles.screen} data-entry-screen="splash">
+-      {/* Background soft ambient orbs */}
+-      <div className={styles.ambientGlowTop} aria-hidden="true" />
+-      <div className={styles.ambientGlowBottom} aria-hidden="true" />
++    <main className={styles.screen} data-entry-screen="splash" onPointerMove={onMove}>
++      <div className={styles.aurora} aria-hidden="true">
++        <i className={styles.blobA} />
++        <i className={styles.blobB} />
++        <i className={styles.blobC} />
++        <i className={styles.grid} />
++      </div>
+ 
+       <header className={styles.topbar}>
+         <div className={styles.topline}>
+@@ -32,90 +61,52 @@ export default function SplashPage() {
+         <Link href="/auth" className={styles.quickSignIn}>Sign in</Link>
+       </header>
+ 
+-      <section className={styles.content}>
+-        <motion.div
+-          className={styles.brandBlock}
+-          initial={reduceMotion ? false : { opacity: 0, y: -10 }}
+-          animate={{ opacity: 1, y: 0 }}
+-          transition={reduceMotion ? { duration: 0 } : { duration: 0.4 }}
+-        >
+-          <div className={styles.logoWrap}>
+-            <Image
+-              src="/icons/retail-mind-logo.png"
+-              alt="Retail Mind"
+-              width={76}
+-              height={76}
+-              priority
+-              className={styles.logo}
+-            />
+-          </div>
+-          <span className={styles.brandPill}>
++      <section className={styles.stage}>
++        <div className={styles.head}>
++          <motion.div className={styles.logoWrap} {...rise(0)}>
++            <Image src="/icons/retail-mind-logo.png" alt="Retail Mind" width={64} height={64} priority className={styles.logo} />
++          </motion.div>
++          <motion.span className={styles.brandPill} {...rise(0.08)}>
+             <Sparkles size={13} /> Direct from nearby stores
+-          </span>
+-          <h1 className={styles.heroTitle}>
++          </motion.span>
++          <motion.h1 className={styles.heroTitle} {...rise(0.16)}>
+             Retail <span>Mind</span>
+-          </h1>
+-          <p className={styles.heroSubtitle}>
++          </motion.h1>
++          <motion.p className={styles.heroSubtitle} {...rise(0.26)}>
+             Fresh groceries, daily essentials, and local favourites delivered straight from neighbourhood shelves.
+-          </p>
+-        </motion.div>
++          </motion.p>
++        </div>
+ 
+-        {/* Hero showcase card with authentic photography */}
+-        <motion.div
+-          className={styles.heroVisualCard}
+-          initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
+-          animate={{ opacity: 1, scale: 1 }}
+-          transition={reduceMotion ? { duration: 0 } : { duration: 0.45, delay: 0.08 }}
+-        >
+-          {/* eslint-disable-next-line @next/next/no-img-element */}
+-          <img
+-            src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80"
+-            alt="Fresh grocery and neighbourhood produce market"
+-            className={styles.heroImage}
+-            loading="eager"
+-          />
+-          <div className={styles.heroOverlay} />
++        <motion.div className={styles.sceneWrap} initial={reduce ? false : { opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.9, delay: 0.1, ease: EASE }}>
++          <motion.div className={styles.scene} style={{ x: sceneX, y: sceneY }}>
++            <MarketScene />
++          </motion.div>
+ 
+-          {/* Floating glass badges */}
+-          <div className={styles.heroBadgeTop}>
++          <motion.div className={`${styles.chip} ${styles.chipTop}`} style={{ x: chipX, y: chipY }}>
+             <span className={styles.badgeIcon}><Store size={14} /></span>
+             <span>50+ Neighbourhood Shops</span>
+-          </div>
+-
+-          <div className={styles.heroBadgeBottomLeft}>
++          </motion.div>
++          <motion.div className={`${styles.chip} ${styles.chipLeft}`} style={{ x: chipX, y: chipY }}>
+             <span className={`${styles.badgeIcon} ${styles.badgeSpeed}`}><Zap size={14} /></span>
+-            <div>
+-              <strong>15-20 Min</strong>
+-              <small>Fast Doorstep Delivery</small>
+-            </div>
+-          </div>
+-
+-          <div className={styles.heroBadgeBottomRight}>
++            <div><strong>15-20 Min</strong><small>Fast Doorstep Delivery</small></div>
++          </motion.div>
++          <motion.div className={`${styles.chip} ${styles.chipRight}`} style={{ x: chipX, y: chipY }}>
+             <span className={`${styles.badgeIcon} ${styles.badgeTrust}`}><ShieldCheck size={14} /></span>
+-            <div>
+-              <strong>100% Genuine</strong>
+-              <small>Local Pricing & Fresh Stock</small>
+-            </div>
++            <div><strong>100% Genuine</strong><small>Local Pricing &amp; Fresh Stock</small></div>
++          </motion.div>
++        </motion.div>
++
++        <motion.div className={styles.cta} {...rise(0.4)}>
++          <div className={styles.pageDots} aria-label="Welcome screen, 1 of 3">
++            <span className={styles.dotActive} /><span /><span />
+           </div>
++          <Link href="/onboarding" className={styles.primaryButton}>
++            <span>Explore Experience</span>
++            <ArrowRight size={18} />
++          </Link>
++          <Link href="/" className={styles.secondaryLink}>Skip to Store Catalog</Link>
+         </motion.div>
+       </section>
+-
+-      <footer className={styles.footer}>
+-        <div className={styles.pageDots} aria-label="Welcome screen, 1 of 3">
+-          <span className={styles.dotActive} />
+-          <span />
+-          <span />
+-        </div>
+-
+-        <Link href="/onboarding" className={styles.primaryButton}>
+-          <span>Explore Experience</span>
+-          <ArrowRight size={18} />
+-        </Link>
+-
+-        <Link href="/" className={styles.secondaryLink}>
+-          Skip to Store Catalog
+-        </Link>
+-      </footer>
+     </main>
+   );
+ }
+diff --git a/frontend-web/src/app/splash/splash.module.css b/frontend-web/src/app/splash/splash.module.css
+index df6007a..ef1730e 100644
+--- a/frontend-web/src/app/splash/splash.module.css
++++ b/frontend-web/src/app/splash/splash.module.css
+@@ -1,352 +1,153 @@
+ .screen {
+-  --blue: #3157d5;
+-  --blue-dark: #1e3bb3;
+-  --navy: #0f172a;
+-  --muted: #64748b;
+-  --mint: #10b981;
+-  position: relative;
+-  isolation: isolate;
+-  display: flex;
+-  flex-direction: column;
+-  justify-content: space-between;
+-  width: min(100%, 540px);
+-  min-height: 100svh;
+-  margin: 0 auto;
+-  overflow: hidden;
+-  padding: max(16px, env(safe-area-inset-top)) 22px max(20px, env(safe-area-inset-bottom));
+-  background: #f8fafc;
+-  color: var(--navy);
+-}
+-
+-.ambientGlowTop {
+-  position: absolute;
+-  top: -120px;
+-  right: -80px;
+-  width: 320px;
+-  height: 320px;
+-  border-radius: 50%;
+-  background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, rgba(255, 255, 255, 0) 70%);
+-  pointer-events: none;
+-  z-index: -1;
+-}
+-
+-.ambientGlowBottom {
+-  position: absolute;
+-  bottom: -100px;
+-  left: -80px;
+-  width: 300px;
+-  height: 300px;
+-  border-radius: 50%;
+-  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, rgba(255, 255, 255, 0) 70%);
+-  pointer-events: none;
+-  z-index: -1;
+-}
+-
+-.topbar {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 12px;
+-  padding-bottom: 8px;
+-}
+-
+-.topline {
+-  display: flex;
+-  align-items: center;
+-  gap: 7px;
+-  color: #64748b;
+-  font-size: 11px;
+-  font-weight: 800;
+-  letter-spacing: 0.05em;
+-}
+-
+-.statusDot {
+-  width: 7px;
+-  height: 7px;
+-  border-radius: 50%;
+-  background: #10b981;
+-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+-}
+-
++  --ink: #f0fdf4;
++  --muted: rgba(220, 252, 231, .72);
++  --mint: #4ade80;
++  --deep: #0b2a1f;
++  position: relative; isolation: isolate; display: flex; flex-direction: column;
++  width: 100%; min-height: 100svh; overflow: hidden;
++  padding: max(16px, env(safe-area-inset-top)) clamp(18px, 4vw, 48px) max(20px, env(safe-area-inset-bottom));
++  background: linear-gradient(160deg, #0b2a1f 0%, #123c2c 55%, #0e2f23 100%);
++  color: var(--ink);
++}
++
++/* ---------- aurora background ---------- */
++.aurora { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
++.aurora i { position: absolute; display: block; border-radius: 50%; filter: blur(70px); will-change: transform; }
++.blobA { width: 520px; height: 520px; left: -140px; top: -120px; background: rgba(74, 222, 128, .38); animation: driftA 18s ease-in-out infinite alternate; }
++.blobB { width: 460px; height: 460px; right: -120px; top: 18%; background: rgba(45, 212, 191, .28); animation: driftB 22s ease-in-out infinite alternate; }
++.blobC { width: 420px; height: 420px; left: 30%; bottom: -200px; background: rgba(250, 204, 21, .16); animation: driftA 26s ease-in-out infinite alternate-reverse; }
++.grid {
++  inset: 0 !important; border-radius: 0 !important; filter: none !important;
++  background-image: radial-gradient(rgba(255, 255, 255, .09) 1px, transparent 1.2px);
++  background-size: 26px 26px;
++  mask-image: radial-gradient(ellipse at 50% 40%, #000 25%, transparent 75%);
++  -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 25%, transparent 75%);
++}
++@keyframes driftA { to { transform: translate(90px, 70px) scale(1.18); } }
++@keyframes driftB { to { transform: translate(-110px, 60px) scale(1.22); } }
++
++/* ---------- top bar ---------- */
++.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: 1180px; margin: 0 auto; }
++.topline { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: .1em; color: var(--muted); }
++.statusDot { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 0 rgba(74, 222, 128, .6); animation: ping 2s ease-out infinite; }
++@keyframes ping { to { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); } }
+ .quickSignIn {
+-  color: var(--blue);
+-  font-size: 13px;
+-  font-weight: 750;
+-  text-decoration: none;
+-  padding: 4px 10px;
+-  border-radius: 8px;
+-  background: rgba(49, 87, 213, 0.06);
+-  transition: background 0.2s;
++  padding: 9px 16px; border-radius: 999px; font-size: 13px; font-weight: 800; color: var(--ink);
++  background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .18); backdrop-filter: blur(10px);
++  transition: background .25s, transform .25s;
+ }
++.quickSignIn:hover { background: rgba(255, 255, 255, .2); transform: translateY(-1px); }
+ 
+-.quickSignIn:hover {
+-  background: rgba(49, 87, 213, 0.12);
++/* ---------- stage: phone = stacked, desktop = two columns ---------- */
++.stage {
++  flex: 1; width: 100%; max-width: 1180px; margin: 0 auto;
++  display: grid; align-items: center; justify-items: center; gap: 12px;
++  grid-template-areas: "head" "scene" "cta"; grid-template-rows: auto 1fr auto;
+ }
+-
+-.content {
+-  display: flex;
+-  flex-direction: column;
+-  gap: 20px;
+-  margin: auto 0;
+-  padding: 10px 0;
+-}
+-
+-.brandBlock {
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  text-align: center;
+-}
+-
+-.logoWrap {
+-  width: 84px;
+-  height: 84px;
+-  display: grid;
+-  place-items: center;
+-  border-radius: 24px;
+-  background: #ffffff;
+-  border: 1px solid #e2e8f0;
+-  box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.08);
+-  margin-bottom: 14px;
+-}
+-
+-.logo {
+-  width: 68px;
+-  height: 68px;
+-  object-fit: contain;
+-}
+-
++.head { grid-area: head; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding-top: 8px; }
++.logoWrap { width: 64px; height: 64px; border-radius: 20px; background: rgba(255, 255, 255, .95); display: grid; place-items: center; box-shadow: 0 18px 40px -14px rgba(0, 0, 0, .55); }
++.logo { width: 52px; height: 52px; border-radius: 14px; }
+ .brandPill {
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 6px;
+-  padding: 4px 12px;
+-  border-radius: 999px;
+-  background: #eff6ff;
+-  color: #2563eb;
+-  font-size: 11.5px;
+-  font-weight: 800;
+-  letter-spacing: 0.02em;
+-  margin-bottom: 8px;
++  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
++  font-size: 12px; font-weight: 800; color: #bbf7d0; background: rgba(74, 222, 128, .14); border: 1px solid rgba(74, 222, 128, .3);
+ }
+-
+-.heroTitle {
+-  margin: 0 0 8px;
+-  font-size: clamp(32px, 8vw, 42px);
+-  line-height: 1.05;
+-  font-weight: 900;
+-  letter-spacing: -0.03em;
+-  color: #0f172a;
+-}
+-
++.heroTitle { margin: 0; font-family: 'Fraunces', Georgia, serif; font-size: clamp(40px, 9vw, 76px); line-height: 1; font-weight: 700; letter-spacing: -.03em; }
+ .heroTitle span {
+-  color: var(--blue);
+-}
+-
+-.heroSubtitle {
+-  max-width: 380px;
+-  margin: 0;
+-  color: #475569;
+-  font-size: 14px;
+-  line-height: 1.5;
+-  font-weight: 500;
+-}
+-
+-/* Hero visual card */
+-.heroVisualCard {
+-  position: relative;
+-  width: 100%;
+-  aspect-ratio: 1.35;
+-  border-radius: 26px;
+-  overflow: hidden;
+-  box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.16);
+-  border: 1px solid rgba(255, 255, 255, 0.8);
+-}
+-
+-.heroImage {
+-  width: 100%;
+-  height: 100%;
+-  object-fit: cover;
+-  display: block;
+-}
+-
+-.heroOverlay {
+-  position: absolute;
+-  inset: 0;
+-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.1) 0%, rgba(15, 23, 42, 0.45) 100%);
+-}
+-
+-.heroBadgeTop {
+-  position: absolute;
+-  top: 14px;
+-  left: 14px;
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 7px;
+-  padding: 7px 13px;
+-  border-radius: 999px;
+-  background: rgba(255, 255, 255, 0.92);
+-  backdrop-filter: blur(8px);
+-  color: #0f172a;
+-  font-size: 12px;
+-  font-weight: 800;
+-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+-}
+-
+-.heroBadgeBottomLeft {
+-  position: absolute;
+-  bottom: 14px;
+-  left: 14px;
+-  display: flex;
+-  align-items: center;
+-  gap: 10px;
+-  padding: 9px 13px;
+-  border-radius: 16px;
+-  background: rgba(255, 255, 255, 0.94);
+-  backdrop-filter: blur(10px);
+-  color: #0f172a;
+-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+-}
+-
+-.heroBadgeBottomLeft strong {
+-  display: block;
+-  font-size: 13px;
+-  font-weight: 850;
+-  color: #0f172a;
+-  line-height: 1.1;
+-}
+-
+-.heroBadgeBottomLeft small {
+-  display: block;
+-  font-size: 10.5px;
+-  color: #64748b;
+-  font-weight: 650;
+-}
+-
+-.heroBadgeBottomRight {
+-  position: absolute;
+-  bottom: 14px;
+-  right: 14px;
+-  display: flex;
+-  align-items: center;
+-  gap: 10px;
+-  padding: 9px 13px;
+-  border-radius: 16px;
+-  background: rgba(255, 255, 255, 0.94);
+-  backdrop-filter: blur(10px);
+-  color: #0f172a;
+-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+-}
+-
+-.heroBadgeBottomRight strong {
+-  display: block;
+-  font-size: 13px;
+-  font-weight: 850;
+-  color: #0f172a;
+-  line-height: 1.1;
+-}
+-
+-.heroBadgeBottomRight small {
+-  display: block;
+-  font-size: 10.5px;
+-  color: #64748b;
+-  font-weight: 650;
+-}
+-
+-.badgeIcon {
+-  width: 28px;
+-  height: 28px;
+-  display: grid;
+-  place-items: center;
+-  border-radius: 8px;
+-  background: #eff6ff;
+-  color: var(--blue);
+-}
+-
+-.badgeSpeed {
+-  background: #fef3c7;
+-  color: #d97706;
+-}
+-
+-.badgeTrust {
+-  background: #ecfdf5;
+-  color: #059669;
+-}
+-
+-/* Footer controls */
+-.footer {
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  gap: 12px;
+-  padding-top: 10px;
+-}
+-
+-.pageDots {
+-  display: flex;
+-  gap: 6px;
+-  align-items: center;
+-}
+-
+-.pageDots span {
+-  width: 6px;
+-  height: 6px;
+-  border-radius: 99px;
+-  background: #cbd5e1;
+-}
+-
+-.pageDots .dotActive {
+-  width: 20px;
+-  background: var(--blue);
+-}
+-
++  background: linear-gradient(100deg, #86efac 20%, #fef08a 45%, #5eead4 70%, #86efac 90%); background-size: 220% 100%;
++  -webkit-background-clip: text; background-clip: text; color: transparent; font-style: italic;
++  animation: sweep 6s linear infinite;
++}
++@keyframes sweep { to { background-position: -220% 0; } }
++.heroSubtitle { max-width: 470px; margin: 0; color: var(--muted); font-size: clamp(14px, 2.2vw, 17px); line-height: 1.6; }
++
++/* ---------- scene ---------- */
++.sceneWrap { grid-area: scene; position: relative; width: min(100%, 440px); aspect-ratio: 1; align-self: center; }
++.scene { position: absolute; inset: 0; will-change: transform; filter: drop-shadow(0 30px 40px rgba(0, 0, 0, .35)); }
++.scene svg { width: 100%; height: 100%; display: block; overflow: visible; }
++
++.chip {
++  position: absolute; z-index: 2; display: flex; align-items: center; gap: 9px; padding: 9px 13px 9px 9px;
++  border-radius: 16px; background: rgba(255, 255, 255, .94); color: #0f2e22;
++  box-shadow: 0 18px 36px -14px rgba(0, 0, 0, .5); font-size: 12px; font-weight: 800; white-space: nowrap;
++  animation: bobChip 5s ease-in-out infinite;
++}
++.chip strong { display: block; font-size: 13px; line-height: 1.15; }
++.chip small { display: block; font-size: 10.5px; font-weight: 700; color: #4b6b5c; }
++.chipTop { top: 2%; left: -2%; }
++.chipLeft { bottom: 6%; left: -4%; animation-delay: -1.6s; }
++.chipRight { bottom: 22%; right: -4%; animation-delay: -3.2s; }
++@keyframes bobChip { 0%, 100% { translate: 0 0; } 50% { translate: 0 -9px; } }
++.badgeIcon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; color: #1d4ed8; background: #dbeafe; flex: 0 0 auto; }
++.badgeSpeed { color: #b45309; background: #fef3c7; }
++.badgeTrust { color: #047857; background: #d1fae5; }
++
++/* ---------- CTA ---------- */
++.cta { grid-area: cta; width: 100%; max-width: 440px; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding-bottom: 4px; }
++.pageDots { display: flex; justify-content: center; gap: 6px; }
++.pageDots span { width: 7px; height: 7px; border-radius: 999px; background: rgba(255, 255, 255, .25); }
++.pageDots .dotActive { width: 24px; background: var(--mint); }
+ .primaryButton {
+-  min-height: 52px;
+-  width: 100%;
+-  display: flex;
+-  align-items: center;
+-  justify-content: center;
+-  gap: 10px;
+-  border-radius: 16px;
+-  color: #ffffff;
+-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+-  box-shadow: 0 10px 24px -4px rgba(37, 99, 235, 0.35);
+-  font-size: 15px;
+-  font-weight: 800;
+-  text-decoration: none;
+-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+-}
+-
+-.primaryButton:hover {
+-  transform: translateY(-2px);
+-  box-shadow: 0 14px 28px -4px rgba(37, 99, 235, 0.45);
+-}
+-
+-.primaryButton:active {
+-  transform: translateY(0);
+-}
+-
+-.secondaryLink {
+-  color: #64748b;
+-  font-size: 13px;
+-  font-weight: 700;
+-  text-decoration: none;
+-  padding: 4px;
+-  transition: color 0.2s;
+-}
+-
+-.secondaryLink:hover {
+-  color: #0f172a;
++  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 10px;
++  min-height: 56px; padding: 0 22px; border-radius: 18px; font-size: 16px; font-weight: 800; color: #052e1a;
++  background: linear-gradient(135deg, #86efac, #4ade80); box-shadow: 0 20px 36px -16px rgba(74, 222, 128, .8);
++  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), box-shadow .3s;
++}
++.primaryButton::after {
++  content: ''; position: absolute; top: 0; bottom: 0; width: 60px; left: -90px;
++  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .65), transparent); transform: skewX(-18deg);
++  animation: shine 3.4s ease-in-out 1.2s infinite;
++}
++@keyframes shine { 0% { left: -90px; } 45%, 100% { left: 120%; } }
++.primaryButton svg { transition: transform .3s; }
++.primaryButton:hover { transform: translateY(-2px); box-shadow: 0 26px 44px -16px rgba(74, 222, 128, .9); }
++.primaryButton:hover svg { transform: translateX(4px); }
++.primaryButton:active { transform: scale(.97); }
++.secondaryLink { text-align: center; padding: 8px; font-size: 14px; font-weight: 700; color: var(--muted); transition: color .2s; }
++.secondaryLink:hover { color: #fff; }
++
++/* ---------- tablet ---------- */
++@media (min-width: 640px) {
++  .sceneWrap { width: min(100%, 500px); }
++  .chipTop { left: 2%; } .chipLeft { left: 0; } .chipRight { right: 0; }
++}
++
++/* ---------- desktop: copy left, scene right ---------- */
++@media (min-width: 1024px) {
++  .stage {
++    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 1fr auto 1fr;
++    grid-template-areas: "scene ." "scene head" "scene cta"; column-gap: 56px; justify-items: stretch;
++  }
++  .stage { grid-template-areas: "head scene" "cta scene"; grid-template-rows: auto auto; align-content: center; }
++  .head { align-items: flex-start; text-align: left; align-self: end; }
++  .heroSubtitle { margin-top: 4px; }
++  .cta { align-self: start; align-items: flex-start; max-width: 380px; margin-top: 18px; }
++  .pageDots { justify-content: flex-start; order: 3; }
++  .primaryButton { width: 100%; }
++  .secondaryLink { text-align: left; padding-left: 0; }
++  .sceneWrap { width: min(100%, 560px); justify-self: end; grid-row: 1 / span 2; }
+ }
+ 
+-@media (max-width: 480px) {
+-  .heroBadgeBottomRight {
+-    display: none;
+-  }
++/* short phones: keep CTA reachable without scrolling */
++@media (max-height: 700px) and (max-width: 639px) {
++  .sceneWrap { width: min(78%, 300px); }
++  .head { gap: 8px; }
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
+-  .primaryButton {
+-    transition: none;
+-  }
++  .aurora i, .heroTitle span, .statusDot, .chip, .primaryButton::after { animation: none !important; }
++}
++
++/* ---------- phone polish ---------- */
++.topline, .quickSignIn { white-space: nowrap; }
++@media (max-width: 639px) {
++  .topline { font-size: 10px; letter-spacing: .06em; }
++  .quickSignIn { padding: 8px 14px; }
++  .sceneWrap { margin: 18px 0 8px; }
++  .chip { padding: 7px 11px 7px 7px; gap: 7px; border-radius: 14px; font-size: 11px; }
++  .chip small { display: none; }
++  .chip strong { font-size: 12px; }
++  .badgeIcon { width: 26px; height: 26px; border-radius: 9px; }
++  .chipTop { top: -4%; left: 4%; }
++  .chipLeft { bottom: 0; left: 0; }
++  .chipRight { bottom: 14%; right: 0; }
+ }
+diff --git a/frontend-web/src/components/HeroParallax.tsx b/frontend-web/src/components/HeroParallax.tsx
+new file mode 100644
+index 0000000..1cff634
+--- /dev/null
++++ b/frontend-web/src/components/HeroParallax.tsx
+@@ -0,0 +1,43 @@
++'use client';
++
++import { useEffect } from 'react';
++
++const TARGET = '[data-experience="marketplace"] [class*="freshArtwork"]';
++
++/**
++ * Desktop-only pointer parallax for the home hero artwork.
++ * Writes --px/--py (-1..1) on the artwork; device-motion.css turns them into
++ * per-layer depth. Skipped on touch devices and for reduced-motion users.
++ */
++export default function HeroParallax() {
++  useEffect(() => {
++    const mq = window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
++    if (!mq.matches) return;
++
++    let frame = 0;
++    let el: HTMLElement | null = null;
++
++    const onMove = (e: PointerEvent) => {
++      if (frame) return;
++      frame = requestAnimationFrame(() => {
++        frame = 0;
++        el = el && el.isConnected ? el : document.querySelector<HTMLElement>(TARGET);
++        if (!el) return;
++        const r = el.getBoundingClientRect();
++        if (r.width === 0 || r.bottom < 0 || r.top > window.innerHeight) return;
++        const px = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - 0.5) * 2));
++        const py = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - 0.5) * 2));
++        el.style.setProperty('--px', px.toFixed(3));
++        el.style.setProperty('--py', py.toFixed(3));
++      });
++    };
++
++    window.addEventListener('pointermove', onMove, { passive: true });
++    return () => {
++      window.removeEventListener('pointermove', onMove);
++      if (frame) cancelAnimationFrame(frame);
++    };
++  }, []);
++
++  return null;
++}
+diff --git a/frontend-web/src/components/Home.module.css b/frontend-web/src/components/Home.module.css
+index 0353864..4d7d00b 100644
+--- a/frontend-web/src/components/Home.module.css
++++ b/frontend-web/src/components/Home.module.css
+@@ -104,6 +104,7 @@
+   --r: -4deg; animation: float 6s ease-in-out infinite;
+ }
+ .artBasket img { width: 100%; height: 100%; object-fit: cover; }
++.artBasket svg { width: 100%; height: 100%; display: block; background: radial-gradient(circle at 50% 38%, #f0fdf4, #bbf7d0 70%, #86efac); }
+ @keyframes float { 0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); } 50% { transform: translateY(-14px) rotate(calc(var(--r, 0deg) + 3deg)); } }
+ .artTile { position: absolute; z-index: 2; width: 64px; height: 64px; display: grid; place-items: center; border: 3px solid rgba(255,255,255,.95); border-radius: 20px; box-shadow: 0 16px 28px -10px rgba(0,0,0,.35); animation: float 5s ease-in-out infinite; }
+ .artTileOne { top: 6%; right: 8%; color: var(--blue); background: #e6e9ff; --r: 10deg; animation-delay: -1s; }
+@@ -278,3 +279,17 @@
+   .freshBanner::before, .freshBanner::after, .artHalo, .artBasket, .artTile, .shopTile, .heroAccent, .locationIcon::after, .freshBadge svg, .liveTag i, .emptyMarketplace > span, .emptyProducts > span, .marketSearch, .freshBadge, .marketSkeleton { animation: none !important; }
+   .productCard:hover, .categoryButton:hover { transform: none; }
+ }
++
++/* Phone: keep the search pill inside the hero instead of clipping its button */
++.marketSearch { width: 100%; box-sizing: border-box; min-width: 0; }
++@media (max-width: 480px) {
++  .marketSearch { padding-left: 14px; gap: 8px; }
++  .marketSearch button { padding: 0 16px; }
++}
++
++/* Grid tracks default to min-content; let the hero copy shrink to the card */
++.freshBanner > * { min-width: 0; }
++@media (max-width: 640px) {
++  .freshBanner { grid-template-columns: minmax(0, 1fr); }
++  .freshBannerCopy { max-width: 100%; }
++}
+diff --git a/frontend-web/src/components/MarketScene.tsx b/frontend-web/src/components/MarketScene.tsx
+new file mode 100644
+index 0000000..ce2ea25
+--- /dev/null
++++ b/frontend-web/src/components/MarketScene.tsx
+@@ -0,0 +1,151 @@
++'use client';
++
++import { motion, useReducedMotion } from 'framer-motion';
++
++/**
++ * Self-contained animated grocery scene (no remote images, works offline).
++ * Produce pops out of the basket one after another, then floats; sparkles twinkle.
++ * `compact` drops the halo/ground so it fits inside the home hero's own halo.
++ */
++const SPRING = { type: 'spring', stiffness: 170, damping: 13 } as const;
++const BOX = { transformBox: 'fill-box', transformOrigin: 'center' } as const;
++
++function Bob({ children, delay = 0, dy = 6, dur = 3.4, reduce }: { children: React.ReactNode; delay?: number; dy?: number; dur?: number; reduce: boolean }) {
++  return (
++    <motion.g
++      style={BOX}
++      animate={reduce ? undefined : { y: [0, -dy, 0], rotate: [-2, 2, -2] }}
++      transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
++    >
++      {children}
++    </motion.g>
++  );
++}
++
++function Pop({ children, delay, reduce }: { children: React.ReactNode; delay: number; reduce: boolean }) {
++  return (
++    <motion.g
++      style={BOX}
++      initial={reduce ? false : { y: 70, scale: 0.2, opacity: 0 }}
++      animate={{ y: 0, scale: 1, opacity: 1 }}
++      transition={{ ...SPRING, delay }}
++    >
++      {children}
++    </motion.g>
++  );
++}
++
++function Sparkle({ x, y, s = 1, delay, reduce }: { x: number; y: number; s?: number; delay: number; reduce: boolean }) {
++  return (
++    <motion.path
++      d="M0-10 L2.6-2.6 L10 0 L2.6 2.6 L0 10 L-2.6 2.6 L-10 0 L-2.6-2.6Z"
++      fill="#fde68a"
++      transform={`translate(${x} ${y}) scale(${s})`}
++      style={BOX}
++      animate={reduce ? { opacity: 0.8 } : { opacity: [0, 1, 0], scale: [0.4, 1.15, 0.4] }}
++      transition={{ duration: 2.6, delay, repeat: Infinity, ease: 'easeInOut' }}
++    />
++  );
++}
++
++export default function MarketScene({ compact = false, className }: { compact?: boolean; className?: string }) {
++  const reduce = Boolean(useReducedMotion());
++  return (
++    <svg
++      viewBox="0 0 400 400"
++      className={className}
++      role="img"
++      aria-label="A basket of fresh groceries"
++      xmlns="http://www.w3.org/2000/svg"
++    >
++      <defs>
++        <radialGradient id="ms-halo" cx="50%" cy="50%" r="50%">
++          <stop offset="0%" stopColor="#4ade80" stopOpacity=".55" />
++          <stop offset="60%" stopColor="#22c55e" stopOpacity=".18" />
++          <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
++        </radialGradient>
++        <linearGradient id="ms-basket" x1="0" y1="0" x2="0" y2="1">
++          <stop offset="0" stopColor="#e9b872" />
++          <stop offset="1" stopColor="#b7793a" />
++        </linearGradient>
++        <linearGradient id="ms-apple" x1="0" y1="0" x2="1" y2="1">
++          <stop offset="0" stopColor="#ff6b5e" />
++          <stop offset="1" stopColor="#d6322a" />
++        </linearGradient>
++        <linearGradient id="ms-orange" x1="0" y1="0" x2="1" y2="1">
++          <stop offset="0" stopColor="#ffc15a" />
++          <stop offset="1" stopColor="#f08a16" />
++        </linearGradient>
++      </defs>
++
++      {!compact && (
++        <>
++          <motion.circle cx="200" cy="205" r="175" fill="url(#ms-halo)"
++            animate={reduce ? undefined : { scale: [1, 1.06, 1], opacity: [0.85, 1, 0.85] }}
++            style={BOX} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }} />
++          <motion.circle cx="200" cy="205" r="150" fill="none" stroke="#86efac" strokeOpacity=".35" strokeWidth="1.5" strokeDasharray="3 9"
++            animate={reduce ? undefined : { rotate: 360 }} style={BOX}
++            transition={{ duration: 40, repeat: Infinity, ease: 'linear' }} />
++          <motion.ellipse cx="200" cy="352" rx="95" ry="13" fill="#000" opacity=".28"
++            animate={reduce ? undefined : { rx: [95, 80, 95], opacity: [0.28, 0.2, 0.28] }}
++            transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }} />
++        </>
++      )}
++
++      <g transform={compact ? 'translate(0 -6) scale(1)' : undefined}>
++        {/* handle sits behind the produce */}
++        <Pop delay={0.2} reduce={reduce}>
++          <path d="M104 232 C104 120 296 120 296 232" stroke="#9a6128" strokeWidth="9" fill="none" strokeLinecap="round" />
++        </Pop>
++        {/* produce, popping out behind the basket rim */}
++        <Pop delay={0.55} reduce={reduce}>
++          <Bob delay={0.2} reduce={reduce} dy={5}>
++            <rect x="262" y="146" width="40" height="92" rx="14" fill="#f8fafc" />
++            <rect x="262" y="146" width="40" height="30" rx="12" fill="#bfdbfe" />
++            <rect x="271" y="132" width="22" height="18" rx="5" fill="#2563eb" />
++          </Bob>
++        </Pop>
++        <Pop delay={0.7} reduce={reduce}>
++          <Bob delay={0.5} reduce={reduce} dy={7} dur={3.9}>
++            <path d="M118 238 C108 190 128 140 164 118 C168 160 160 205 148 238Z" fill="#22c55e" />
++            <path d="M138 232 C140 190 150 160 164 118" stroke="#15803d" strokeWidth="3" fill="none" strokeLinecap="round" />
++            <path d="M92 240 C90 200 108 168 132 154 C134 188 126 214 116 240Z" fill="#4ade80" />
++          </Bob>
++        </Pop>
++        <Pop delay={0.85} reduce={reduce}>
++          <Bob delay={0.9} reduce={reduce} dy={6} dur={3.1}>
++            <circle cx="236" cy="196" r="36" fill="url(#ms-orange)" />
++            <ellipse cx="224" cy="182" rx="10" ry="6" fill="#fff" opacity=".35" transform="rotate(-30 224 182)" />
++            <path d="M236 160 q6 -10 16 -8 q-4 10 -16 8Z" fill="#16a34a" />
++          </Bob>
++        </Pop>
++        <Pop delay={1.0} reduce={reduce}>
++          <Bob delay={0.3} reduce={reduce} dy={8} dur={3.6}>
++            <path d="M170 168 c-30 -18 -62 6 -52 46 c6 24 26 36 44 28 c8 -4 14 -4 22 0 c18 8 38 -4 44 -28 c10 -40 -22 -64 -52 -46 c-2 1 -4 1 -6 0Z" fill="url(#ms-apple)" />
++            <ellipse cx="146" cy="196" rx="9" ry="14" fill="#fff" opacity=".28" transform="rotate(18 146 196)" />
++            <path d="M176 166 q2 -18 14 -26" stroke="#7c4a1d" strokeWidth="5" fill="none" strokeLinecap="round" />
++            <path d="M190 148 q16 -14 30 -4 q-12 14 -30 4Z" fill="#22c55e" />
++          </Bob>
++        </Pop>
++
++        {/* basket */}
++        <Pop delay={0.2} reduce={reduce}>
++          <path d="M84 232 Q200 214 316 232 L292 336 Q200 352 108 336Z" fill="url(#ms-basket)" />
++          <g stroke="#8a5424" strokeOpacity=".45" strokeWidth="3" strokeLinecap="round" fill="none">
++            <path d="M96 262 Q200 248 304 262" />
++            <path d="M102 292 Q200 278 298 292" />
++            <path d="M108 320 Q200 306 292 320" />
++            <path d="M140 238 L132 338" /><path d="M176 236 L170 344" />
++            <path d="M212 236 L214 344" /><path d="M250 238 L258 340" />
++          </g>
++          <path d="M78 232 Q200 208 322 232 Q322 244 312 246 Q200 230 88 246 Q78 244 78 232Z" fill="#f3c98a" />
++        </Pop>
++      </g>
++
++      <Sparkle x={86} y={118} s={1.1} delay={1.2} reduce={reduce} />
++      <Sparkle x={322} y={96} s={0.8} delay={1.9} reduce={reduce} />
++      <Sparkle x={338} y={236} s={0.9} delay={2.4} reduce={reduce} />
++      <Sparkle x={62} y={250} s={0.7} delay={0.6} reduce={reduce} />
++    </svg>
++  );
++}
+diff --git a/frontend-web/src/components/MarketplaceShell.tsx b/frontend-web/src/components/MarketplaceShell.tsx
+index 7ba49bb..0cb739c 100644
+--- a/frontend-web/src/components/MarketplaceShell.tsx
++++ b/frontend-web/src/components/MarketplaceShell.tsx
+@@ -7,6 +7,7 @@ import { ArrowRight, Boxes, ArrowUpRight, MapPin, Search, ShoppingBasket, Shield
+ import styles from './Home.module.css';
+ import { API_BASE } from '../lib/api';
+ import Tilt3D from './Tilt3D';
++import MarketScene from './MarketScene';
+ import { Reveal, Stagger, StaggerItem, WordReveal } from './Reveal';
+ import ProductImage from './ProductImage';
+ import LocationModal from './LocationModal';
+@@ -428,12 +429,7 @@ export default function MarketplaceShell({
+             <span className={styles.artTile + ' ' + styles.artTileTwo}><Milk size={30} /></span>
+             <span className={styles.artTile + ' ' + styles.artTileThree}><Leaf size={30} /></span>
+             <div className={styles.artBasket}>
+-              {/* eslint-disable-next-line @next/next/no-img-element */}
+-              <img
+-                src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=480&q=80"
+-                alt="Fresh market produce"
+-                loading="eager"
+-              />
++              <MarketScene compact />
+             </div>
+           </div>
+         </section>
+diff --git a/frontend-web/src/components/ScrollProgress.tsx b/frontend-web/src/components/ScrollProgress.tsx
+new file mode 100644
+index 0000000..b0d6f83
+--- /dev/null
++++ b/frontend-web/src/components/ScrollProgress.tsx
+@@ -0,0 +1,12 @@
++'use client';
++
++import { motion, useReducedMotion, useScroll, useSpring } from 'framer-motion';
++
++/** Thin brand-coloured reading-progress bar pinned under the status bar. */
++export default function ScrollProgress() {
++  const reduce = useReducedMotion();
++  const { scrollYProgress } = useScroll();
++  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 28, mass: 0.4 });
++  if (reduce) return null;
++  return <motion.div aria-hidden="true" className="rm-scroll-progress" style={{ scaleX }} />;
++}
+-- 
+2.43.0
+
