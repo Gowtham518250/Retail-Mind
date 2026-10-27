@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import MarketplaceShell from '../components/MarketplaceShell';
-import MobileWelcomeGate from '../components/MobileWelcomeGate';
 import JsonLd from '../components/JsonLd';
 import { getHomepagePreview } from '../lib/publicCatalog';
 import { absoluteSiteUrl, publicPageMetadata } from '../lib/seo';
@@ -16,7 +15,7 @@ export const metadata: Metadata = publicPageMetadata({
 export default async function Home() {
   const { shops, products } = await getHomepagePreview();
   return (
-    <MobileWelcomeGate>
+    <>
       {shops.length > 0 && (
         <JsonLd data={{
           '@context': 'https://schema.org',
@@ -59,6 +58,6 @@ export default async function Home() {
         }} />
       )}
       <MarketplaceShell initialShops={shops} initialFeaturedProducts={products} />
-    </MobileWelcomeGate>
+    </>
   );
 }
