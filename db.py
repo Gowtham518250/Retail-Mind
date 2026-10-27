@@ -48,7 +48,7 @@ def _before_cursor_execute(conn, cursor, statement, parameters, context, execute
     normalized = str(statement).lstrip()
     while normalized.startswith("--") or normalized.startswith("/*"):
         if normalized.startswith("--"):
-            newline = normalized.find("\\n")
+            newline = normalized.find("\n")
             normalized = normalized[newline + 1:] if newline >= 0 else ""
         else:
             end_comment = normalized.find("*/", 2)
