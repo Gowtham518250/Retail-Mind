@@ -100,13 +100,13 @@ def test_native_script_chicken_biryani_shortlists_english_catalog_item():
     assert candidates[0].id == expected.id
 
 
-def test_small_catalog_is_not_artificially_trimmed():
+def test_small_catalog_is_filtered_by_spoken_product_evidence():
     products = [
         _product(1, "Rice", "RICE"),
         _product(2, "Milk", "MILK"),
     ]
     candidates = _voice_billing_catalog_candidates("two rice", products, limit=80)
-    assert [product.id for product in candidates] == [1, 2]
+    assert [product.id for product in candidates] == [1]
 
 
 def test_large_catalog_does_not_return_random_candidates_for_unknown_product():
