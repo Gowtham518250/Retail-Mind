@@ -1658,11 +1658,13 @@ def _voice_billing_product_has_evidence(transcript: str, product: Product) -> bo
     if query_tokens and query_tokens.issubset(product_tokens):
         return True
 
-    compact_query = " ".join(query_tokens)
+    # Sorting makes the fallback deterministic; a high threshold avoids treating
+    # near-homophones (for example, "soup" vs "soap") as stock-backed evidence.
+    compact_query = " ".join(sorted(query_tokens))
     return bool(
         compact_query
         and normalized_name
-        and difflib.SequenceMatcher(None, compact_query, normalized_name).ratio() >= 0.72
+        and difflib.SequenceMatcher(None, compact_query, normalized_name).ratio() >= 0.84
     )
 
 async def _voice_billing_translate_search_query(
