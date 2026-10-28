@@ -2062,8 +2062,8 @@ def _voice_billing_whisper_prompt(
     names: list[str] = []
     seen: set[str] = set()
     for raw_name in product_names:
-        name = re.sub(r"\\s+", " ", str(raw_name or "")).strip()
-        name = re.sub(r"[\\r\\n|;]+", " ", name).strip(" ,")
+        name = re.sub(r"\s+", " ", str(raw_name or "")).strip()
+        name = re.sub(r"[\r\n|;]+", " ", name).strip(" ,")
         if not name:
             continue
         key = name.casefold()
