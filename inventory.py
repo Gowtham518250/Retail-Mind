@@ -2046,7 +2046,7 @@ def _voice_billing_whisper_prompt(
     product_names: list[str],
 ) -> str:
     """Give Whisper short, shop-specific spelling hints for mixed retail speech."""
-    language = _voice_billing_whisper_language_hint(language_code) or "en"
+    language = _voice_billing_whisper_language_hint(language_code)
     prefixes = {
         "en": "Retail billing. Preserve the spoken product names, quantities, and rupee prices. Shop vocabulary: ",
         "hi": "दुकान की बिलिंग। उत्पादों के नाम, मात्रा और रुपये की कीमतें ध्यान से लिखें। दुकान के उत्पाद: ",
@@ -2073,9 +2073,12 @@ def _voice_billing_whisper_prompt(
         names.append(name[:48])
         if len(names) >= 14:
             break
+    prefix = prefixes.get(language, "")
     if not names:
-        return prefixes.get(language, prefixes["en"]).rstrip()
-    prompt = prefixes.get(language, prefixes["en"]) + ", ".join(names)
+        return prefix.rstrip()
+    # With language=auto, send only catalog terms rather than an English
+    # sentence that could bias a non-English transcription.
+    prompt = prefix + ", ".join(names)
     # The provider limits this hint to 224 tokens; keep a conservative margin.
     return prompt[:650]
 
@@ -2125,8 +2128,9 @@ async def parse_voice_billing_audio(
         "model": stt_model,
         "response_format": "verbose_json",
         "temperature": "0",
-        "prompt": whisper_prompt,
     }
+    if whisper_prompt:
+        transcription_data["prompt"] = whisper_prompt
     if whisper_language:
         transcription_data["language"] = whisper_language
 
