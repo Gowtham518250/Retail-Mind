@@ -1478,7 +1478,7 @@ _VOICE_BILLING_NUMBER_WORDS = {
 }
 
 _VOICE_BILLING_SCALE_WORDS = {
-    "hundred": 100, "hundreds": 100, "sau": 100, "so": 100, "सौ": 100,
+    "hundred": 100, "hundreds": 100, "sau": 100, "सौ": 100,
     "vanda": 100, "vandu": 100, "vandalu": 100, "vandala": 100,
     "vandlu": 100, "vandulu": 100, "vandallu": 100,
     "వంద": 100, "వందలు": 100, "వందల": 100,
