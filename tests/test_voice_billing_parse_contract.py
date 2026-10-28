@@ -439,6 +439,23 @@ def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monke
     monkeypatch.setattr(inventory_module.httpx, "AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
 
+    class FakeQuery:
+        def filter(self, *args):
+            return self
+
+        def order_by(self, *args):
+            return self
+
+        def limit(self, *args):
+            return self
+
+        def all(self):
+            return []
+
+    class FakeDb:
+        def query(self, *args):
+            return FakeQuery()
+
     audio = UploadFile(
         filename="voice-billing.wav",
         file=io.BytesIO(b"RIFF-fake-test-audio"),
@@ -449,12 +466,15 @@ def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monke
             audio=audio,
             language_code="auto",
             user_id=7,
-            db=object(),
+            db=FakeDb(),
         )
     )
 
     assert captured["url"].endswith("/audio/transcriptions")
     assert captured["data"]["model"] == "whisper-large-v3"
+    assert captured["data"]["response_format"] == "verbose_json"
+    assert captured["data"]["prompt"]
+    assert "language" not in captured["data"]  # auto-detection should remain enabled
     assert captured["headers"]["Authorization"] == "Bearer unit-test-key"
     assert captured["transcript"] == "2 kg rice 50"
     assert captured["language_code"] == "english"
