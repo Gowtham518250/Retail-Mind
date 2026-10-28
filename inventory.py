@@ -2027,6 +2027,62 @@ async def parse_voice_billing(
     }
 
 
+_VOICE_BILLING_WHISPER_LANGUAGES = {
+    "en", "hi", "te", "ta", "kn", "ml", "mr", "bn", "gu", "pa",
+}
+
+
+def _voice_billing_whisper_language_hint(language_code: str) -> Optional[str]:
+    """Convert the selected UI locale (for example te-IN) to a supported ASR hint."""
+    value = (language_code or "").strip().lower()
+    if value in {"", "auto", "und"}:
+        return None
+    base_language = value.split("-", 1)[0].split("_", 1)[0]
+    return base_language if base_language in _VOICE_BILLING_WHISPER_LANGUAGES else None
+
+
+def _voice_billing_whisper_prompt(
+    language_code: str,
+    product_names: list[str],
+) -> str:
+    """Give Whisper short, shop-specific spelling hints for mixed retail speech."""
+    language = _voice_billing_whisper_language_hint(language_code)
+    prefixes = {
+        "en": "Retail billing. Preserve the spoken product names, quantities, and rupee prices. Shop vocabulary: ",
+        "hi": "दुकान की बिलिंग। उत्पादों के नाम, मात्रा और रुपये की कीमतें ध्यान से लिखें। दुकान के उत्पाद: ",
+        "te": "రిటైల్ బిల్లింగ్. ఉత్పత్తుల పేర్లు, పరిమాణాలు, రూపాయి ధరలను జాగ్రత్తగా గుర్తించండి. దుకాణపు ఉత్పత్తులు: ",
+        "ta": "சில்லறை பில்லிங். பொருட்களின் பெயர்கள், அளவுகள், ரூபாய் விலைகளை கவனமாக பதிவு செய்யவும். கடை பொருட்கள்: ",
+        "kn": "ಚಿಲ್ಲರೆ ಬಿಲ್ಲಿಂಗ್. ಉತ್ಪನ್ನಗಳ ಹೆಸರು, ಪ್ರಮಾಣ ಮತ್ತು ರೂಪಾಯಿ ಬೆಲೆಗಳನ್ನು ಸರಿಯಾಗಿ ಗುರುತಿಸಿ. ಅಂಗಡಿಯ ಉತ್ಪನ್ನಗಳು: ",
+        "ml": "റീട്ടെയിൽ ബില്ലിംഗ്. ഉൽപ്പന്നങ്ങളുടെ പേരുകൾ, അളവുകൾ, രൂപ വിലകൾ കൃത്യമായി തിരിച്ചറിയുക. കടയിലെ ഉൽപ്പന്നങ്ങൾ: ",
+        "mr": "दुकान बिलिंग. वस्तूंची नावे, प्रमाण आणि रुपयातील किंमती जशाच्या तशा नोंदवा. दुकानातील वस्तू: ",
+        "bn": "দোকানের বিলিং। পণ্যের নাম, পরিমাণ ও টাকার দাম সঠিকভাবে লিখুন। দোকানের পণ্য: ",
+        "gu": "દુકાનનું બિલિંગ. વસ્તુઓનાં નામ, જથ્થો અને રૂપિયાની કિંમત બરાબર ઓળખો. દુકાનની વસ્તુઓ: ",
+        "pa": "ਦੁਕਾਨ ਦੀ ਬਿਲਿੰਗ। ਉਤਪਾਦਾਂ ਦੇ ਨਾਮ, ਮਾਤਰਾ ਅਤੇ ਰੁਪਏ ਦੀਆਂ ਕੀਮਤਾਂ ਧਿਆਨ ਨਾਲ ਲਿਖੋ। ਦੁਕਾਨ ਦੇ ਉਤਪਾਦ: ",
+    }
+    names: list[str] = []
+    seen: set[str] = set()
+    for raw_name in product_names:
+        name = re.sub(r"\s+", " ", str(raw_name or "")).strip()
+        name = re.sub(r"[\r\n|;]+", " ", name).strip(" ,")
+        if not name:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name[:48])
+        if len(names) >= 14:
+            break
+    prefix = prefixes.get(language, "")
+    if not names:
+        return prefix.rstrip()
+    # With language=auto, send only catalog terms rather than an English
+    # sentence that could bias a non-English transcription.
+    prompt = prefix + ", ".join(names)
+    # The provider limits this hint to 224 tokens; keep a conservative margin.
+    return prompt[:650]
+
+
 @router.post("/voice-billing/parse-audio")
 async def parse_voice_billing_audio(
     audio: UploadFile = File(...),
@@ -2056,16 +2112,34 @@ async def parse_voice_billing_audio(
         )
 
     stt_model = (os.getenv("GROQ_VOICE_STT_MODEL") or "whisper-large-v3").strip()
+    # The selected locale is an ASR hint, not just a downstream translation hint.
+    # Whisper documents that this improves transcription accuracy and latency.
+    whisper_language = _voice_billing_whisper_language_hint(language_code)
+    catalog_rows = (
+        db.query(Product.product_name)
+        .filter(Product.user_id == int(user_id), Product.is_active == True)
+        .order_by(Product.product_name.asc())
+        .limit(25)
+        .all()
+    )
+    catalog_names = [str(row[0] or "").strip() for row in catalog_rows]
+    whisper_prompt = _voice_billing_whisper_prompt(language_code, catalog_names)
+    transcription_data = {
+        "model": stt_model,
+        "response_format": "verbose_json",
+        "temperature": "0",
+    }
+    if whisper_prompt:
+        transcription_data["prompt"] = whisper_prompt
+    if whisper_language:
+        transcription_data["language"] = whisper_language
+
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=8.0)) as client:
             response = await client.post(
                 "https://api.groq.com/openai/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {api_key}"},
-                data={
-                    "model": stt_model,
-                    "response_format": "json",
-                    "temperature": "0",
-                },
+                data=transcription_data,
                 files={
                     "file": (
                         Path(audio.filename or "voice-billing.wav").name,
