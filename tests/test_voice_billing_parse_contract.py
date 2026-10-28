@@ -377,10 +377,12 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
 
 def test_spoken_modifier_must_match_before_catalog_stock_id_is_used():
     sona_masoori = _product(42, "Sona Masoori Rice", "RICE-01")
+    soap = _product(43, "Soap", "SOAP-01")
 
     assert _voice_billing_product_has_evidence("2 kg rice 50", sona_masoori) is True
     assert _voice_billing_product_has_evidence("2 kg sona masoori rice 50", sona_masoori) is True
     assert _voice_billing_product_has_evidence("2 kg black rice 50", sona_masoori) is False
+    assert _voice_billing_product_has_evidence("2 pieces soup 50", soap) is False
 
 
 def test_voice_parser_requires_english_normalization_when_language_is_auto():
