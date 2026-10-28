@@ -1445,6 +1445,98 @@ def _voice_billing_normalize(value: str) -> str:
     return re.sub(r"\s+", " ", normalized).strip()
 
 
+_VOICE_BILLING_NUMBER_WORDS = {
+    # English.
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
+    "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+    # Roman Telugu.
+    "okati": 1, "okkati": 1, "okaati": 1, "rendu": 2, "moodu": 3, "mudu": 3,
+    "nalugu": 4, "naalugu": 4, "aidu": 5, "ayidu": 5, "aaru": 6,
+    "aru": 6, "edu": 7, "yedu": 7, "enimidi": 8, "enamidi": 8,
+    "tommidi": 9, "tomidi": 9, "padi": 10, "iravai": 20, "muppai": 30,
+    "nalabhai": 40, "yabhai": 50, "yaabhai": 50, "aravai": 60,
+    "debbai": 70, "enabhai": 80, "tombhai": 90,
+    # Telugu script.
+    "సున్నా": 0, "ఒకటి": 1, "ఒక్కటి": 1, "రెండు": 2, "మూడు": 3,
+    "నాలుగు": 4, "ఐదు": 5, "అయిదు": 5, "ఆరు": 6, "ఏడు": 7,
+    "ఎనిమిది": 8, "తొమ్మిది": 9, "పది": 10, "ఇరవై": 20,
+    "ముప్పై": 30, "నలభై": 40, "యాభై": 50, "అరవై": 60,
+    "డెబ్బై": 70, "ఎనభై": 80, "తొంభై": 90,
+    # Common Hindi/Roman Hindi forms, excluding ambiguous homophones.
+    "ek": 1, "do": 2, "teen": 3, "char": 4, "chaar": 4, "panch": 5,
+    "paanch": 5, "cheh": 6, "saat": 7, "aath": 8, "nau": 9, "das": 10,
+    "bees": 20, "tees": 30, "chalis": 40, "chaalis": 40, "pachas": 50,
+    "pachaas": 50, "saath": 60, "sattar": 70, "assi": 80, "nabbe": 90,
+    "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5, "पाँच": 5,
+    "छह": 6, "सात": 7, "आठ": 8, "नौ": 9, "दस": 10, "बीस": 20,
+    "तीस": 30, "चालीस": 40, "पचास": 50, "साठ": 60, "सत्तर": 70,
+    "अस्सी": 80, "नब्बे": 90,
+}
+
+_VOICE_BILLING_SCALE_WORDS = {
+    "hundred": 100, "hundreds": 100, "sau": 100, "सौ": 100,
+    "vanda": 100, "vandu": 100, "vandalu": 100, "vandala": 100,
+    "vandlu": 100, "vandulu": 100, "vandallu": 100,
+    "వంద": 100, "వందలు": 100, "వందల": 100,
+    "thousand": 1000, "thousands": 1000, "hazar": 1000, "hazaar": 1000,
+    "vela": 1000, "velu": 1000, "velalu": 1000, "వేలు": 1000, "వేల": 1000,
+}
+
+_VOICE_BILLING_NUMBER_CONNECTORS = {"and", "aur", "మరియు", "mariyu"}
+
+
+def _voice_billing_number_value(token: str) -> Optional[Decimal]:
+    try:
+        value = Decimal(token)
+        if value.is_finite():
+            return value
+    except (TypeError, ValueError, ArithmeticError):
+        pass
+    word_value = _VOICE_BILLING_NUMBER_WORDS.get(token)
+    return Decimal(word_value) if word_value is not None else None
+
+
+def _voice_billing_format_number(value: Decimal) -> str:
+    formatted = format(value.normalize(), "f")
+    return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
+
+
+def _voice_billing_normalize_spoken_scales(value: str) -> str:
+    """Deterministically collapse phrases like '3 vandalu' into '300'."""
+    tokens = _voice_billing_normalize(value).split()
+    output: list[str] = []
+    index = 0
+    while index < len(tokens):
+        current = tokens[index]
+        if index + 1 < len(tokens):
+            amount = _voice_billing_number_value(current)
+            scale = _VOICE_BILLING_SCALE_WORDS.get(tokens[index + 1])
+            if amount is not None and scale is not None and Decimal("1") <= amount <= Decimal("99"):
+                total = amount * Decimal(scale)
+                consumed = 2
+                remainder_index = index + 2
+                if (
+                    remainder_index < len(tokens)
+                    and tokens[remainder_index] in _VOICE_BILLING_NUMBER_CONNECTORS
+                ):
+                    remainder_index += 1
+                if remainder_index < len(tokens):
+                    remainder = _voice_billing_number_value(tokens[remainder_index])
+                    if remainder is not None and Decimal("1") <= remainder < Decimal(scale):
+                        total += remainder
+                        consumed = remainder_index - index + 1
+                output.append(_voice_billing_format_number(total))
+                index += consumed
+                continue
+        output.append(current)
+        index += 1
+    return " ".join(output)
+
+
 def _voice_billing_expanded_tokens(value: str) -> set[str]:
     tokens = set(_voice_billing_normalize(value).split())
     expanded = set(tokens)
@@ -1456,10 +1548,11 @@ def _voice_billing_expanded_tokens(value: str) -> set[str]:
 
 
 def _voice_billing_catalog_candidates(transcript: str, products: list[Product], limit: int = 80) -> list[Product]:
-    """Choose tenant-owned catalog rows with positive lexical evidence; avoid random nearest products."""
-    if len(products) <= limit:
-        return products
+    """Return only tenant-owned catalog rows supported by transcript evidence.
 
+    A small catalog is not a reason to send unrelated products to the model:
+    doing so encourages plausible but incorrect product-ID selections.
+    """
     normalized_transcript = _voice_billing_normalize(transcript)
     stop_tokens = {
         "a", "an", "the", "please", "add", "want", "need", "give", "me", "for", "at",
@@ -1565,11 +1658,13 @@ def _voice_billing_product_has_evidence(transcript: str, product: Product) -> bo
     if query_tokens and query_tokens.issubset(product_tokens):
         return True
 
-    compact_query = " ".join(query_tokens)
+    # Sorting makes the fallback deterministic; a high threshold avoids treating
+    # near-homophones (for example, "soup" vs "soap") as stock-backed evidence.
+    compact_query = " ".join(sorted(query_tokens))
     return bool(
         compact_query
         and normalized_name
-        and difflib.SequenceMatcher(None, compact_query, normalized_name).ratio() >= 0.72
+        and difflib.SequenceMatcher(None, compact_query, normalized_name).ratio() >= 0.84
     )
 
 async def _voice_billing_translate_search_query(
@@ -1584,7 +1679,9 @@ async def _voice_billing_translate_search_query(
         "Translate product words to common English product names where known. For uncommon product names, "
         "use a clear English transliteration rather than omitting the item. Preserve every item, brand, quantity, "
         "measurement unit, spoken price, and whether an amount appears to be a per-unit price or a line total. "
-        "Do not invent or delete any product, quantity, unit, or price. Return exactly JSON: "
+        "Do not invent or delete any product, quantity, unit, or price. Some Indian spoken scale phrases are "
+        "deterministically normalized before translation, e.g. '3 vandalu' or 'moodu vandalu' becomes 300. "
+        "Preserve normalized numeric values exactly and do not multiply them again. Return exactly JSON: "
         "{\"english_search_text\": \"...\"}.\n"
         f"Language hint: {language_code or 'auto'}\n"
         f"Original utterance: {transcript}"
@@ -1660,12 +1757,16 @@ async def parse_voice_billing(
             detail="Voice billing AI is not configured. Set GROQ_API_KEY on the backend.",
         )
 
+    # Deterministically normalize spoken scale expressions before translation.
+    # Keep the original transcript in the response for the cashier's review.
+    parser_transcript = _voice_billing_normalize_spoken_scales(transcript)
+
     # Normalize non-English/native-script and common Romanized Indian speech BEFORE matching.
     model = (os.getenv("GROQ_VOICE_BILLING_MODEL") or "qwen/qwen3.8-27b").strip()
     translated_search_text = ""
     if _voice_billing_should_translate(transcript, request.language_code or "auto"):
         translated_search_text = await _voice_billing_translate_search_query(
-            transcript, request.language_code or "auto", api_key, model
+            parser_transcript, request.language_code or "auto", api_key, model
         )
         if not translated_search_text or not _voice_billing_is_english_text(translated_search_text):
             return {
@@ -1682,7 +1783,7 @@ async def parse_voice_billing(
             }
         english_transcript = translated_search_text
     else:
-        english_transcript = transcript
+        english_transcript = parser_transcript
 
     products = (
         db.query(Product)
