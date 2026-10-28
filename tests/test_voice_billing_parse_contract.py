@@ -473,7 +473,7 @@ def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monke
     assert captured["url"].endswith("/audio/transcriptions")
     assert captured["data"]["model"] == "whisper-large-v3"
     assert captured["data"]["response_format"] == "verbose_json"
-    assert captured["data"]["prompt"]
+    assert "prompt" not in captured["data"]  # no shop terms were supplied
     assert "language" not in captured["data"]  # auto-detection should remain enabled
     assert captured["headers"]["Authorization"] == "Bearer unit-test-key"
     assert captured["transcript"] == "2 kg rice 50"
