@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from inventory import (
     _voice_billing_catalog_candidates,
+    _voice_billing_normalize_spoken_scales,
     _voice_billing_normalize,
     _voice_billing_product_has_evidence,
     _voice_billing_should_translate,
@@ -25,6 +26,20 @@ def test_voice_billing_parse_endpoints_are_registered():
 def test_voice_billing_normalization_preserves_indian_script_and_numbers():
     assert _voice_billing_normalize("రెండు kg rice 50") == "రెండు kg rice 50"
     assert _voice_billing_normalize("  RICE,   50 ") == "rice 50"
+
+
+def test_spoken_scale_phrases_normalize_roman_telugu_and_telugu_script():
+    assert _voice_billing_normalize_spoken_scales("3 vandalu biyyam") == "300 biyyam"
+    assert _voice_billing_normalize_spoken_scales("moodu vandalu biyyam") == "300 biyyam"
+    assert _voice_billing_normalize_spoken_scales("మూడు వందలు బియ్యం") == "300 బియ్యం"
+
+
+def test_spoken_scale_phrases_can_include_a_remainder():
+    assert _voice_billing_normalize_spoken_scales("3 vandalu yabhai rupees") == "350 rupees"
+
+
+def test_spoken_scale_phrases_do_not_treat_homophones_as_numbers():
+    assert _voice_billing_normalize_spoken_scales("tree vandalu soap") == "tree vandalu soap"
 
 
 def test_catalog_shortlisting_matches_transliterated_product_alias():
