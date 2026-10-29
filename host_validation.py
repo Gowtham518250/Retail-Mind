@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 DEFAULT_ALLOWED_HOSTS = (
     "localhost",
     "127.0.0.1",
-    "retail-mind-vkbp.onrender.com",
+    "https://final-production-nwkl.onrender.com"
     "retail-mind-hpx3.onrender.com",
     "retail-mind-web.onrender.com",
 )
