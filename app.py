@@ -302,6 +302,7 @@ _EXTRA_ALLOWED_ORIGINS = ",".join(
     for value in (
         os.getenv("ALLOWED_ORIGINS", "").strip(),
         "https://retail-mind-1.onrender.com",
+        "https://final-production-nwkl.onrender.com",
     )
     if value
 )
