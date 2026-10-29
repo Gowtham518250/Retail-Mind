@@ -227,6 +227,14 @@ def _expire_pending_otps(db: Session, user_id: int, purpose: str) -> None:
     )
 
 
+def _delete_pending_otps(db: Session, user_id: int, purpose: str) -> int:
+    """Delete all reset records for one user and purpose after a successful reset."""
+    return db.query(PasswordReset).filter(
+        PasswordReset.user_id == user_id,
+        PasswordReset.description == purpose,
+    ).delete(synchronize_session=False)
+
+
 def _store_db_otp(db: Session, user_id: int, otp: str, purpose: str, minutes: int = 10) -> None:
     _expire_pending_otps(db, user_id, purpose)
     db.add(
@@ -709,6 +717,7 @@ def verify_reset_otp(
         db.commit()
     except Exception:
         db.rollback()
+        logger.exception("Password reset transaction failed")
         raise HTTPException(status_code=500, detail="Failed to reset password")
 
     return {"msg": "Password reset successfully"}
