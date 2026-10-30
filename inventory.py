@@ -1491,6 +1491,43 @@ _VOICE_BILLING_SCALE_WORDS = {
 
 _VOICE_BILLING_NUMBER_CONNECTORS = {"and", "aur", "మరియు", "mariyu"}
 
+# Conservative corrections for recurring Telugu speech-recognition variants.
+# These are applied only to complete normalized tokens, before scale parsing.
+_VOICE_BILLING_TELUGU_ASR_VARIANTS = {
+    "ఇండు": "రెండు", "రేండు": "రెండు", "రెణ్డు": "రెండు", "రెండూ": "రెండు",
+    "మూడూ": "మూడు",
+    "నాల్గు": "నాలుగు", "నాలుగూ": "నాలుగు",
+    "ఆయ్దు": "ఐదు", "అయ్దు": "ఐదు", "ఐదూ": "ఐదు", "ఆయిదు": "ఐదు",
+    "ఆరవే": "అరవై", "అరవయ్": "అరవై", "అరవయి": "అరవై", "ఆరవై": "అరవై",
+    "యాభయ్": "యాభై", "యాభయి": "యాభై", "డెబ్భై": "డెబ్బై",
+    "ఉందలు": "వందలు", "ఒందలు": "వందలు", "వందాలు": "వందలు",
+    "వందులు": "వందలు", "వందలూ": "వందలు", "వంద్లు": "వందలు",
+    "పంచేదారా": "పంచదార", "పంచేదార": "పంచదార", "పంచదారా": "పంచదార",
+    "పంచదరా": "పంచదార", "పంచదర": "పంచదార",
+    "నూనే": "నూనె", "నూనై": "నూనె",
+    "బిర్యాని": "బిరియాని", "బిర్యానీ": "బిరియాని", "బిరియానీ": "బిరియాని",
+    "బిరియానీలు": "బిరియాని",
+}
+
+
+def _voice_billing_correct_telugu_asr_variants(value: str) -> str:
+    tokens = _voice_billing_normalize(value).split()
+    for index, token in enumerate(tokens):
+        corrected = _VOICE_BILLING_TELUGU_ASR_VARIANTS.get(token)
+        if corrected is not None:
+            tokens[index] = corrected
+        elif (
+            token == "రేణు"
+            and index + 1 < len(tokens)
+            and (
+                tokens[index + 1] in _VOICE_BILLING_SCALE_WORDS
+                or _VOICE_BILLING_TELUGU_ASR_VARIANTS.get(tokens[index + 1]) == "వందలు"
+            )
+        ):
+            # "రేణు" can be a person's name; reinterpret only before a scale word.
+            tokens[index] = "రెండు"
+    return " ".join(tokens)
+
 
 def _voice_billing_number_value(token: str) -> Optional[Decimal]:
     try:
@@ -1510,7 +1547,7 @@ def _voice_billing_format_number(value: Decimal) -> str:
 
 def _voice_billing_normalize_spoken_scales(value: str) -> str:
     """Deterministically collapse phrases like '3 vandalu' into '300'."""
-    tokens = _voice_billing_normalize(value).split()
+    tokens = _voice_billing_correct_telugu_asr_variants(value).split()
     output: list[str] = []
     index = 0
     while index < len(tokens):
