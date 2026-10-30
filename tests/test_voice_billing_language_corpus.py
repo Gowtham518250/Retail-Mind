@@ -47,14 +47,10 @@ def test_multilingual_number_and_asr_normalization(language, utterance, expected
     assert _voice_billing_normalize_spoken_scales(utterance) == expected
 
 
-def test_per_language_deterministic_corpus_accuracy_at_least_90_percent():
-    totals, correct = {}, {}
+def test_all_current_deterministic_corpus_cases_match_expected_output():
+    # This is a regression corpus, not a statistical/live microphone accuracy claim.
     for language, utterance, expected in CORPUS:
-        totals[language] = totals.get(language, 0) + 1
-        if _voice_billing_normalize_spoken_scales(utterance) == expected:
-            correct[language] = correct.get(language, 0) + 1
-    for language, total in totals.items():
-        assert correct.get(language, 0) / total >= 0.9, language
+        assert _voice_billing_normalize_spoken_scales(utterance) == expected, language
 
 
 @pytest.mark.parametrize(
