@@ -1431,7 +1431,17 @@ _VOICE_BILLING_ALIASES = {
     # Narrow catalog-aware ASR spelling repair observed in Telugu speech:
     # "bubt" is sometimes transcribed for the packaged drink brand "Boost".
     "boost": {"boost", "bubt"},
+    "mutton": {"mutton", "gosht", "meka", "మటన్", "మాంసం", "मटन", "மட்டன்", "ಮಟನ್", "മട്ടൻ", "মাটন"},
+    "egg": {"egg", "eggs", "anda", "kodiguddu", "muttai", "గుడ్డు", "గుడ్లు", "अंडा", "அண்டா", "முட்டை", "ಮೊಟ್ಟೆ", "മുട്ട", "ডিম"},
+    "onion": {"onion", "pyaz", "pyaaz", "ullipaya", "vengayam", "ఉల్లిపాయ", "ఉల్లి", "प्याज", "प्याज़", "வெங்காயம்", "ಈರುಳ್ಳಿ", "സവാള", "পেঁয়াজ"},
+    "tomato": {"tomato", "tamata", "thakkali", "tamatar", "టమాటా", "టమాటో", "టమోటా", "टमाटर", "தக்காளி", "ಟೊಮೇಟೊ", "തക്കാളി", "টমেটো"},
+    "potato": {"potato", "aloo", "batata", "bangaladumpa", "బంగాళదుంప", "ఆలు", "आलू", "உருளைக்கிழங்கு", "ಆಲೂಗಡ್ಡೆ", "ഉരുളക്കിഴങ്ങ്", "আলু"},
+    "atta": {"atta", "wheat", "godhuma", "pindi", "flour", "గోధుమ", "గోధుమపిండి", "आटा", "கோதுமை", "ಗೋಧಿ", "ഗോതമ്പ്"},
+    "biscuit": {"biscuit", "biscuits", "biskut", "బిస్కెట్", "బిస్కెట్లు", "बिस्कुट", "பிஸ்கட்", "ಬಿಸ್ಕತ್ತು", "ബിസ്കറ്റ്"},
 }
+_VOICE_BILLING_ALIASES["biryani"].update({"బిరియాని", "బిరియానీ", "బిర్యానీ"})
+_VOICE_BILLING_ALIASES["sugar"].update({"పంచదారా", "पंचदार"})
+_VOICE_BILLING_ALIASES["oil"].update({"నూనె", "నూనే"})
 
 
 def _voice_billing_normalize(value: str) -> str:
@@ -1491,6 +1501,67 @@ _VOICE_BILLING_SCALE_WORDS = {
 
 _VOICE_BILLING_NUMBER_CONNECTORS = {"and", "aur", "మరియు", "mariyu"}
 
+_VOICE_BILLING_NUMBER_WORDS.update({
+    "ஒன்று": 1, "இரண்டு": 2, "மூன்று": 3, "நான்கு": 4, "ஐந்து": 5, "ஆறு": 6,
+    "ஏழு": 7, "எட்டு": 8, "ஒன்பது": 9, "பத்து": 10, "இருபது": 20,
+    "முப்பது": 30, "நாற்பது": 40, "ஐம்பது": 50, "அறுபது": 60, "எழுபது": 70,
+    "எண்பது": 80, "தொண்ணூறு": 90, "onru": 1, "irandu": 2, "moondru": 3,
+    "naangu": 4, "ainthu": 5, "ezhu": 7, "ettu": 8, "onbathu": 9, "pathu": 10,
+    "irubathu": 20, "muppathu": 30, "narpathu": 40, "aimbathu": 50,
+    "arubathu": 60, "ezhubathu": 70, "enbathu": 80, "thonnooru": 90,
+    "ಒಂದು": 1, "ಎರಡು": 2, "ಮೂರು": 3, "ನಾಲ್ಕು": 4, "ಐದು": 5, "ಆರು": 6,
+    "ಏಳು": 7, "ಎಂಟು": 8, "ಒಂಬತ್ತು": 9, "ಹತ್ತು": 10, "ಇಪ್ಪತ್ತು": 20,
+    "ಮೂವತ್ತು": 30, "ನಲವತ್ತು": 40, "ಐವತ್ತು": 50, "ಅರವತ್ತು": 60, "ಎಪ್ಪತ್ತು": 70,
+    "ಎಂಬತ್ತು": 80, "ತೊಂಬತ್ತು": 90, "ഒന്ന്": 1, "രണ്ട്": 2, "മൂന്ന്": 3,
+    "നാല്": 4, "അഞ്ച്": 5, "ആറ്": 6, "ഏഴ്": 7, "എട്ട്": 8, "ഒമ്പത്": 9,
+    "പത്ത്": 10, "ഇരുപത്": 20, "മുപ്പത്": 30, "നാല്പത്": 40, "അമ്പത്": 50,
+    "അറുപത്": 60, "എഴുപത്": 70, "എൺപത്": 80, "തൊണ്ണൂറ്": 90,
+    "एक": 1, "दोन": 2, "तीन": 3, "चार": 4, "पाच": 5, "सहा": 6, "सात": 7,
+    "आठ": 8, "नऊ": 9, "दहा": 10, "वीस": 20, "तीस": 30, "चाळीस": 40,
+    "पन्नास": 50, "साठ": 60, "सत्तर": 70, "ऐंशी": 80, "नव्वद": 90,
+    "এক": 1, "দুই": 2, "তিন": 3, "চার": 4, "পাঁচ": 5, "ছয়": 6, "সাত": 7,
+    "আট": 8, "নয়": 9, "দশ": 10, "বিশ": 20, "ত্রিশ": 30, "চল্লিশ": 40,
+    "পঞ্চাশ": 50, "ষাট": 60, "সত্তর": 70, "আশি": 80, "নব্বই": 90,
+    "એક": 1, "બે": 2, "ત્રણ": 3, "ચાર": 4, "પાંચ": 5, "છ": 6, "સાત": 7,
+    "આઠ": 8, "નવ": 9, "દસ": 10, "વીસ": 20, "ત્રીસ": 30, "ચાલીસ": 40,
+    "પચાસ": 50, "સાઠ": 60, "સિત્તેર": 70, "એંસી": 80, "નેવું": 90,
+    "ਇੱਕ": 1, "ਦੋ": 2, "ਤਿੰਨ": 3, "ਚਾਰ": 4, "ਪੰਜ": 5, "ਛੇ": 6, "ਸੱਤ": 7,
+    "ਅੱਠ": 8, "ਨੌਂ": 9, "ਦਸ": 10, "ਵੀਹ": 20, "ਤੀਹ": 30, "ਚਾਲੀ": 40,
+    "ਪੰਜਾਹ": 50, "ਸੱਠ": 60, "ਸੱਤਰ": 70, "ਅੱਸੀ": 80, "ਨੱਬੇ": 90,
+})
+_VOICE_BILLING_SCALE_WORDS.update({
+    "நூறு": 100, "ஆயிரம்": 1000, "nooru": 100, "aayiram": 1000,
+    "ನೂರು": 100, "ಸಾವಿರ": 1000, "നൂറ്": 100, "ആയിരം": 1000,
+    "शे": 100, "शंभर": 100, "हजार": 1000, "હજાર": 1000,
+    "સો": 100, "শো": 100, "হাজার": 1000, "ਸੌ": 100, "ਹਜ਼ਾਰ": 1000,
+})
+_VOICE_BILLING_ASR_VARIANTS = {
+    "ఇండు": "రెండు", "రెండూ": "రెండు", "రేండు": "రెండు", "రెణ్డు": "రెండు",
+    "మూడూ": "మూడు", "నాల్గు": "నాలుగు", "నాలుగూ": "నాలుగు",
+    "ఆయ్దు": "ఐదు", "అయ్దు": "ఐదు", "ఐదూ": "ఐదు", "ఆయిదు": "ఐదు",
+    "ఆరవే": "అరవై", "అరవయ్": "అరవై", "అరవయి": "అరవై",
+    "యాభయ్": "యాభై", "యాభయి": "యాభై", "డెబ్భై": "డెబ్బై",
+    "ఉందలు": "వందలు", "ఒందలు": "వందలు", "వందాలు": "వందలు",
+    "వందులు": "వందలు", "వందలూ": "వందలు", "వంద్లు": "వందలు",
+    "పంచేదారా": "పంచదార", "పంచేదార": "పంచదార", "పంచదారా": "పంచదార",
+    "పంచదరా": "పంచదార", "పంచదర": "పంచదార", "నూనే": "నూనె", "నూనై": "నూనె",
+    "బిర్యాని": "బిరియాని", "బిర్యానీ": "బిరియాని", "బిరియానీ": "బిరియాని",
+    "हज़ार": "हजार", "पांचसौ": "पाँच सौ", "சர்க்கறை": "சர்க்கரை",
+    "எண்ணை": "எண்ணெய்", "அரிசீ": "அரிசி", "ಸಕ್ಕರೆಯ": "ಸಕ್ಕರೆ", "ಎண்ணೆಯ": "ಎಣ್ಣೆ",
+}
+
+def _voice_billing_repair_asr(tokens: list[str]) -> list[str]:
+    repaired = []
+    for i, token in enumerate(tokens):
+        fixed = _VOICE_BILLING_ASR_VARIANTS.get(token)
+        if fixed is None and token == "రేణు" and i + 1 < len(tokens):
+            following = _VOICE_BILLING_ASR_VARIANTS.get(tokens[i + 1], tokens[i + 1])
+            if following in _VOICE_BILLING_SCALE_WORDS:
+                fixed = "రెండు"
+        repaired.append(fixed if fixed is not None else token)
+    return repaired
+
+
 # Conservative corrections for recurring Telugu speech-recognition variants.
 # These are applied only to complete normalized tokens, before scale parsing.
 _VOICE_BILLING_TELUGU_ASR_VARIANTS = {
@@ -1511,7 +1582,7 @@ _VOICE_BILLING_TELUGU_ASR_VARIANTS = {
 
 
 def _voice_billing_correct_telugu_asr_variants(value: str) -> str:
-    tokens = _voice_billing_normalize(value).split()
+    tokens = _voice_billing_repair_asr(_voice_billing_normalize(value).split())
     for index, token in enumerate(tokens):
         corrected = _VOICE_BILLING_TELUGU_ASR_VARIANTS.get(token)
         if corrected is not None:
