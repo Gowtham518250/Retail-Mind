@@ -1610,12 +1610,17 @@ def _voice_billing_should_translate(transcript: str, language_code: str) -> bool
     for char in transcript:
         if unicodedata.category(char)[0] in {"L", "M"} and "LATIN" not in unicodedata.name(char, ""):
             return True
-    # Device STT may return Romanized Indian speech with language_code=auto.
+    # Android/Whisper may label Romanized Telugu as English because the
+    # transcript uses Latin characters. Include scale words as language cues:
+    # e.g. "3 vandalu bubt" must still go through translation even when the ASR
+    # reports English, otherwise the product word is matched without context.
     cues = {
         "rendu", "moodu", "nalugu", "biyyam", "biyam", "palu", "paalu",
         "noone", "kavali", "cheyyandi", "yaabhai", "iravai", "chawal",
         "chaval", "doodh", "dudh", "cheeni", "shakkar", "pachaas", "pachis",
         "kilolu", "rupay", "chai", "paani", "neeru", "thanni", "ennai", "paruppu",
+        "vanda", "vandu", "vandalu", "vandala", "vandlu", "vandulu", "vandallu",
+        "vela", "velu", "velalu", "sau", "hazar", "hazaar",
     }
     return bool(set(_voice_billing_normalize(transcript).split()).intersection(cues))
 
