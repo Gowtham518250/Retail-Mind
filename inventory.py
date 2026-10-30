@@ -1428,6 +1428,9 @@ _VOICE_BILLING_ALIASES = {
         "dal", "daal", "pappu", "paruppu",
         "పప్పు", "పప్పులు", "दाल", "பருப்பு", "ಬೇಳೆ", "പരിപ്പ്",
     },
+    # Narrow catalog-aware ASR spelling repair observed in Telugu speech:
+    # "bubt" is sometimes transcribed for the packaged drink brand "Boost".
+    "boost": {"boost", "bubt"},
 }
 
 
@@ -1653,11 +1656,17 @@ def _voice_billing_product_has_evidence(transcript: str, product: Product) -> bo
         "pcs", "bottle", "bottles", "one", "two", "three", "four", "five", "six",
         "seven", "eight", "nine", "ten", "ek", "do", "teen", "char", "panch",
     }
+    # Expand known speech/catalog aliases on both sides. This remains
+    # catalog-bound: "bubt" only supports a Boost row when that row exists in
+    # this shop's inventory; it is not globally rewritten into a product.
     query_tokens = {
-        token for token in normalized_transcript.split()
+        token for token in _voice_billing_expanded_tokens(normalized_transcript)
         if token not in stop_tokens and not token.isdigit()
     }
-    product_tokens = set(normalized_name.split())
+    product_tokens = {
+        token for token in _voice_billing_expanded_tokens(normalized_name)
+        if token not in stop_tokens and not token.isdigit()
+    }
     # Generic product terms (e.g. "rice") are allowed, but extra spoken
     # descriptors (e.g. "black" in "black rice") must also exist in the catalog name.
     if query_tokens and query_tokens.issubset(product_tokens):
