@@ -3467,7 +3467,7 @@ def _chatbot_is_greeting(message: str) -> bool:
 
 _CHATBOT_BUSINESS_TERMS = re.compile(
     r"\b(sales?|revenue|turnover|expenses?|spent|profit|income|stock|inventory|"
-    r"invoices?|bills?|khata|dues|receivables?|attendance|workers?|staff|"
+    r"sell|sold|invoices?|bills?|khata|dues|receivables?|attendance|workers?|staff|"
     r"payments?|transactions?|orders?|customers?|products?)\b",
     re.IGNORECASE,
 )
