@@ -1428,6 +1428,9 @@ _VOICE_BILLING_ALIASES = {
         "dal", "daal", "pappu", "paruppu",
         "పప్పు", "పప్పులు", "दाल", "பருப்பு", "ಬೇಳೆ", "പരിപ്പ്",
     },
+    # Narrow catalog-aware ASR spelling repair observed in Telugu speech:
+    # "bubt" is sometimes transcribed for the packaged drink brand "Boost".
+    "boost": {"boost", "bubt"},
 }
 
 
@@ -1563,6 +1566,25 @@ def _voice_billing_catalog_candidates(transcript: str, products: list[Product], 
         "seven", "eight", "nine", "ten", "ek", "do", "teen", "char", "panch",
         "rendu", "moodu", "nalugu", "aidu", "aaru", "edu", "padi",
     }
+    raw_query_tokens = {
+        token for token in normalized_transcript.split()
+        if token not in stop_tokens and not token.isdigit()
+    }
+    uses_boost_alias = "bubt" in raw_query_tokens and "boost" not in raw_query_tokens
+
+    # "bubt" is a narrow ASR alias for Boost, but it cannot identify a pack
+    # size. If more than one active shop product shares that alias, withhold
+    # stock-backed candidates and let the API request clarification/custom entry.
+    if uses_boost_alias:
+        boost_matches = [
+            product for product in products
+            if "boost" in _voice_billing_expanded_tokens(
+                str(product.product_name or "")
+            )
+        ]
+        if len(boost_matches) != 1:
+            return []
+
     query_tokens = {
         token for token in _voice_billing_expanded_tokens(transcript)
         if token not in stop_tokens and not token.isdigit()
@@ -1610,12 +1632,17 @@ def _voice_billing_should_translate(transcript: str, language_code: str) -> bool
     for char in transcript:
         if unicodedata.category(char)[0] in {"L", "M"} and "LATIN" not in unicodedata.name(char, ""):
             return True
-    # Device STT may return Romanized Indian speech with language_code=auto.
+    # Android/Whisper may label Romanized Telugu as English because the
+    # transcript uses Latin characters. Include scale words as language cues:
+    # e.g. "3 vandalu bubt" must still go through translation even when the ASR
+    # reports English, otherwise the product word is matched without context.
     cues = {
         "rendu", "moodu", "nalugu", "biyyam", "biyam", "palu", "paalu",
         "noone", "kavali", "cheyyandi", "yaabhai", "iravai", "chawal",
         "chaval", "doodh", "dudh", "cheeni", "shakkar", "pachaas", "pachis",
         "kilolu", "rupay", "chai", "paani", "neeru", "thanni", "ennai", "paruppu",
+        "vanda", "vandu", "vandalu", "vandala", "vandlu", "vandulu", "vandallu",
+        "vela", "velu", "velalu", "sau", "hazar", "hazaar",
     }
     return bool(set(_voice_billing_normalize(transcript).split()).intersection(cues))
 
@@ -1648,11 +1675,17 @@ def _voice_billing_product_has_evidence(transcript: str, product: Product) -> bo
         "pcs", "bottle", "bottles", "one", "two", "three", "four", "five", "six",
         "seven", "eight", "nine", "ten", "ek", "do", "teen", "char", "panch",
     }
+    # Expand known speech/catalog aliases on both sides. This remains
+    # catalog-bound: "bubt" only supports a Boost row when that row exists in
+    # this shop's inventory; it is not globally rewritten into a product.
     query_tokens = {
-        token for token in normalized_transcript.split()
+        token for token in _voice_billing_expanded_tokens(normalized_transcript)
         if token not in stop_tokens and not token.isdigit()
     }
-    product_tokens = set(normalized_name.split())
+    product_tokens = {
+        token for token in _voice_billing_expanded_tokens(normalized_name)
+        if token not in stop_tokens and not token.isdigit()
+    }
     # Generic product terms (e.g. "rice") are allowed, but extra spoken
     # descriptors (e.g. "black" in "black rice") must also exist in the catalog name.
     if query_tokens and query_tokens.issubset(product_tokens):
