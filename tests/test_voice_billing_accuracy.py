@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from inventory import (
     _voice_billing_catalog_candidates,
     _voice_billing_normalize_spoken_scales,
+    _voice_billing_product_has_evidence,
     _voice_billing_should_translate,
     _voice_billing_whisper_language_hint,
     _voice_billing_whisper_prompt,
@@ -62,3 +63,21 @@ def test_whisper_prompt_uses_shop_catalog_vocabulary_without_duplicates():
     assert "Tata Salt" in prompt
     assert "Turmeric Powder" in prompt
     assert prompt.count("Sona Masoori Rice") == 1
+
+def test_bubt_asr_variant_matches_boost_only_when_boost_is_in_catalog():
+    boost = SimpleNamespace(product_name="Boost", sku="")
+    butter = SimpleNamespace(product_name="Butter", sku="")
+
+    assert _voice_billing_catalog_candidates("300 bubt", [boost]) == [boost]
+    assert _voice_billing_product_has_evidence("300 bubt", boost) is True
+    assert _voice_billing_product_has_evidence("300 bubt", butter) is False
+
+
+def test_boost_asr_alias_does_not_turn_unrelated_words_into_catalog_matches():
+    boost = SimpleNamespace(product_name="Boost", sku="")
+    soap = SimpleNamespace(product_name="Soap", sku="")
+
+    assert _voice_billing_catalog_candidates("300 soap", [boost]) == []
+    assert _voice_billing_product_has_evidence("300 soap", boost) is False
+    assert _voice_billing_product_has_evidence("300 bubt", soap) is False
+
