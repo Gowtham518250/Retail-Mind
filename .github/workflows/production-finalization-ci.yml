@@ -5,6 +5,7 @@ on:
     branches:
       - "production-finalization-*"
       - "production-fix-2026-08-18-playstore"
+      - "feature/help-support-chat-api-20261030"
   pull_request:
     branches:
       - "production-fix-2026-08-18"
