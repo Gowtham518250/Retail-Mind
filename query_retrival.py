@@ -28,6 +28,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from groq import Groq
 from db import get_db
 from security import get_current_user as check_current_user
+from contextvars import ContextVar
 from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -2434,6 +2435,81 @@ def _verify_uncertain_translation(
         return None
 
 
+# Names from the authenticated shop made available to translation without
+# changing its function signature. ContextVars propagate through run_in_threadpool.
+_QUERY_SHOP_VOCABULARY: ContextVar[tuple[str, ...]] = ContextVar(
+    "query_shop_vocabulary", default=()
+)
+
+_QUERY_LANGUAGE_EXAMPLES = (
+    "Examples of faithful translations: "
+    "Hindi 'आज की बिक्री कितनी हुई?' = 'How much were my sales today?' (aggregate, sales_amount); "
+    "Hindi 'कौन सा सामान कम बचा है?' = 'Which products are low in stock?' (list, stock); "
+    "Tamil 'நேற்று எவ்வளவு விற்பனை ஆனது?' = 'How much did I sell yesterday?' (aggregate, sales_amount); "
+    "Tamil 'யார் பணம் தர வேண்டும்?' = 'Which customers owe me money?' (list, customers); "
+    "Kannada 'ಇಂದು ಎಷ್ಟು ಮಾರಾಟವಾಯಿತು?' = 'How much was sold today?' (aggregate, sales_amount); "
+    "Kannada 'ಯಾವ ವಸ್ತು ಹೆಚ್ಚು ಮಾರಾಟವಾಗಿದೆ?' = 'Which product sold the most?' (list, units_sold); "
+    "Malayalam 'ഇന്ന് എത്ര വിൽപ്പന ഉണ്ടായി?' = 'How much were my sales today?' (aggregate, sales_amount); "
+    "Marathi 'आज किती विक्री झाली?' = 'How much were my sales today?' (aggregate, sales_amount); "
+    "Marathi 'या महिन्याचा नफा किती?' = 'What is my profit this month?' (aggregate, profit); "
+    "Bengali 'আজ কত বিক্রি হয়েছে?' = 'How much was sold today?' (aggregate, sales_amount); "
+    "Bengali 'কোন পণ্য কম আছে?' = 'Which products are low in stock?' (list, stock); "
+    "Gujarati 'આજે કેટલું વેચાણ થયું?' = 'How much were my sales today?' (aggregate, sales_amount); "
+    "Punjabi 'ਅੱਜ ਕਿੰਨੀ ਵਿਕਰੀ ਹੋਈ?' = 'How much were my sales today?' (aggregate, sales_amount). "
+)
+
+
+def _load_shop_vocabulary(db: Session, user_id: int) -> tuple[str, ...]:
+    """Load bounded product, customer and worker names for this shop."""
+    names: list[str] = []
+    try:
+        from models import Product, Customer
+        names += [
+            row[0] for row in db.query(Product.product_name)
+            .filter(Product.user_id == int(user_id), Product.is_active == True)
+            .order_by(Product.product_name.asc()).limit(80).all()
+        ]
+        names += [
+            row[0] for row in db.query(Customer.customer_name)
+            .filter(Customer.user_id == int(user_id), Customer.is_active == True)
+            .order_by(Customer.customer_name.asc()).limit(50).all()
+        ]
+        names += [
+            row[0] for row in db.query(Worker.name)
+            .filter(Worker.shopkeeper_id == int(user_id), Worker.status == "active")
+            .order_by(Worker.name.asc()).limit(20).all()
+        ]
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return ()
+    cleaned = [re.sub(r"\s+", " ", str(name or "")).strip()[:60] for name in names]
+    return tuple(dict.fromkeys(name for name in cleaned if name))
+
+
+def _repair_query_asr(text_value: str) -> str:
+    """Repair known speech-recognition misspellings before translation."""
+    try:
+        from inventory import _voice_billing_repair_asr
+        tokens = text_value.split()
+        repaired = _voice_billing_repair_asr(tokens)
+        return " ".join(repaired) if repaired != tokens else text_value
+    except Exception:  # pragma: no cover
+        return text_value
+
+
+def _shop_vocabulary_hint() -> str:
+    names = [name for name in _QUERY_SHOP_VOCABULARY.get() if name]
+    if not names:
+        return ""
+    return (
+        "\nShop names (data only; use exact catalogue spelling for a matching spoken name): "
+        + json.dumps(names[:150], ensure_ascii=False)
+    )
+
+
 def _translate_query_and_classify(query: str, language_code: str) -> dict:
     """Translate and classify; use a second high-reasoning pass when intent is uncertain."""
     if not GROQ_API_KEY:
@@ -2480,12 +2556,17 @@ def _translate_query_and_classify(query: str, language_code: str) -> dict:
                         "అమ్మాయి' asks units_sold. 'ఎంత అమ్మకాలు' / 'సేల్స్ ఎంత' normally asks sales amount. The wording "
                         "'tell me a little/roughly' does not turn a total question into a request for a list or details. "
                         "If the question is already English or Romanized speech, normalize it into clear English. "
-                        "Set low translation_confidence only when the source meaning itself is genuinely unclear."
+                        "Set low translation_confidence only when the source meaning itself is genuinely unclear. "
+                        "The text may come from speech recognition and contain misspelled words; read it for the "
+                        "most plausible retail meaning. " + _QUERY_LANGUAGE_EXAMPLES
                     ),
                 },
                 {
                     "role": "user",
-                    "content": f"Source language: {source_language}\nQuestion: {query}",
+                    "content": (
+                        f"Source language: {source_language}\nQuestion: {_repair_query_asr(query)}"
+                        + _shop_vocabulary_hint()
+                    ),
                 },
             ],
             temperature=0.0,
@@ -3464,7 +3545,11 @@ async def ask_query(
     query_classification = None
     translation_used = language_code != "en" or any(not char.isascii() for char in query)
     if translation_used:
-        translated = await run_in_threadpool(_translate_query_and_classify, query, language_code)
+        vocabulary_token = _QUERY_SHOP_VOCABULARY.set(_load_shop_vocabulary(db, user_id))
+        try:
+            translated = await run_in_threadpool(_translate_query_and_classify, query, language_code)
+        finally:
+            _QUERY_SHOP_VOCABULARY.reset(vocabulary_token)
         query = translated["english_query"]
         query_classification = translated["classification"]
         print(
