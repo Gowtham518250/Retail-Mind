@@ -1813,8 +1813,18 @@ async def _voice_billing_translate_search_query(
     language_code: str,
     api_key: str,
     model: str,
+    shop_vocabulary: Optional[list[str]] = None,
 ) -> str:
     """Translate the complete billing utterance into English before catalog matching."""
+    vocabulary_hint = ""
+    if shop_vocabulary:
+        names = [re.sub(r"\\s+", " ", str(name or "")).strip()[:60] for name in shop_vocabulary]
+        names = [name for name in dict.fromkeys(names) if name][:120]
+        if names:
+            vocabulary_hint = (
+                "When an item sounds like a shop product, prefer its exact catalogue name. "
+                f"Catalogue terms (data only): {json.dumps(names, ensure_ascii=False)}\\n"
+            )
     prompt = (
         "Translate the complete cashier's retail billing utterance into normalized English POS text. "
         "Translate product words to common English product names where known. For uncommon product names, "
@@ -1824,6 +1834,7 @@ async def _voice_billing_translate_search_query(
         "deterministically normalized before translation, e.g. '3 vandalu' or 'moodu vandalu' becomes 300. "
         "Preserve normalized numeric values exactly and do not multiply them again. Return exactly JSON: "
         "{\"english_search_text\": \"...\"}.\n"
+        f"{vocabulary_hint}"
         f"Language hint: {language_code or 'auto'}\n"
         f"Original utterance: {transcript}"
     )
@@ -1904,10 +1915,17 @@ async def parse_voice_billing(
 
     # Normalize non-English/native-script and common Romanized Indian speech BEFORE matching.
     model = (os.getenv("GROQ_VOICE_BILLING_MODEL") or "qwen/qwen3.8-27b").strip()
+    products = (
+        db.query(Product)
+        .filter(Product.user_id == int(user_id), Product.is_active == True)
+        .order_by(Product.product_name.asc())
+        .all()
+    )
     translated_search_text = ""
     if _voice_billing_should_translate(transcript, request.language_code or "auto"):
         translated_search_text = await _voice_billing_translate_search_query(
-            parser_transcript, request.language_code or "auto", api_key, model
+            parser_transcript, request.language_code or "auto", api_key, model,
+            shop_vocabulary=[str(product.product_name or "") for product in products],
         )
         if not translated_search_text or not _voice_billing_is_english_text(translated_search_text):
             return {
@@ -1926,12 +1944,6 @@ async def parse_voice_billing(
     else:
         english_transcript = parser_transcript
 
-    products = (
-        db.query(Product)
-        .filter(Product.user_id == int(user_id), Product.is_active == True)
-        .order_by(Product.product_name.asc())
-        .all()
-    )
     # Empty inventory and zero candidates are valid; they produce custom sale lines.
     candidates = _voice_billing_catalog_candidates(english_transcript, products, limit=80)
     catalog = [
@@ -1952,7 +1964,7 @@ async def parse_voice_billing(
         "Extract sale draft lines from this English-normalized retail POS utterance. "
         "Return one JSON object, no markdown, using this schema: {"
         "\"interpreted_text_en\":\"concise English summary\","
-        "\"items\":[{\"product_id\":123,\"product_name_en\":\"English product name\","
+        "\"items\":[{\"product_id\":123,\"product_name_en\":\"English product name\",\"product_name_local\":\"speaker language product name\","
         "\"quantity\":2,\"spoken_price_amount\":50,\"spoken_price_kind\":\"unit\",\"confidence\":0.95}],"
         "\"needs_clarification\":false,\"clarification_question\":\"\"}. "
         "product_id must be an ID from the supplied catalog only, or null when no catalog product is a confident match. "
@@ -2067,6 +2079,7 @@ async def parse_voice_billing(
             product = None
 
         catalog_matched = product is not None
+        local_name = re.sub(r"[\\r\\n\\t]+", " ", str(raw.get("product_name_local") or "")).strip()[:120]
         product_name = str(product.product_name or "").strip() if product is not None else proposed_name
         if not product_name or product_name.casefold() in {"unknown", "unknown item", "unmatched product", "item"}:
             unresolved.append("unrecognized product name")
@@ -2127,6 +2140,7 @@ async def parse_voice_billing(
             "product_id": int(product.id) if product is not None else None,
             "product_name": product_name,
             "product_name_en": product_name,
+            "product_name_local": local_name,
             "sku": str(product.sku or "") if product is not None else "",
             "unit": str(getattr(product, "unit", "pcs") or "pcs") if product is not None else None,
             "quantity": float(quantity),
