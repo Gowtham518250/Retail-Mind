@@ -29,6 +29,7 @@ def test_chatbot_routes_live_metrics_to_authenticated_query_and_keeps_how_to_in_
     assert _chatbot_is_business_data_question("How much were my sales today?")
     assert _chatbot_is_business_data_question("Show my current stock")
     assert _chatbot_is_business_data_question("List my top 5 products")
+    assert _chatbot_is_business_data_question("What did I sell today?")
     assert not _chatbot_is_business_data_question("How do I create an invoice?")
     assert not _chatbot_is_business_data_question("How can I add a product to inventory?")
     assert not _chatbot_is_business_data_question("What is an invoice?")
