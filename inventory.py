@@ -1566,6 +1566,25 @@ def _voice_billing_catalog_candidates(transcript: str, products: list[Product], 
         "seven", "eight", "nine", "ten", "ek", "do", "teen", "char", "panch",
         "rendu", "moodu", "nalugu", "aidu", "aaru", "edu", "padi",
     }
+    raw_query_tokens = {
+        token for token in normalized_transcript.split()
+        if token not in stop_tokens and not token.isdigit()
+    }
+    uses_boost_alias = "bubt" in raw_query_tokens and "boost" not in raw_query_tokens
+
+    # "bubt" is a narrow ASR alias for Boost, but it cannot identify a pack
+    # size. If more than one active shop product shares that alias, withhold
+    # stock-backed candidates and let the API request clarification/custom entry.
+    if uses_boost_alias:
+        boost_matches = [
+            product for product in products
+            if "boost" in _voice_billing_expanded_tokens(
+                str(product.product_name or "")
+            )
+        ]
+        if len(boost_matches) != 1:
+            return []
+
     query_tokens = {
         token for token in _voice_billing_expanded_tokens(transcript)
         if token not in stop_tokens and not token.isdigit()
