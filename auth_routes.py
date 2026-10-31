@@ -1152,8 +1152,17 @@ def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(ge
                     'total': float(invoice.total_amount),
                     'totalAmount': float(invoice.total_amount),
                     'date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                    'business_date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
                     'created_at': invoice.created_at.isoformat() if invoice.created_at else None,
+                    'updated_at': invoice.updated_at.isoformat() if invoice.updated_at else None,
+                    'total_amount': float(invoice.total_amount),
+                    'invoice_total': float(invoice.total_amount),
+                    'paid_amount': float(invoice.paid_amount or 0),
+                    'payment_method': invoice.payment_method,
                     'payment_status': invoice.payment_status,
+                    'status': invoice.status,
+                    'source': invoice.source,
+                    'customer_phone': invoice.customer_phone,
                 }
                 sales_data.append(sales_record)
             else:
@@ -1173,8 +1182,17 @@ def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(ge
                         'totalAmount': float(item.line_total),
                         'final_amount': float(item.line_total),
                         'date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                        'business_date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
                         'created_at': invoice.created_at.isoformat() if invoice.created_at else None,
+                        'updated_at': invoice.updated_at.isoformat() if invoice.updated_at else None,
+                        'total_amount': float(invoice.total_amount),
+                        'invoice_total': float(invoice.total_amount),
+                        'paid_amount': float(invoice.paid_amount or 0),
+                        'payment_method': invoice.payment_method,
                         'payment_status': invoice.payment_status,
+                        'status': invoice.status,
+                        'source': invoice.source,
+                        'customer_phone': invoice.customer_phone,
                     }
                     sales_data.append(sales_record)
         
