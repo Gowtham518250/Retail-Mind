@@ -31,6 +31,17 @@ def test_customer_marketplace_can_find_shops_by_category_metadata():
     assert "ShopProfile.shop_categories.ilike(like)" in source
 
 
+def test_shop_product_page_batches_flash_sale_lookups_by_category():
+    import inspect
+
+    from online_store import browse_shop_products
+
+    source = inspect.getsource(browse_shop_products)
+    assert "get_active_discounts(" in source
+    assert "discounts_by_category.get(product.category, 0.0)" in source
+    assert "get_active_discount(db, shop_id_int, p.category)" not in source
+
+
 def test_product_image_column_has_an_idempotent_production_repair():
     from pathlib import Path
 
