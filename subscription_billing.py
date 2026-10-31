@@ -137,6 +137,10 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
     amount = int(plan["monthly_amount_paise"] if body.billing_interval == "MONTHLY" else plan["yearly_amount_paise"])
     if amount <= 0:
         raise HTTPException(status_code=400, detail="This plan cannot be billed.")
+    # Serialize checkout creation per shop. Without this transaction-scoped lock,
+    # two near-simultaneous taps can both pass the active-subscription check and
+    # create two Cashfree mandates for the same shop.
+    db.execute(text("SELECT pg_advisory_xact_lock(:shop_lock)"), {"shop_lock": shop_id})
     existing = db.execute(text("""
         SELECT id,status FROM rm_shop_subscriptions
         WHERE shop_id=:shop AND (
@@ -147,7 +151,23 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
         ORDER BY created_at DESC LIMIT 1
     """), {"shop": shop_id}).mappings().first()
     if existing:
-        raise HTTPException(status_code=409, detail="This shop already has a pending or active subscription. Cancel the current renewal or finish checkout before starting another plan.")
+        status = str(existing["status"] or "UNKNOWN").upper()
+        if status in {"CREATING", "PENDING_AUTH"}:
+            detail = (
+                "A previous checkout is still being created or awaiting authorization. "
+                "Retail Mind must reconcile that Cashfree checkout before another mandate can be started."
+            )
+        else:
+            detail = (
+                "This shop already has an active paid subscription. Use the subscription change/cancellation flow "
+                "before starting another recurring plan."
+            )
+        raise HTTPException(status_code=409, detail={
+            "code": "SUBSCRIPTION_CHECKOUT_BLOCKED",
+            "subscription_id": int(existing["id"]),
+            "subscription_status": status,
+            "message": detail,
+        })
     user = db.query(User).filter(User.id == shop_id, User.user_type == "OWNER", User.is_active == True).first()
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
     if not user:
@@ -200,7 +220,20 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
         session_id = data.get("subscription_session_id")
         cf_id = data.get("subscription_id") or local_sub_id
         if not session_id:
-            raise HTTPException(status_code=502, detail="Cashfree did not return a subscription checkout session.")
+            # A successful Cashfree response without a session token is ambiguous:
+            # Cashfree may already have created the mandate. Keep the row in
+            # CREATING so another checkout cannot accidentally create a duplicate.
+            logger.error(
+                "Cashfree created subscription without checkout session: shop_id=%s subscription_id=%s",
+                shop_id, cf_id,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "CASHFREE_SESSION_MISSING",
+                    "message": "Cashfree did not return a checkout session. This attempt is held for reconciliation to prevent duplicate mandates. Please contact support.",
+                },
+            )
         db.execute(text("UPDATE rm_shop_subscriptions SET status='PENDING_AUTH',subscription_session_id=:session,cashfree_subscription_id=:cfid,updated_at=NOW() WHERE cashfree_subscription_id=:old"), {"session":session_id,"cfid":cf_id,"old":local_sub_id})
         db.commit()
         return {"subscription_id": cf_id, "subscription_session_id": session_id, "environment": os.getenv("CASHFREE_ENV","sandbox").lower(), "status": "PENDING_AUTH"}
@@ -208,8 +241,20 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
         raise
     except Exception:
         db.rollback()
-        logger.exception("Cashfree subscription creation error")
-        raise HTTPException(status_code=502, detail="Unable to start Cashfree checkout. Please retry.")
+        # Do not mark an ambiguous network timeout as CREATE_FAILED: Cashfree may
+        # have accepted the request even if Retail Mind never received its reply.
+        # The CREATING row deliberately blocks a second mandate until reconciled.
+        logger.exception(
+            "Cashfree subscription creation outcome is unknown; reconciliation required: shop_id=%s subscription_id=%s",
+            shop_id, local_sub_id,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "CASHFREE_CHECKOUT_OUTCOME_UNKNOWN",
+                "message": "We could not confirm whether Cashfree created this checkout. To avoid duplicate recurring payments, this attempt is held for reconciliation. Please contact support before retrying.",
+            },
+        )
 
 @router.post("/api/billing/subscriptions/{subscription_id}/cancel")
 async def cancel_subscription(subscription_id: int, db: Session = Depends(get_db), owner: dict = Depends(owner_only)):
