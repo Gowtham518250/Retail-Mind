@@ -2298,13 +2298,15 @@ async def support_chat_message(
 
     guidance = _support_chat_guidance(question)
     if guidance is not None:
-        return {"answer": guidance, "message": guidance, "source": "retail_mind_help", "language_code": language_code}
+        localized = _translate_answer_to_language(guidance, language_code)
+        return {"answer": localized, "message": localized, "source": "retail_mind_help", "language_code": language_code}
 
     if _is_shop_data_question(question):
         result = await ask_query(query=question, language_code=language_code, db=db, user_id=user_id)
         answer = result.get("answer") or result.get("message")
         if answer:
-            return {"answer": str(answer), "message": str(answer), "source": "shop_data_query", "language_code": language_code}
+            localized = _translate_answer_to_language(str(answer), language_code)
+            return {"answer": localized, "message": localized, "source": "shop_data_query", "language_code": language_code}
         raise HTTPException(status_code=502, detail="The shop-data assistant returned an empty answer.")
 
     fallback = (
@@ -2313,7 +2315,8 @@ async def support_chat_message(
         "For live shop figures, ask a specific question such as “Show my sales today” "
         "or “Which products are low in stock?”"
     )
-    return {"answer": fallback, "message": fallback, "source": "retail_mind_help", "language_code": language_code}
+    localized = _translate_answer_to_language(fallback, language_code)
+    return {"answer": localized, "message": localized, "source": "retail_mind_help", "language_code": language_code}
 
 
 @app.get("/askquery/history")
