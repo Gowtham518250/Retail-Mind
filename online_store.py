@@ -79,6 +79,38 @@ def get_active_discount(db: Session, shop_id: int, category: str) -> float:
         pass
     return 0.0
 
+def get_active_discounts(
+    db: Session,
+    shop_id: int,
+    categories: set,
+) -> dict:
+    """Load the latest active discount for each category in one query."""
+    clean_categories = {category for category in categories if category}
+    if not clean_categories:
+        return {}
+
+    try:
+        from models import FlashSale
+        now = datetime.utcnow()
+        rows = db.query(FlashSale).filter(
+            FlashSale.user_id == shop_id,
+            FlashSale.category.in_(clean_categories),
+            FlashSale.is_active == True,
+            FlashSale.end_time > now,
+        ).order_by(
+            FlashSale.category.asc(),
+            FlashSale.start_time.desc(),
+        ).all()
+
+        discounts = {}
+        for sale in rows:
+            discounts.setdefault(sale.category, float(sale.discount_pct or 0))
+        return discounts
+    except Exception:
+        logger.exception("Unable to load active flash-sale discounts for shop %s", shop_id)
+        return {}
+
+
 logger = logging.getLogger(__name__)
 from realtime import publish_realtime_event
 from durable_sync import append_sync_event
@@ -1281,6 +1313,13 @@ def browse_shop_products(
         q = q.filter(Product.category == category)
 
     products = q.offset(skip).limit(limit).all()
+    # Resolve all category discounts in one query instead of one SELECT per
+    # product. This was producing repeated flash_sales round trips on shop pages.
+    discounts_by_category = get_active_discounts(
+        db,
+        shop_id_int,
+        {product.category for product in products if product.category},
+    )
 
     return {
         "shop_name": profile.shop_name,
@@ -1309,19 +1348,32 @@ def browse_shop_products(
         "accept_online": bool(getattr(profile, "online_accept_online", False)),
         "is_online": True,
         "products": [
-            (lambda p, discount: {
-                "id": p.id,
-                "name": p.product_name,
-                "category": p.category,
-                "price": round(float(p.unit_price) * (1.0 - discount / 100.0), 2) if discount > 0 else float(p.unit_price),
-                "original_price": float(p.unit_price),
+            {
+                "id": product.id,
+                "name": product.product_name,
+                "category": product.category,
+                "price": (
+                    round(
+                        float(product.unit_price)
+                        * (1.0 - discount / 100.0),
+                        2,
+                    )
+                    if discount > 0
+                    else float(product.unit_price)
+                ),
+                "original_price": float(product.unit_price),
                 "discount_pct": discount,
                 "flash_sale_active": discount > 0,
-                "stock_available": p.current_stock if p.current_stock is not None else 999,
-                "description": p.description,
-                "image_url": p.image_url,
-            })(p, get_active_discount(db, shop_id_int, p.category))
-            for p in products
+                "stock_available": (
+                    product.current_stock
+                    if product.current_stock is not None
+                    else 999
+                ),
+                "description": product.description,
+                "image_url": product.image_url,
+            }
+            for product in products
+            for discount in [discounts_by_category.get(product.category, 0.0)]
         ],
     }
 
