@@ -1117,20 +1117,25 @@ def get_sales(user_id: int = Depends(get_current_user), db: Session = Depends(ge
     This endpoint is used by the frontend to download sales history from the cloud.
     """
     try:
-        from models import Invoice, InvoiceLineItem
+        from models import Invoice
         from sqlalchemy import desc
-        
-        # Get all invoices for this user
-        invoices = db.query(Invoice).filter(
-            Invoice.user_id == user_id
-        ).order_by(desc(Invoice.created_at)).all()
-        
+        from sqlalchemy.orm import selectinload
+
+        # Load all invoices and their lines in two bounded queries rather than
+        # issuing one SELECT for each invoice. This route is the legacy full
+        # history reader used by analytics/cache reconciliation.
+        invoices = (
+            db.query(Invoice)
+            .options(selectinload(Invoice.line_items))
+            .filter(Invoice.user_id == user_id)
+            .order_by(desc(Invoice.created_at))
+            .all()
+        )
+
         sales_data = []
         for invoice in invoices:
-            # Flatten invoices into legacy sales objects expected by the frontend
-            line_items = db.query(InvoiceLineItem).filter(
-                InvoiceLineItem.invoice_id == invoice.id
-            ).all()
+            # The relationship was loaded in one select-in query above.
+            line_items = invoice.line_items or []
 
             if not line_items:
                 # If there are no line items, just create a placeholder
