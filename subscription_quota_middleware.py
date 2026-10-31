@@ -45,7 +45,7 @@ class SubscriptionAIQuotaMiddleware(BaseHTTPMiddleware):
                 JOIN rm_subscription_plans p ON p.plan_code=s.plan_code
                 WHERE s.shop_id=:shop
                   AND ((s.status='ACTIVE' AND (s.current_period_end IS NULL OR s.current_period_end >= NOW()))
-                    OR (s.status='GRACE_PERIOD' AND s.grace_period_end >= NOW()))
+                    OR (s.status='GRACE_PERIOD' AND s.current_period_end IS NOT NULL AND s.grace_period_end >= NOW()))
                 ORDER BY s.created_at DESC LIMIT 1
             """), {"shop": shop_id}).first()
             limit = int(plan[0]) if plan else 0
