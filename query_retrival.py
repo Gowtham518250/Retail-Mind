@@ -2232,6 +2232,93 @@ GROQ_API_KEY = (os.getenv("GROQ_API_KEY") or "").strip()
 client = Groq(api_key=GROQ_API_KEY or "unconfigured-groq-api-key")
 
 
+
+def _support_chat_guidance(message: str) -> str | None:
+    """Answer common app-how-to questions without invoking the shop-data SQL engine."""
+    question = re.sub(r"\s+", " ", (message or "").strip().lower())
+    if not question:
+        return "Please enter a question so I can help."
+
+    guidance = (
+        (("create a bill", "make a bill", "generate a bill", "create invoice", "make invoice", "billing process"),
+         "To create a bill in Retail Mind:\n1. Open Sales or Add Sale from your shop dashboard.\n2. Select or add the customer (if needed).\n3. Add the products and enter their quantities.\n4. Review the total and choose the payment method.\n5. Save the sale or generate the bill. Open Invoices to view or share the saved bill.\n\nIf your screen uses different labels, tell me which page you are on and I’ll guide you."),
+        (("add a product", "create a product", "new product", "add item to inventory"),
+         "To add a product, open Inventory, choose Add Product, enter the product name and available details (such as price and stock), then save. Check the product in your inventory list after saving."),
+        (("reset my password", "forgot password", "change my password", "password reset"),
+         "On the sign-in screen, choose Forgot Password and follow the verification steps sent to your registered contact method. Never share your OTP or password with anyone."),
+        (("add a customer", "create customer", "new customer"),
+         "Open Customers, choose Add Customer, enter the customer's details, and save. You can then select that customer while recording a sale."),
+        (("worker attendance", "mark attendance", "staff attendance"),
+         "Open Attendance from the dashboard, select the worker, and use the available check-in or attendance action. Review the attendance entry after saving."),
+        (("online store", "enable online shopping", "online orders"),
+         "Open Online Store from your dashboard and follow the store setup steps. Once enabled, review your store settings and product availability before sharing the shop link."),
+    )
+    for phrases, answer in guidance:
+        if any(phrase in question for phrase in phrases):
+            return answer
+    return None
+
+
+def _is_shop_data_question(message: str) -> bool:
+    """Route actual business-data questions to the authenticated, tenant-scoped query engine."""
+    question = (message or "").strip().lower()
+    data_terms = (
+        "sales", "revenue", "stock", "inventory", "invoice", "customer",
+        "attendance", "profit", "expense", "payment", "khata", "udhar",
+        "receivable", "low stock", "top product", "sold today", "today's",
+        "yesterday", "this week", "this month", "how many", "total amount",
+    )
+    return any(term in question for term in data_terms)
+
+
+@app.post("/chatbot/message")
+async def support_chat_message(
+    message: str = Form(...),
+    language_code: str = Form("en"),
+    conversation_history: str = Form("[]"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(check_current_user),
+):
+    """Authenticated Help & Support chat; app guidance is separate from shop-data RAG."""
+    question = (message or "").strip()
+    language_code = (language_code or "en").strip().lower()
+    if not question:
+        raise HTTPException(status_code=422, detail="Enter a question to ask Retail Mind.")
+    if len(question) > 2000:
+        raise HTTPException(status_code=422, detail="Please keep support questions under 2,000 characters.")
+
+    # Validate the optional history payload contract, but never trust it for
+    # identity, tenant scope, or SQL filters.
+    try:
+        history = json.loads(conversation_history or "[]")
+        if not isinstance(history, list):
+            raise ValueError("history must be a list")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=422, detail="Conversation history must be a valid JSON list.")
+
+    guidance = _support_chat_guidance(question)
+    if guidance is not None:
+        localized = _translate_answer_to_language(guidance, language_code)
+        return {"answer": localized, "message": localized, "source": "retail_mind_help", "language_code": language_code}
+
+    if _is_shop_data_question(question):
+        result = await ask_query(query=question, language_code=language_code, db=db, user_id=user_id)
+        answer = result.get("answer") or result.get("message")
+        if answer:
+            localized = _translate_answer_to_language(str(answer), language_code)
+            return {"answer": localized, "message": localized, "source": "shop_data_query", "language_code": language_code}
+        raise HTTPException(status_code=502, detail="The shop-data assistant returned an empty answer.")
+
+    fallback = (
+        "I can help with Retail Mind features such as creating bills, adding products, "
+        "password recovery, customers, attendance, inventory, and online orders. "
+        "For live shop figures, ask a specific question such as “Show my sales today” "
+        "or “Which products are low in stock?”"
+    )
+    localized = _translate_answer_to_language(fallback, language_code)
+    return {"answer": localized, "message": localized, "source": "retail_mind_help", "language_code": language_code}
+
+
 @app.get("/askquery/history")
 def get_query_history(
     limit: int = 30,
