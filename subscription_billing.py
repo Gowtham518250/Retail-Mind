@@ -137,37 +137,104 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
     amount = int(plan["monthly_amount_paise"] if body.billing_interval == "MONTHLY" else plan["yearly_amount_paise"])
     if amount <= 0:
         raise HTTPException(status_code=400, detail="This plan cannot be billed.")
-    # Serialize checkout creation per shop. Without this transaction-scoped lock,
-    # two near-simultaneous taps can both pass the active-subscription check and
-    # create two Cashfree mandates for the same shop.
+    # Serialize checkout creation per shop to prevent duplicate Cashfree mandates.
     db.execute(text("SELECT pg_advisory_xact_lock(:shop_lock)"), {"shop_lock": shop_id})
-    existing = db.execute(text("""
-        SELECT id,status FROM rm_shop_subscriptions
-        WHERE shop_id=:shop AND (
-            status IN ('CREATING','PENDING_AUTH')
-            OR (status IN ('ACTIVE','GRACE_PERIOD') AND
-                (current_period_end IS NULL OR current_period_end >= NOW() OR grace_period_end >= NOW()))
-        )
-        ORDER BY created_at DESC LIMIT 1
+
+    active = db.execute(text("""
+        SELECT id, status, plan_code, cancel_at_period_end, current_period_end
+        FROM rm_shop_subscriptions
+        WHERE shop_id=:shop
+          AND status IN ('ACTIVE','GRACE_PERIOD')
+          AND (
+              current_period_end IS NULL
+              OR current_period_end >= NOW()
+              OR (status='GRACE_PERIOD' AND grace_period_end >= NOW())
+          )
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
     """), {"shop": shop_id}).mappings().first()
-    if existing:
-        status = str(existing["status"] or "UNKNOWN").upper()
-        if status in {"CREATING", "PENDING_AUTH"}:
-            detail = (
-                "A previous checkout is still being created or awaiting authorization. "
-                "Retail Mind must reconcile that Cashfree checkout before another mandate can be started."
-            )
-        else:
-            detail = (
-                "This shop already has an active paid subscription. Use the subscription change/cancellation flow "
-                "before starting another recurring plan."
-            )
+    if active:
         raise HTTPException(status_code=409, detail={
-            "code": "SUBSCRIPTION_CHECKOUT_BLOCKED",
-            "subscription_id": int(existing["id"]),
-            "subscription_status": status,
-            "message": detail,
+            "code": "ACTIVE_SUBSCRIPTION_EXISTS",
+            "subscription_id": int(active["id"]),
+            "current_plan": active["plan_code"],
+            "cancel_at_period_end": bool(active["cancel_at_period_end"]),
+            "current_period_end": active["current_period_end"].isoformat() if active["current_period_end"] else None,
+            "message": "This shop already has an active paid subscription. A second recurring mandate cannot be created. Use a supported plan-change or cancellation workflow.",
         })
+
+    pending_rows = db.execute(text("""
+        SELECT id, status, cashfree_subscription_id, created_at
+        FROM rm_shop_subscriptions
+        WHERE shop_id=:shop AND status IN ('CREATING','PENDING_AUTH')
+        ORDER BY created_at DESC, id DESC
+    """), {"shop": shop_id}).mappings().all()
+
+    # Resolve abandoned checkouts conservatively. Never expire a recent CREATING row,
+    # and never mark a remote Cashfree mandate cancelled until Cashfree confirms it.
+    pending_app_id = pending_secret = pending_base = None
+    for pending in pending_rows:
+        if pending["status"] == "CREATING":
+            stale = db.execute(text("""
+                UPDATE rm_shop_subscriptions
+                SET status='CREATE_FAILED', updated_at=NOW()
+                WHERE id=:id AND status='CREATING'
+                  AND created_at < NOW() - INTERVAL '10 minutes'
+            """), {"id": pending["id"]})
+            db.commit()
+            if getattr(stale, "rowcount", 0) == 0:
+                raise HTTPException(status_code=409, detail={
+                    "code": "CHECKOUT_CREATION_IN_PROGRESS",
+                    "subscription_id": int(pending["id"]),
+                    "message": "A subscription checkout is currently being created. Please wait a minute and retry.",
+                })
+            continue
+
+        cashfree_id = pending["cashfree_subscription_id"]
+        if not cashfree_id:
+            db.execute(text("""
+                UPDATE rm_shop_subscriptions
+                SET status='CANCELLED', cancelled_at=NOW(), updated_at=NOW()
+                WHERE id=:id AND status='PENDING_AUTH'
+            """), {"id": pending["id"]})
+            db.commit()
+            continue
+
+        if pending_app_id is None:
+            pending_app_id, pending_secret, pending_base = _cashfree_config()
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                cancel_response = await client.post(
+                    f"{pending_base}/subscriptions/{cashfree_id}/manage",
+                    headers=_cashfree_headers(
+                        pending_app_id, pending_secret,
+                        f"rm-retry-cancel-{pending['id']}",
+                    ),
+                    json={"subscription_id": cashfree_id, "action": "CANCEL"},
+                )
+            if cancel_response.status_code not in (200, 201):
+                logger.warning(
+                    "Could not cancel previous pending Cashfree subscription %s: %s %s",
+                    cashfree_id, cancel_response.status_code, cancel_response.text[:500],
+                )
+                raise HTTPException(status_code=409, detail={
+                    "code": "PENDING_CASHFREE_CHECKOUT",
+                    "subscription_id": int(pending["id"]),
+                    "message": "A previous checkout is still pending with Cashfree. Open or cancel that checkout before starting another plan.",
+                })
+            db.execute(text("""
+                UPDATE rm_shop_subscriptions
+                SET status='CANCELLED', cancelled_at=NOW(), updated_at=NOW()
+                WHERE id=:id AND status='PENDING_AUTH'
+            """), {"id": pending["id"]})
+            db.commit()
+        except HTTPException:
+            raise
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to cancel abandoned pending subscription %s", pending["id"])
+            raise HTTPException(status_code=503, detail="Could not safely close the previous pending checkout. Please retry shortly.")
+
     user = db.query(User).filter(User.id == shop_id, User.user_type == "OWNER", User.is_active == True).first()
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
     if not user:
@@ -220,9 +287,8 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
         session_id = data.get("subscription_session_id")
         cf_id = data.get("subscription_id") or local_sub_id
         if not session_id:
-            # A successful Cashfree response without a session token is ambiguous:
-            # Cashfree may already have created the mandate. Keep the row in
-            # CREATING so another checkout cannot accidentally create a duplicate.
+            # Cashfree returned no session. Keep the CREATING row for reconciliation:
+            # the provider may already have opened a mandate despite the missing token.
             logger.error(
                 "Cashfree created subscription without checkout session: shop_id=%s subscription_id=%s",
                 shop_id, cf_id,
