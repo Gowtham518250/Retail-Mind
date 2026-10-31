@@ -266,12 +266,14 @@ async def cashfree_subscription_webhook(request: Request, db: Session = Depends(
             payment_id = payment.get("cf_payment_id") or payment.get("payment_id") or data.get("cf_payment_id")
             amount_raw = payment.get("payment_amount") or payment.get("amount") or row["amount_paise"] / 100
             amount_paise = int(round(float(amount_raw) * 100))
-            db.execute(text("""
+            inserted_payment = db.execute(text("""
                 INSERT INTO rm_subscription_payments(subscription_id,shop_id,cashfree_payment_id,amount_paise,status,payment_type,paid_at)
-                VALUES(:sub,:shop,:pid,:amount,'SUCCESS','RENEWAL',:paid)
+                VALUES(:sub,:shop,:pid,:amount,'SUCCESS',:payment_type,:paid)
                 ON CONFLICT(cashfree_payment_id) DO NOTHING
-            """), {"sub":row["id"],"shop":row["shop_id"],"pid":str(payment_id) if payment_id else None,"amount":amount_paise,"paid":now})
-            period_start = row["current_period_end"] if row["current_period_end"] and row["current_period_end"] > now else now
+                RETURNING id
+            """), {"sub":row["id"],"shop":row["shop_id"],"pid":str(payment_id) if payment_id else None,"amount":amount_paise,"payment_type":"INITIAL" if row["current_period_start"] is None else "RENEWAL","paid":now}).first()
+            if inserted_payment:
+                period_start = row["current_period_end"] if row["current_period_end"] and row["current_period_end"] > now else now
             if row["billing_interval"] == "YEARLY":
                 next_year = period_start.year + 1
                 period_end = period_start.replace(year=next_year, day=min(period_start.day, calendar.monthrange(next_year, period_start.month)[1]))
@@ -280,11 +282,11 @@ async def cashfree_subscription_webhook(request: Request, db: Session = Depends(
                 next_year = period_start.year + (1 if next_month > 12 else 0)
                 next_month = 1 if next_month > 12 else next_month
                 period_end = period_start.replace(year=next_year, month=next_month, day=min(period_start.day, calendar.monthrange(next_year, next_month)[1]))
-            db.execute(text("""
-                UPDATE rm_shop_subscriptions SET status='ACTIVE',current_period_start=:start,
-                    current_period_end=:end,grace_period_end=NULL,mandate_status=COALESCE(mandate_status,'AUTHORIZED'),updated_at=NOW()
-                WHERE id=:id
-            """), {"start":period_start,"end":period_end,"id":row["id"]})
+                db.execute(text("""
+                    UPDATE rm_shop_subscriptions SET status='ACTIVE',current_period_start=:start,
+                        current_period_end=:end,grace_period_end=NULL,mandate_status=COALESCE(mandate_status,'AUTHORIZED'),updated_at=NOW()
+                    WHERE id=:id
+                """), {"start":period_start,"end":period_end,"id":row["id"]})
         elif event_type == "SUBSCRIPTION_PAYMENT_FAILED":
             if row["current_period_end"] and row["current_period_end"] >= now:
                 db.execute(text("UPDATE rm_shop_subscriptions SET status='GRACE_PERIOD',grace_period_end=:end,updated_at=NOW() WHERE id=:id"), {"end":now+timedelta(days=3),"id":row["id"]})
