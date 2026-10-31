@@ -181,7 +181,7 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                 WHERE id=:id AND status='CREATING'
                   AND created_at < NOW() - INTERVAL '10 minutes'
             """), {"id": pending["id"]})
-            db.commit()
+            # Keep the transaction-scoped advisory lock until the new CREATING row is inserted.
             if getattr(stale, "rowcount", 0) == 0:
                 raise HTTPException(status_code=409, detail={
                     "code": "CHECKOUT_CREATION_IN_PROGRESS",
@@ -197,8 +197,7 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                 SET status='CANCELLED', cancelled_at=NOW(), updated_at=NOW()
                 WHERE id=:id AND status='PENDING_AUTH'
             """), {"id": pending["id"]})
-            db.commit()
-            continue
+            # Do not commit here: the advisory lock must cover all pending cleanup.
 
         if pending_app_id is None:
             pending_app_id, pending_secret, pending_base = _cashfree_config()
@@ -227,7 +226,7 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                 SET status='CANCELLED', cancelled_at=NOW(), updated_at=NOW()
                 WHERE id=:id AND status='PENDING_AUTH'
             """), {"id": pending["id"]})
-            db.commit()
+            # Do not commit here: keep the per-shop advisory lock until the new checkout row exists.
         except HTTPException:
             raise
         except Exception:
