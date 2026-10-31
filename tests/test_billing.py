@@ -27,7 +27,7 @@ def test_next_bill_number_route_exists():
 
 
 from pathlib import Path
-import json
+import re
 
 from subscription_entitlements import get_shop_entitlements, feature_is_allowed
 
@@ -79,7 +79,7 @@ def test_subscription_checkout_lock_is_held_until_new_checkout_insert():
     # commit must happen only after the new CREATING row has been inserted.
     commit_positions = [
         match.start()
-        for match in __import__("re").finditer(r"db\\.commit\\(\\)", block)
+        for match in re.finditer(r"db\.commit\(\)", block)
     ]
     assert commit_positions
     assert all(position > insert_at for position in commit_positions)
@@ -98,4 +98,4 @@ def test_owner_subscription_middleware_is_registered_after_app_creation():
     assert source.index("api = FastAPI(") < source.index("async def subscription_feature_enforcement")
     assert '"/store/owner/orders"' in source
     assert '"/store/owner/reviews"' in source
-    assert "require_shop_feature(db, owner_user_id, \\"online_orders\\")" in source
+    assert 'require_shop_feature(db, owner_user_id, "online_orders")' in source
