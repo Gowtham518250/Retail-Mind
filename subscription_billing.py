@@ -1,5 +1,6 @@
 """Retail Mind owner subscriptions and Cashfree recurring billing."""
 import base64
+import calendar
 import hashlib
 import hmac
 import json
@@ -88,7 +89,7 @@ def get_ai_usage(db: Session = Depends(get_db), owner: dict = Depends(owner_only
         FROM rm_shop_subscriptions s JOIN rm_subscription_plans p ON p.plan_code=s.plan_code
         WHERE s.shop_id=:shop_id
           AND (s.status='ACTIVE' AND (s.current_period_end IS NULL OR s.current_period_end >= NOW())
-            OR s.status='GRACE_PERIOD' AND s.grace_period_end >= NOW())
+            OR s.status='GRACE_PERIOD' AND s.current_period_end IS NOT NULL AND s.grace_period_end >= NOW())
         ORDER BY s.created_at DESC LIMIT 1
     """), {"shop_id": shop_id}).mappings().first()
     plan_code = subscription["plan_code"] if subscription else "FREE"
@@ -154,7 +155,7 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
     """), {"shop":shop_id,"plan":code,"interval":body.billing_interval,"amount":amount,"cfid":local_sub_id})
     db.commit()
     amount_rupees = amount / 100
-    plan_interval = "MONTHLY" if body.billing_interval == "MONTHLY" else "YEARLY"
+    plan_interval = "MONTH" if body.billing_interval == "MONTHLY" else "YEAR"
     auth_amount = float(os.getenv("CASHFREE_AUTHORIZATION_AMOUNT", "1"))
     payload = {
         "subscription_id": local_sub_id,
@@ -270,18 +271,32 @@ async def cashfree_subscription_webhook(request: Request, db: Session = Depends(
                 VALUES(:sub,:shop,:pid,:amount,'SUCCESS','RENEWAL',:paid)
                 ON CONFLICT(cashfree_payment_id) DO NOTHING
             """), {"sub":row["id"],"shop":row["shop_id"],"pid":str(payment_id) if payment_id else None,"amount":amount_paise,"paid":now})
-            days = 365 if row["billing_interval"] == "YEARLY" else 30
+            period_start = row["current_period_end"] if row["current_period_end"] and row["current_period_end"] > now else now
+            if row["billing_interval"] == "YEARLY":
+                next_year = period_start.year + 1
+                period_end = period_start.replace(year=next_year, day=min(period_start.day, calendar.monthrange(next_year, period_start.month)[1]))
+            else:
+                next_month = period_start.month + 1
+                next_year = period_start.year + (1 if next_month > 12 else 0)
+                next_month = 1 if next_month > 12 else next_month
+                period_end = period_start.replace(year=next_year, month=next_month, day=min(period_start.day, calendar.monthrange(next_year, next_month)[1]))
             db.execute(text("""
                 UPDATE rm_shop_subscriptions SET status='ACTIVE',current_period_start=:start,
                     current_period_end=:end,grace_period_end=NULL,mandate_status=COALESCE(mandate_status,'AUTHORIZED'),updated_at=NOW()
                 WHERE id=:id
-            """), {"start":now,"end":now+timedelta(days=days),"id":row["id"]})
+            """), {"start":period_start,"end":period_end,"id":row["id"]})
         elif event_type == "SUBSCRIPTION_PAYMENT_FAILED":
-            db.execute(text("UPDATE rm_shop_subscriptions SET status='GRACE_PERIOD',grace_period_end=:end,updated_at=NOW() WHERE id=:id"), {"end":now+timedelta(days=3),"id":row["id"]})
+            if row["current_period_end"] and row["current_period_end"] >= now:
+                db.execute(text("UPDATE rm_shop_subscriptions SET status='GRACE_PERIOD',grace_period_end=:end,updated_at=NOW() WHERE id=:id"), {"end":now+timedelta(days=3),"id":row["id"]})
+            else:
+                db.execute(text("UPDATE rm_shop_subscriptions SET status='PAYMENT_FAILED',grace_period_end=NULL,updated_at=NOW() WHERE id=:id"), {"id":row["id"]})
         elif event_type in {"SUBSCRIPTION_PAYMENT_CANCELLED","SUBSCRIPTION_STATUS_CHANGED"}:
             status_value = str(details.get("subscription_status") or data.get("subscription_status") or "").upper()
             if status_value in {"CANCELLED","CANCELED","COMPLETED","EXPIRED"}:
-                db.execute(text("UPDATE rm_shop_subscriptions SET status='CANCELLED',cancelled_at=:now,updated_at=NOW() WHERE id=:id"), {"now":now,"id":row["id"]})
+                if row["current_period_end"] and row["current_period_end"] >= now:
+                    db.execute(text("UPDATE rm_shop_subscriptions SET cancel_at_period_end=TRUE,updated_at=NOW() WHERE id=:id"), {"id":row["id"]})
+                else:
+                    db.execute(text("UPDATE rm_shop_subscriptions SET status='CANCELLED',cancelled_at=:now,updated_at=NOW() WHERE id=:id"), {"now":now,"id":row["id"]})
     db.execute(text("UPDATE rm_subscription_webhook_events SET processed_at=NOW() WHERE event_key=:key"), {"key":event_key})
     db.commit()
     return {"success": True}
