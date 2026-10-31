@@ -377,7 +377,7 @@ class StockMovement(Base):
 
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    movement_type = Column(Enum(StockMovementType, name="stock_movement_type"), nullable=False)
+    movement_type = Column(Enum(StockMovementType, name="movement_type"), nullable=False)
     quantity = Column(Numeric(12, 3), nullable=False)
     reason = Column(String(200))  # e.g., "Purchase", "Sale", "Damage", "Inventory Adjustment"
     reference_id = Column(String(100))  # e.g., invoice_id, purchase_order_id
