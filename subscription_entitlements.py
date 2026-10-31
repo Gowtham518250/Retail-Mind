@@ -70,6 +70,29 @@ def require_shop_feature(db: Session, shop_id: int, feature_code: str) -> dict:
     return entitlement
 
 
+@router.get("/api/billing/feature-access")
+def check_all_feature_access(
+    db: Session = Depends(get_db),
+    owner: dict = Depends(owner_only),
+):
+    """Return all owner feature entitlements in one DB round trip."""
+    entitlement = get_shop_entitlements(db, int(owner["user_id"]))
+    feature_codes = set(entitlement["features"].keys())
+    # These features use the same authoritative rules as the single-feature
+    # endpoint and are required by the app's route gates.
+    feature_codes.update({"online_orders", "ai_queries"})
+    return {
+        "plan_code": entitlement["plan_code"],
+        "plan_name": entitlement["plan_name"],
+        "status": entitlement["status"],
+        "daily_ai_query_limit": entitlement["daily_ai_query_limit"],
+        "features": {
+            code: feature_is_allowed(entitlement, code)
+            for code in sorted(feature_codes)
+        },
+    }
+
+
 @router.get("/api/billing/feature-access/{feature_code}")
 def check_feature_access(
     feature_code: str,
