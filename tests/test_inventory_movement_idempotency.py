@@ -37,6 +37,20 @@ def _movement(**overrides):
     return SimpleNamespace(**values)
 
 
+def test_stock_movement_enum_name_matches_the_original_database_migration():
+    assert StockMovement.__table__.c.movement_type.type.name == "movement_type"
+
+
+def test_sales_restore_stock_movements_are_idempotent_and_use_legacy_reason():
+    from sales_restore_service import _apply_stock_impact_from_sales
+
+    source = getsource(_apply_stock_impact_from_sales)
+    assert "SALES SYNC (RESTORED)" in source
+    assert 'reason="Sales Sync"' in source
+    assert 'idempotency_key=f"sales-restore:{invoice.id}:{item.id}"' in source
+    assert "db.add_all(movements_to_create)" in source
+
+
 def test_stock_movement_persists_a_unique_non_null_idempotency_key():
     assert "idempotency_key" in StockMovement.__table__.columns
     index = next(
