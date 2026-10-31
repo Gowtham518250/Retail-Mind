@@ -55,13 +55,12 @@ def get_cancelled_order_identifiers(
     online-orders management screen. It reveals only the caller's own cancelled
     order IDs and statuses, not customer names, addresses, items or payments.
     """
-    rows = db.query(OnlineOrder.id, OnlineOrder.order_status).filter(
+    owner_orders = db.query(OnlineOrder.id, OnlineOrder.order_status).filter(
         OnlineOrder.shop_id == user_id,
-        OnlineOrder.order_status.in_([
-            OnlineOrderStatus.CANCELLED,
-            OnlineOrderStatus.REJECTED,
-        ]),
     ).all()
+    # The dashboard's Total Online Orders metric is a lifetime order count:
+    # include pending, accepted, dispatched, delivered, cancelled, rejected
+    # and returned records. Do not derive it from revenue-eligible invoices.
     orders = [
         {
             "id": int(row.id),
@@ -77,9 +76,26 @@ def get_cancelled_order_identifiers(
                 else str(row.order_status)
             ),
         }
-        for row in rows
+        for row in owner_orders
+        if str(
+            row.order_status.value
+            if hasattr(row.order_status, "value")
+            else row.order_status
+        ).upper() in {"CANCELLED", "CANCELED", "REJECTED", "RETURNED"}
     ]
-    return {"orders": orders, "total": len(orders)}
+    return {
+        "orders": orders,
+        "total": len(owner_orders),
+        "totalCount": len(owner_orders),
+        "cancelledCount": sum(
+            1
+            for order in orders
+            if order["status"].upper() in {"CANCELLED", "CANCELED", "RETURNED"}
+        ),
+        "rejectedCount": sum(
+            1 for order in orders if order["status"].upper() == "REJECTED"
+        ),
+    }
 
 
 @router.post("/restore-all", response_model=SalesRestoreResponse)
