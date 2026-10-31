@@ -1,4 +1,47 @@
-"""
+"
+
+# Subscription enforcement for owner-only online-order management APIs.
+# Customer storefront/order routes remain public/customer-authenticated and are not blocked here.
+@api.middleware("http")
+async def subscription_feature_enforcement(request: Request, call_next):
+    path = request.url.path
+    protected_prefixes = (
+        "/store/owner/orders",
+        "/store/owner/reviews",
+    )
+    if not path.startswith(protected_prefixes):
+        return await call_next(request)
+
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.lower().startswith("bearer "):
+        return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+
+    db_generator = get_db()
+    db = next(db_generator)
+    try:
+        from security import decode_token
+        from subscription_entitlements import require_shop_feature
+        payload = decode_token(authorization.split(" ", 1)[1].strip())
+        if payload.get("type") == "refresh" or str(payload.get("role", "")).upper() != "OWNER":
+            return JSONResponse(status_code=403, content={"detail": "Owner access required."})
+        try:
+            owner_user_id = int(payload.get("sub"))
+        except (TypeError, ValueError):
+            return JSONResponse(status_code=401, content={"detail": "Invalid access token."})
+        require_shop_feature(db, owner_user_id, "online_orders")
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    except Exception:
+        logger.exception("Subscription entitlement enforcement failed")
+        return JSONResponse(status_code=503, content={"detail": "Subscription access could not be verified."})
+    finally:
+        try:
+            db_generator.close()
+        except Exception:
+            pass
+
+    return await call_next(request)
+""
 🚀 AI Shop Pro Enterprise Backend — Main Application
 ====================================================
 Fully secured FastAPI app with:
@@ -9,7 +52,7 @@ Fully secured FastAPI app with:
 - All ERP modules registered
 """
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -69,6 +112,7 @@ except Exception as e:
 # Core Auth & Session
 from auth_routes import router as authentication_router
 from subscription_billing import router as subscription_billing_router
+from subscription_entitlements import router as subscription_entitlements_router
 from subscription_quota_middleware import SubscriptionAIQuotaMiddleware
 from auth_hardening_service import router as auth_hardening_router
 from session_routes import router as session_router
@@ -430,6 +474,7 @@ async def dashboard_storefront_redirect(request: Request, call_next):
 # Auth
 api.include_router(authentication_router, prefix="/auth", tags=["Authentication"])
 api.include_router(subscription_billing_router, tags=["Subscription Billing"])
+api.include_router(subscription_entitlements_router, tags=["Subscription Entitlements"])
 api.include_router(auth_hardening_router, tags=["Authentication Hardened"])
 api.include_router(session_router, tags=["Session Management"])
 api.include_router(logs_router, tags=["Client Logging"])
