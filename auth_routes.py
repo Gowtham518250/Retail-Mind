@@ -34,7 +34,10 @@ class UserCreate(BaseModel):
     shop_name: Optional[str] = None
 
 class UserLogin(BaseModel):
-    email: str
+    # Accept both the current email field and the legacy username field.
+    # A username value that is email-shaped is still treated as an email.
+    email: Optional[str] = None
+    username: Optional[str] = None
     password: str
 
 class GoogleLoginRequest(BaseModel):
@@ -901,6 +904,18 @@ def google_login(data: GoogleLoginRequest, request: Request, db: Session = Depen
 @rate_limit_endpoint(max_requests=5, window_seconds=60)
 def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
     try:
+        identifier = (user.email or user.username or "").strip()
+        if not identifier:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email or username is required",
+            )
+        if user.email and user.username and user.email.strip().lower() != user.username.strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provide either email or username, not conflicting identifiers",
+            )
+
         ip = get_client_ip(request)
         
         # Check if IP is blocked due to too many failed attempts
@@ -912,9 +927,24 @@ def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
         
         check_login_lockout(ip)
         
-        # Case-insensitive email lookup
-        db_user = db.query(User).filter(User.email.ilike(user.email)).first()
-        
+        # Email is the canonical identifier. Accept legacy username payloads
+        # too, but reject ambiguous duplicate usernames instead of choosing an
+        # arbitrary account.
+        if "@" in identifier:
+            db_user = db.query(User).filter(
+                func.lower(User.email) == identifier.lower()
+            ).first()
+        else:
+            matching_users = db.query(User).filter(
+                func.lower(User.user_name) == identifier.lower()
+            ).limit(2).all()
+            if len(matching_users) > 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This username is shared by multiple accounts. Please sign in with your email.",
+                )
+            db_user = matching_users[0] if matching_users else None
+
         if not db_user or not verify_password(user.password, db_user.password):
             # Record failed attempt
             if ip_rate_limiter.record_failure(ip):
@@ -923,7 +953,7 @@ def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
             record_login_failure(ip)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
+                detail="Incorrect email/username or password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
             
@@ -983,7 +1013,7 @@ def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Login failed unexpectedly for {user.email}: {e}", exc_info=True)
+        logger.error("Login failed unexpectedly: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred. Please try again."
