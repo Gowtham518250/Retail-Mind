@@ -55,12 +55,24 @@ def get_cancelled_order_identifiers(
     online-orders management screen. It reveals only the caller's own cancelled
     order IDs and statuses, not customer names, addresses, items or payments.
     """
-    owner_orders = db.query(OnlineOrder.id, OnlineOrder.order_status).filter(
-        OnlineOrder.shop_id == user_id,
+    owner_filter = OnlineOrder.shop_id == user_id
+    total_count = db.query(func.count(OnlineOrder.id)).filter(owner_filter).scalar() or 0
+    cancellation_rows = db.query(
+        OnlineOrder.id,
+        OnlineOrder.order_status,
+    ).filter(
+        owner_filter,
+        OnlineOrder.order_status.in_([
+            OnlineOrderStatus.CANCELLED,
+            OnlineOrderStatus.REJECTED,
+            OnlineOrderStatus.RETURNED,
+        ]),
     ).all()
-    # The dashboard's Total Online Orders metric is a lifetime order count:
+
+    # The dashboard's Total Online Orders metric is a lifetime count:
     # include pending, accepted, dispatched, delivered, cancelled, rejected
-    # and returned records. Do not derive it from revenue-eligible invoices.
+    # and returned records. The separate IDs below are used only to exclude
+    # cancelled-order invoices from sales/Khata restoration.
     orders = [
         {
             "id": int(row.id),
@@ -76,17 +88,12 @@ def get_cancelled_order_identifiers(
                 else str(row.order_status)
             ),
         }
-        for row in owner_orders
-        if str(
-            row.order_status.value
-            if hasattr(row.order_status, "value")
-            else row.order_status
-        ).upper() in {"CANCELLED", "CANCELED", "REJECTED", "RETURNED"}
+        for row in cancellation_rows
     ]
     return {
         "orders": orders,
-        "total": len(owner_orders),
-        "totalCount": len(owner_orders),
+        "total": int(total_count),
+        "totalCount": int(total_count),
         "cancelledCount": sum(
             1
             for order in orders
