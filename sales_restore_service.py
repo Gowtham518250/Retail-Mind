@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import logging
 
 from db import get_db
-from models import Invoice, InvoiceStatus, InvoiceLineItem, Customer, Product, StockMovement
+from models import Invoice, InvoiceStatus, InvoiceLineItem, Customer, Product, StockMovement, OnlineOrder, OnlineOrderStatus
 from security import get_current_user as check_current_user
 from sales_recognition import recognized_invoice_filters
 
@@ -42,6 +42,45 @@ class SalesRestoreRequest(BaseModel):
 
 
 # ==================== SALES RESTORATION ENDPOINTS ====================
+
+@router.get("/cancelled-order-identifiers")
+def get_cancelled_order_identifiers(
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return minimal cancellation references for safe invoice restoration.
+
+    This route deliberately does not depend on the paid online_orders feature:
+    invoice/Khata recovery must still be possible when the owner cannot open the
+    online-orders management screen. It reveals only the caller's own cancelled
+    order IDs and statuses, not customer names, addresses, items or payments.
+    """
+    rows = db.query(OnlineOrder.id, OnlineOrder.order_status).filter(
+        OnlineOrder.shop_id == user_id,
+        OnlineOrder.order_status.in_([
+            OnlineOrderStatus.CANCELLED,
+            OnlineOrderStatus.REJECTED,
+        ]),
+    ).all()
+    orders = [
+        {
+            "id": int(row.id),
+            "order_id": int(row.id),
+            "status": (
+                row.order_status.value
+                if hasattr(row.order_status, "value")
+                else str(row.order_status)
+            ),
+            "order_status": (
+                row.order_status.value
+                if hasattr(row.order_status, "value")
+                else str(row.order_status)
+            ),
+        }
+        for row in rows
+    ]
+    return {"orders": orders, "total": len(orders)}
+
 
 @router.post("/restore-all", response_model=SalesRestoreResponse)
 def restore_all_sales(
