@@ -8,6 +8,7 @@ import logging
 import re
 import time
 from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
 from db_pool_config import pool_options_from_env, log_pool_budget
@@ -260,9 +261,11 @@ def get_db():
                 pending_dirty,
                 pending_deleted,
             )
-    except HTTPException:
+    except (HTTPException, RequestValidationError):
+        # Client-side validation failures (for example a missing login field)
+        # are expected 4xx responses, not database/session outages.
         db.rollback()
-        logger.debug("Expected HTTP error; database transaction rolled back")
+        logger.debug("Expected HTTP/validation error; database transaction rolled back")
         raise
     except Exception:
         db.rollback()
