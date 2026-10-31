@@ -124,6 +124,72 @@ api = FastAPI(
     redoc_url="/redoc",
 )
 
+# Enforce paid entitlements on owner-only management APIs. Customer storefront and
+# customer checkout routes intentionally remain outside this owner feature gate.
+@api.middleware("http")
+async def subscription_feature_enforcement(request: Request, call_next):
+    path = request.url.path
+    protected_prefixes = (
+        "/store/owner/orders",
+        "/store/owner/reviews",
+    )
+    if not path.startswith(protected_prefixes):
+        return await call_next(request)
+
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.lower().startswith("bearer "):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Authentication required."},
+        )
+
+    db_generator = get_db()
+    db = next(db_generator)
+    try:
+        from security import decode_token
+        from subscription_entitlements import require_shop_feature
+
+        payload = decode_token(authorization.split(" ", 1)[1].strip())
+        if (
+            payload.get("type") == "refresh"
+            or str(payload.get("role", "")).upper() != "OWNER"
+        ):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Owner access required."},
+            )
+
+        try:
+            owner_user_id = int(payload.get("sub"))
+            if owner_user_id <= 0:
+                raise ValueError("Invalid owner ID")
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid access token."},
+            )
+
+        require_shop_feature(db, owner_user_id, "online_orders")
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+        )
+    except Exception:
+        logger.exception("Subscription entitlement enforcement failed")
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Subscription access could not be verified."},
+        )
+    finally:
+        try:
+            db_generator.close()
+        except Exception:
+            logger.exception("Could not close subscription entitlement DB session")
+
+    return await call_next(request)
+
+
 # Server-authoritative quota enforcement for text and direct voice AI requests.
 api.add_middleware(SubscriptionAIQuotaMiddleware)
 
