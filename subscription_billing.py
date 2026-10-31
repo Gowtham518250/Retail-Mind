@@ -137,17 +137,76 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
     amount = int(plan["monthly_amount_paise"] if body.billing_interval == "MONTHLY" else plan["yearly_amount_paise"])
     if amount <= 0:
         raise HTTPException(status_code=400, detail="This plan cannot be billed.")
-    existing = db.execute(text("""
-        SELECT id,status FROM rm_shop_subscriptions
-        WHERE shop_id=:shop AND (
-            status IN ('CREATING','PENDING_AUTH')
-            OR (status IN ('ACTIVE','GRACE_PERIOD') AND
-                (current_period_end IS NULL OR current_period_end >= NOW() OR grace_period_end >= NOW()))
-        )
-        ORDER BY created_at DESC LIMIT 1
+    # An active paid mandate must not be silently replaced: doing so can create
+    # overlapping recurring mandates. A pending authorization, however, is an
+    # abandoned/incomplete checkout and can be cancelled at Cashfree before retry.
+    active = db.execute(text("""
+        SELECT id, status, plan_code, cancel_at_period_end, current_period_end
+        FROM rm_shop_subscriptions
+        WHERE shop_id=:shop
+          AND status IN ('ACTIVE','GRACE_PERIOD')
+          AND (current_period_end IS NULL OR current_period_end >= NOW()
+               OR (status='GRACE_PERIOD' AND grace_period_end >= NOW()))
+        ORDER BY created_at DESC, id DESC LIMIT 1
     """), {"shop": shop_id}).mappings().first()
-    if existing:
-        raise HTTPException(status_code=409, detail="This shop already has a pending or active subscription. Cancel the current renewal or finish checkout before starting another plan.")
+    if active:
+        raise HTTPException(status_code=409, detail={
+            "code": "ACTIVE_SUBSCRIPTION_EXISTS",
+            "subscription_id": int(active["id"]),
+            "current_plan": active["plan_code"],
+            "cancel_at_period_end": bool(active["cancel_at_period_end"]),
+            "current_period_end": active["current_period_end"].isoformat() if active["current_period_end"] else None,
+            "message": "Your shop already has an active paid subscription. It cannot start a second recurring mandate. Use the subscription management flow to change or cancel the current plan.",
+        })
+
+    pending_rows = db.execute(text("""
+        SELECT id, status, cashfree_subscription_id, created_at
+        FROM rm_shop_subscriptions
+        WHERE shop_id=:shop AND status IN ('CREATING','PENDING_AUTH')
+        ORDER BY created_at DESC, id DESC
+    """), {"shop": shop_id}).mappings().all()
+    app_id, secret, base = _cashfree_config()
+    for pending in pending_rows:
+        # A CREATING row may belong to an in-flight request. Only mark it failed
+        # after a generous timeout; never assume Cashfree created a mandate.
+        if pending["status"] == "CREATING":
+            stale = db.execute(text("""
+                UPDATE rm_shop_subscriptions SET status='CREATE_FAILED', updated_at=NOW()
+                WHERE id=:id AND status='CREATING' AND created_at < NOW() - INTERVAL '10 minutes'
+            """), {"id": pending["id"]})
+            db.commit()
+            if getattr(stale, "rowcount", 0) == 0:
+                raise HTTPException(status_code=409, detail="A subscription checkout is currently being created. Please wait a minute and retry.")
+            continue
+
+        cashfree_id = pending["cashfree_subscription_id"]
+        if not cashfree_id:
+            db.execute(text("UPDATE rm_shop_subscriptions SET status='CANCELLED',cancelled_at=NOW(),updated_at=NOW() WHERE id=:id AND status='PENDING_AUTH'"), {"id": pending["id"]})
+            db.commit()
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                cancel_response = await client.post(
+                    f"{base}/subscriptions/{cashfree_id}/manage",
+                    headers=_cashfree_headers(app_id, secret, f"rm-retry-cancel-{pending['id']}"),
+                    json={"subscription_id": cashfree_id, "action": "CANCEL"},
+                )
+            if cancel_response.status_code not in (200, 201):
+                logger.warning("Could not cancel previous pending Cashfree subscription %s: %s %s", cashfree_id, cancel_response.status_code, cancel_response.text[:500])
+                raise HTTPException(status_code=409, detail="A previous checkout is still pending with Cashfree. Please open the existing checkout or cancel it from Subscription Management before trying another plan.")
+            db.execute(text("""
+                UPDATE rm_shop_subscriptions
+                SET status='CANCELLED', cancelled_at=NOW(), updated_at=NOW()
+                WHERE id=:id AND status='PENDING_AUTH'
+            """), {"id": pending["id"]})
+            db.commit()
+        except HTTPException:
+            raise
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to cancel abandoned pending subscription %s", pending["id"])
+            raise HTTPException(status_code=503, detail="Could not safely close the previous pending checkout. Please retry shortly.")
+
     user = db.query(User).filter(User.id == shop_id, User.user_type == "OWNER", User.is_active == True).first()
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
     if not user:
@@ -200,7 +259,9 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
         session_id = data.get("subscription_session_id")
         cf_id = data.get("subscription_id") or local_sub_id
         if not session_id:
-            raise HTTPException(status_code=502, detail="Cashfree did not return a subscription checkout session.")
+            db.execute(text("UPDATE rm_shop_subscriptions SET status='CREATE_FAILED',updated_at=NOW() WHERE cashfree_subscription_id=:id AND status='CREATING'"), {"id": local_sub_id})
+            db.commit()
+            raise HTTPException(status_code=502, detail="Cashfree did not return a subscription checkout session. You can safely retry.")
         db.execute(text("UPDATE rm_shop_subscriptions SET status='PENDING_AUTH',subscription_session_id=:session,cashfree_subscription_id=:cfid,updated_at=NOW() WHERE cashfree_subscription_id=:old"), {"session":session_id,"cfid":cf_id,"old":local_sub_id})
         db.commit()
         return {"subscription_id": cf_id, "subscription_session_id": session_id, "environment": os.getenv("CASHFREE_ENV","sandbox").lower(), "status": "PENDING_AUTH"}
