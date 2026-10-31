@@ -69,7 +69,7 @@ def _plan_payload(row):
         "yearly_amount_paise": int(row["yearly_amount_paise"]),
         "currency": "INR",
         "daily_ai_query_limit": int(row["daily_ai_query_limit"]),
-        "features": row["features"] or {},
+        "features": [str(key).replace("_", " ").title() for key, enabled in (row["features"] or {}).items() if enabled],
         "recommended": row["plan_code"] == "PRO",
     }
 
@@ -81,7 +81,8 @@ def get_billing_plans(db: Session = Depends(get_db), owner: dict = Depends(owner
 @router.get("/api/billing/usage")
 def get_ai_usage(db: Session = Depends(get_db), owner: dict = Depends(owner_only)):
     shop_id = _shop_id(owner)
-    today = date.today()
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     subscription = db.execute(text("""
         SELECT s.status, s.current_period_end, s.grace_period_end, p.plan_code, p.name, p.daily_ai_query_limit
         FROM rm_shop_subscriptions s JOIN rm_subscription_plans p ON p.plan_code=s.plan_code
@@ -95,7 +96,7 @@ def get_ai_usage(db: Session = Depends(get_db), owner: dict = Depends(owner_only
     limit = int(subscription["daily_ai_query_limit"]) if subscription else 0
     usage = db.execute(text("SELECT used_count FROM rm_ai_daily_usage WHERE shop_id=:shop AND usage_date=:day"), {"shop": shop_id, "day": today}).first()
     used = int(usage[0]) if usage else 0
-    return {"plan_code": plan_code, "plan_name": plan_name, "subscription_status": subscription["status"] if subscription else "FREE", "usage": {"daily_limit": limit, "used": used, "remaining": max(0, limit-used), "resets_at": datetime.combine(today + timedelta(days=1), datetime.min.time()).isoformat()}}
+    return {"plan_code": plan_code, "plan_name": plan_name, "subscription_status": subscription["status"] if subscription else "FREE", "usage": {"daily_limit": limit, "used": used, "remaining": max(0, limit-used), "resets_at": datetime.combine(today + timedelta(days=1), datetime.min.time()).replace(tzinfo=ZoneInfo("Asia/Kolkata")).isoformat()}}
 
 @router.get("/api/billing/entitlements")
 def get_entitlements(db: Session = Depends(get_db), owner: dict = Depends(owner_only)):
