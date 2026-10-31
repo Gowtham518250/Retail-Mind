@@ -68,6 +68,8 @@ except Exception as e:
 # ========================
 # Core Auth & Session
 from auth_routes import router as authentication_router
+from subscription_billing import router as subscription_billing_router
+from subscription_quota_middleware import SubscriptionAIQuotaMiddleware
 from auth_hardening_service import router as auth_hardening_router
 from session_routes import router as session_router
 from logs_routes import router as logs_router
@@ -131,6 +133,9 @@ api = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Server-authoritative quota enforcement for text and direct voice AI requests.
+api.add_middleware(SubscriptionAIQuotaMiddleware)
 
 # ========================
 # ATTENDANCE AUTO-CHECKOUT LIFECYCLE
@@ -424,6 +429,7 @@ async def dashboard_storefront_redirect(request: Request, call_next):
 
 # Auth
 api.include_router(authentication_router, prefix="/auth", tags=["Authentication"])
+api.include_router(subscription_billing_router, tags=["Subscription Billing"])
 api.include_router(auth_hardening_router, tags=["Authentication Hardened"])
 api.include_router(session_router, tags=["Session Management"])
 api.include_router(logs_router, tags=["Client Logging"])
