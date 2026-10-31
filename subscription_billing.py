@@ -137,6 +137,17 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
     amount = int(plan["monthly_amount_paise"] if body.billing_interval == "MONTHLY" else plan["yearly_amount_paise"])
     if amount <= 0:
         raise HTTPException(status_code=400, detail="This plan cannot be billed.")
+    existing = db.execute(text("""
+        SELECT id,status FROM rm_shop_subscriptions
+        WHERE shop_id=:shop AND (
+            status IN ('CREATING','PENDING_AUTH')
+            OR (status IN ('ACTIVE','GRACE_PERIOD') AND
+                (current_period_end IS NULL OR current_period_end >= NOW() OR grace_period_end >= NOW()))
+        )
+        ORDER BY created_at DESC LIMIT 1
+    """), {"shop": shop_id}).mappings().first()
+    if existing:
+        raise HTTPException(status_code=409, detail="This shop already has a pending or active subscription. Cancel the current renewal or finish checkout before starting another plan.")
     user = db.query(User).filter(User.id == shop_id, User.user_type == "OWNER", User.is_active == True).first()
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == shop_id).first()
     if not user:
@@ -211,7 +222,7 @@ async def cancel_subscription(subscription_id: int, db: Session = Depends(get_db
     app_id, secret, base = _cashfree_config()
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.post(f"{base}/subscriptions/{row['cashfree_subscription_id']}/manage", headers=_cashfree_headers(app_id,secret,f"rm-cancel-{row['id']}"), json={"action":"CANCEL"})
+            response = await client.post(f"{base}/subscriptions/{row['cashfree_subscription_id']}/manage", headers=_cashfree_headers(app_id,secret,f"rm-cancel-{row['id']}"), json={"subscription_id":row["cashfree_subscription_id"],"action":"CANCEL"})
         if response.status_code not in (200,201):
             raise HTTPException(status_code=502, detail="Cashfree could not cancel the mandate. Please retry or contact support.")
         db.execute(text("UPDATE rm_shop_subscriptions SET cancel_at_period_end=TRUE,updated_at=NOW() WHERE id=:id"), {"id":subscription_id})
@@ -288,7 +299,7 @@ async def cashfree_subscription_webhook(request: Request, db: Session = Depends(
                     WHERE id=:id
                 """), {"start":period_start,"end":period_end,"id":row["id"]})
         elif event_type == "SUBSCRIPTION_PAYMENT_FAILED":
-            if row["current_period_end"] and row["current_period_end"] >= now:
+            if row["current_period_end"] is not None:
                 db.execute(text("UPDATE rm_shop_subscriptions SET status='GRACE_PERIOD',grace_period_end=:end,updated_at=NOW() WHERE id=:id"), {"end":now+timedelta(days=3),"id":row["id"]})
             else:
                 db.execute(text("UPDATE rm_shop_subscriptions SET status='PAYMENT_FAILED',grace_period_end=NULL,updated_at=NOW() WHERE id=:id"), {"id":row["id"]})
