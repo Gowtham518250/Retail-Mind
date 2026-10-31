@@ -5,7 +5,7 @@ Restores: invoices, invoice items, stock impact, customer history, payment statu
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, desc
+from sqlalchemy import and_, func, desc, case
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -87,13 +87,23 @@ def restore_all_sales(
         restored_invoices = []
         total_line_items = 0
         customers_restored = set()
-        
-        for invoice in invoices:
-            # Get line items
-            line_items = db.query(InvoiceLineItem).filter(
-                InvoiceLineItem.invoice_id == invoice.id
+
+        # Fetch all line items in one query. Querying inside the invoice loop
+        # caused an N+1 round trip for every restored invoice.
+        invoice_ids = [invoice.id for invoice in invoices]
+        line_items_by_invoice: Dict[int, List[InvoiceLineItem]] = {}
+        if invoice_ids:
+            all_line_items = db.query(InvoiceLineItem).filter(
+                InvoiceLineItem.invoice_id.in_(invoice_ids)
             ).all()
-            
+            for line_item in all_line_items:
+                line_items_by_invoice.setdefault(line_item.invoice_id, []).append(
+                    line_item
+                )
+
+        for invoice in invoices:
+            line_items = line_items_by_invoice.get(invoice.id, [])
+
             # Build invoice data
             invoice_data = {
                 "id": invoice.id,
@@ -138,7 +148,7 @@ def restore_all_sales(
         stock_impact_applied = False
         if request.include_stock_impact:
             stock_impact_applied = _apply_stock_impact_from_sales(
-                db, user_id, invoices, background_tasks
+                db, user_id, invoices, background_tasks, line_items_by_invoice
             )
         
         # The restore payload includes open invoices, but sales KPIs must not
@@ -195,46 +205,36 @@ def get_restore_summary(
     Get summary of available sales data for restoration.
     """
     try:
-        # Get invoice counts by status
-        total_invoices = db.query(Invoice).filter(
+        # Aggregate invoice counts, dates and revenue in one DB round trip
+        # instead of issuing a separate COUNT/SELECT for each statistic.
+        invoice_stats = db.query(
+            func.count(Invoice.id),
+            func.coalesce(
+                func.sum(case((Invoice.payment_status == "PAID", 1), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((Invoice.payment_status == "UNPAID", 1), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((Invoice.payment_status == "PARTIAL", 1), else_=0)), 0
+            ),
+            func.min(Invoice.created_at),
+            func.max(Invoice.created_at),
+            func.coalesce(func.sum(Invoice.total_amount), 0),
+        ).filter(
             Invoice.user_id == user_id,
             Invoice.status != InvoiceStatus.CANCELLED,
-        ).count()
-        
-        paid_count = db.query(Invoice).filter(
-            Invoice.user_id == user_id,
-            Invoice.status != InvoiceStatus.CANCELLED,
-            Invoice.payment_status == "PAID"
-        ).count()
-        
-        unpaid_count = db.query(Invoice).filter(
-            Invoice.user_id == user_id,
-            Invoice.status != InvoiceStatus.CANCELLED,
-            Invoice.payment_status == "UNPAID"
-        ).count()
-        
-        partial_count = db.query(Invoice).filter(
-            Invoice.user_id == user_id,
-            Invoice.status != InvoiceStatus.CANCELLED,
-            Invoice.payment_status == "PARTIAL"
-        ).count()
-        
-        # Get date range
-        oldest_invoice = db.query(Invoice).filter(
-            Invoice.user_id == user_id,
-            Invoice.status != InvoiceStatus.CANCELLED,
-        ).order_by(Invoice.created_at).first()
-        
-        newest_invoice = db.query(Invoice).filter(
-            Invoice.user_id == user_id,
-            Invoice.status != InvoiceStatus.CANCELLED,
-        ).order_by(desc(Invoice.created_at)).first()
-        
-        # Get total revenue
-        total_revenue = db.query(func.sum(Invoice.total_amount)).filter(
-            Invoice.user_id == user_id,
-            Invoice.status != InvoiceStatus.CANCELLED,
-        ).scalar() or 0
+        ).one()
+
+        (
+            total_invoices,
+            paid_count,
+            unpaid_count,
+            partial_count,
+            oldest_created_at,
+            newest_created_at,
+            total_revenue,
+        ) = invoice_stats
         
         # Get customer count
         customer_count = db.query(Customer).filter(
@@ -251,8 +251,8 @@ def get_restore_summary(
                 "partial": partial_count
             },
             "date_range": {
-                "oldest_invoice": oldest_invoice.created_at.isoformat() if oldest_invoice else None,
-                "newest_invoice": newest_invoice.created_at.isoformat() if newest_invoice else None
+                "oldest_invoice": oldest_created_at.isoformat() if oldest_created_at else None,
+                "newest_invoice": newest_created_at.isoformat() if newest_created_at else None
             },
             "financial_summary": {
                 "total_revenue": float(total_revenue),
@@ -320,62 +320,96 @@ def restore_customers(
 # ==================== HELPER FUNCTIONS ====================
 
 def _apply_stock_impact_from_sales(
-    db: Session, 
-    user_id: int, 
+    db: Session,
+    user_id: int,
     invoices: List[Invoice],
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    line_items_by_invoice: Optional[Dict[int, List[InvoiceLineItem]]] = None,
 ) -> bool:
     """
-    Apply stock impact from restored sales.
-    This ensures inventory is consistent with sales history.
+    Record the stock impact of restored sales without N+1 database queries.
+
+    A stable per-invoice-line idempotency key prevents repeat restores from
+    creating duplicate OUT movements. Legacy "Sales Sync" and previously
+    restored rows are both recognised.
     """
     try:
-        # Get all stock movements from these invoices
-        invoice_numbers = [inv.invoice_number for inv in invoices]
-        
-        existing_movements = db.query(StockMovement).filter(
+        if not invoices:
+            return True
+
+        invoice_numbers = [
+            invoice.invoice_number for invoice in invoices
+            if invoice.invoice_number
+        ]
+        if not invoice_numbers:
+            return True
+
+        existing_rows = db.query(StockMovement.reference_id).filter(
             StockMovement.reference_id.in_(invoice_numbers),
-            StockMovement.reason == "Sales Sync"
+            func.upper(StockMovement.reason).in_(
+                ("SALES SYNC", "SALES SYNC (RESTORED)")
+            ),
         ).all()
-        
-        existing_refs = {m.reference_id for m in existing_movements}
-        
-        # Create missing stock movements
-        movements_created = 0
-        
+        existing_refs = {row[0] for row in existing_rows}
+
+        if line_items_by_invoice is None:
+            invoice_ids = [invoice.id for invoice in invoices]
+            line_items_by_invoice = {}
+            if invoice_ids:
+                line_items = db.query(InvoiceLineItem).filter(
+                    InvoiceLineItem.invoice_id.in_(invoice_ids)
+                ).all()
+                for item in line_items:
+                    line_items_by_invoice.setdefault(item.invoice_id, []).append(
+                        item
+                    )
+
+        candidate_product_ids = {
+            item.product_id
+            for invoice in invoices
+            if invoice.invoice_number not in existing_refs
+            for item in line_items_by_invoice.get(invoice.id, [])
+            if item.product_id is not None
+        }
+        owned_product_ids = set()
+        if candidate_product_ids:
+            owned_rows = db.query(Product.id).filter(
+                Product.user_id == user_id,
+                Product.id.in_(candidate_product_ids),
+            ).all()
+            owned_product_ids = {row[0] for row in owned_rows}
+
+        movements_to_create = []
         for invoice in invoices:
             if invoice.invoice_number in existing_refs:
-                continue  # Already has stock movement
-            
-            line_items = db.query(InvoiceLineItem).filter(
-                InvoiceLineItem.invoice_id == invoice.id
-            ).all()
-            
-            for item in line_items:
-                if item.product_id:
-                    product = db.query(Product).filter(
-                        Product.id == item.product_id,
-                        Product.user_id == user_id
-                    ).first()
-                    
-                    if product:
-                        movement = StockMovement(
-                            product_id=item.product_id,
-                            movement_type="OUT",
-                            quantity=item.quantity,
-                            reason="Sales Sync (Restored)",
-                            reference_id=invoice.invoice_number
-                        )
-                        db.add(movement)
-                        movements_created += 1
-        
-        if movements_created > 0:
+                continue
+
+            for item in line_items_by_invoice.get(invoice.id, []):
+                if item.product_id not in owned_product_ids:
+                    continue
+
+                movements_to_create.append(
+                    StockMovement(
+                        product_id=item.product_id,
+                        movement_type="OUT",
+                        quantity=item.quantity,
+                        reason="Sales Sync",
+                        reference_id=invoice.invoice_number,
+                        idempotency_key=f"sales-restore:{invoice.id}:{item.id}",
+                    )
+                )
+
+        if movements_to_create:
+            db.add_all(movements_to_create)
             db.commit()
-            logger.info(f"Created {movements_created} stock movements from restored sales")
-        
+            logger.info(
+                "Created %s stock movements from restored sales",
+                len(movements_to_create),
+            )
+
         return True
-        
+
     except Exception as e:
-        logger.error(f"Stock impact application failed: {e}")
+        logger.error("Stock impact application failed: %s", e)
         db.rollback()
         return False
