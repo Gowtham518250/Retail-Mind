@@ -274,14 +274,14 @@ async def cashfree_subscription_webhook(request: Request, db: Session = Depends(
             """), {"sub":row["id"],"shop":row["shop_id"],"pid":str(payment_id) if payment_id else None,"amount":amount_paise,"payment_type":"INITIAL" if row["current_period_start"] is None else "RENEWAL","paid":now}).first()
             if inserted_payment:
                 period_start = row["current_period_end"] if row["current_period_end"] and row["current_period_end"] > now else now
-            if row["billing_interval"] == "YEARLY":
-                next_year = period_start.year + 1
-                period_end = period_start.replace(year=next_year, day=min(period_start.day, calendar.monthrange(next_year, period_start.month)[1]))
-            else:
-                next_month = period_start.month + 1
-                next_year = period_start.year + (1 if next_month > 12 else 0)
-                next_month = 1 if next_month > 12 else next_month
-                period_end = period_start.replace(year=next_year, month=next_month, day=min(period_start.day, calendar.monthrange(next_year, next_month)[1]))
+                if row["billing_interval"] == "YEARLY":
+                    next_year = period_start.year + 1
+                    period_end = period_start.replace(year=next_year, day=min(period_start.day, calendar.monthrange(next_year, period_start.month)[1]))
+                else:
+                    next_month = period_start.month + 1
+                    next_year = period_start.year + (1 if next_month > 12 else 0)
+                    next_month = 1 if next_month > 12 else next_month
+                    period_end = period_start.replace(year=next_year, month=next_month, day=min(period_start.day, calendar.monthrange(next_year, next_month)[1]))
                 db.execute(text("""
                     UPDATE rm_shop_subscriptions SET status='ACTIVE',current_period_start=:start,
                         current_period_end=:end,grace_period_end=NULL,mandate_status=COALESCE(mandate_status,'AUTHORIZED'),updated_at=NOW()
