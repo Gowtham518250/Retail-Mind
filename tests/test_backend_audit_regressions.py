@@ -102,6 +102,18 @@ def test_payment_notification_rejects_blank_idempotency_and_reference():
     assert "if not cleaned:" in schema
 
 
+def test_upi_order_cannot_be_marked_delivered_before_payment_confirmation():
+    source = read_source("online_store.py")
+    action = function_block(
+        source,
+        'def update_order_status(',
+        '@router.get("/owner/orders/',
+    )
+    assert 'payment_method in {"UPI", "ONLINE"}' in action
+    assert 'payment_status != "PAID"' in action
+    assert "UPI payment must be confirmed before delivering" in action
+
+
 def test_upi_reservation_index_migration_follows_cancellation_cleanup():
     migration = read_source(
         "alembic/versions/042_upi_reservation_expiry_index.py"
