@@ -1316,7 +1316,9 @@ def update_product(
                             status_code=409,
                             detail="This stock adjustment was already applied. Refresh inventory before editing stock again.",
                         )
-                elif current_stock != desired_stock:
+                else:
+                    # Persist a movement even for a no-op balance so a retried
+                    # request cannot become a new adjustment after later sales.
                     db_product.current_stock = desired_stock
                     db.add(StockMovement(
                         product_id=product_id,
@@ -1326,7 +1328,7 @@ def update_product(
                         reference_id=f"PRODUCT-{product_id}-STOCK-ADJUSTMENT",
                         idempotency_key=stock_idempotency_key,
                     ))
-                    stock_adjustment_recorded = True
+                    stock_adjustment_recorded = current_stock != desired_stock
             elif current_stock != desired_stock:
                 # Preserve old clients while recording an auditable adjustment.
                 # New clients should always provide stock_adjustment_idempotency_key.
