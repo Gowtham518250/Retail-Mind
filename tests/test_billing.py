@@ -89,8 +89,43 @@ def test_pending_checkout_recovery_and_active_plan_safety_are_present():
     source = Path("subscription_billing.py").read_text(encoding="utf-8")
     assert "INTERVAL '10 minutes'" in source
     assert "PENDING_CASHFREE_CHECKOUT" in source
-    assert "ACTIVE_SUBSCRIPTION_EXISTS" in source
     assert 'json={"subscription_id": cashfree_id, "action": "CANCEL"}' in source
+
+
+def test_three_character_pro_plan_code_is_valid():
+    from subscription_billing import CreateSubscriptionBody
+
+    request = CreateSubscriptionBody(plan_code="PRO")
+    assert request.plan_code == "PRO"
+
+
+def test_active_subscription_upgrade_changes_the_existing_cashfree_mandate():
+    source = Path("subscription_billing.py").read_text(encoding="utf-8")
+    start = source.index("async def create_subscription")
+    end = source.index(
+        '@router.post("/api/billing/subscriptions/{subscription_id}/cancel")',
+        start,
+    )
+    checkout = source[start:end]
+
+    assert '"action": "CHANGE_PLAN"' in checkout
+    assert '"action_details": {"plan_id": target_plan_id}' in checkout
+    assert '"requires_checkout": False' in checkout
+    assert "CASHFREE_PLAN_CHANGE_FAILED" in checkout
+    assert "ACTIVE_SUBSCRIPTION_EXISTS" not in checkout
+
+
+def test_cashfree_plan_id_is_stable_and_price_versioned():
+    from subscription_billing import _cashfree_plan_id
+
+    monthly = _cashfree_plan_id("PRO", "MONTHLY", 19900)
+    yearly = _cashfree_plan_id("PRO", "YEARLY", 199900)
+    changed_price = _cashfree_plan_id("PRO", "MONTHLY", 24900)
+
+    assert monthly == "rm_pro_monthly_19900"
+    assert yearly == "rm_pro_yearly_199900"
+    assert monthly != yearly
+    assert monthly != changed_price
 
 
 def test_owner_subscription_middleware_is_registered_after_app_creation():
