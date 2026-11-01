@@ -269,6 +269,136 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
         db.close()
 
 
+def _expire_stale_unpaid_online_order_reservations(now=None, batch_size=100):
+    """Cancel expired unpaid UPI orders and release their reserved inventory.
+
+    Only PENDING/ACCEPTED UPI orders with no recorded payment are eligible.
+    The database row lock prevents a concurrent owner/customer transition from
+    racing this job. Payment evidence discovered during financial reversal is
+    retained as REFUND_REQUIRED rather than discarded.
+    """
+    try:
+        timeout_minutes = int(os.getenv("ONLINE_ORDER_UPI_RESERVATION_MINUTES", "30"))
+    except (TypeError, ValueError):
+        timeout_minutes = 30
+    timeout_minutes = min(1440, max(5, timeout_minutes))
+    cutoff = (now or datetime.utcnow()) - timedelta(minutes=timeout_minutes)
+
+    from db import SessionLocal
+    from models import OnlineOrder
+    from online_store import (
+        _reverse_online_order_financials,
+        _online_order_sales_updated_event,
+        _invalidate_online_order_caches,
+    )
+
+    db = SessionLocal()
+    processed = []
+    realtime_events = []
+    try:
+        expired_orders = (
+            db.query(OnlineOrder)
+            .filter(
+                OnlineOrder.payment_method == "UPI",
+                OnlineOrder.payment_status == "PENDING",
+                OnlineOrder.order_status.in_(["PENDING", "ACCEPTED"]),
+                OnlineOrder.created_at <= cutoff,
+            )
+            .order_by(OnlineOrder.created_at.asc(), OnlineOrder.id.asc())
+            .with_for_update(skip_locked=True)
+            .limit(max(1, min(500, int(batch_size))))
+            .all()
+        )
+
+        for order in expired_orders:
+            previous_status = str(
+                getattr(order.order_status, "value", order.order_status)
+            ).upper()
+            shop_id = int(order.shop_id)
+            restored_inventory, cancelled_invoices = _reverse_online_order_financials(
+                db, order, shop_id, "Unpaid UPI reservation expired"
+            )
+            order.order_status = "CANCELLED"
+            processed.append((shop_id, int(order.id)))
+
+            realtime_events.append({
+                "event_id": str(uuid.uuid4()),
+                "type": "order.status_changed",
+                "shop_id": shop_id,
+                "order_id": int(order.id),
+                "customer_id": int(order.customer_id),
+                "previous_status": previous_status,
+                "status": "CANCELLED",
+                "payment_status": order.payment_status,
+                "total_amount": float(order.total_amount),
+                "cancellation_reason": "PAYMENT_TIMEOUT",
+                "analytics_invalidated": True,
+                "authoritative_refresh_required": True,
+            })
+            if restored_inventory:
+                realtime_events.append({
+                    "event_id": str(uuid.uuid4()),
+                    "type": "inventory.changed",
+                    "shop_id": shop_id,
+                    "reference_type": "ONLINE_ORDER_CANCELLATION",
+                    "reference_id": str(order.id),
+                    "changes": restored_inventory,
+                })
+            for invoice in cancelled_invoices:
+                realtime_events.append({
+                    "event_id": str(uuid.uuid4()),
+                    "type": "invoice.deleted",
+                    "shop_id": shop_id,
+                    "invoice_id": invoice["id"],
+                    "invoice_number": invoice["invoice_number"],
+                    "total_amount": invoice["total_amount"],
+                    "source": "ONLINE_ORDER_CANCELLATION",
+                    "reference_id": f"ONL-{order.id}",
+                })
+            realtime_events.append(
+                _online_order_sales_updated_event(
+                    shop_id, order, "UNPAID_UPI_RESERVATION_EXPIRED"
+                )
+            )
+
+        if not expired_orders:
+            db.rollback()
+            return 0
+
+        durable_events = [append_sync_event(db, event) for event in realtime_events]
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(
+            "[ONLINE ORDERS] reservation-expiry pass failed: "
+            f"{type(exc).__name__}",
+            flush=True,
+        )
+        return 0
+    finally:
+        db.close()
+
+    for shop_id, order_id in processed:
+        _invalidate_online_order_caches(
+            shop_id, order_id, "UNPAID_UPI_RESERVATION_EXPIRED"
+        )
+    for event in durable_events:
+        publish_realtime_event(event)
+
+    if processed:
+        print(
+            f"[ONLINE ORDERS] expired {len(processed)} unpaid UPI reservation(s)",
+            flush=True,
+        )
+    return len(processed)
+
+
+def _run_periodic_maintenance(log_summary=False):
+    """Run single-replica maintenance tasks under one advisory transaction lock."""
+    _auto_checkout_expired_shifts(log_summary=log_summary)
+    _expire_stale_unpaid_online_order_reservations()
+
+
 # A fixed PostgreSQL transaction-level advisory lock prevents every API
 # replica/worker from simultaneously executing the same periodic reconciliation.
 _ATTENDANCE_AUTO_CHECKOUT_LOCK_ID = 7435812051047
@@ -277,7 +407,7 @@ _ATTENDANCE_AUTO_CHECKOUT_LOCK_ID = 7435812051047
 def _run_attendance_auto_checkout_once(log_summary=False):
     """Run one reconciliation only when this process acquires the shared lock."""
     ran = run_with_advisory_lock(
-        lambda: _auto_checkout_expired_shifts(log_summary=log_summary),
+        lambda: _run_periodic_maintenance(log_summary=log_summary),
         lock_id=_ATTENDANCE_AUTO_CHECKOUT_LOCK_ID,
     )
     if not ran and log_summary:
