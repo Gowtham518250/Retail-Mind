@@ -1285,8 +1285,27 @@ def update_product(
         cleaned_key = str(client_stock_key).strip()
         if not cleaned_key:
             raise HTTPException(status_code=422, detail="Stock adjustment idempotency key must not be blank.")
+        key_identity = cleaned_key
+    elif requested_stock is not None:
+        # Legacy clients cannot yet send an operation UUID. Derive a stable
+        # fingerprint so the same retried payload cannot reapply stock after
+        # intervening sales. Updated clients should send a fresh UUID for each
+        # intentional stock adjustment.
+        key_identity = json.dumps(
+            {
+                "desired_stock": str(requested_stock),
+                "metadata": update_data,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    else:
+        key_identity = None
+
+    if key_identity is not None:
         stock_idempotency_key = hashlib.sha256(
-            f"product-stock-adjustment:{user_id}:{product_id}:{cleaned_key}".encode("utf-8")
+            f"product-stock-adjustment:{user_id}:{product_id}:{key_identity}".encode("utf-8")
         ).hexdigest()
 
     try:
