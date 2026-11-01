@@ -9,6 +9,7 @@ import os
 import re
 import uuid
 from datetime import datetime, timedelta, date, timezone
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 from typing import Optional
 
@@ -89,31 +90,17 @@ async def _ensure_cashfree_plan(
     billing_interval: str,
     amount_paise: int,
 ) -> str:
-    """Create or reuse the remote Cashfree plan needed by CHANGE_PLAN.
+    """Create or safely reuse the provider plan required by CHANGE_PLAN.
 
-    Cashfree's CHANGE_PLAN action requires a provider-side plan_id. The normal
-    checkout currently creates subscriptions using inline plan_details, so
-    create a deterministic provider plan only when an existing mandate needs
-    to be moved to a different tier.
+    Create first with a deterministic idempotency key. This avoids making a
+    Fetch Plan permission/lookup response a prerequisite for first-time plan
+    creation. If Cashfree reports that the plan may already exist, fetch it
+    and verify its amount, cadence and currency before reusing it.
     """
     amount = round(int(amount_paise) / 100, 2)
     plan_id = _cashfree_plan_id(plan_code, billing_interval, amount_paise)
-    headers = _cashfree_headers(app_id, secret)
-
-    fetched = await client.get(f"{base}/plans/{plan_id}", headers=headers)
-    if fetched.status_code == 200:
-        return plan_id
-    if fetched.status_code != 404:
-        logger.error(
-            "Cashfree plan lookup failed: plan_id=%s status=%s body=%s",
-            plan_id, fetched.status_code, fetched.text[:500],
-        )
-        raise HTTPException(
-            status_code=502,
-            detail="Unable to verify the target recurring plan with Cashfree. Please retry.",
-        )
-
     interval_type = "MONTH" if billing_interval == "MONTHLY" else "YEAR"
+    request_id = str(uuid.uuid4())
     payload = {
         "plan_id": plan_id,
         "plan_name": f"Retail Mind {plan_name} {billing_interval.title()}",
@@ -126,29 +113,153 @@ async def _ensure_cashfree_plan(
         "plan_interval_type": interval_type,
         "plan_note": f"Retail Mind {plan_name} subscription",
     }
-    created = await client.post(
-        f"{base}/plans",
-        headers=_cashfree_headers(app_id, secret, f"rm-plan-{plan_id}"),
-        json=payload,
+    create_headers = _cashfree_headers(
+        app_id,
+        secret,
+        f"rm-plan-{plan_id}",
     )
+    create_headers["x-request-id"] = request_id
+
+    try:
+        created = await client.post(
+            f"{base}/plans",
+            headers=create_headers,
+            json=payload,
+        )
+    except httpx.HTTPError as exc:
+        logger.exception(
+            "Cashfree plan create request failed: plan_id=%s request_id=%s",
+            plan_id,
+            request_id,
+        )
+        raise HTTPException(status_code=502, detail={
+            "code": "CASHFREE_PLAN_CREATE_UNCONFIRMED",
+            "request_id": request_id,
+            "message": "Cashfree did not confirm the target recurring plan. Refresh subscription status before retrying.",
+        }) from exc
+
     if created.status_code in (200, 201):
+        try:
+            response_data = created.json()
+        except (ValueError, json.JSONDecodeError):
+            response_data = {}
+        returned_plan_id = str(response_data.get("plan_id") or plan_id)
+        if returned_plan_id != plan_id:
+            logger.error(
+                "Cashfree returned unexpected plan ID: requested=%s returned=%s request_id=%s",
+                plan_id,
+                returned_plan_id,
+                request_id,
+            )
+            raise HTTPException(status_code=502, detail={
+                "code": "CASHFREE_PLAN_ID_MISMATCH",
+                "request_id": request_id,
+                "message": "Cashfree returned a different recurring plan ID. No plan change was applied.",
+            })
         return plan_id
 
-    # A concurrent request or a previous timeout may have created the plan.
-    # Confirm it exists before treating the create response as a failure.
-    if created.status_code in (409, 422):
-        verified = await client.get(f"{base}/plans/{plan_id}", headers=headers)
-        if verified.status_code == 200:
+    # A duplicate plan ID or an idempotent replay can mean the plan already
+    # exists. Fetch it only in that case, and verify its financial definition.
+    try:
+        verified = await client.get(
+            f"{base}/plans/{plan_id}",
+            headers={
+                **_cashfree_headers(app_id, secret),
+                "x-request-id": request_id,
+            },
+        )
+    except httpx.HTTPError as exc:
+        logger.exception(
+            "Cashfree plan verification request failed: plan_id=%s create_status=%s request_id=%s",
+            plan_id,
+            created.status_code,
+            request_id,
+        )
+        raise HTTPException(status_code=502, detail={
+            "code": "CASHFREE_PLAN_VERIFY_UNCONFIRMED",
+            "provider_status": created.status_code,
+            "request_id": request_id,
+            "message": "Cashfree could not confirm whether the recurring plan already exists. Refresh status before retrying.",
+        }) from exc
+
+    if verified.status_code == 200:
+        try:
+            existing = verified.json()
+        except (ValueError, json.JSONDecodeError):
+            existing = {}
+
+        def _same_amount(value, expected):
+            try:
+                return Decimal(str(value)).quantize(Decimal("0.01")) == Decimal(
+                    str(expected)
+                ).quantize(Decimal("0.01"))
+            except Exception:
+                return False
+
+        existing_plan_id = str(existing.get("plan_id") or "")
+        same_definition = (
+            existing_plan_id == plan_id
+            and str(existing.get("plan_type") or "").upper() == "PERIODIC"
+            and str(existing.get("plan_currency") or "INR").upper() == "INR"
+            and str(existing.get("plan_interval_type") or "").upper() == interval_type
+            and int(existing.get("plan_intervals") or 0) == 1
+            and _same_amount(existing.get("plan_recurring_amount"), amount)
+            and _same_amount(existing.get("plan_max_amount"), amount)
+        )
+        if same_definition:
             return plan_id
 
+        logger.error(
+            "Cashfree plan definition mismatch: plan_id=%s request_id=%s provider_status=%s",
+            plan_id,
+            request_id,
+            verified.status_code,
+        )
+        raise HTTPException(status_code=409, detail={
+            "code": "CASHFREE_PLAN_DEFINITION_MISMATCH",
+            "request_id": request_id,
+            "message": "A recurring plan with this ID already exists but its amount or billing interval differs. Contact support; no plan change was applied.",
+        })
+
+    try:
+        create_error = created.json()
+    except (ValueError, json.JSONDecodeError):
+        create_error = {}
+    try:
+        verify_error = verified.json()
+    except (ValueError, json.JSONDecodeError):
+        verify_error = {}
+
+    provider_code = str(
+        create_error.get("code")
+        or create_error.get("type")
+        or verify_error.get("code")
+        or verify_error.get("type")
+        or ""
+    )[:80]
     logger.error(
-        "Cashfree plan creation failed: plan_id=%s status=%s body=%s",
-        plan_id, created.status_code, created.text[:700],
+        "Cashfree plan preparation failed: plan_id=%s create_status=%s verify_status=%s "
+        "provider_code=%s request_id=%s create_body=%s verify_body=%s",
+        plan_id,
+        created.status_code,
+        verified.status_code,
+        provider_code,
+        request_id,
+        created.text[:500],
+        verified.text[:500],
     )
-    raise HTTPException(
-        status_code=502,
-        detail="Cashfree could not prepare the target subscription plan. Please retry or contact support.",
-    )
+    raise HTTPException(status_code=502, detail={
+        "code": "CASHFREE_PLAN_PREPARATION_FAILED",
+        "provider_status": created.status_code,
+        "verification_status": verified.status_code,
+        "provider_code": provider_code or None,
+        "request_id": request_id,
+        "message": (
+            "Cashfree could not create or verify the target recurring plan. "
+            "Check the Cashfree API credentials, environment and Subscriptions API access, "
+            "then retry. No plan change was applied."
+        ),
+    })
 
 
 def _plan_payload(row):
