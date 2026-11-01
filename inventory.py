@@ -871,6 +871,9 @@ class ProductUpdate(BaseModel):
     product_name: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = None
     current_stock: Optional[Decimal] = Field(None, ge=0)
+    # Optional client request identity for retry-safe stock adjustments made
+    # through the product editor.
+    stock_adjustment_idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
     unit: Optional[str] = Field(None, min_length=1, max_length=20)
     min_stock: Optional[int] = Field(None, ge=0)
     max_stock: Optional[int] = Field(None, gt=0)
@@ -982,7 +985,8 @@ def create_product(
     if existing:
         existing.product_name = product.product_name
         existing.description = product.description
-        existing.current_stock = product.current_stock
+        # SKU restore is a catalog upsert, not a stock adjustment. Preserve the
+        # authoritative backend balance so a stale offline payload cannot reset it.
         existing.unit = product.unit
         existing.min_stock = product.min_stock
         existing.max_stock = product.max_stock
@@ -1012,6 +1016,16 @@ def create_product(
     db.add(db_product)
     try:
         db.flush()
+        initial_quantity = Decimal(str(db_product.current_stock or 0))
+        if initial_quantity > 0:
+            db.add(StockMovement(
+                product_id=db_product.id,
+                movement_type="IN",
+                quantity=initial_quantity,
+                reason="INITIAL_STOCK",
+                reference_id=f"PRODUCT-{db_product.id}-INITIAL-STOCK",
+                idempotency_key=f"PRODUCT-{db_product.id}-INITIAL-STOCK",
+            ))
         sync_event = _queue_inventory_change(
             db, user_id, "product_created", product_id=db_product.id
         )
@@ -1026,7 +1040,7 @@ def create_product(
         if raced:
             raced.product_name = product.product_name
             raced.description = product.description
-            raced.current_stock = product.current_stock
+            # Preserve the inventory balance already committed by the winning request.
             raced.unit = product.unit
             raced.min_stock = product.min_stock
             raced.max_stock = product.max_stock
@@ -1093,29 +1107,113 @@ def update_product(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update product — account-scoped"""
-    db_product = db.query(Product).filter(
+    """Update product metadata and ledger any explicit stock adjustment."""
+    db_product = db.query(Product).with_for_update().filter(
         Product.id == product_id,
         Product.user_id == user_id
     ).first()
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     update_data = product_update.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(db_product, field, value)
-    
-    db.add(db_product)
+    requested_stock = update_data.pop("current_stock", None)
+    client_stock_key = update_data.pop("stock_adjustment_idempotency_key", None)
+    stock_idempotency_key = None
+    stock_adjustment_recorded = False
+
+    if client_stock_key is not None:
+        cleaned_key = str(client_stock_key).strip()
+        if not cleaned_key:
+            raise HTTPException(status_code=422, detail="Stock adjustment idempotency key must not be blank.")
+        stock_idempotency_key = hashlib.sha256(
+            f"product-stock-adjustment:{user_id}:{product_id}:{cleaned_key}".encode("utf-8")
+        ).hexdigest()
+
     try:
+        if requested_stock is not None:
+            desired_stock = Decimal(str(requested_stock))
+            current_stock = Decimal(str(db_product.current_stock or 0))
+            if stock_idempotency_key:
+                existing_movement = db.query(StockMovement).filter(
+                    StockMovement.idempotency_key == stock_idempotency_key
+                ).with_for_update().first()
+                if existing_movement is not None:
+                    existing_quantity = Decimal(str(existing_movement.quantity)).quantize(
+                        Decimal("0.001")
+                    )
+                    if (
+                        int(existing_movement.product_id) != int(product_id)
+                        or str(getattr(existing_movement.movement_type, "value", existing_movement.movement_type)).upper() != "ADJUSTMENT"
+                        or existing_quantity != desired_stock.quantize(Decimal("0.001"))
+                        or str(existing_movement.reason or "") != "PRODUCT_UPDATE"
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Stock adjustment key was already used for a different update.",
+                        )
+                    if current_stock != desired_stock:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="This stock adjustment was already applied. Refresh inventory before editing stock again.",
+                        )
+                elif current_stock != desired_stock:
+                    db_product.current_stock = desired_stock
+                    db.add(StockMovement(
+                        product_id=product_id,
+                        movement_type="ADJUSTMENT",
+                        quantity=desired_stock,
+                        reason="PRODUCT_UPDATE",
+                        reference_id=f"PRODUCT-{product_id}-STOCK-ADJUSTMENT",
+                        idempotency_key=stock_idempotency_key,
+                    ))
+                    stock_adjustment_recorded = True
+            elif current_stock != desired_stock:
+                # Preserve old clients while recording an auditable adjustment.
+                # New clients should always provide stock_adjustment_idempotency_key.
+                db_product.current_stock = desired_stock
+                db.add(StockMovement(
+                    product_id=product_id,
+                    movement_type="ADJUSTMENT",
+                    quantity=desired_stock,
+                    reason="PRODUCT_UPDATE",
+                    reference_id=f"PRODUCT-{product_id}-STOCK-ADJUSTMENT",
+                ))
+                stock_adjustment_recorded = True
+
+        for field, value in update_data.items():
+            setattr(db_product, field, value)
+
+        db.add(db_product)
         db.flush()
         sync_event = _queue_inventory_change(
-            db, user_id, "product_updated", product_id=db_product.id
+            db,
+            user_id,
+            "product_updated",
+            product_id=db_product.id,
+            stock_adjustment_recorded=stock_adjustment_recorded,
+            current_stock=float(db_product.current_stock or 0),
+            stock_idempotency_key=stock_idempotency_key,
         )
         db.commit()
         db.refresh(db_product)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update product: {str(e)}")
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="A concurrent product or stock update conflicted. Refresh and retry.",
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Product update failed for shop_id=%s product_id=%s",
+            user_id,
+            product_id,
+        )
+        raise HTTPException(status_code=500, detail="Failed to update product.")
+
     publish_realtime_event(sync_event)
     return db_product
 
