@@ -879,23 +879,81 @@ def bulk_export_products(user_id: int = Depends(check_current_user), db: Session
 
 @router.post("/bulk-import/products")
 def bulk_import_products(items: list[dict], user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Import products in bulk"""
+    """Bulk-create catalog products without overwriting existing stock balances."""
+    if not items:
+        raise HTTPException(status_code=422, detail="At least one product is required.")
+    if len(items) > 500:
+        raise HTTPException(status_code=413, detail="A maximum of 500 products can be imported at once.")
+
     created = 0
-    for item in items:
-        p = Product(user_id=user_id, **item)
-        db.add(p)
-        created += 1
+    skipped = 0
+    seen_skus: set[str] = set()
     try:
+        for raw_item in items:
+            product_data = ProductCreate.model_validate(raw_item)
+            normalized_sku = product_data.sku.strip()
+            if normalized_sku.casefold() in seen_skus:
+                skipped += 1
+                continue
+            seen_skus.add(normalized_sku.casefold())
+
+            existing = db.query(Product).filter(
+                Product.user_id == user_id,
+                Product.sku == normalized_sku,
+            ).with_for_update().first()
+            if existing is not None:
+                # A repeated import must not reset quantities already changed by
+                # sales, stock receipts or manual adjustments. Reactivate an
+                # archived SKU, but leave its authoritative balance untouched.
+                existing.is_active = True
+                skipped += 1
+                continue
+
+            payload = product_data.model_dump()
+            initial_stock = Decimal(str(payload.get("current_stock") or 0))
+            product = Product(
+                user_id=user_id,
+                **payload,
+            )
+            db.add(product)
+            db.flush()
+
+            if initial_stock > 0:
+                db.add(StockMovement(
+                    product_id=product.id,
+                    movement_type="IN",
+                    quantity=initial_stock,
+                    reason="BULK_IMPORT_INITIAL_STOCK",
+                    reference_id=f"PRODUCT-{product.id}-BULK-INITIAL",
+                    idempotency_key=f"PRODUCT-{product.id}-BULK-INITIAL",
+                ))
+            created += 1
+
         db.flush()
         sync_event = _queue_inventory_change(
-            db, user_id, "bulk_product_import", product_count=created
+            db,
+            user_id,
+            "bulk_product_import",
+            created_count=created,
+            skipped_existing_count=skipped,
         )
         db.commit()
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Bulk import failed: {str(e)}")
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="A concurrent product import conflicted. Refresh inventory and retry.",
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("Bulk product import failed for shop_id=%s", user_id)
+        raise HTTPException(status_code=500, detail="Bulk product import failed. No products were committed.")
+
     publish_realtime_event(sync_event)
-    return {"imported": created}
+    return {"imported": created, "skipped": skipped}
 
 @router.post("/bulk-import/customers")
 def bulk_import_customers(items: list[dict], user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
