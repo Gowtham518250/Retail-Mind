@@ -1186,6 +1186,16 @@ def create_stock_movement(
             existing = db.query(StockMovement).filter(
                 StockMovement.idempotency_key == idempotency_key
             ).with_for_update().first()
+            if existing is None and reference_id:
+                # Older app versions did not persist idempotency_key. Treat the
+                # same business reference as a replay when all movement fields
+                # match, instead of applying stock a second time.
+                existing = db.query(StockMovement).filter(
+                    StockMovement.product_id == movement.product_id,
+                    StockMovement.reference_id == reference_id,
+                    StockMovement.movement_type == movement_type,
+                    func.upper(StockMovement.reason) == reason.upper(),
+                ).with_for_update().first()
             if existing is not None:
                 existing_type = str(
                     getattr(existing.movement_type, "value", existing.movement_type)
@@ -1201,7 +1211,7 @@ def create_stock_movement(
                 if not same_request:
                     raise HTTPException(
                         status_code=409,
-                        detail="Idempotency key was already used for a different stock movement.",
+                        detail="Idempotency key or reference was already used for a different stock movement.",
                     )
                 return {
                     "message": "Stock movement already processed.",
