@@ -905,11 +905,24 @@ class StockMovementCreate(BaseModel):
     quantity: Decimal = Field(..., ge=0, description="Fractional quantities are allowed, up to 3 decimal places.")
     reason: Optional[str] = None
     reference_id: Optional[str] = None
+    # New clients should send this key. Legacy clients get a deterministic
+    # reference-based key when reference_id is available.
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
 
     @field_validator("quantity")
     @classmethod
     def _validate_quantity_precision(cls, value):
         return _validate_stock_precision(value)
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def _validate_idempotency_key(cls, value):
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Idempotency key must not be blank.")
+        return cleaned
 
 
 class ProductBatchCreate(BaseModel):
@@ -1140,28 +1153,76 @@ def create_stock_movement(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Record stock movement (IN/OUT/ADJUSTMENT)"""
+    """Record a retry-safe stock movement (IN/OUT/ADJUSTMENT)."""
+    movement_type = movement.movement_type.upper() if movement.movement_type else "IN"
+    if movement_type not in {"IN", "OUT", "ADJUSTMENT"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid movement_type. Must be one of: ['IN', 'OUT', 'ADJUSTMENT']",
+        )
+
+    reference_id = (movement.reference_id or "").strip()
+    reason = (movement.reason or "").strip()
+    idempotency_key = (movement.idempotency_key or "").strip() or None
+    if idempotency_key is None and reference_id:
+        # Preserve older client contracts while making invoice/order references
+        # retry-safe. Reference IDs must identify one business movement.
+        fingerprint = (
+            f"stock-movement:{user_id}:{movement.product_id}:{movement_type}:"
+            f"{reference_id}:{reason.casefold()}:"
+            f"{movement.quantity.quantize(Decimal('0.001'))}"
+        )
+        idempotency_key = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+
     product = db.query(Product).with_for_update().filter(
         Product.id == movement.product_id,
-        Product.user_id == user_id
+        Product.user_id == user_id,
     ).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
-    movement_type = movement.movement_type.upper() if movement.movement_type else "IN"
-    if movement_type not in {"IN", "OUT", "ADJUSTMENT"}:
-        raise HTTPException(status_code=400, detail="Invalid movement_type. Must be one of: ['IN', 'OUT', 'ADJUSTMENT']")
 
     try:
-        product, _ = StockService.apply_stock_change(
+        if idempotency_key:
+            existing = db.query(StockMovement).filter(
+                StockMovement.idempotency_key == idempotency_key
+            ).with_for_update().first()
+            if existing is not None:
+                existing_type = str(
+                    getattr(existing.movement_type, "value", existing.movement_type)
+                ).upper()
+                same_request = (
+                    int(existing.product_id) == int(movement.product_id)
+                    and existing_type == movement_type
+                    and Decimal(str(existing.quantity)).quantize(Decimal("0.001"))
+                    == movement.quantity.quantize(Decimal("0.001"))
+                    and str(existing.reason or "").strip().casefold() == reason.casefold()
+                    and str(existing.reference_id or "").strip() == reference_id
+                )
+                if not same_request:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Idempotency key was already used for a different stock movement.",
+                    )
+                return {
+                    "message": "Stock movement already processed.",
+                    "product_id": movement.product_id,
+                    "current_stock": product.current_stock,
+                    "movement_type": movement_type,
+                    "duplicate": True,
+                }
+
+        product, stock_movement = StockService.apply_stock_change(
             db,
             product_id=movement.product_id,
             user_id=user_id,
             quantity=movement.quantity,
             movement_type=movement_type,
-            reason=movement.reason,
-            reference_id=movement.reference_id,
+            reason=reason,
+            reference_id=reference_id or None,
         )
+        if idempotency_key:
+            stock_movement.idempotency_key = idempotency_key
+
         sync_event = _queue_inventory_change(
             db,
             user_id,
@@ -1170,20 +1231,36 @@ def create_stock_movement(
             movement_type=movement_type,
             quantity=float(movement.quantity),
             current_stock=float(product.current_stock),
-            reason=str(movement.reason or ""),
-            reference_id=str(movement.reference_id or ""),
+            reason=reason,
+            reference_id=reference_id,
+            idempotency_key=idempotency_key,
         )
         db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="A concurrent stock movement conflicted. Refresh inventory and retry.",
+        )
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Stock movement failed: {str(e)}")
+        logger.exception(
+            "Stock movement failed for shop_id=%s product_id=%s",
+            user_id,
+            movement.product_id,
+        )
+        raise HTTPException(status_code=500, detail="Stock movement failed. Please retry safely.") from e
 
     publish_realtime_event(sync_event)
     return {
         "message": "Stock movement recorded",
         "product_id": movement.product_id,
         "current_stock": product.current_stock,
-        "movement_type": movement_type
+        "movement_type": movement_type,
+        "duplicate": False,
     }
 
 @router.get("/stock-movements/{product_id}")
