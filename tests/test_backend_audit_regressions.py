@@ -96,7 +96,7 @@ def test_product_stock_edits_are_ledgered_and_sku_restore_preserves_balance():
     create = function_block(
         source,
         '@router.post("/products", response_model=ProductResponse)',
-        '@router.get("/products")',
+        '@router.get("/products",',
     )
     update = function_block(
         source,
