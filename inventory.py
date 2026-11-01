@@ -801,11 +801,14 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
                 actual_type = str(
                     getattr(existing_movement.movement_type, "value", existing_movement.movement_type)
                 ).upper()
+                valid_import_movement = (
+                    (actual_type == "ADJUSTMENT" and str(existing_movement.reason or "") == "INVENTORY_FILE_IMPORT")
+                    or (actual_type == "IN" and str(existing_movement.reason or "") == "INVENTORY_FILE_IMPORT_INITIAL")
+                )
                 if (
                     int(existing_movement.product_id) != int(product.id)
-                    or actual_type != movement_type
+                    or not valid_import_movement
                     or actual_quantity != expected_quantity
-                    or str(existing_movement.reason or "") != movement_reason
                 ):
                     raise HTTPException(
                         status_code=409,
