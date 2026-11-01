@@ -117,16 +117,7 @@ def test_active_subscription_upgrade_changes_the_existing_cashfree_mandate():
     assert "ACTIVE_SUBSCRIPTION_EXISTS" not in checkout
 
 
-def test_cashfree_activation_date_uses_ist_date_component():
-    from datetime import datetime
-    from subscription_billing import _cashfree_activation_date
-
-    # Cashfree uses only the date component; DB timestamps are stored as UTC.
-    period_end_utc = datetime(2026, 11, 1, 20, 0, 0)
-    assert _cashfree_activation_date(period_end_utc) == "2026-11-02"
-
-
-def test_cancellation_pending_upgrade_reactivates_before_change_plan():
+def test_cancelled_cashfree_mandate_uses_replacement_checkout_not_activate():
     source = Path("subscription_billing.py").read_text(encoding="utf-8")
     start = source.index("async def create_subscription")
     end = source.index(
@@ -135,29 +126,111 @@ def test_cancellation_pending_upgrade_reactivates_before_change_plan():
     )
     checkout = source[start:end]
 
-    activate_at = checkout.index('"action": "ACTIVATE"')
-    change_plan_at = checkout.index('"action": "CHANGE_PLAN"')
-    assert activate_at < change_plan_at
-    assert '"next_scheduled_time": activation_date' in checkout
-    assert "cancel_at_period_end=FALSE" in checkout
-    assert "cancelled_at=NULL" in checkout
-    assert "SUBSCRIPTION_REACTIVATION_FAILED" in checkout
-    assert "SUBSCRIPTION_REACTIVATED_UPGRADE_FAILED" in checkout
-    assert '"cancellation_reversed": cancellation_pending' in checkout
+    assert "_fetch_cashfree_subscription_status(" in checkout
+    assert 'terminal_statuses = {"CANCELLED", "CANCELED", "COMPLETED", "EXPIRED"}' in checkout
+    assert "replacing_cancelled_subscription" in checkout
+    assert "active = None" in checkout
+    assert '"action": "ACTIVATE"' not in checkout
+    assert '"replacement_for_cancelled_subscription": True' in checkout
+    assert '"previous_plan_access_until"' in checkout
 
 
-def test_cancellation_pending_upgrade_does_not_create_a_second_mandate():
+def test_cancelled_cashfree_mandate_does_not_create_a_second_live_mandate():
     source = Path("subscription_billing.py").read_text(encoding="utf-8")
     start = source.index("async def create_subscription")
-    active_start = source.index("    if active:", start)
-    pending_start = source.index("    pending_rows =", active_start)
-    active_branch = source[active_start:pending_start]
+    end = source.index(
+        '@router.post("/api/billing/subscriptions/{subscription_id}/cancel")',
+        start,
+    )
+    checkout = source[start:end]
+    terminal_start = checkout.index("if provider_status in terminal_statuses:")
+    active_check_start = checkout.index("else:", terminal_start)
+    terminal_branch = checkout[terminal_start:active_check_start]
 
-    assert "cashfree_subscription_id" in active_branch
-    assert '"action": "ACTIVATE"' in active_branch
-    assert '"action": "CHANGE_PLAN"' in active_branch
-    assert "INSERT INTO rm_shop_subscriptions" not in active_branch
-    assert '"requires_checkout": False' in active_branch
+    assert "active = None" in terminal_branch
+    assert "INSERT INTO rm_shop_subscriptions" not in terminal_branch
+    assert "terminal_statuses" in checkout
+    assert "CASHFREE_MANDATE_NOT_TERMINAL" in checkout
+    assert "CASHFREE_SUBSCRIPTION_STATUS_UNCONFIRMED" in checkout
+    assert "pending_rows =" in checkout
+    assert "subscription_session_id" in checkout
+
+
+def test_cancelled_subscription_replacement_preserves_existing_paid_through_access():
+    source = Path("subscription_billing.py").read_text(encoding="utf-8")
+    start = source.index("async def create_subscription")
+    end = source.index(
+        '@router.post("/api/billing/subscriptions/{subscription_id}/cancel")',
+        start,
+    )
+    checkout = source[start:end]
+
+    assert "Keep the old ACTIVE row and its paid-through entitlement intact." in checkout
+    assert "previous_plan_access_until" in checkout
+    assert "current_period_end" in checkout
+    assert "cancel_at_period_end" in checkout
+
+
+def test_cashfree_subscription_status_fetch_uses_provider_fetch_endpoint():
+    import asyncio
+    from subscription_billing import _fetch_cashfree_subscription_status
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {
+                "subscription_id": "rm_1_test",
+                "subscription_status": "CANCELLED",
+            }
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        async def get(self, url, **kwargs):
+            self.calls.append((url, kwargs))
+            return Response()
+
+    client = Client()
+    status, payload = asyncio.run(_fetch_cashfree_subscription_status(
+        client,
+        base="https://sandbox.cashfree.com/pg",
+        app_id="test-app-id",
+        secret="test-secret",
+        cashfree_subscription_id="rm_1_test",
+    ))
+
+    assert status == "CANCELLED"
+    assert payload["subscription_id"] == "rm_1_test"
+    assert client.calls[0][0].endswith("/subscriptions/rm_1_test")
+
+
+def test_cashfree_subscription_status_fetch_fails_closed():
+    import asyncio
+    from fastapi import HTTPException
+    from subscription_billing import _fetch_cashfree_subscription_status
+
+    class Response:
+        status_code = 403
+        text = '{"code":"PERMISSION_DENIED"}'
+
+    class Client:
+        async def get(self, *_args, **_kwargs):
+            return Response()
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(_fetch_cashfree_subscription_status(
+            Client(),
+            base="https://sandbox.cashfree.com/pg",
+            app_id="test-app-id",
+            secret="test-secret",
+            cashfree_subscription_id="rm_1_test",
+        ))
+
+    assert raised.value.status_code == 502
+    assert raised.value.detail["code"] == "CASHFREE_SUBSCRIPTION_STATUS_UNCONFIRMED"
+    assert raised.value.detail["provider_status"] == 403
 
 
 def test_cashfree_plan_id_is_stable_and_price_versioned():
