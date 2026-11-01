@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, date
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 from typing import Optional
@@ -64,13 +64,58 @@ def _cashfree_headers(app_id, secret, idem=None):
         headers["x-idempotency-key"] = idem
     return headers
 
-def _cashfree_activation_date(period_end: datetime) -> str:
-    """Cashfree ACTIVATE accepts a date; convert the UTC DB timestamp to IST."""
-    if period_end is None:
-        raise ValueError("A billing period end is required to reactivate a scheduled cancellation.")
-    if period_end.tzinfo is None:
-        period_end = period_end.replace(tzinfo=timezone.utc)
-    return period_end.astimezone(ZoneInfo("Asia/Kolkata")).date().isoformat()
+async def _fetch_cashfree_subscription_status(
+    client: httpx.AsyncClient,
+    *,
+    base: str,
+    app_id: str,
+    secret: str,
+    cashfree_subscription_id: str,
+) -> tuple[str, dict]:
+    """Read Cashfree's authoritative state before deciding whether a mandate is reusable."""
+    response = await client.get(
+        f"{base}/subscriptions/{cashfree_subscription_id}",
+        headers=_cashfree_headers(app_id, secret),
+    )
+    if response.status_code != 200:
+        logger.error(
+            "Cashfree subscription status fetch failed: subscription_id=%s status=%s body=%s",
+            cashfree_subscription_id,
+            response.status_code,
+            response.text[:700],
+        )
+        raise HTTPException(status_code=502, detail={
+            "code": "CASHFREE_SUBSCRIPTION_STATUS_UNCONFIRMED",
+            "provider_status": response.status_code,
+            "message": (
+                "Retail Mind could not verify the existing Cashfree mandate. "
+                "No new mandate was created. Refresh subscription status or contact support."
+            ),
+        })
+
+    try:
+        payload = response.json()
+    except (ValueError, json.JSONDecodeError) as exc:
+        logger.error(
+            "Cashfree returned invalid subscription status JSON: subscription_id=%s",
+            cashfree_subscription_id,
+        )
+        raise HTTPException(status_code=502, detail={
+            "code": "CASHFREE_SUBSCRIPTION_STATUS_INVALID",
+            "message": "Cashfree returned an invalid subscription status. No new mandate was created.",
+        }) from exc
+
+    provider_status = str(payload.get("subscription_status") or "").strip().upper()
+    if not provider_status:
+        logger.error(
+            "Cashfree subscription response omitted subscription_status: subscription_id=%s",
+            cashfree_subscription_id,
+        )
+        raise HTTPException(status_code=502, detail={
+            "code": "CASHFREE_SUBSCRIPTION_STATUS_MISSING",
+            "message": "Cashfree did not return the mandate status. No new mandate was created.",
+        })
+    return provider_status, payload
 
 
 def _cashfree_plan_id(plan_code: str, billing_interval: str, amount_paise: int) -> str:
@@ -360,6 +405,84 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
         ORDER BY created_at DESC, id DESC
         LIMIT 1
     """), {"shop": shop_id}).mappings().first()
+    # Cashfree's CANCEL action can leave the local paid-through entitlement
+    # active while the provider mandate itself is already terminal. Never call
+    # ACTIVATE on a cancelled mandate. Fetch the provider state and, only for a
+    # confirmed terminal mandate, fall through to a fresh authorization checkout.
+    replacing_cancelled_subscription = None
+    if active and bool(active["cancel_at_period_end"]):
+        old_subscription_id = int(active["id"])
+        old_cashfree_id = str(active["cashfree_subscription_id"] or "").strip()
+        old_period_end = active["current_period_end"]
+        if not old_period_end:
+            raise HTTPException(status_code=409, detail={
+                "code": "SUBSCRIPTION_PERIOD_END_UNKNOWN",
+                "subscription_id": old_subscription_id,
+                "current_plan": str(active["plan_code"] or "").upper(),
+                "message": "The current paid-through date is unavailable. Contact support to reconcile this subscription before starting another mandate.",
+            })
+        if not old_cashfree_id:
+            raise HTTPException(status_code=409, detail={
+                "code": "SUBSCRIPTION_MANDATE_MISSING",
+                "subscription_id": old_subscription_id,
+                "message": "The previous Cashfree mandate cannot be verified. No replacement mandate was created.",
+            })
+
+        app_id, secret, base = _cashfree_config()
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                provider_status, _provider_subscription = await _fetch_cashfree_subscription_status(
+                    client,
+                    base=base,
+                    app_id=app_id,
+                    secret=secret,
+                    cashfree_subscription_id=old_cashfree_id,
+                )
+        except HTTPException:
+            raise
+        except httpx.HTTPError as exc:
+            logger.exception(
+                "Cashfree mandate status could not be fetched: shop_id=%s subscription_id=%s",
+                shop_id,
+                old_subscription_id,
+            )
+            raise HTTPException(status_code=502, detail={
+                "code": "CASHFREE_SUBSCRIPTION_STATUS_UNCONFIRMED",
+                "message": "Retail Mind could not verify the old Cashfree mandate. No replacement mandate was created. Refresh status or contact support.",
+            }) from exc
+
+        terminal_statuses = {"CANCELLED", "CANCELED", "COMPLETED", "EXPIRED"}
+        if provider_status in terminal_statuses:
+            replacing_cancelled_subscription = {
+                "id": old_subscription_id,
+                "plan_code": str(active["plan_code"] or "").upper(),
+                "current_period_end": old_period_end,
+                "cashfree_status": provider_status,
+            }
+            logger.info(
+                "CANCELLED_MANDATE_REPLACEMENT_CHECKOUT shop_id=%s old_subscription_id=%s provider_status=%s",
+                shop_id,
+                old_subscription_id,
+                provider_status,
+            )
+            # Keep the old ACTIVE row and its paid-through entitlement intact.
+            # The new PENDING_AUTH row becomes authoritative only after Cashfree
+            # confirms the replacement authorization/payment.
+            active = None
+        else:
+            # An ACTIVE/PAUSED/unknown mandate may still be capable of debiting.
+            # Fail closed instead of creating a second recurring mandate.
+            raise HTTPException(status_code=409, detail={
+                "code": "CASHFREE_MANDATE_NOT_TERMINAL",
+                "subscription_id": old_subscription_id,
+                "provider_status": provider_status,
+                "message": (
+                    "Cashfree still reports the previous mandate as active or resumable. "
+                    "To prevent duplicate recurring debits, Retail Mind has not created another mandate. "
+                    "Refresh status or contact support."
+                ),
+            })
+
     if active:
         subscription_id = int(active["id"])
         current_status = str(active["status"] or "").upper()
@@ -373,14 +496,6 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                 "subscription_id": subscription_id,
                 "current_status": current_status,
                 "message": "This subscription is in a payment grace period. Resolve the pending payment before changing plans.",
-            })
-        cancellation_pending = bool(active["cancel_at_period_end"])
-        if cancellation_pending and not active["current_period_end"]:
-            raise HTTPException(status_code=409, detail={
-                "code": "SUBSCRIPTION_PERIOD_END_UNKNOWN",
-                "subscription_id": subscription_id,
-                "current_plan": current_plan,
-                "message": "We cannot safely reactivate this subscription because its paid-through date is missing. Contact support to reconcile the Cashfree mandate.",
             })
         if not cashfree_subscription_id:
             raise HTTPException(status_code=409, detail={
@@ -397,11 +512,6 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
             })
 
         app_id, secret, base = _cashfree_config()
-        activation_accepted = False
-        activation_date = (
-            _cashfree_activation_date(active["current_period_end"])
-            if cancellation_pending else None
-        )
         try:
             async with httpx.AsyncClient(timeout=25) as client:
                 target_plan_id = await _ensure_cashfree_plan(
@@ -414,50 +524,6 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                     billing_interval=body.billing_interval,
                     amount_paise=amount,
                 )
-
-                # Cashfree cancellation is an explicit mandate action. When the
-                # owner has already requested cancellation, first schedule ACTIVATE
-                # for the existing paid-through date; only then change the plan on
-                # that same mandate. Never create a second mandate for this case.
-                if cancellation_pending:
-                    activation_response = await client.post(
-                        f"{base}/subscriptions/{cashfree_subscription_id}/manage",
-                        headers=_cashfree_headers(
-                            app_id,
-                            secret,
-                            f"rm-activate-{subscription_id}-{activation_date}",
-                        ),
-                        json={
-                            "subscription_id": cashfree_subscription_id,
-                            "action": "ACTIVATE",
-                            "action_details": {
-                                "next_scheduled_time": activation_date,
-                            },
-                        },
-                    )
-                    if activation_response.status_code not in (200, 201):
-                        logger.error(
-                            "Cashfree reactivation failed: subscription_id=%s status=%s body=%s",
-                            subscription_id,
-                            activation_response.status_code,
-                            activation_response.text[:700],
-                        )
-                        raise HTTPException(status_code=409, detail={
-                            "code": "SUBSCRIPTION_REACTIVATION_FAILED",
-                            "subscription_id": subscription_id,
-                            "current_plan": current_plan,
-                            "message": "Cashfree could not remove the scheduled cancellation. Your current plan is unchanged. Refresh status or contact support before retrying.",
-                        })
-
-                    activation_accepted = True
-                    db.execute(text("""
-                        UPDATE rm_shop_subscriptions
-                        SET cancel_at_period_end=FALSE,
-                            cancelled_at=NULL,
-                            updated_at=NOW()
-                        WHERE id=:id AND shop_id=:shop AND status='ACTIVE'
-                    """), {"id": subscription_id, "shop": shop_id})
-
                 change_response = await client.post(
                     f"{base}/subscriptions/{cashfree_subscription_id}/manage",
                     headers=_cashfree_headers(
@@ -478,13 +544,6 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                     subscription_id, target_plan_id, change_response.status_code,
                     change_response.text[:700],
                 )
-                if activation_accepted:
-                    raise HTTPException(status_code=502, detail={
-                        "code": "SUBSCRIPTION_REACTIVATED_UPGRADE_FAILED",
-                        "subscription_id": subscription_id,
-                        "current_plan": current_plan,
-                        "message": "The scheduled cancellation was removed and your current plan remains active, but Cashfree could not apply the selected upgrade. Refresh subscription status and retry.",
-                    })
                 raise HTTPException(status_code=502, detail={
                     "code": "CASHFREE_PLAN_CHANGE_FAILED",
                     "message": "Cashfree could not change the existing mandate. Your current subscription has been left unchanged. Please retry or contact support.",
@@ -495,10 +554,9 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                 SET plan_code=:plan,
                     billing_interval=:interval,
                     amount_paise=:amount,
-                    cancel_at_period_end=FALSE,
-                    cancelled_at=NULL,
                     updated_at=NOW()
                 WHERE id=:id AND shop_id=:shop AND status='ACTIVE'
+                  AND cancel_at_period_end=FALSE
             """), {
                 "plan": code,
                 "interval": body.billing_interval,
@@ -508,33 +566,18 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
             })
             db.commit()
         except HTTPException:
-            # If ACTIVATE succeeded but CHANGE_PLAN did not, retain the confirmed
-            # cancellation reversal locally. Otherwise no local state changed.
-            if activation_accepted:
-                db.commit()
-            else:
-                db.rollback()
+            db.rollback()
             raise
         except Exception as exc:
-            if activation_accepted:
-                db.commit()
-            else:
-                db.rollback()
+            db.rollback()
             logger.exception(
                 "Cashfree plan upgrade failed: shop_id=%s subscription_id=%s",
                 shop_id,
                 subscription_id,
             )
             raise HTTPException(status_code=502, detail={
-                "code": (
-                    "SUBSCRIPTION_REACTIVATED_UPGRADE_UNCONFIRMED"
-                    if activation_accepted else "CASHFREE_PLAN_CHANGE_UNCONFIRMED"
-                ),
-                "message": (
-                    "The scheduled cancellation was removed, but the selected plan change could not be confirmed. Refresh subscription status before retrying."
-                    if activation_accepted else
-                    "Cashfree could not confirm the plan change. Your current subscription was not changed. Refresh status before retrying."
-                ),
+                "code": "CASHFREE_PLAN_CHANGE_UNCONFIRMED",
+                "message": "Cashfree could not confirm the plan change. Your current subscription was not changed. Refresh status before retrying.",
             }) from exc
         return {
             "success": True,
@@ -546,12 +589,7 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
             "billing_interval": body.billing_interval,
             "amount_paise": amount,
             "status": "ACTIVE",
-            "cancellation_reversed": cancellation_pending,
-            "message": (
-                "Your scheduled cancellation was reversed and your existing subscription was upgraded. No second mandate was created."
-                if cancellation_pending else
-                "Your existing recurring subscription has been changed. No second mandate was created."
-            ),
+            "message": "Your existing recurring subscription has been changed. No second mandate was created.",
         }
 
     pending_rows = db.execute(text("""
@@ -692,7 +730,23 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
             )
         db.execute(text("UPDATE rm_shop_subscriptions SET status='PENDING_AUTH',subscription_session_id=:session,cashfree_subscription_id=:cfid,updated_at=NOW() WHERE cashfree_subscription_id=:old"), {"session":session_id,"cfid":cf_id,"old":local_sub_id})
         db.commit()
-        return {"subscription_id": cf_id, "subscription_session_id": session_id, "environment": os.getenv("CASHFREE_ENV","sandbox").lower(), "status": "PENDING_AUTH"}
+        checkout_result = {
+            "subscription_id": cf_id,
+            "subscription_session_id": session_id,
+            "environment": os.getenv("CASHFREE_ENV", "sandbox").lower(),
+            "status": "PENDING_AUTH",
+        }
+        if replacing_cancelled_subscription:
+            checkout_result.update({
+                "replacement_for_cancelled_subscription": True,
+                "previous_subscription_record_id": replacing_cancelled_subscription["id"],
+                "previous_plan_access_until": (
+                    replacing_cancelled_subscription["current_period_end"].isoformat()
+                    if isinstance(replacing_cancelled_subscription["current_period_end"], datetime)
+                    else str(replacing_cancelled_subscription["current_period_end"])
+                ),
+            })
+        return checkout_result
     except HTTPException:
         raise
     except Exception:
