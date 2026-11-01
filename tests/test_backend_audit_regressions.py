@@ -153,8 +153,8 @@ def test_upi_order_cannot_be_marked_delivered_before_payment_confirmation():
 
 def test_upi_reservation_index_migration_follows_cancellation_cleanup():
     migration = read_source(
-        "alembic/versions/042_upi_reservation_expiry_index.py"
+        "alembic/versions/044_upi_reservation_expiry_index.py"
     )
-    assert 'revision = "042_upi_reservation_expiry_index"' in migration
-    assert 'down_revision = "041_cancelled_online_order_financial_cleanup"' in migration
+    assert 'revision = "044_upi_reservation_expiry_index"' in migration
+    assert 'down_revision = "043_retailmind_subscriptions"' in migration
     assert "ix_online_orders_upi_pending_reservation" in migration
