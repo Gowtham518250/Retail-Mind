@@ -8,7 +8,8 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 import httpx
@@ -61,6 +62,15 @@ def _cashfree_headers(app_id, secret, idem=None):
     if idem:
         headers["x-idempotency-key"] = idem
     return headers
+
+def _cashfree_activation_date(period_end: datetime) -> str:
+    """Cashfree ACTIVATE accepts a date; convert the UTC DB timestamp to IST."""
+    if period_end is None:
+        raise ValueError("A billing period end is required to reactivate a scheduled cancellation.")
+    if period_end.tzinfo is None:
+        period_end = period_end.replace(tzinfo=timezone.utc)
+    return period_end.astimezone(ZoneInfo("Asia/Kolkata")).date().isoformat()
+
 
 def _cashfree_plan_id(plan_code: str, billing_interval: str, amount_paise: int) -> str:
     """Return a stable, price-versioned Cashfree plan identifier."""
@@ -247,13 +257,13 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                 "current_status": current_status,
                 "message": "This subscription is in a payment grace period. Resolve the pending payment before changing plans.",
             })
-        if bool(active["cancel_at_period_end"]):
+        cancellation_pending = bool(active["cancel_at_period_end"])
+        if cancellation_pending and not active["current_period_end"]:
             raise HTTPException(status_code=409, detail={
-                "code": "SUBSCRIPTION_CANCELLATION_PENDING",
+                "code": "SUBSCRIPTION_PERIOD_END_UNKNOWN",
                 "subscription_id": subscription_id,
                 "current_plan": current_plan,
-                "current_period_end": active["current_period_end"].isoformat() if active["current_period_end"] else None,
-                "message": "This subscription is already scheduled to cancel. Refresh subscription status before selecting another plan.",
+                "message": "We cannot safely reactivate this subscription because its paid-through date is missing. Contact support to reconcile the Cashfree mandate.",
             })
         if not cashfree_subscription_id:
             raise HTTPException(status_code=409, detail={
@@ -270,57 +280,145 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
             })
 
         app_id, secret, base = _cashfree_config()
-        async with httpx.AsyncClient(timeout=25) as client:
-            target_plan_id = await _ensure_cashfree_plan(
-                client,
-                base=base,
-                app_id=app_id,
-                secret=secret,
-                plan_code=code,
-                plan_name=str(plan["name"]),
-                billing_interval=body.billing_interval,
-                amount_paise=amount,
-            )
-            change_response = await client.post(
-                f"{base}/subscriptions/{cashfree_subscription_id}/manage",
-                headers=_cashfree_headers(
-                    app_id,
-                    secret,
-                    f"rm-change-plan-{subscription_id}-{target_plan_id}",
-                ),
-                json={
-                    "subscription_id": cashfree_subscription_id,
-                    "action": "CHANGE_PLAN",
-                    "action_details": {"plan_id": target_plan_id},
-                },
-            )
+        activation_accepted = False
+        activation_date = (
+            _cashfree_activation_date(active["current_period_end"])
+            if cancellation_pending else None
+        )
+        try:
+            async with httpx.AsyncClient(timeout=25) as client:
+                target_plan_id = await _ensure_cashfree_plan(
+                    client,
+                    base=base,
+                    app_id=app_id,
+                    secret=secret,
+                    plan_code=code,
+                    plan_name=str(plan["name"]),
+                    billing_interval=body.billing_interval,
+                    amount_paise=amount,
+                )
 
-        if change_response.status_code not in (200, 201):
-            logger.error(
-                "Cashfree plan change failed: subscription_id=%s target_plan=%s status=%s body=%s",
-                subscription_id, target_plan_id, change_response.status_code,
-                change_response.text[:700],
+                # Cashfree cancellation is an explicit mandate action. When the
+                # owner has already requested cancellation, first schedule ACTIVATE
+                # for the existing paid-through date; only then change the plan on
+                # that same mandate. Never create a second mandate for this case.
+                if cancellation_pending:
+                    activation_response = await client.post(
+                        f"{base}/subscriptions/{cashfree_subscription_id}/manage",
+                        headers=_cashfree_headers(
+                            app_id,
+                            secret,
+                            f"rm-activate-{subscription_id}-{activation_date}",
+                        ),
+                        json={
+                            "subscription_id": cashfree_subscription_id,
+                            "action": "ACTIVATE",
+                            "action_details": {
+                                "next_scheduled_time": activation_date,
+                            },
+                        },
+                    )
+                    if activation_response.status_code not in (200, 201):
+                        logger.error(
+                            "Cashfree reactivation failed: subscription_id=%s status=%s body=%s",
+                            subscription_id,
+                            activation_response.status_code,
+                            activation_response.text[:700],
+                        )
+                        raise HTTPException(status_code=409, detail={
+                            "code": "SUBSCRIPTION_REACTIVATION_FAILED",
+                            "subscription_id": subscription_id,
+                            "current_plan": current_plan,
+                            "message": "Cashfree could not remove the scheduled cancellation. Your current plan is unchanged. Refresh status or contact support before retrying.",
+                        })
+
+                    activation_accepted = True
+                    db.execute(text("""
+                        UPDATE rm_shop_subscriptions
+                        SET cancel_at_period_end=FALSE,
+                            cancelled_at=NULL,
+                            updated_at=NOW()
+                        WHERE id=:id AND shop_id=:shop AND status='ACTIVE'
+                    """), {"id": subscription_id, "shop": shop_id})
+
+                change_response = await client.post(
+                    f"{base}/subscriptions/{cashfree_subscription_id}/manage",
+                    headers=_cashfree_headers(
+                        app_id,
+                        secret,
+                        f"rm-change-plan-{subscription_id}-{target_plan_id}",
+                    ),
+                    json={
+                        "subscription_id": cashfree_subscription_id,
+                        "action": "CHANGE_PLAN",
+                        "action_details": {"plan_id": target_plan_id},
+                    },
+                )
+
+            if change_response.status_code not in (200, 201):
+                logger.error(
+                    "Cashfree plan change failed: subscription_id=%s target_plan=%s status=%s body=%s",
+                    subscription_id, target_plan_id, change_response.status_code,
+                    change_response.text[:700],
+                )
+                if activation_accepted:
+                    raise HTTPException(status_code=502, detail={
+                        "code": "SUBSCRIPTION_REACTIVATED_UPGRADE_FAILED",
+                        "subscription_id": subscription_id,
+                        "current_plan": current_plan,
+                        "message": "The scheduled cancellation was removed and your current plan remains active, but Cashfree could not apply the selected upgrade. Refresh subscription status and retry.",
+                    })
+                raise HTTPException(status_code=502, detail={
+                    "code": "CASHFREE_PLAN_CHANGE_FAILED",
+                    "message": "Cashfree could not change the existing mandate. Your current subscription has been left unchanged. Please retry or contact support.",
+                })
+
+            db.execute(text("""
+                UPDATE rm_shop_subscriptions
+                SET plan_code=:plan,
+                    billing_interval=:interval,
+                    amount_paise=:amount,
+                    cancel_at_period_end=FALSE,
+                    cancelled_at=NULL,
+                    updated_at=NOW()
+                WHERE id=:id AND shop_id=:shop AND status='ACTIVE'
+            """), {
+                "plan": code,
+                "interval": body.billing_interval,
+                "amount": amount,
+                "id": subscription_id,
+                "shop": shop_id,
+            })
+            db.commit()
+        except HTTPException:
+            # If ACTIVATE succeeded but CHANGE_PLAN did not, retain the confirmed
+            # cancellation reversal locally. Otherwise no local state changed.
+            if activation_accepted:
+                db.commit()
+            else:
+                db.rollback()
+            raise
+        except Exception as exc:
+            if activation_accepted:
+                db.commit()
+            else:
+                db.rollback()
+            logger.exception(
+                "Cashfree plan upgrade failed: shop_id=%s subscription_id=%s",
+                shop_id,
+                subscription_id,
             )
             raise HTTPException(status_code=502, detail={
-                "code": "CASHFREE_PLAN_CHANGE_FAILED",
-                "message": "Cashfree could not change the existing mandate. Your current subscription has been left unchanged. Please retry or contact support.",
-            })
-
-        db.execute(text("""
-            UPDATE rm_shop_subscriptions
-            SET plan_code=:plan,
-                billing_interval=:interval,
-                amount_paise=:amount,
-                updated_at=NOW()
-            WHERE id=:id AND shop_id=:shop AND status='ACTIVE'
-        """), {
-            "plan": code,
-            "interval": body.billing_interval,
-            "amount": amount,
-            "id": subscription_id,
-            "shop": shop_id,
-        })
-        db.commit()
+                "code": (
+                    "SUBSCRIPTION_REACTIVATED_UPGRADE_UNCONFIRMED"
+                    if activation_accepted else "CASHFREE_PLAN_CHANGE_UNCONFIRMED"
+                ),
+                "message": (
+                    "The scheduled cancellation was removed, but the selected plan change could not be confirmed. Refresh subscription status before retrying."
+                    if activation_accepted else
+                    "Cashfree could not confirm the plan change. Your current subscription was not changed. Refresh status before retrying."
+                ),
+            }) from exc
         return {
             "success": True,
             "plan_changed": True,
@@ -331,7 +429,12 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
             "billing_interval": body.billing_interval,
             "amount_paise": amount,
             "status": "ACTIVE",
-            "message": "Your existing recurring subscription has been changed. No second mandate was created.",
+            "cancellation_reversed": cancellation_pending,
+            "message": (
+                "Your scheduled cancellation was reversed and your existing subscription was upgraded. No second mandate was created."
+                if cancellation_pending else
+                "Your existing recurring subscription has been changed. No second mandate was created."
+            ),
         }
 
     pending_rows = db.execute(text("""
