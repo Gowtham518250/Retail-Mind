@@ -1423,8 +1423,17 @@ def create_stock_movement(
 
     reference_id = (movement.reference_id or "").strip()
     reason = (movement.reason or "").strip()
-    idempotency_key = (movement.idempotency_key or "").strip() or None
-    if idempotency_key is None and reference_id:
+    provided_idempotency_key = (movement.idempotency_key or "").strip()
+    idempotency_key = None
+    if provided_idempotency_key:
+        # The database key is globally unique, so namespace client keys by
+        # tenant and product before persisting them.
+        key_material = (
+            f"stock-movement:{user_id}:{movement.product_id}:"
+            f"{provided_idempotency_key}"
+        )
+        idempotency_key = hashlib.sha256(key_material.encode("utf-8")).hexdigest()
+    elif reference_id:
         # Preserve older client contracts while making invoice/order references
         # retry-safe. Reference IDs must identify one business movement.
         fingerprint = (
