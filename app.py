@@ -171,6 +171,17 @@ async def subscription_feature_enforcement(request: Request, call_next):
 
         require_shop_feature(db, owner_user_id, "online_orders")
     except HTTPException as exc:
+        if exc.status_code == 403:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            logger.warning(
+                "SUBSCRIPTION_FEATURE_DENIED path=%s shop_id=%s feature=%s "
+                "current_plan=%s code=%s",
+                path,
+                locals().get("owner_user_id", "unknown"),
+                detail.get("feature", "online_orders"),
+                detail.get("current_plan", "unknown"),
+                detail.get("code", "OWNER_ACCESS_REQUIRED"),
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
