@@ -104,11 +104,7 @@ def test_payment_notification_rejects_blank_idempotency_and_reference():
 
 def test_upi_order_cannot_be_marked_delivered_before_payment_confirmation():
     source = read_source("online_store.py")
-    action = function_block(
-        source,
-        'def update_order_status(',
-        '@router.get("/owner/orders/',
-    )
+    action = source[source.index("def update_order_status("):]
     assert 'payment_method in {"UPI", "ONLINE"}' in action
     assert 'payment_status != "PAID"' in action
     assert "UPI payment must be confirmed before delivering" in action
