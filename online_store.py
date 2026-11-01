@@ -769,13 +769,27 @@ def request_customer_password_reset_otp(
     # accidental leading/trailing spaces before registration was normalized.
     user = db.query(OnlineCustomerAuth).filter(
         func.lower(func.trim(OnlineCustomerAuth.email)) == normalized_email
-    ).first()
+    ).with_for_update().first()
 
     # Keep enumeration-resistant response behavior, but do not make the
     # frontend believe an OTP was sent when this customer has no matching
     # account/email. The caller can keep the same generic wording while using
     # success=false to avoid advancing to OTP verification.
-    if not user or not user.email or not EmailNotificationService:
+    if not user or not user.is_active or not user.email or not EmailNotificationService:
+        return {
+            "success": False,
+            "email_sent": False,
+            **_customer_reset_generic_message(),
+        }
+
+    # Enforce an account-level issuance budget in addition to the IP limiter.
+    # The customer row lock serializes parallel requests for the same account.
+    now = datetime.utcnow()
+    recent_otp_count = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.created_at >= now - timedelta(minutes=10),
+    ).count()
+    if recent_otp_count >= 3:
         return {
             "success": False,
             "email_sent": False,
