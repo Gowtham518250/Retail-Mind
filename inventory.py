@@ -666,11 +666,14 @@ async def preview_inventory_upload(file: UploadFile = File(...), user_id: int = 
 
 class InventoryUploadConfirmRequest(BaseModel):
     rows: List[Dict[str, Any]] = Field(..., min_length=1, max_length=_INVENTORY_IMPORT_MAX_ROWS)
+    # Reuse this key for network retries. A new key is required for a new import
+    # that intentionally reapplies quantities after subsequent stock movements.
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
 
 
 @router.post("/upload/confirm")
 def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
-    """Validate reviewed rows again and import them atomically only after explicit confirmation."""
+    """Validate reviewed rows and import atomically with an auditable stock ledger."""
     prepared: List[Dict[str, Any]] = []
     issues: List[Dict[str, Any]] = []
     seen_skus: set[str] = set()
@@ -742,29 +745,125 @@ def confirm_inventory_upload(request: InventoryUploadConfirmRequest, user_id: in
     if issues or len(prepared) != len(request.rows):
         raise HTTPException(status_code=422, detail={"message": "No inventory was changed. Correct the highlighted rows and confirm again.", "rows": issues})
 
+    supplied_key = (request.idempotency_key or "").strip()
+    payload_fingerprint = json.dumps(prepared, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    import_identity = supplied_key or hashlib.sha256(payload_fingerprint.encode("utf-8")).hexdigest()
+    import_digest = hashlib.sha256(
+        f"inventory-file-import:{int(user_id)}:{import_identity}".encode("utf-8")
+    ).hexdigest()
+
     created = 0
     updated = 0
+    skipped_stock_replays = 0
     try:
         for item in prepared:
-            existing = db.query(Product).filter(Product.user_id == int(user_id), Product.sku == item["sku"]).with_for_update().first()
+            existing = db.query(Product).filter(
+                Product.user_id == int(user_id),
+                Product.sku == item["sku"],
+            ).with_for_update().first()
+
+            target_stock = Decimal(str(item["current_stock"]))
             if existing:
+                product = existing
+                previous_stock = Decimal(str(product.current_stock or 0))
                 for field, value in item.items():
-                    setattr(existing, field, value)
-                existing.is_active = True
+                    if field != "current_stock":
+                        setattr(product, field, value)
                 updated += 1
+                movement_type = "ADJUSTMENT"
+                movement_reason = "INVENTORY_FILE_IMPORT"
             else:
-                db.add(Product(user_id=int(user_id), **item, is_active=True))
+                product_data = dict(item)
+                product_data["current_stock"] = target_stock
+                product = Product(
+                    user_id=int(user_id),
+                    **product_data,
+                    is_active=True,
+                )
+                db.add(product)
+                db.flush()
+                previous_stock = Decimal("0")
                 created += 1
+                movement_type = "IN"
+                movement_reason = "INVENTORY_FILE_IMPORT_INITIAL"
+
+            movement_key = hashlib.sha256(
+                f"{import_digest}:{product.id}".encode("utf-8")
+            ).hexdigest()
+            reference_id = f"INV-UPLOAD-{import_digest[:24]}-{product.id}"
+            existing_movement = db.query(StockMovement).filter(
+                StockMovement.idempotency_key == movement_key
+            ).with_for_update().first()
+
+            if existing_movement is not None:
+                expected_quantity = target_stock.quantize(Decimal("0.001"))
+                actual_quantity = Decimal(str(existing_movement.quantity)).quantize(Decimal("0.001"))
+                actual_type = str(
+                    getattr(existing_movement.movement_type, "value", existing_movement.movement_type)
+                ).upper()
+                if (
+                    int(existing_movement.product_id) != int(product.id)
+                    or actual_type != movement_type
+                    or actual_quantity != expected_quantity
+                    or str(existing_movement.reason or "") != movement_reason
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Inventory import idempotency key was already used for different stock data.",
+                    )
+                # A replay updates catalog metadata only. Never reset stock to
+                # an old file value after later sales or purchase receipts.
+                skipped_stock_replays += 1
+            else:
+                if existing and previous_stock != target_stock:
+                    product.current_stock = target_stock
+                db.add(StockMovement(
+                    product_id=product.id,
+                    movement_type=movement_type,
+                    quantity=target_stock,
+                    reason=movement_reason,
+                    reference_id=reference_id,
+                    idempotency_key=movement_key,
+                ))
+
         db.flush()
-        sync_event = _queue_inventory_change(db, int(user_id), "inventory_file_import", product_count=len(prepared), created_count=created, updated_count=updated)
+        sync_event = _queue_inventory_change(
+            db,
+            int(user_id),
+            "inventory_file_import",
+            product_count=len(prepared),
+            created_count=created,
+            updated_count=updated,
+            skipped_stock_replays=skipped_stock_replays,
+            idempotency_key=import_digest,
+        )
         db.commit()
-    except Exception as exc:
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="A concurrent inventory import conflicted. Refresh inventory and retry.",
+        )
+    except Exception:
         db.rollback()
         logging.exception("Inventory file import transaction rolled back.")
-        raise HTTPException(status_code=500, detail="Inventory import failed; no rows were committed. Please retry.") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Inventory import failed; no rows were committed. Please retry.",
+        )
 
     publish_realtime_event(sync_event)
-    return {"success": True, "imported": len(prepared), "created": created, "updated": updated, "message": f"Imported {len(prepared)} inventory rows ({created} created, {updated} updated)."}
+    return {
+        "success": True,
+        "imported": len(prepared),
+        "created": created,
+        "updated": updated,
+        "stock_replays_skipped": skipped_stock_replays,
+        "message": f"Imported {len(prepared)} inventory rows ({created} created, {updated} updated).",
+    }
 
 
 # ==================== BATCH OPERATIONS ====================
