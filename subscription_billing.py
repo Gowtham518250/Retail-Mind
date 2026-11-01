@@ -197,12 +197,18 @@ async def _ensure_cashfree_plan(
                 return False
 
         existing_plan_id = str(existing.get("plan_id") or "")
+        try:
+            existing_intervals = int(existing.get("plan_intervals") or 0)
+        except (TypeError, ValueError, OverflowError):
+            existing_intervals = -1
+        existing_status = str(existing.get("plan_status") or "ACTIVE").upper()
         same_definition = (
             existing_plan_id == plan_id
+            and existing_status == "ACTIVE"
             and str(existing.get("plan_type") or "").upper() == "PERIODIC"
             and str(existing.get("plan_currency") or "INR").upper() == "INR"
             and str(existing.get("plan_interval_type") or "").upper() == interval_type
-            and int(existing.get("plan_intervals") or 0) == 1
+            and existing_intervals == 1
             and _same_amount(existing.get("plan_recurring_amount"), amount)
             and _same_amount(existing.get("plan_max_amount"), amount)
         )
