@@ -203,6 +203,8 @@ jobs:
           pytest -q tests/test_sales_analytics_regression.py
           pytest -q tests/test_query_date_scope_contract.py
           pytest -q tests/test_customer_otp_password_reset.py
+          pytest -q tests/test_online_order_cancellation.py
+          pytest -q tests/test_backend_audit_regressions.py
           pytest -q tests/test_access_token_boundaries.py
           pytest -q tests/test_render_host_validation.py
           pytest -q tests/test_performance_middleware.py

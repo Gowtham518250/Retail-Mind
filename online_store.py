@@ -304,8 +304,35 @@ def _online_order_sales_updated_event(shop_id: int, order: OnlineOrder, reason: 
     }
 
 
+def _release_online_order_coupon(db: Session, order: OnlineOrder, shop_id: int) -> bool:
+    """Release one coupon reservation when an online order is cancelled/rejected.
+
+    Order rows are locked by the calling transition handlers, and coupon rows
+    are locked here so concurrent checkouts cannot oversubscribe the last use.
+    The transition guards ensure this release is performed only once per order.
+    """
+    coupon_code = str(getattr(order, "coupon_code", "") or "").strip().upper()
+    if not coupon_code:
+        return False
+
+    from models import RetailCoupon
+
+    coupon = db.query(RetailCoupon).filter(
+        RetailCoupon.shop_id == shop_id,
+        RetailCoupon.code == coupon_code,
+    ).with_for_update().first()
+    if coupon is None:
+        return False
+
+    current_count = max(0, int(coupon.used_count or 0))
+    if current_count == 0:
+        return False
+    coupon.used_count = current_count - 1
+    return True
+
+
 def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: int, reason: str):
-    """Restore reserved stock once, then remove the cancelled order's financial artifacts."""
+    """Restore reserved stock, release its coupon, and reverse order financial artifacts."""
     try:
         items = json.loads(order.items_json or "[]")
         if not isinstance(items, list):
@@ -347,6 +374,7 @@ def _reverse_online_order_financials(db: Session, order: OnlineOrder, shop_id: i
                 "new_stock": float(product.current_stock),
             })
 
+    _release_online_order_coupon(db, order, shop_id)
     invoice_snapshots = _cleanup_online_order_financials(db, order, shop_id, reason)
     return restored_inventory, invoice_snapshots
 
@@ -474,6 +502,13 @@ class PaymentNotificationMatch(BaseModel):
     source: str = Field(default="PAYMENT_NOTIFICATION", max_length=50)
     payer_name: Optional[str] = Field(default=None, max_length=120)
     timestamp: Optional[str] = Field(default=None, max_length=80)
+
+    @field_validator("payment_reference", "idempotency_key")
+    def validate_nonblank_payment_identifiers(cls, value):
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Payment reference and idempotency key must not be blank.")
+        return cleaned
 
 
 class OrderRating(BaseModel):
@@ -734,13 +769,27 @@ def request_customer_password_reset_otp(
     # accidental leading/trailing spaces before registration was normalized.
     user = db.query(OnlineCustomerAuth).filter(
         func.lower(func.trim(OnlineCustomerAuth.email)) == normalized_email
-    ).first()
+    ).with_for_update().first()
 
     # Keep enumeration-resistant response behavior, but do not make the
     # frontend believe an OTP was sent when this customer has no matching
     # account/email. The caller can keep the same generic wording while using
     # success=false to avoid advancing to OTP verification.
-    if not user or not user.email or not EmailNotificationService:
+    if not user or not user.is_active or not user.email or not EmailNotificationService:
+        return {
+            "success": False,
+            "email_sent": False,
+            **_customer_reset_generic_message(),
+        }
+
+    # Enforce an account-level issuance budget in addition to the IP limiter.
+    # The customer row lock serializes parallel requests for the same account.
+    now = datetime.utcnow()
+    recent_otp_count = db.query(CustomerPasswordResetOtp).filter(
+        CustomerPasswordResetOtp.customer_id == user.id,
+        CustomerPasswordResetOtp.created_at >= now - timedelta(minutes=10),
+    ).count()
+    if recent_otp_count >= 3:
         return {
             "success": False,
             "email_sent": False,
@@ -1498,11 +1547,6 @@ def place_order(
         raise HTTPException(status_code=400, detail="Cash on delivery is disabled for this shop.")
     if selected_payment_method == "UPI" and not accept_online:
         raise HTTPException(status_code=400, detail="Online UPI payment is not enabled for this shop.")
-    selected_payment_method = data.payment_method.upper()
-    if selected_payment_method == "COD" and not accept_cod:
-        raise HTTPException(status_code=400, detail="Cash on delivery is disabled for this shop.")
-    if selected_payment_method == "UPI" and not accept_online:
-        raise HTTPException(status_code=400, detail="Online UPI payment is not enabled for this shop.")
 
     discount_amount = 0.0
     coupon_code = (data.coupon_code or "").strip().upper() or None
@@ -1514,7 +1558,7 @@ def place_order(
             RetailCoupon.shop_id == data.shop_id,
             RetailCoupon.code == coupon_code,
             RetailCoupon.is_active.is_(True),
-        ).first()
+        ).with_for_update().first()
         now = datetime.now(timezone.utc)
         if not coupon:
             raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
@@ -1831,7 +1875,7 @@ def place_guest_order(
             RetailCoupon.shop_id == data.shop_id,
             RetailCoupon.code == coupon_code,
             RetailCoupon.is_active.is_(True),
-        ).first()
+        ).with_for_update().first()
         now = datetime.now(timezone.utc)
         if not coupon:
             raise HTTPException(status_code=400, detail="Invalid or inactive coupon.")
@@ -2991,8 +3035,21 @@ def update_order_status(
                     tx_date=payment_date,
                 ))
 
-    # 🟢 On DELIVER: verify the OTP emailed to the customer, then mark invoice as PAID.
+    # Delivery OTP proves hand-off, not payment. A UPI order must have a
+    # separately confirmed payment before it can be marked delivered.
     if new_status == "DELIVERED":
+        payment_method = str(
+            getattr(order.payment_method, "value", order.payment_method) or ""
+        ).upper()
+        payment_status = str(
+            getattr(order.payment_status, "value", order.payment_status) or ""
+        ).upper()
+        if payment_method in {"UPI", "ONLINE"} and payment_status != "PAID":
+            raise HTTPException(
+                status_code=409,
+                detail="UPI payment must be confirmed before delivering this order.",
+            )
+
         customer_otp = (data.customer_otp if data else None)
         if not customer_otp:
             raise HTTPException(

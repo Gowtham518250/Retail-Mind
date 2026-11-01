@@ -60,11 +60,17 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
     from sqlalchemy import func
     from sqlalchemy.exc import SQLAlchemyError
 
-    # Public registration may choose only recognized application roles.
-    # Unknown roles must never become signed access-token claims.
+    # Public self-registration is owner-only. Customer accounts use
+    # /store/customer/register and worker accounts are provisioned by an owner.
+    # Accepting CUSTOMER or WORKER here would let an anonymous caller mint a
+    # signed token with elevated application permissions.
     requested_role = str(user.user_type or ROLE_OWNER).strip().upper()
-    if requested_role not in VALID_ROLES:
-        raise HTTPException(status_code=400, detail="Unsupported account role")
+    requested_legacy_role = str(user.role or ROLE_OWNER).strip().upper()
+    if requested_role != ROLE_OWNER or requested_legacy_role != ROLE_OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Public registration is owner-only. Customer and worker accounts must use their dedicated flows.",
+        )
 
     # Check email uniqueness (case-insensitive) — return 409 Conflict
     if db.query(User).filter(func.lower(User.email) == user.email.strip().lower()).first():
@@ -86,7 +92,8 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
                 email=user.email.strip().lower(),  # Store email in lowercase for consistency
                 password=hashed_password,
                 user_type=requested_role,
-                is_active=user.is_active if user.is_active is not None else True
+                # Public users cannot create a disabled or privileged account.
+                is_active=True
             )
             db.add(new_user)
             db.flush()  # ensure new_user.id is populated
@@ -256,7 +263,7 @@ def _find_db_otp(db: Session, user_id: int, otp: str, purpose: str):
         PasswordReset.user_id == user_id,
         PasswordReset.description == purpose,
         PasswordReset.expires_at > datetime.utcnow(),
-    ).order_by(PasswordReset.id.desc()).first()
+    ).order_by(PasswordReset.id.desc()).with_for_update().first()
     if not record:
         return None
 

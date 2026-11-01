@@ -1222,6 +1222,18 @@ class OnlineOrder(Base):
             postgresql_where=text("idempotency_key IS NOT NULL"),
             sqlite_where=text("idempotency_key IS NOT NULL"),
         ),
+        Index(
+            "ix_online_orders_upi_pending_reservation",
+            "created_at",
+            postgresql_where=text(
+                "payment_method = 'UPI' AND payment_status = 'PENDING' "
+                "AND order_status IN ('PENDING', 'ACCEPTED')"
+            ),
+            sqlite_where=text(
+                "payment_method = 'UPI' AND payment_status = 'PENDING' "
+                "AND order_status IN ('PENDING', 'ACCEPTED')"
+            ),
+        ),
     )
     
     id = Column(Integer, primary_key=True)
