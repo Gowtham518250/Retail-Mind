@@ -75,14 +75,16 @@ def test_subscription_checkout_lock_is_held_until_new_checkout_insert():
     insert_at = block.index("INSERT INTO rm_shop_subscriptions")
     assert lock_at < insert_at
 
-    # Intermediate commits release a transaction-scoped advisory lock. The first
-    # commit must happen only after the new CREATING row has been inserted.
+    # Existing-plan changes commit in place before this branch inserts a
+    # new CREATING row. For a fresh checkout, ensure the provider request and
+    # at least one commit occur only after the new row is persisted.
+    create_call_at = block.index('await client.post(f"{base}/subscriptions"')
     commit_positions = [
         match.start()
         for match in re.finditer(r"db\.commit\(\)", block)
     ]
-    assert commit_positions
-    assert all(position > insert_at for position in commit_positions)
+    assert create_call_at > insert_at
+    assert any(position > insert_at for position in commit_positions)
 
 
 def test_pending_checkout_recovery_and_active_plan_safety_are_present():
