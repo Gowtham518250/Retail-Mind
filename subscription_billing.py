@@ -33,7 +33,7 @@ PLANS = {
 }
 
 class CreateSubscriptionBody(BaseModel):
-    plan_code: str = Field(min_length=4, max_length=24)
+    plan_code: str = Field(min_length=3, max_length=24)
     billing_interval: str = Field(default="MONTHLY", pattern="^(MONTHLY|YEARLY)$")
 
 def _shop_id(owner: dict) -> int:
@@ -61,6 +61,85 @@ def _cashfree_headers(app_id, secret, idem=None):
     if idem:
         headers["x-idempotency-key"] = idem
     return headers
+
+def _cashfree_plan_id(plan_code: str, billing_interval: str, amount_paise: int) -> str:
+    """Return a stable, price-versioned Cashfree plan identifier."""
+    interval = "monthly" if billing_interval == "MONTHLY" else "yearly"
+    return f"rm_{plan_code.strip().lower()}_{interval}_{int(amount_paise)}"
+
+
+async def _ensure_cashfree_plan(
+    client: httpx.AsyncClient,
+    *,
+    base: str,
+    app_id: str,
+    secret: str,
+    plan_code: str,
+    plan_name: str,
+    billing_interval: str,
+    amount_paise: int,
+) -> str:
+    """Create or reuse the remote Cashfree plan needed by CHANGE_PLAN.
+
+    Cashfree's CHANGE_PLAN action requires a provider-side plan_id. The normal
+    checkout currently creates subscriptions using inline plan_details, so
+    create a deterministic provider plan only when an existing mandate needs
+    to be moved to a different tier.
+    """
+    amount = round(int(amount_paise) / 100, 2)
+    plan_id = _cashfree_plan_id(plan_code, billing_interval, amount_paise)
+    headers = _cashfree_headers(app_id, secret)
+
+    fetched = await client.get(f"{base}/plans/{plan_id}", headers=headers)
+    if fetched.status_code == 200:
+        return plan_id
+    if fetched.status_code != 404:
+        logger.error(
+            "Cashfree plan lookup failed: plan_id=%s status=%s body=%s",
+            plan_id, fetched.status_code, fetched.text[:500],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to verify the target recurring plan with Cashfree. Please retry.",
+        )
+
+    interval_type = "MONTH" if billing_interval == "MONTHLY" else "YEAR"
+    payload = {
+        "plan_id": plan_id,
+        "plan_name": f"Retail Mind {plan_name} {billing_interval.title()}",
+        "plan_type": "PERIODIC",
+        "plan_currency": "INR",
+        "plan_recurring_amount": amount,
+        "plan_max_amount": amount,
+        "plan_max_cycles": 0,
+        "plan_intervals": 1,
+        "plan_interval_type": interval_type,
+        "plan_note": f"Retail Mind {plan_name} subscription",
+    }
+    created = await client.post(
+        f"{base}/plans",
+        headers=_cashfree_headers(app_id, secret, f"rm-plan-{plan_id}"),
+        json=payload,
+    )
+    if created.status_code in (200, 201):
+        return plan_id
+
+    # A concurrent request or a previous timeout may have created the plan.
+    # Confirm it exists before treating the create response as a failure.
+    if created.status_code in (409, 422):
+        verified = await client.get(f"{base}/plans/{plan_id}", headers=headers)
+        if verified.status_code == 200:
+            return plan_id
+
+    logger.error(
+        "Cashfree plan creation failed: plan_id=%s status=%s body=%s",
+        plan_id, created.status_code, created.text[:700],
+    )
+    raise HTTPException(
+        status_code=502,
+        detail="Cashfree could not prepare the target subscription plan. Please retry or contact support.",
+    )
+
 
 def _plan_payload(row):
     return {
@@ -141,7 +220,8 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
     db.execute(text("SELECT pg_advisory_xact_lock(:shop_lock)"), {"shop_lock": shop_id})
 
     active = db.execute(text("""
-        SELECT id, status, plan_code, cancel_at_period_end, current_period_end
+        SELECT id, status, plan_code, billing_interval, amount_paise,
+               cashfree_subscription_id, cancel_at_period_end, current_period_end
         FROM rm_shop_subscriptions
         WHERE shop_id=:shop
           AND status IN ('ACTIVE','GRACE_PERIOD')
@@ -154,14 +234,105 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
         LIMIT 1
     """), {"shop": shop_id}).mappings().first()
     if active:
-        raise HTTPException(status_code=409, detail={
-            "code": "ACTIVE_SUBSCRIPTION_EXISTS",
-            "subscription_id": int(active["id"]),
-            "current_plan": active["plan_code"],
-            "cancel_at_period_end": bool(active["cancel_at_period_end"]),
-            "current_period_end": active["current_period_end"].isoformat() if active["current_period_end"] else None,
-            "message": "This shop already has an active paid subscription. A second recurring mandate cannot be created. Use a supported plan-change or cancellation workflow.",
+        subscription_id = int(active["id"])
+        current_status = str(active["status"] or "").upper()
+        cashfree_subscription_id = str(active["cashfree_subscription_id"] or "").strip()
+        current_plan = str(active["plan_code"] or "").upper()
+        current_interval = str(active["billing_interval"] or "MONTHLY").upper()
+
+        if current_status != "ACTIVE":
+            raise HTTPException(status_code=409, detail={
+                "code": "SUBSCRIPTION_NOT_CHANGEABLE",
+                "subscription_id": subscription_id,
+                "current_status": current_status,
+                "message": "This subscription is in a payment grace period. Resolve the pending payment before changing plans.",
+            })
+        if bool(active["cancel_at_period_end"]):
+            raise HTTPException(status_code=409, detail={
+                "code": "SUBSCRIPTION_CANCELLATION_PENDING",
+                "subscription_id": subscription_id,
+                "current_plan": current_plan,
+                "current_period_end": active["current_period_end"].isoformat() if active["current_period_end"] else None,
+                "message": "This subscription is already scheduled to cancel. Refresh subscription status before selecting another plan.",
+            })
+        if not cashfree_subscription_id:
+            raise HTTPException(status_code=409, detail={
+                "code": "SUBSCRIPTION_MANDATE_MISSING",
+                "subscription_id": subscription_id,
+                "message": "The active subscription has no linked Cashfree mandate. Contact support so it can be reconciled safely.",
+            })
+        if current_plan == code and current_interval == body.billing_interval:
+            raise HTTPException(status_code=409, detail={
+                "code": "PLAN_ALREADY_ACTIVE",
+                "subscription_id": subscription_id,
+                "current_plan": current_plan,
+                "message": "This plan is already active on your shop.",
+            })
+
+        app_id, secret, base = _cashfree_config()
+        async with httpx.AsyncClient(timeout=25) as client:
+            target_plan_id = await _ensure_cashfree_plan(
+                client,
+                base=base,
+                app_id=app_id,
+                secret=secret,
+                plan_code=code,
+                plan_name=str(plan["name"]),
+                billing_interval=body.billing_interval,
+                amount_paise=amount,
+            )
+            change_response = await client.post(
+                f"{base}/subscriptions/{cashfree_subscription_id}/manage",
+                headers=_cashfree_headers(
+                    app_id,
+                    secret,
+                    f"rm-change-plan-{subscription_id}-{target_plan_id}",
+                ),
+                json={
+                    "subscription_id": cashfree_subscription_id,
+                    "action": "CHANGE_PLAN",
+                    "action_details": {"plan_id": target_plan_id},
+                },
+            )
+
+        if change_response.status_code not in (200, 201):
+            logger.error(
+                "Cashfree plan change failed: subscription_id=%s target_plan=%s status=%s body=%s",
+                subscription_id, target_plan_id, change_response.status_code,
+                change_response.text[:700],
+            )
+            raise HTTPException(status_code=502, detail={
+                "code": "CASHFREE_PLAN_CHANGE_FAILED",
+                "message": "Cashfree could not change the existing mandate. Your current subscription has been left unchanged. Please retry or contact support.",
+            })
+
+        db.execute(text("""
+            UPDATE rm_shop_subscriptions
+            SET plan_code=:plan,
+                billing_interval=:interval,
+                amount_paise=:amount,
+                updated_at=NOW()
+            WHERE id=:id AND shop_id=:shop AND status='ACTIVE'
+        """), {
+            "plan": code,
+            "interval": body.billing_interval,
+            "amount": amount,
+            "id": subscription_id,
+            "shop": shop_id,
         })
+        db.commit()
+        return {
+            "success": True,
+            "plan_changed": True,
+            "requires_checkout": False,
+            "subscription_id": cashfree_subscription_id,
+            "subscription_record_id": subscription_id,
+            "plan_code": code,
+            "billing_interval": body.billing_interval,
+            "amount_paise": amount,
+            "status": "ACTIVE",
+            "message": "Your existing recurring subscription has been changed. No second mandate was created.",
+        }
 
     pending_rows = db.execute(text("""
         SELECT id, status, cashfree_subscription_id, created_at
