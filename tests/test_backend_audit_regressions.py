@@ -91,6 +91,47 @@ def test_stock_movement_endpoint_is_idempotent_and_preserves_http_errors():
     assert "except IntegrityError:" in route
 
 
+def test_product_stock_edits_are_ledgered_and_sku_restore_preserves_balance():
+    source = read_source("inventory.py")
+    create = function_block(
+        source,
+        '@router.post("/products", response_model=ProductResponse)',
+        '@router.get("/products")',
+    )
+    update = function_block(
+        source,
+        '@router.put("/products/{product_id}", response_model=ProductResponse)',
+        '@router.delete("/products/{product_id}")',
+    )
+    assert "INITIAL_STOCK" in create
+    assert "current_stock = product.current_stock" not in create
+    assert "stock_adjustment_idempotency_key" in update
+    assert 'movement_type="ADJUSTMENT"' in update
+    assert 'reason="PRODUCT_UPDATE"' in update
+    assert ".with_for_update()" in update
+
+
+def test_inventory_file_and_bulk_imports_write_initial_or_adjustment_movements():
+    source = read_source("inventory.py")
+    upload = function_block(
+        source,
+        "class InventoryUploadConfirmRequest(",
+        "# ==================== BATCH OPERATIONS ====================",
+    )
+    bulk = function_block(
+        source,
+        '@router.post("/bulk-import/products")',
+        '@router.post("/bulk-import/customers")',
+    )
+    assert "idempotency_key: Optional[str]" in upload
+    assert "INVENTORY_FILE_IMPORT_INITIAL" in upload
+    assert "INVENTORY_FILE_IMPORT" in upload
+    assert "idempotency_key=movement_key" in upload
+    assert "BULK_IMPORT_INITIAL_STOCK" in bulk
+    assert "skipped_existing_count" in bulk
+    assert "current_stock" not in bulk.split("existing = db.query(Product)", 1)[-1].split("if existing", 1)[0]
+
+
 def test_payment_notification_rejects_blank_idempotency_and_reference():
     source = read_source("online_store.py")
     schema = function_block(
