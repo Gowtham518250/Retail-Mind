@@ -117,6 +117,49 @@ def test_active_subscription_upgrade_changes_the_existing_cashfree_mandate():
     assert "ACTIVE_SUBSCRIPTION_EXISTS" not in checkout
 
 
+def test_cashfree_activation_date_uses_ist_date_component():
+    from datetime import datetime
+    from subscription_billing import _cashfree_activation_date
+
+    # Cashfree uses only the date component; DB timestamps are stored as UTC.
+    period_end_utc = datetime(2026, 11, 1, 20, 0, 0)
+    assert _cashfree_activation_date(period_end_utc) == "2026-11-02"
+
+
+def test_cancellation_pending_upgrade_reactivates_before_change_plan():
+    source = Path("subscription_billing.py").read_text(encoding="utf-8")
+    start = source.index("async def create_subscription")
+    end = source.index(
+        '@router.post("/api/billing/subscriptions/{subscription_id}/cancel")',
+        start,
+    )
+    checkout = source[start:end]
+
+    activate_at = checkout.index('"action": "ACTIVATE"')
+    change_plan_at = checkout.index('"action": "CHANGE_PLAN"')
+    assert activate_at < change_plan_at
+    assert '"next_scheduled_time": activation_date' in checkout
+    assert "cancel_at_period_end=FALSE" in checkout
+    assert "cancelled_at=NULL" in checkout
+    assert "SUBSCRIPTION_REACTIVATION_FAILED" in checkout
+    assert "SUBSCRIPTION_REACTIVATED_UPGRADE_FAILED" in checkout
+    assert '"cancellation_reversed": cancellation_pending' in checkout
+
+
+def test_cancellation_pending_upgrade_does_not_create_a_second_mandate():
+    source = Path("subscription_billing.py").read_text(encoding="utf-8")
+    start = source.index("async def create_subscription")
+    active_start = source.index("    if active:", start)
+    pending_start = source.index("    pending_rows =", active_start)
+    active_branch = source[active_start:pending_start]
+
+    assert "cashfree_subscription_id" in active_branch
+    assert '"action": "ACTIVATE"' in active_branch
+    assert '"action": "CHANGE_PLAN"' in active_branch
+    assert "INSERT INTO rm_shop_subscriptions" not in active_branch
+    assert '"requires_checkout": False' in active_branch
+
+
 def test_cashfree_plan_id_is_stable_and_price_versioned():
     from subscription_billing import _cashfree_plan_id
 
