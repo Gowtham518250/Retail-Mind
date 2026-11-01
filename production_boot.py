@@ -383,7 +383,16 @@ def _expire_stale_unpaid_online_order_reservations(now=None, batch_size=100):
             shop_id, order_id, "UNPAID_UPI_RESERVATION_EXPIRED"
         )
     for event in durable_events:
-        publish_realtime_event(event)
+        try:
+            publish_realtime_event(event)
+        except Exception as publish_error:
+            # The database commit is authoritative. A transient realtime
+            # failure must not terminate this long-lived maintenance thread.
+            print(
+                "[ONLINE ORDERS] realtime publish failed after commit: "
+                f"{type(publish_error).__name__}",
+                flush=True,
+            )
 
     if processed:
         print(
