@@ -179,3 +179,151 @@ def test_owner_subscription_middleware_is_registered_after_app_creation():
     assert '"/store/owner/orders"' in source
     assert '"/store/owner/reviews"' in source
     assert 'require_shop_feature(db, owner_user_id, "online_orders")' in source
+
+
+def test_cashfree_plan_is_created_before_fetch_lookup():
+    import asyncio
+    from subscription_billing import _ensure_cashfree_plan
+
+    class Response:
+        status_code = 201
+        text = ""
+        headers = {}
+
+        def json(self):
+            return {"plan_id": "rm_pro_monthly_19900"}
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, **kwargs):
+            self.calls.append(("POST", url, kwargs))
+            return Response()
+
+        async def get(self, url, **kwargs):
+            self.calls.append(("GET", url, kwargs))
+            raise AssertionError("A newly created plan must not require a GET.")
+
+    client = Client()
+    result = asyncio.run(_ensure_cashfree_plan(
+        client,
+        base="https://sandbox.cashfree.com/pg",
+        app_id="test-app-id",
+        secret="test-secret",
+        plan_code="PRO",
+        plan_name="Pro",
+        billing_interval="MONTHLY",
+        amount_paise=19900,
+    ))
+
+    assert result == "rm_pro_monthly_19900"
+    assert len(client.calls) == 1
+    method, url, kwargs = client.calls[0]
+    assert method == "POST"
+    assert url.endswith("/plans")
+    assert kwargs["headers"]["x-idempotency-key"] == "rm-plan-rm_pro_monthly_19900"
+    assert kwargs["headers"]["x-request-id"]
+    assert kwargs["json"]["plan_recurring_amount"] == 199.0
+    assert kwargs["json"]["plan_interval_type"] == "MONTH"
+
+
+def test_cashfree_plan_reuses_existing_plan_only_after_definition_verification():
+    import asyncio
+    from subscription_billing import _ensure_cashfree_plan
+
+    class Response:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+            self.text = str(payload)
+            self.headers = {}
+
+        def json(self):
+            return self._payload
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, **kwargs):
+            self.calls.append(("POST", url, kwargs))
+            return Response(409, {"code": "PLAN_ALREADY_EXISTS"})
+
+        async def get(self, url, **kwargs):
+            self.calls.append(("GET", url, kwargs))
+            return Response(200, {
+                "plan_id": "rm_pro_monthly_19900",
+                "plan_type": "PERIODIC",
+                "plan_currency": "INR",
+                "plan_interval_type": "MONTH",
+                "plan_intervals": 1,
+                "plan_recurring_amount": 199.0,
+                "plan_max_amount": 199.0,
+                "plan_status": "ACTIVE",
+            })
+
+    client = Client()
+    result = asyncio.run(_ensure_cashfree_plan(
+        client,
+        base="https://sandbox.cashfree.com/pg",
+        app_id="test-app-id",
+        secret="test-secret",
+        plan_code="PRO",
+        plan_name="Pro",
+        billing_interval="MONTHLY",
+        amount_paise=19900,
+    ))
+
+    assert result == "rm_pro_monthly_19900"
+    assert [call[0] for call in client.calls] == ["POST", "GET"]
+
+
+def test_cashfree_plan_creation_error_returns_provider_diagnostics():
+    import asyncio
+    from fastapi import HTTPException
+    from subscription_billing import _ensure_cashfree_plan
+
+    class Response:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+            self.text = str(payload)
+            self.headers = {}
+
+        def json(self):
+            return self._payload
+
+    class Client:
+        async def post(self, url, **kwargs):
+            return Response(403, {"code": "PERMISSION_DENIED"})
+
+        async def get(self, url, **kwargs):
+            return Response(404, {"code": "PLAN_NOT_FOUND"})
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(_ensure_cashfree_plan(
+            Client(),
+            base="https://sandbox.cashfree.com/pg",
+            app_id="test-app-id",
+            secret="test-secret",
+            plan_code="PRO",
+            plan_name="Pro",
+            billing_interval="MONTHLY",
+            amount_paise=19900,
+        ))
+
+    assert raised.value.status_code == 502
+    assert raised.value.detail["code"] == "CASHFREE_PLAN_PREPARATION_FAILED"
+    assert raised.value.detail["provider_status"] == 403
+    assert raised.value.detail["verification_status"] == 404
+    assert raised.value.detail["provider_code"] == "PERMISSION_DENIED"
+    assert raised.value.detail["request_id"]
+
+
+def test_owner_orders_403_logs_subscription_entitlement_reason():
+    source = Path("app.py").read_text(encoding="utf-8")
+    middleware = source[source.index("async def subscription_feature_enforcement"):]
+    assert "SUBSCRIPTION_FEATURE_DENIED" in middleware
+    assert 'detail.get("feature", "online_orders")' in middleware
+    assert 'detail.get("current_plan", "unknown")' in middleware
