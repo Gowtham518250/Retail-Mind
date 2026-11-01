@@ -3035,8 +3035,21 @@ def update_order_status(
                     tx_date=payment_date,
                 ))
 
-    # 🟢 On DELIVER: verify the OTP emailed to the customer, then mark invoice as PAID.
+    # Delivery OTP proves hand-off, not payment. A UPI order must have a
+    # separately confirmed payment before it can be marked delivered.
     if new_status == "DELIVERED":
+        payment_method = str(
+            getattr(order.payment_method, "value", order.payment_method) or ""
+        ).upper()
+        payment_status = str(
+            getattr(order.payment_status, "value", order.payment_status) or ""
+        ).upper()
+        if payment_method in {"UPI", "ONLINE"} and payment_status != "PAID":
+            raise HTTPException(
+                status_code=409,
+                detail="UPI payment must be confirmed before delivering this order.",
+            )
+
         customer_otp = (data.customer_otp if data else None)
         if not customer_otp:
             raise HTTPException(
