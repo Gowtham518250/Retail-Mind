@@ -265,6 +265,20 @@ def classify_shop_data_intent(value: str) -> tuple[str | None, str]:
     """Return (intent, normalized English query) for supported deterministic data paths."""
     query = normalize_support_query(value)
     q = f" {query} "
+
+    # Do not let a single-metric fast path silently answer only part of a
+    # compound question. Ambiguous multi-metric requests must be clarified.
+    domains = {
+        "sales": bool(re.search(r"\b(sales?|revenue|turnover|sold)\b", q)),
+        "expenses": bool(re.search(r"\b(expenses?|spending|spent)\b", q)),
+        "profit": bool(re.search(r"\b(net profit|profit|profits|profit and loss|p&l)\b", q)),
+        "stock": bool(re.search(r"\b(low stock|stock|inventory|reorder)\b", q)),
+        "receivables": bool(re.search(r"\b(outstanding|owe|owes|owed|receivable|receivables|khata|udhar)\b", q)),
+        "overpayments": bool(re.search(r"\b(overpayment|overpayments|overpaid|paid too much|extra payments)\b", q)),
+    }
+    if sum(domains.values()) > 1:
+        return None
+
     if re.search(r"\b(low stock|stock low|running low|reorder|below minimum)\b", q):
         return "low_stock", query
     if re.search(r"\b(overpayment|overpayments|overpaid|paid too much|extra payments)\b", q):
@@ -288,6 +302,8 @@ def classify_shop_data_intent(value: str) -> tuple[str | None, str]:
     if re.search(r"\b(expenses?|spending|spent)\b", q):
         return "expenses", query
     if re.search(r"\b(sales?|revenue|turnover)\b", q):
+        if re.search(r"\b(by|per|each|every|breakdown|compare|comparison|trend|group|category|customer|customers|product|products|worker|workers)\b", q):
+            return None
         if re.search(r"\b(how many|count|number of)\b", q) and re.search(r"\bsales?\b", q):
             return "sales_count", query
         if re.search(r"\b(units?|items?)\b", q) and re.search(r"\b(sold|sales?)\b", q):
