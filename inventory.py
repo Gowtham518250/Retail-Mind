@@ -17,7 +17,7 @@ import logging
 import pandas as pd
 from PIL import Image, ImageOps
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, desc
+from sqlalchemy import and_, func, desc, text
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime, timedelta
@@ -30,7 +30,7 @@ import time
 from uuid import uuid4
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
-from models import Product, StockMovement, ProductBatch, Notification
+from models import Product, ProductCreateRequest, StockMovement, ProductBatch, Notification
 from stock_service import StockService
 from voice_billing_core import (
     convert_quantity as _vb_convert_quantity,
@@ -1006,11 +1006,12 @@ def _validate_stock_precision(value: Optional[Decimal]) -> Optional[Decimal]:
 class ProductCreate(BaseModel):
     product_name: str = Field(..., min_length=2, max_length=100)
     sku: str = Field(..., min_length=2, max_length=50)
+    client_operation_id: Optional[str] = Field(None, min_length=8, max_length=128)
     description: Optional[str] = None
     # Match the database NUMERIC(12, 3) type to support loose goods by weight/volume.
     current_stock: Decimal = Field(Decimal("0"), ge=0)
     unit: str = Field("pcs", min_length=1, max_length=20)
-    min_stock: int = Field(10, ge=0)
+    min_stock: Decimal = Field(Decimal("10"), ge=0)
     max_stock: int = Field(100, gt=0)
     reorder_level: int = Field(20, ge=0)
     unit_price: float = Field(..., ge=0)
@@ -1018,10 +1019,28 @@ class ProductCreate(BaseModel):
     category: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
 
-    @field_validator("current_stock")
+    @field_validator("current_stock", "min_stock")
     @classmethod
-    def _validate_current_stock_precision(cls, value):
+    def _validate_stock_fields_precision(cls, value):
         return _validate_stock_precision(value)
+
+    @field_validator("sku")
+    @classmethod
+    def _validate_sku(cls, value):
+        normalized = (value or "").strip()
+        if not normalized:
+            raise ValueError("Barcode/SKU must not be blank.")
+        return normalized
+
+    @field_validator("client_operation_id")
+    @classmethod
+    def _validate_client_operation_id(cls, value):
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Client operation ID must not be blank.")
+        return normalized
 
     @field_validator("unit")
     @classmethod
@@ -1037,13 +1056,14 @@ class ProductCreate(BaseModel):
 
 class ProductUpdate(BaseModel):
     product_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    sku: Optional[str] = Field(None, min_length=2, max_length=50)
     description: Optional[str] = None
     current_stock: Optional[Decimal] = Field(None, ge=0)
     # Optional client request identity for retry-safe stock adjustments made
     # through the product editor.
     stock_adjustment_idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
     unit: Optional[str] = Field(None, min_length=1, max_length=20)
-    min_stock: Optional[int] = Field(None, ge=0)
+    min_stock: Optional[Decimal] = Field(None, ge=0)
     max_stock: Optional[int] = Field(None, gt=0)
     reorder_level: Optional[int] = Field(None, ge=0)
     unit_price: Optional[float] = Field(None, ge=0)
@@ -1051,10 +1071,20 @@ class ProductUpdate(BaseModel):
     category: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
 
-    @field_validator("current_stock")
+    @field_validator("current_stock", "min_stock")
     @classmethod
     def _validate_optional_stock_precision(cls, value):
         return _validate_stock_precision(value)
+
+    @field_validator("sku")
+    @classmethod
+    def _validate_optional_sku(cls, value):
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Barcode/SKU must not be blank.")
+        return normalized
 
     @field_validator("unit")
     @classmethod
@@ -1115,7 +1145,7 @@ class ProductResponse(BaseModel):
     sku: str
     current_stock: float
     unit: str = "pcs"
-    min_stock: int
+    min_stock: float
     max_stock: int
     unit_price: float
     purchase_price: float = 0
@@ -1133,57 +1163,161 @@ class ProductResponse(BaseModel):
 
 # ==================== PRODUCTS ====================
 
+def _normalize_product_identity(value: Optional[str]) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value or ""))
+    return " ".join(normalized.casefold().split())
+
+
+def _product_identity_conflicts_from_rows(
+    rows,
+    product_name: str,
+    sku: Optional[str],
+    exclude_product_id: Optional[int] = None,
+):
+    """Pure duplicate matcher used by API handlers and regression tests."""
+    requested_name = _normalize_product_identity(product_name)
+    requested_sku = _normalize_product_identity(sku)
+    matches = []
+
+    for existing in rows:
+        existing_id = int(getattr(existing, "id", 0) or 0)
+        if exclude_product_id is not None and existing_id == int(exclude_product_id):
+            continue
+
+        is_active = bool(getattr(existing, "is_active", True))
+        match_types = []
+        existing_name = _normalize_product_identity(getattr(existing, "product_name", ""))
+        existing_sku = _normalize_product_identity(getattr(existing, "sku", ""))
+
+        # Archived names can be reused, but their SKU remains reserved by the
+        # products(user_id, sku) unique constraint.
+        if is_active and requested_name and existing_name == requested_name:
+            match_types.append("PRODUCT_NAME")
+        if requested_sku and existing_sku == requested_sku:
+            match_types.append("BARCODE")
+
+        if match_types:
+            matches.append({
+                "match_types": match_types,
+                "product": {
+                    "id": existing_id,
+                    "product_name": str(getattr(existing, "product_name", "") or ""),
+                    "sku": str(getattr(existing, "sku", "") or ""),
+                    "barcode": str(getattr(existing, "sku", "") or ""),
+                    "unit_price": float(getattr(existing, "unit_price", 0) or 0),
+                    "purchase_price": float(getattr(existing, "purchase_price", 0) or 0),
+                    "current_stock": float(getattr(existing, "current_stock", 0) or 0),
+                    "min_stock": float(getattr(existing, "min_stock", 10) or 0),
+                    "unit": str(getattr(existing, "unit", "pcs") or "pcs"),
+                    "category": getattr(existing, "category", None),
+                    "is_active": is_active,
+                },
+            })
+    return matches
+
+
+def _find_product_identity_conflicts(
+    db: Session,
+    user_id: int,
+    product_name: str,
+    sku: Optional[str],
+    exclude_product_id: Optional[int] = None,
+):
+    rows = db.query(Product).filter(Product.user_id == user_id).all()
+    return _product_identity_conflicts_from_rows(
+        rows,
+        product_name=product_name,
+        sku=sku,
+        exclude_product_id=exclude_product_id,
+    )
+
+
+def _lock_product_identity_scope(db: Session, user_id: int) -> None:
+    """Serialize identity checks per shop on PostgreSQL."""
+    try:
+        if db.get_bind().dialect.name == "postgresql":
+            db.execute(
+                text(
+                    "SELECT pg_advisory_xact_lock("
+                    "hashtext('retailmind.product_identity'), :user_id)"
+                ),
+                {"user_id": int(user_id)},
+            )
+    except AttributeError:
+        return
+
+
+def _duplicate_product_http_detail(matches):
+    return {
+        "code": "DUPLICATE_PRODUCT",
+        "message": (
+            "A product with this name or barcode already exists in this shop. "
+            "Review the matching product before creating another one."
+        ),
+        "matches": matches,
+    }
+
+
+@router.get("/products/duplicate-check")
+def check_product_duplicate(
+    product_name: str = Query(..., min_length=2, max_length=100),
+    sku: Optional[str] = Query(None, max_length=50),
+    exclude_product_id: Optional[int] = Query(None, gt=0),
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Shop-scoped duplicate preflight for add/edit inventory forms."""
+    matches = _find_product_identity_conflicts(
+        db,
+        user_id,
+        product_name=product_name,
+        sku=sku,
+        exclude_product_id=exclude_product_id,
+    )
+    return {"exists": bool(matches), "matches": matches}
+
+
 @router.post("/products", response_model=ProductResponse)
 def create_product(
     product: ProductCreate,
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create or idempotently restore a product for this account.
+    """Create a product while rejecting real duplicates and accepting exact offline retries."""
+    operation_id = (product.client_operation_id or "").strip()
 
-    SKU is the shop-scoped identity for an inventory product. Repeated offline
-    retries, double taps, or concurrent sync workers must not turn an already
-    persisted product into a 500 error.
-    """
-    existing = db.query(Product).filter(
-        Product.user_id == user_id,
-        Product.sku == product.sku,
-    ).first()
-
-    if existing:
-        existing.product_name = product.product_name
-        existing.description = product.description
-        # SKU restore is a catalog upsert, not a stock adjustment. Preserve the
-        # authoritative backend balance so a stale offline payload cannot reset it.
-        existing.unit = product.unit
-        existing.min_stock = product.min_stock
-        existing.max_stock = product.max_stock
-        existing.reorder_level = product.reorder_level
-        existing.unit_price = product.unit_price
-        existing.purchase_price = product.purchase_price
-        existing.category = product.category
-        if product.image_url is not None:
-            existing.image_url = product.image_url
-        existing.is_active = True
-        try:
-            sync_event = _queue_inventory_change(
-                db, user_id, "product_restored", product_id=existing.id
-            )
-            db.commit()
-            db.refresh(existing)
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Failed to restore existing product: {str(e)}")
-        publish_realtime_event(sync_event)
-        return existing
-
-    db_product = Product(
-        user_id=user_id,
-        **product.dict()
-    )
-    db.add(db_product)
     try:
+        _lock_product_identity_scope(db, user_id)
+
+        if operation_id:
+            prior_request = db.query(ProductCreateRequest).filter(
+                ProductCreateRequest.user_id == user_id,
+                ProductCreateRequest.operation_id == operation_id,
+            ).first()
+            if prior_request:
+                prior_product = db.query(Product).filter(
+                    Product.id == prior_request.product_id,
+                    Product.user_id == user_id,
+                ).first()
+                if prior_product:
+                    return prior_product
+                db.delete(prior_request)
+                db.flush()
+
+        conflicts = _find_product_identity_conflicts(
+            db,
+            user_id,
+            product_name=product.product_name,
+            sku=product.sku,
+        )
+        if conflicts:
+            raise HTTPException(status_code=409, detail=_duplicate_product_http_detail(conflicts))
+
+        product_data = product.dict(exclude={"client_operation_id"})
+        db_product = Product(user_id=user_id, **product_data)
+        db.add(db_product)
         db.flush()
+
         initial_quantity = Decimal(str(db_product.current_stock or 0))
         if initial_quantity > 0:
             db.add(StockMovement(
@@ -1194,45 +1328,60 @@ def create_product(
                 reference_id=f"PRODUCT-{db_product.id}-INITIAL-STOCK",
                 idempotency_key=f"PRODUCT-{db_product.id}-INITIAL-STOCK",
             ))
+
+        if operation_id:
+            db.add(ProductCreateRequest(
+                user_id=user_id,
+                operation_id=operation_id,
+                product_id=db_product.id,
+            ))
+
         sync_event = _queue_inventory_change(
             db, user_id, "product_created", product_id=db_product.id
         )
         db.commit()
         db.refresh(db_product)
+    except HTTPException:
+        db.rollback()
+        raise
     except IntegrityError:
         db.rollback()
-        raced = db.query(Product).filter(
-            Product.user_id == user_id,
-            Product.sku == product.sku,
-        ).first()
-        if raced:
-            raced.product_name = product.product_name
-            raced.description = product.description
-            # Preserve the inventory balance already committed by the winning request.
-            raced.unit = product.unit
-            raced.min_stock = product.min_stock
-            raced.max_stock = product.max_stock
-            raced.reorder_level = product.reorder_level
-            raced.unit_price = product.unit_price
-            raced.purchase_price = product.purchase_price
-            raced.category = product.category
-            if product.image_url is not None:
-                raced.image_url = product.image_url
-            raced.is_active = True
-            db.flush()
-            sync_event = _queue_inventory_change(
-                db, user_id, "product_restored", product_id=raced.id
-            )
-            db.commit()
-            db.refresh(raced)
-            publish_realtime_event(sync_event)
-            return raced
-        raise HTTPException(status_code=500, detail="Failed to create product due to a database constraint.")
-    except Exception as e:
+        if operation_id:
+            prior_request = db.query(ProductCreateRequest).filter(
+                ProductCreateRequest.user_id == user_id,
+                ProductCreateRequest.operation_id == operation_id,
+            ).first()
+            if prior_request:
+                prior_product = db.query(Product).filter(
+                    Product.id == prior_request.product_id,
+                    Product.user_id == user_id,
+                ).first()
+                if prior_product:
+                    return prior_product
+
+        conflicts = _find_product_identity_conflicts(
+            db,
+            user_id,
+            product_name=product.product_name,
+            sku=product.sku,
+        )
+        if conflicts:
+            raise HTTPException(status_code=409, detail=_duplicate_product_http_detail(conflicts))
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PRODUCT_IDENTITY_CONFLICT",
+                "message": "This barcode/SKU is already assigned to another product. Refresh inventory and review the existing product.",
+            },
+        )
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create product: {str(e)}")
+        logger.exception("Product creation failed for shop_id=%s", user_id)
+        raise HTTPException(status_code=500, detail="Failed to create product.")
+
     publish_realtime_event(sync_event)
     return db_product
+
 
 @router.get("/products", response_model=List[ProductResponse])
 def get_products(
@@ -1276,6 +1425,7 @@ def update_product(
     db: Session = Depends(get_db)
 ):
     """Update product metadata and ledger any explicit stock adjustment."""
+    _lock_product_identity_scope(db, user_id)
     db_product = db.query(Product).with_for_update().filter(
         Product.id == product_id,
         Product.user_id == user_id
@@ -1284,6 +1434,18 @@ def update_product(
         raise HTTPException(status_code=404, detail="Product not found")
 
     update_data = product_update.dict(exclude_unset=True)
+    candidate_name = update_data.get("product_name", db_product.product_name)
+    candidate_sku = update_data.get("sku", db_product.sku)
+    conflicts = _find_product_identity_conflicts(
+        db,
+        user_id,
+        product_name=candidate_name,
+        sku=candidate_sku,
+        exclude_product_id=product_id,
+    )
+    if conflicts:
+        raise HTTPException(status_code=409, detail=_duplicate_product_http_detail(conflicts))
+
     requested_stock = update_data.pop("current_stock", None)
     client_stock_key = update_data.pop("stock_adjustment_idempotency_key", None)
     stock_idempotency_key = None
