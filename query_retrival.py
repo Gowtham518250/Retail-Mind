@@ -2326,6 +2326,7 @@ async def support_chat_message(
             "language_code": language_code,
             "results": [],
             "retrieved_documents": [],
+            "llm_calls": 0,
         }
 
     # Normalize common Telugu/Roman-Telugu retail terms locally. No cloud
