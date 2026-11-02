@@ -2641,7 +2641,11 @@ async def parse_voice_billing(
             "unit_mismatch": unit_mismatch,
             "quantity_grounded": quantity_grounded,
             "needs_confirmation": bool(
-                ambiguous_candidates or unit_mismatch or not quantity_grounded or price_missing
+                ambiguous_candidates
+                or unit_mismatch
+                or not quantity_grounded
+                or price_missing
+                or bool(price_warning)
             ),
             "ambiguous_candidates": ambiguous_candidates,
             "match_reasons": match_reasons,
