@@ -2272,6 +2272,13 @@ def _run_deterministic_support_data_query(
     if intent == "overpayment":
         return _fast_overpayment_query(normalized, db, user_id, date_scope)
     if intent == "receivables":
+        # The existing receivables handler intentionally requires an explicit
+        # customer/khata/invoice-balance cue. Supply the safe shop-wide khata
+        # context for broad "who owes me?" and "outstanding balance" questions.
+        if not re.search(r"\\b(customer|customers|khata|udhar|invoice|invoices|bill|bills)\\b", normalized):
+            normalized = "show customers khata balances " + normalized
+        elif re.search(r"\\b(who|which|total|overall|how much)\\b", normalized) and not re.search(r"\\b(balance|balances|khata|udhar)\\b", normalized):
+            normalized = "show customer khata balances " + normalized
         return _fast_receivables_query(normalized, db, user_id, date_scope)
     if intent == "profit":
         return _fast_profit_query(normalized, db, user_id, date_scope)
