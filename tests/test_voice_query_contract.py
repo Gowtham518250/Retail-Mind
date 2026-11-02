@@ -123,7 +123,7 @@ def test_groq_audio_transcription_returns_spoken_text(monkeypatch):
     assert transcript == "నిన్న నా అమ్మకాలు ఎంత?"
     assert calls["model"] == query_retrival.GROQ_STT_MODEL
     assert calls["language"] == "te"
-    assert calls["response_format"] == "json"
+    assert calls["response_format"] == "verbose_json"
     assert calls["temperature"] == 0.0
     assert calls["file"][0] == "question.wav"
 

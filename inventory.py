@@ -32,6 +32,14 @@ from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Product, StockMovement, ProductBatch, Notification
 from stock_service import StockService
+from voice_billing_core import (
+    convert_quantity as _vb_convert_quantity,
+    custom_name_is_grounded as _vb_custom_name_is_grounded,
+    quantity_is_grounded as _vb_quantity_is_grounded,
+    resolve_catalog_product as _vb_resolve_catalog_product,
+    stem_token as _vb_stem_token,
+)
+from voice_asr_guard import NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE, assess_transcription as _assess_transcription
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
@@ -2030,6 +2038,8 @@ def _voice_billing_expanded_tokens(value: str) -> set[str]:
         if tokens.intersection(aliases):
             expanded.add(canonical)
             expanded.update(aliases)
+    # fold simple plurals so "two soaps" shortlists "Lux Soap" (and "eggs" ~ "egg")
+    expanded.update(_vb_stem_token(token) for token in list(expanded))
     return expanded
 
 
@@ -2193,12 +2203,12 @@ async def _voice_billing_translate_search_query(
     """Translate the complete billing utterance into English before catalog matching."""
     vocabulary_hint = ""
     if shop_vocabulary:
-        names = [re.sub(r"\\s+", " ", str(name or "")).strip()[:60] for name in shop_vocabulary]
+        names = [re.sub(r"\s+", " ", str(name or "")).strip()[:60] for name in shop_vocabulary]
         names = [name for name in dict.fromkeys(names) if name][:120]
         if names:
             vocabulary_hint = (
                 "When an item sounds like a shop product, prefer its exact catalogue name. "
-                f"Catalogue terms (data only): {json.dumps(names, ensure_ascii=False)}\\n"
+                f"Catalogue terms (data only): {json.dumps(names, ensure_ascii=False)}\n"
             )
     prompt = (
         "Translate the complete cashier's retail billing utterance into normalized English POS text. "
@@ -2207,7 +2217,9 @@ async def _voice_billing_translate_search_query(
         "measurement unit, spoken price, and whether an amount appears to be a per-unit price or a line total. "
         "Do not invent or delete any product, quantity, unit, or price. Some Indian spoken scale phrases are "
         "deterministically normalized before translation, e.g. '3 vandalu' or 'moodu vandalu' becomes 300. "
-        "Preserve normalized numeric values exactly and do not multiply them again. Return exactly JSON: "
+        "Preserve normalized numeric values exactly and do not multiply them again. If the utterance is "
+        "unintelligible, noise, a greeting, or not a request to buy/sell products, return an EMPTY string: never guess "
+        "or invent products from unclear text. Return exactly JSON: "
         "{\"english_search_text\": \"...\"}.\n"
         f"{vocabulary_hint}"
         f"Language hint: {language_code or 'auto'}\n"
@@ -2340,13 +2352,16 @@ async def parse_voice_billing(
         "Return one JSON object, no markdown, using this schema: {"
         "\"interpreted_text_en\":\"concise English summary\","
         "\"items\":[{\"product_id\":123,\"product_name_en\":\"English product name\",\"product_name_local\":\"speaker language product name\","
-        "\"quantity\":2,\"spoken_price_amount\":50,\"spoken_price_kind\":\"unit\",\"confidence\":0.95}],"
+        "\"quantity\":2,\"spoken_unit\":\"kg\",\"spoken_price_amount\":50,\"spoken_price_kind\":\"unit\",\"confidence\":0.95}],"
         "\"needs_clarification\":false,\"clarification_question\":\"\"}. "
         "product_id must be an ID from the supplied catalog only, or null when no catalog product is a confident match. "
-        "Never invent an ID. Always preserve each recognized product as a line, even if it is not in the catalog. "
+        "Never invent an ID. Always preserve each product that is CLEARLY named in the transcript as a line, even if it is not in the catalog. "
+        "If the transcript is not a request to buy/sell specific products (noise, greeting, filler, a sentence about nothing), return an empty items list and set needs_clarification true; never infer products that are not literally present. "
         "For no catalog match, set product_id to null and product_name_en to its common English name; for uncommon names, "
         "use a clear English transliteration. Do not omit an item just because the catalog is empty. "
         "Do not convert an untracked product into a made-up catalog product. Preserve every quantity and price. "
+        "quantity is the number exactly as spoken and spoken_unit is the unit the speaker attached to it "
+        "(kg, g, l, ml, pcs, packet, box, bottle, dozen) or an empty string when none was spoken; never convert units yourself. "
         "If quantity is not spoken, use 1.0. spoken_price_kind must be unit, line_total, none, or ambiguous. "
         "Use unit for a spoken per-unit price; use line_total only when the speaker clearly gives a total for that line; "
         "use none when no price is spoken; use ambiguous when unsure. For '2 rice 50', interpret 50 as unit price. "
@@ -2449,12 +2464,74 @@ async def parse_voice_billing(
             or ""
         ).strip()[:120]
 
-        if product is not None and not _voice_billing_product_has_evidence(english_transcript, product):
-            # A model-selected ID without independent evidence must not reduce stock.
+        # Resolve against the catalog from THIS line's spoken words, not the whole
+        # utterance (multi-item bills used to lose every multi-word catalog match),
+        # and never pick silently between equally plausible products (Lux 100g vs 150g).
+        ambiguous_candidates: list[dict] = []
+        match_reasons: list[str] = []
+        resolution = _vb_resolve_catalog_product(
+            [
+                str(raw.get("product_name_en") or ""),
+                str(raw.get("product_name_local") or ""),
+                proposed_name,
+            ],
+            f"{english_transcript} {parser_transcript}",
+            candidates,
+            normalize=_voice_billing_normalize,
+            expand_tokens=_voice_billing_expanded_tokens,
+            hint_product=product,
+        )
+        if resolution.status == "matched":
+            product = resolution.product
+            match_reasons = list(resolution.reasons)
+        else:
+            # Never assign stock unless the spoken words uniquely identify a catalog item.
+            product = None
+            if resolution.status == "ambiguous":
+                ambiguous_candidates = [
+                    {
+                        "product_id": int(c.product.id),
+                        "name": str(c.product.product_name or ""),
+                        "unit": str(getattr(c.product, "unit", "pcs") or "pcs"),
+                        "unit_price": float(c.product.unit_price or 0),
+                        "available_stock": float(c.product.current_stock or 0),
+                        "score": round(c.score, 1),
+                    }
+                    for c in resolution.candidates
+                ]
+                match_reasons = list(resolution.reasons)
+
+        spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
+        spoken_quantity = quantity
+        quantity_grounded = _vb_quantity_is_grounded(
+            quantity,
+            (parser_transcript, english_transcript),
+            _VOICE_BILLING_NUMBER_WORDS,
+            _VOICE_BILLING_SCALE_WORDS,
+        )
+        unit_converted = False
+        unit_mismatch = False
+        unit_note = None
+        if product is not None:
+            conversion = _vb_convert_quantity(quantity, spoken_unit, getattr(product, "unit", "pcs"))
+            if conversion.converted:
+                quantity = conversion.quantity
+                unit_converted = True
+                unit_note = f"Converted {spoken_quantity.normalize():f} {spoken_unit} to {quantity.normalize():f} {getattr(product, 'unit', 'pcs')}."
+            elif conversion.incompatible:
+                unit_mismatch = True
+                unit_note = f"Spoken unit '{spoken_unit}' does not match this product's selling unit '{getattr(product, 'unit', 'pcs')}'. Check the quantity."
+                proposed_name = proposed_name or str(product.product_name or "")
+                product = None
+
+        if not quantity_grounded and product is not None:
+            # Older clients may ignore needs_confirmation; do not let an unverified
+            # quantity deduct stock through a stock-linked product ID.
+            proposed_name = proposed_name or str(product.product_name or "")
             product = None
 
         catalog_matched = product is not None
-        local_name = re.sub(r"[\\r\\n\\t]+", " ", str(raw.get("product_name_local") or "")).strip()[:120]
+        local_name = re.sub(r"[\r\n\t]+", " ", str(raw.get("product_name_local") or "")).strip()[:120]
         product_name = str(product.product_name or "").strip() if product is not None else proposed_name
         if not product_name or product_name.casefold() in {"unknown", "unknown item", "unmatched product", "item"}:
             unresolved.append("unrecognized product name")
@@ -2462,6 +2539,20 @@ async def parse_voice_billing(
         if not _voice_billing_is_english_text(product_name):
             unresolved.append("product name was not translated into English")
             continue
+        if product is None and not ambiguous_candidates and not _vb_custom_name_is_grounded(
+            [proposed_name, local_name], (english_transcript, parser_transcript), normalize=_voice_billing_normalize,
+        ):
+            # The model proposed a product the speaker never said: do not put it on a bill.
+            unresolved.append(f"{product_name}: not heard in the recording")
+            continue
+
+        if ambiguous_candidates:
+            options = ", ".join(c["name"] for c in ambiguous_candidates[:3])
+            unresolved.append(f"{product_name}: which one? {options}")
+        if unit_mismatch:
+            unresolved.append(f"{product_name}: unit mismatch")
+        if not quantity_grounded:
+            unresolved.append(f"{product_name}: quantity {spoken_quantity.normalize():f} was not clearly heard")
 
         kind = str(raw.get("spoken_price_kind") or "none").strip().lower()
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
@@ -2503,6 +2594,8 @@ async def parse_voice_billing(
                 price_warning = "The spoken price could not be read. Enter the selling price before saving."
                 unresolved.append(f"{product_name}: price unclear")
 
+        if unit_note and not price_warning:
+            price_warning = unit_note
         price_missing = not unit_price.is_finite() or unit_price <= 0
         if price_missing:
             unit_price = Decimal("0")
@@ -2528,6 +2621,16 @@ async def parse_voice_billing(
             "stock_warning": bool(product is not None and quantity > available_stock),
             "price_warning": price_warning,
             "confidence": confidence,
+            "spoken_unit": spoken_unit or None,
+            "spoken_quantity": float(spoken_quantity),
+            "unit_converted": unit_converted,
+            "unit_mismatch": unit_mismatch,
+            "quantity_grounded": quantity_grounded,
+            "needs_confirmation": bool(
+                ambiguous_candidates or unit_mismatch or not quantity_grounded or price_missing
+            ),
+            "ambiguous_candidates": ambiguous_candidates,
+            "match_reasons": match_reasons,
         })
 
     needs_clarification = bool(parsed.get("needs_clarification")) or bool(unresolved)
@@ -2543,18 +2646,20 @@ async def parse_voice_billing(
     interpreted_text_en = str(
         translated_search_text or parsed.get("interpreted_text_en") or english_transcript
     ).strip()[:320]
-    return {
+    result = {
         "success": bool(output_items),
         "items": output_items,
         "needs_clarification": needs_clarification or not output_items,
         "clarification_question": clarification,
         "transcript": transcript,
+        "normalized_transcript": parser_transcript,
         "interpreted_text_en": interpreted_text_en,
         "translation_required": _voice_billing_should_translate(transcript, request.language_code or "auto"),
         "provider": "Groq",
         "model": model,
         "catalog_candidates": len(candidates),
     }
+    return result
 
 
 _VOICE_BILLING_WHISPER_LANGUAGES = {
@@ -2571,13 +2676,7 @@ def _voice_billing_whisper_language_hint(language_code: str) -> Optional[str]:
     return base_language if base_language in _VOICE_BILLING_WHISPER_LANGUAGES else None
 
 
-def _voice_billing_whisper_prompt(
-    language_code: str,
-    product_names: list[str],
-) -> str:
-    """Give Whisper short, shop-specific spelling hints for mixed retail speech."""
-    language = _voice_billing_whisper_language_hint(language_code)
-    prefixes = {
+_VOICE_BILLING_WHISPER_PREFIXES = {
         "en": "Retail billing. Preserve the spoken product names, quantities, and rupee prices. Shop vocabulary: ",
         "hi": "दुकान की बिलिंग। उत्पादों के नाम, मात्रा और रुपये की कीमतें ध्यान से लिखें। दुकान के उत्पाद: ",
         "te": "రిటైల్ బిల్లింగ్. ఉత్పత్తుల పేర్లు, పరిమాణాలు, రూపాయి ధరలను జాగ్రత్తగా గుర్తించండి. దుకాణపు ఉత్పత్తులు: ",
@@ -2588,7 +2687,16 @@ def _voice_billing_whisper_prompt(
         "bn": "দোকানের বিলিং। পণ্যের নাম, পরিমাণ ও টাকার দাম সঠিকভাবে লিখুন। দোকানের পণ্য: ",
         "gu": "દુકાનનું બિલિંગ. વસ્તુઓનાં નામ, જથ્થો અને રૂપિયાની કિંમત બરાબર ઓળખો. દુકાનની વસ્તુઓ: ",
         "pa": "ਦੁਕਾਨ ਦੀ ਬਿਲਿੰਗ। ਉਤਪਾਦਾਂ ਦੇ ਨਾਮ, ਮਾਤਰਾ ਅਤੇ ਰੁਪਏ ਦੀਆਂ ਕੀਮਤਾਂ ਧਿਆਨ ਨਾਲ ਲਿਖੋ। ਦੁਕਾਨ ਦੇ ਉਤਪਾਦ: ",
-    }
+}
+
+
+def _voice_billing_whisper_prompt(
+    language_code: str,
+    product_names: list[str],
+) -> str:
+    """Give Whisper short, shop-specific spelling hints for mixed retail speech."""
+    language = _voice_billing_whisper_language_hint(language_code)
+    prefixes = _VOICE_BILLING_WHISPER_PREFIXES
     names: list[str] = []
     seen: set[str] = set()
     for raw_name in product_names:
@@ -2693,9 +2801,19 @@ async def parse_voice_billing_audio(
         logging.warning("Groq voice billing transcription failed: %s", type(exc).__name__)
         raise HTTPException(status_code=502, detail="Groq could not transcribe this recording. Please try again.")
 
-    transcript = str(transcription.get("text") or "").strip()
-    if not transcript:
-        raise HTTPException(status_code=422, detail="No clear speech was detected. Please record again.")
+    verdict = _assess_transcription(
+        transcription,
+        prompt_prefix=_VOICE_BILLING_WHISPER_PREFIXES.get(whisper_language or "", ""),
+        catalog_names=catalog_names,
+    )
+    if not verdict.accepted:
+        # Never log the transcript itself (customer speech); the reason code is enough to tune thresholds.
+        logging.info(
+            "voice-billing ASR rejected: reason=%s kept=%s dropped=%s max_no_speech=%s",
+            verdict.reason, verdict.kept_segments, verdict.dropped_segments, verdict.max_no_speech_prob,
+        )
+        raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
+    transcript = verdict.text
 
     detected_language = str(transcription.get("language") or "").strip().lower()
     effective_language = language_code
@@ -2705,7 +2823,10 @@ async def parse_voice_billing_audio(
         effective_language = detected_language
 
     parsed = await parse_voice_billing(
-        VoiceBillingParseRequest(transcript=transcript, language_code=effective_language),
+        VoiceBillingParseRequest(
+            transcript=transcript,
+            language_code=effective_language,
+        ),
         user_id=user_id,
         db=db,
     )
@@ -2713,4 +2834,5 @@ async def parse_voice_billing_audio(
     parsed["transcription_provider"] = "Groq"
     parsed["transcription_model"] = stt_model
     parsed["detected_language"] = detected_language or None
+    parsed["speech_quality"] = verdict.public()
     return parsed
