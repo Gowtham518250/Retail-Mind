@@ -251,14 +251,15 @@ def quantity_is_grounded(
     quantity = Decimal(quantity)
     if quantity == 1:
         return True
+    transcript_values = [str(text or "") for text in transcripts]
     heard: set[Decimal] = set()
-    for text in transcripts:
-        heard |= spoken_numbers(text, number_words, scale_words)
+    for transcript in transcript_values:
+        heard |= spoken_numbers(transcript, number_words, scale_words)
     if quantity in heard:
         return True
     # A multiple of twelve is accepted only when "dozen" was actually spoken.
-    for transcript in transcripts:
-        if re.search(r"(?i)\b(?:dozen|dozens|doz|డజను|డజన్|డజన్లు|दर्जन)\b", str(transcript or "")):
+    for transcript in transcript_values:
+        if re.search(r"(?i)\b(?:dozen|dozens|doz|డజను|డజన్|డజన్లు|दर्जन)\b", transcript):
             if any(h > 0 and quantity == h * 12 for h in heard if h == h.to_integral_value()):
                 return True
     return False
