@@ -3,7 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from test_voice_billing_parse_contract import _run_voice_billing_endpoint
-from voice_billing_core import ResponseCache, convert_quantity
+from voice_billing_core import ResponseCache, convert_quantity, spoken_numbers
 
 
 def _p(pid, name, unit="pcs", price=40, stock=50):
@@ -150,3 +150,9 @@ def test_unclear_spoken_price_requires_manual_confirmation(monkeypatch):
     item = result["items"][0]
     assert item["price_warning"]
     assert item["needs_confirmation"] is True
+
+
+def test_fractional_numeric_speech_is_parsed_before_integer_prefix():
+    values = spoken_numbers("1/2 kg rice", {}, {})
+    assert Decimal("0.5") in values
+    assert Decimal("1") not in values
