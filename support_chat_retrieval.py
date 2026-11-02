@@ -202,6 +202,10 @@ _STOP_WORDS = {
 # Deterministic vocabulary normalization for common Telugu and Roman-Telugu
 # retail questions. This is deliberately conservative; unknown wording is not guessed.
 _TRANSLATIONS = (
+    ("బిల్", "bill"), ("బిల్లులు", "bills"), ("తయారు చేయాలి", "create"),
+    ("వాయిస్ బిల్లింగ్", "voice billing"), ("వాయిస్", "voice"),
+    ("ఉత్పత్తులు", "products"), ("ఉత్పత్తి", "product"),
+    ("జోడించాలి", "add"), ("కస్టమర్ వివరాలు", "customer details"),
     ("ఈ రోజు", "today"), ("ఈరోజు", "today"), ("ఇవాళ", "today"),
     ("నిన్న", "yesterday"), ("ఈ నెల", "this month"), ("ఈనెల", "this month"),
     ("గత నెల", "last month"), ("గతవారం", "last week"), ("ఈ వారం", "this week"),
@@ -216,7 +220,7 @@ _TRANSLATIONS = (
     ("ఏ ఉత్పత్తులు", "which products"), ("ఏ వస్తువులు", "which items"),
     ("ఎన్ని", "how many"), ("పెండింగ్ ఆర్డర్లు", "pending orders"),
     ("ఆర్డర్లు", "orders"),
-    ("ivala", "today"), ("eeroju", "today"), ("ee roju", "today"),
+    ("sell", "sales"), ("ivala", "today"), ("eeroju", "today"), ("ee roju", "today"),
     ("ninna", "yesterday"), ("ee nela", "this month"), ("gata nela", "last month"),
     ("ammakalu", "sales"), ("ammakalu", "sales"), ("vikrayalu", "sales"),
     ("takkuva stock", "low stock"), ("stock takkuva", "low stock"),
