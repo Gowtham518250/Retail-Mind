@@ -137,3 +137,16 @@ def test_unknown_spoken_unit_requires_confirmation(monkeypatch):
     item = result["items"][0]
     assert item["unit_mismatch"] is True
     assert item["needs_confirmation"] is True
+
+
+def test_unclear_spoken_price_requires_manual_confirmation(monkeypatch):
+    catalog = [_p(15, "Sugar", unit="kg", price=44)]
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [_item("Sugar", 2, pid=15, spoken_price_kind="ambiguous")],
+        transcript="2 kg sugar",
+        catalog_products=catalog,
+    )
+    item = result["items"][0]
+    assert item["price_warning"]
+    assert item["needs_confirmation"] is True
