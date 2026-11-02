@@ -199,6 +199,11 @@ jobs:
           pytest -q tests/test_realtime.py
           pytest -q tests/test_durable_sync.py
           pytest -q tests/test_ai_query_history_contract.py
+          # Run this PR's new regressions before the known baseline support-chat failures.
+          pytest -q tests/test_voice_query_contract.py
+          pytest -q tests/test_ai_query_date_scope.py
+          pytest -q tests/test_voice_asr_guard.py
+          pytest -q tests/test_voice_billing_core.py
           pytest -q tests/test_query_retrieval_quality.py
           pytest -q tests/test_support_chat_contract.py
           pytest -q tests/test_support_chat_retrieval.py
@@ -215,10 +220,6 @@ jobs:
           pytest -q tests/test_owner_otp_attempts.py
           pytest -q tests/test_security_distributed_rate_limit.py
           pytest -q tests/test_growth_suite.py
-          pytest -q tests/test_voice_query_contract.py
-          pytest -q tests/test_ai_query_date_scope.py
-          pytest -q tests/test_voice_asr_guard.py
-          pytest -q tests/test_voice_billing_core.py
           pytest -q tests/test_product_discovery_contract.py
           pytest -q tests/test_voice_billing_parse_contract.py
           pytest -q tests/test_inventory_upload_ai_contract.py
