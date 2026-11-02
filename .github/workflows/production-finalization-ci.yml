@@ -191,6 +191,10 @@ jobs:
 
           print("Fresh database migration smoke test passed.")
           PY
+      - name: Run voice and AI-query safety tests
+        env:
+          PYTHONPATH: .
+        run: |
       - name: Run focused production tests
         env:
           PYTHONPATH: .
