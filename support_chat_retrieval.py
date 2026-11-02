@@ -293,6 +293,10 @@ def classify_shop_data_intent(value: str) -> tuple[str | None, str]:
         and re.search(r"\b(revenue|sales|earnings|income|turnover|amount)\b", q)
     ):
         return "top_product_revenue", query
+    # The product-list shortcut returns items sold and quantities; it must not
+    # reinterpret a requested sales-by-product/category breakdown as that list.
+    if re.search(r"\b(sales|revenue|turnover)\s+by\b|\bby\s+(products?|items?|categories?|customers?|workers?)\b", q):
+        return None
     if (
         re.search(r"\b(products?|items?)\b", q)
         and re.search(r"\b(sold|sales)\b", q)
