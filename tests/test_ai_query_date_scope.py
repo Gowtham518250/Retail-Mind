@@ -35,7 +35,7 @@ def test_named_date_range_and_month_resolve(monkeypatch):
 def test_future_month_requires_clarification(monkeypatch):
     _freeze(monkeypatch)
     scope = qr._resolve_explicit_date_scope("sales in February 2028")
-    assert scope["kind"] == "unsupported"
+    assert scope["kind"] == "unspecified"
     assert qr._has_unresolved_date_intent("sales in February 2028", scope)
 
 
