@@ -2524,6 +2524,12 @@ async def parse_voice_billing(
                 proposed_name = proposed_name or str(product.product_name or "")
                 product = None
 
+        if not quantity_grounded and product is not None:
+            # Older clients may ignore needs_confirmation; do not let an unverified
+            # quantity deduct stock through a stock-linked product ID.
+            proposed_name = proposed_name or str(product.product_name or "")
+            product = None
+
         catalog_matched = product is not None
         local_name = re.sub(r"[\r\n\t]+", " ", str(raw.get("product_name_local") or "")).strip()[:120]
         product_name = str(product.product_name or "").strip() if product is not None else proposed_name
