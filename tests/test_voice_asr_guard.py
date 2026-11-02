@@ -185,7 +185,7 @@ def _run_audio(monkeypatch, whisper_json):
     monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
     audio = UploadFile(filename="v.m4a", file=io.BytesIO(b"fake"), headers=Headers({"content-type": "audio/mp4"}))
     result = asyncio.run(inventory_module.parse_voice_billing_audio(
-        audio=audio, language_code="te", client_request_id="", user_id=7, db=_Db()))
+        audio=audio, language_code="te", user_id=7, db=_Db()))
     return result, calls
 
 
