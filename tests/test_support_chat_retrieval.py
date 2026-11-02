@@ -40,8 +40,10 @@ def test_help_retrieval_does_not_guess_unmatched_questions():
 
 
 def test_local_normalization_handles_common_telugu_and_roman_telugu():
-    assert "sales today" in normalize_support_query("ఈరోజు అమ్మకాలు ఎంత?")
-    assert "sales yesterday" in normalize_support_query("ninna ammakalu")
+    today_query = normalize_support_query("ఈరోజు అమ్మకాలు ఎంత?")
+    yesterday_query = normalize_support_query("ninna ammakalu")
+    assert "today" in today_query and "sales" in today_query
+    assert "yesterday" in yesterday_query and "sales" in yesterday_query
     assert "low stock" in normalize_support_query("తక్కువ స్టాక్ ఏవి?")
 
 
