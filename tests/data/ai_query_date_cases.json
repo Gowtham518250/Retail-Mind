@@ -1,0 +1,1892 @@
+{
+ "anchors": {
+  "mon-2026-11-02": "2026-11-02T04:00:00+00:00",
+  "year-start-2027-01-01": "2027-01-01T10:00:00+00:00",
+  "month-end-2026-03-31": "2026-03-31T06:00:00+00:00",
+  "leap-2028-03-01": "2028-03-01T06:00:00+00:00",
+  "ist-ahead-of-utc-2026-11-01": "2026-10-31T20:00:00+00:00",
+  "ist-new-year-2027-01-01": "2026-12-31T19:00:00+00:00"
+ },
+ "cases": [
+  {
+   "id": "date-001",
+   "group": "single_day",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales today",
+   "outcome": "resolved",
+   "start": "2026-11-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-002",
+   "group": "single_day",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "what were my sales today?",
+   "outcome": "resolved",
+   "start": "2026-11-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-003",
+   "group": "single_day",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "yesterday's sales",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-004",
+   "group": "single_day",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "revenue yesterday",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-005",
+   "group": "single_day",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales day before yesterday",
+   "outcome": "resolved",
+   "start": "2026-10-31",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-006",
+   "group": "week",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales this week",
+   "outcome": "resolved",
+   "start": "2026-11-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-007",
+   "group": "week",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales last week",
+   "outcome": "resolved",
+   "start": "2026-10-26",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-008",
+   "group": "week",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in the past week",
+   "outcome": "resolved",
+   "start": "2026-10-27",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-009",
+   "group": "month",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales this month",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-010",
+   "group": "month",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales last month",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-011",
+   "group": "month",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "total sales in the last 1 month",
+   "outcome": "resolved",
+   "start": "2026-10-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-012",
+   "group": "month",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales for the last 3 months",
+   "outcome": "resolved",
+   "start": "2026-08-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-013",
+   "group": "year",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales this year",
+   "outcome": "resolved",
+   "start": "2026-01-01",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-014",
+   "group": "year",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales last year",
+   "outcome": "resolved",
+   "start": "2025-01-01",
+   "end": "2025-12-31"
+  },
+  {
+   "id": "date-015",
+   "group": "rolling",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in the last 7 days",
+   "outcome": "resolved",
+   "start": "2026-10-27",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-016",
+   "group": "rolling",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales last 30 days",
+   "outcome": "resolved",
+   "start": "2026-10-04",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-017",
+   "group": "rolling",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales for last 10 days",
+   "outcome": "resolved",
+   "start": "2026-10-24",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-018",
+   "group": "rolling",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "expenses in the last 2 weeks",
+   "outcome": "resolved",
+   "start": "2026-10-20",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-019",
+   "group": "named_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-020",
+   "group": "named_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on october 15",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-021",
+   "group": "named_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-022",
+   "group": "named_month",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "expenses in October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-023",
+   "group": "named_range",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales from 1 October to 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-024",
+   "group": "named_range",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "give me the sales between 1st oct and 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-025",
+   "group": "single_day",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales today",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-026",
+   "group": "single_day",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "what were my sales today?",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-027",
+   "group": "single_day",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "yesterday's sales",
+   "outcome": "resolved",
+   "start": "2026-12-31",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-028",
+   "group": "single_day",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "revenue yesterday",
+   "outcome": "resolved",
+   "start": "2026-12-31",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-029",
+   "group": "single_day",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales day before yesterday",
+   "outcome": "resolved",
+   "start": "2026-12-30",
+   "end": "2026-12-30"
+  },
+  {
+   "id": "date-030",
+   "group": "week",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales this week",
+   "outcome": "resolved",
+   "start": "2026-12-28",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-031",
+   "group": "week",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales last week",
+   "outcome": "resolved",
+   "start": "2026-12-21",
+   "end": "2026-12-27"
+  },
+  {
+   "id": "date-032",
+   "group": "week",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales in the past week",
+   "outcome": "resolved",
+   "start": "2026-12-26",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-033",
+   "group": "month",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales this month",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-034",
+   "group": "month",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales last month",
+   "outcome": "resolved",
+   "start": "2026-12-01",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-035",
+   "group": "month",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "total sales in the last 1 month",
+   "outcome": "resolved",
+   "start": "2026-12-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-036",
+   "group": "month",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales for the last 3 months",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-037",
+   "group": "year",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales this year",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-038",
+   "group": "year",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales last year",
+   "outcome": "resolved",
+   "start": "2026-01-01",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-039",
+   "group": "rolling",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales in the last 7 days",
+   "outcome": "resolved",
+   "start": "2026-12-26",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-040",
+   "group": "rolling",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales last 30 days",
+   "outcome": "resolved",
+   "start": "2026-12-03",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-041",
+   "group": "rolling",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales for last 10 days",
+   "outcome": "resolved",
+   "start": "2026-12-23",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-042",
+   "group": "rolling",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "expenses in the last 2 weeks",
+   "outcome": "resolved",
+   "start": "2026-12-19",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-043",
+   "group": "named_date",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales on 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-044",
+   "group": "named_date",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales on october 15",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-045",
+   "group": "named_date",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales on 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-046",
+   "group": "named_month",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "expenses in October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-047",
+   "group": "named_range",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "sales from 1 October to 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-048",
+   "group": "named_range",
+   "anchor": "year-start-2027-01-01",
+   "now_utc": "2027-01-01T10:00:00+00:00",
+   "query": "give me the sales between 1st oct and 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-049",
+   "group": "single_day",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales today",
+   "outcome": "resolved",
+   "start": "2026-03-31",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-050",
+   "group": "single_day",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "what were my sales today?",
+   "outcome": "resolved",
+   "start": "2026-03-31",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-051",
+   "group": "single_day",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "yesterday's sales",
+   "outcome": "resolved",
+   "start": "2026-03-30",
+   "end": "2026-03-30"
+  },
+  {
+   "id": "date-052",
+   "group": "single_day",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "revenue yesterday",
+   "outcome": "resolved",
+   "start": "2026-03-30",
+   "end": "2026-03-30"
+  },
+  {
+   "id": "date-053",
+   "group": "single_day",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales day before yesterday",
+   "outcome": "resolved",
+   "start": "2026-03-29",
+   "end": "2026-03-29"
+  },
+  {
+   "id": "date-054",
+   "group": "week",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales this week",
+   "outcome": "resolved",
+   "start": "2026-03-30",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-055",
+   "group": "week",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales last week",
+   "outcome": "resolved",
+   "start": "2026-03-23",
+   "end": "2026-03-29"
+  },
+  {
+   "id": "date-056",
+   "group": "week",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales in the past week",
+   "outcome": "resolved",
+   "start": "2026-03-25",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-057",
+   "group": "month",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales this month",
+   "outcome": "resolved",
+   "start": "2026-03-01",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-058",
+   "group": "month",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales last month",
+   "outcome": "resolved",
+   "start": "2026-02-01",
+   "end": "2026-02-28"
+  },
+  {
+   "id": "date-059",
+   "group": "month",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "total sales in the last 1 month",
+   "outcome": "resolved",
+   "start": "2026-02-28",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-060",
+   "group": "month",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales for the last 3 months",
+   "outcome": "resolved",
+   "start": "2025-12-31",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-061",
+   "group": "year",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales this year",
+   "outcome": "resolved",
+   "start": "2026-01-01",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-062",
+   "group": "year",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales last year",
+   "outcome": "resolved",
+   "start": "2025-01-01",
+   "end": "2025-12-31"
+  },
+  {
+   "id": "date-063",
+   "group": "rolling",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales in the last 7 days",
+   "outcome": "resolved",
+   "start": "2026-03-25",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-064",
+   "group": "rolling",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales last 30 days",
+   "outcome": "resolved",
+   "start": "2026-03-02",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-065",
+   "group": "rolling",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales for last 10 days",
+   "outcome": "resolved",
+   "start": "2026-03-22",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-066",
+   "group": "rolling",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "expenses in the last 2 weeks",
+   "outcome": "resolved",
+   "start": "2026-03-18",
+   "end": "2026-03-31"
+  },
+  {
+   "id": "date-067",
+   "group": "named_date",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales on 15 October",
+   "outcome": "resolved",
+   "start": "2025-10-15",
+   "end": "2025-10-15"
+  },
+  {
+   "id": "date-068",
+   "group": "named_date",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales on october 15",
+   "outcome": "resolved",
+   "start": "2025-10-15",
+   "end": "2025-10-15"
+  },
+  {
+   "id": "date-069",
+   "group": "named_date",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales on 15th oct",
+   "outcome": "resolved",
+   "start": "2025-10-15",
+   "end": "2025-10-15"
+  },
+  {
+   "id": "date-070",
+   "group": "named_month",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "expenses in October",
+   "outcome": "resolved",
+   "start": "2025-10-01",
+   "end": "2025-10-31"
+  },
+  {
+   "id": "date-071",
+   "group": "named_range",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "sales from 1 October to 15 October",
+   "outcome": "resolved",
+   "start": "2025-10-01",
+   "end": "2025-10-15"
+  },
+  {
+   "id": "date-072",
+   "group": "named_range",
+   "anchor": "month-end-2026-03-31",
+   "now_utc": "2026-03-31T06:00:00+00:00",
+   "query": "give me the sales between 1st oct and 15th oct",
+   "outcome": "resolved",
+   "start": "2025-10-01",
+   "end": "2025-10-15"
+  },
+  {
+   "id": "date-073",
+   "group": "single_day",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales today",
+   "outcome": "resolved",
+   "start": "2028-03-01",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-074",
+   "group": "single_day",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "what were my sales today?",
+   "outcome": "resolved",
+   "start": "2028-03-01",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-075",
+   "group": "single_day",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "yesterday's sales",
+   "outcome": "resolved",
+   "start": "2028-02-29",
+   "end": "2028-02-29"
+  },
+  {
+   "id": "date-076",
+   "group": "single_day",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "revenue yesterday",
+   "outcome": "resolved",
+   "start": "2028-02-29",
+   "end": "2028-02-29"
+  },
+  {
+   "id": "date-077",
+   "group": "single_day",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales day before yesterday",
+   "outcome": "resolved",
+   "start": "2028-02-28",
+   "end": "2028-02-28"
+  },
+  {
+   "id": "date-078",
+   "group": "week",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales this week",
+   "outcome": "resolved",
+   "start": "2028-02-28",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-079",
+   "group": "week",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales last week",
+   "outcome": "resolved",
+   "start": "2028-02-21",
+   "end": "2028-02-27"
+  },
+  {
+   "id": "date-080",
+   "group": "week",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales in the past week",
+   "outcome": "resolved",
+   "start": "2028-02-24",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-081",
+   "group": "month",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales this month",
+   "outcome": "resolved",
+   "start": "2028-03-01",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-082",
+   "group": "month",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales last month",
+   "outcome": "resolved",
+   "start": "2028-02-01",
+   "end": "2028-02-29"
+  },
+  {
+   "id": "date-083",
+   "group": "month",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "total sales in the last 1 month",
+   "outcome": "resolved",
+   "start": "2028-02-01",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-084",
+   "group": "month",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales for the last 3 months",
+   "outcome": "resolved",
+   "start": "2027-12-01",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-085",
+   "group": "year",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales this year",
+   "outcome": "resolved",
+   "start": "2028-01-01",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-086",
+   "group": "year",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales last year",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-12-31"
+  },
+  {
+   "id": "date-087",
+   "group": "rolling",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales in the last 7 days",
+   "outcome": "resolved",
+   "start": "2028-02-24",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-088",
+   "group": "rolling",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales last 30 days",
+   "outcome": "resolved",
+   "start": "2028-02-01",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-089",
+   "group": "rolling",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales for last 10 days",
+   "outcome": "resolved",
+   "start": "2028-02-21",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-090",
+   "group": "rolling",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "expenses in the last 2 weeks",
+   "outcome": "resolved",
+   "start": "2028-02-17",
+   "end": "2028-03-01"
+  },
+  {
+   "id": "date-091",
+   "group": "named_date",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales on 15 October",
+   "outcome": "resolved",
+   "start": "2027-10-15",
+   "end": "2027-10-15"
+  },
+  {
+   "id": "date-092",
+   "group": "named_date",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales on october 15",
+   "outcome": "resolved",
+   "start": "2027-10-15",
+   "end": "2027-10-15"
+  },
+  {
+   "id": "date-093",
+   "group": "named_date",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales on 15th oct",
+   "outcome": "resolved",
+   "start": "2027-10-15",
+   "end": "2027-10-15"
+  },
+  {
+   "id": "date-094",
+   "group": "named_month",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "expenses in October",
+   "outcome": "resolved",
+   "start": "2027-10-01",
+   "end": "2027-10-31"
+  },
+  {
+   "id": "date-095",
+   "group": "named_range",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales from 1 October to 15 October",
+   "outcome": "resolved",
+   "start": "2027-10-01",
+   "end": "2027-10-15"
+  },
+  {
+   "id": "date-096",
+   "group": "named_range",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "give me the sales between 1st oct and 15th oct",
+   "outcome": "resolved",
+   "start": "2027-10-01",
+   "end": "2027-10-15"
+  },
+  {
+   "id": "date-097",
+   "group": "single_day",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales today",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-098",
+   "group": "single_day",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "what were my sales today?",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-099",
+   "group": "single_day",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "yesterday's sales",
+   "outcome": "resolved",
+   "start": "2026-10-31",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-100",
+   "group": "single_day",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "revenue yesterday",
+   "outcome": "resolved",
+   "start": "2026-10-31",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-101",
+   "group": "single_day",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales day before yesterday",
+   "outcome": "resolved",
+   "start": "2026-10-30",
+   "end": "2026-10-30"
+  },
+  {
+   "id": "date-102",
+   "group": "week",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales this week",
+   "outcome": "resolved",
+   "start": "2026-10-26",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-103",
+   "group": "week",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales last week",
+   "outcome": "resolved",
+   "start": "2026-10-19",
+   "end": "2026-10-25"
+  },
+  {
+   "id": "date-104",
+   "group": "week",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales in the past week",
+   "outcome": "resolved",
+   "start": "2026-10-26",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-105",
+   "group": "month",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales this month",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-106",
+   "group": "month",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales last month",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-107",
+   "group": "month",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "total sales in the last 1 month",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-108",
+   "group": "month",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales for the last 3 months",
+   "outcome": "resolved",
+   "start": "2026-08-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-109",
+   "group": "year",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales this year",
+   "outcome": "resolved",
+   "start": "2026-01-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-110",
+   "group": "year",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales last year",
+   "outcome": "resolved",
+   "start": "2025-01-01",
+   "end": "2025-12-31"
+  },
+  {
+   "id": "date-111",
+   "group": "rolling",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales in the last 7 days",
+   "outcome": "resolved",
+   "start": "2026-10-26",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-112",
+   "group": "rolling",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales last 30 days",
+   "outcome": "resolved",
+   "start": "2026-10-03",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-113",
+   "group": "rolling",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales for last 10 days",
+   "outcome": "resolved",
+   "start": "2026-10-23",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-114",
+   "group": "rolling",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "expenses in the last 2 weeks",
+   "outcome": "resolved",
+   "start": "2026-10-19",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "date-115",
+   "group": "named_date",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales on 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-116",
+   "group": "named_date",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales on october 15",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-117",
+   "group": "named_date",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales on 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-118",
+   "group": "named_month",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "expenses in October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-119",
+   "group": "named_range",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "sales from 1 October to 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-120",
+   "group": "named_range",
+   "anchor": "ist-ahead-of-utc-2026-11-01",
+   "now_utc": "2026-10-31T20:00:00+00:00",
+   "query": "give me the sales between 1st oct and 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-121",
+   "group": "single_day",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales today",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-122",
+   "group": "single_day",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "what were my sales today?",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-123",
+   "group": "single_day",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "yesterday's sales",
+   "outcome": "resolved",
+   "start": "2026-12-31",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-124",
+   "group": "single_day",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "revenue yesterday",
+   "outcome": "resolved",
+   "start": "2026-12-31",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-125",
+   "group": "single_day",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales day before yesterday",
+   "outcome": "resolved",
+   "start": "2026-12-30",
+   "end": "2026-12-30"
+  },
+  {
+   "id": "date-126",
+   "group": "week",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales this week",
+   "outcome": "resolved",
+   "start": "2026-12-28",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-127",
+   "group": "week",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales last week",
+   "outcome": "resolved",
+   "start": "2026-12-21",
+   "end": "2026-12-27"
+  },
+  {
+   "id": "date-128",
+   "group": "week",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales in the past week",
+   "outcome": "resolved",
+   "start": "2026-12-26",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-129",
+   "group": "month",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales this month",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-130",
+   "group": "month",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales last month",
+   "outcome": "resolved",
+   "start": "2026-12-01",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-131",
+   "group": "month",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "total sales in the last 1 month",
+   "outcome": "resolved",
+   "start": "2026-12-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-132",
+   "group": "month",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales for the last 3 months",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-133",
+   "group": "year",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales this year",
+   "outcome": "resolved",
+   "start": "2027-01-01",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-134",
+   "group": "year",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales last year",
+   "outcome": "resolved",
+   "start": "2026-01-01",
+   "end": "2026-12-31"
+  },
+  {
+   "id": "date-135",
+   "group": "rolling",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales in the last 7 days",
+   "outcome": "resolved",
+   "start": "2026-12-26",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-136",
+   "group": "rolling",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales last 30 days",
+   "outcome": "resolved",
+   "start": "2026-12-03",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-137",
+   "group": "rolling",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales for last 10 days",
+   "outcome": "resolved",
+   "start": "2026-12-23",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-138",
+   "group": "rolling",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "expenses in the last 2 weeks",
+   "outcome": "resolved",
+   "start": "2026-12-19",
+   "end": "2027-01-01"
+  },
+  {
+   "id": "date-139",
+   "group": "named_date",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales on 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-140",
+   "group": "named_date",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales on october 15",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-141",
+   "group": "named_date",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales on 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-142",
+   "group": "named_month",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "expenses in October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-143",
+   "group": "named_range",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "sales from 1 October to 15 October",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-144",
+   "group": "named_range",
+   "anchor": "ist-new-year-2027-01-01",
+   "now_utc": "2026-12-31T19:00:00+00:00",
+   "query": "give me the sales between 1st oct and 15th oct",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-145",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 2026-10-15",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-146",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 15/10/2026",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-147",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 15-10-2026",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-148",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on october 15, 2025",
+   "outcome": "resolved",
+   "start": "2025-10-15",
+   "end": "2025-10-15"
+  },
+  {
+   "id": "date-149",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 15 october 2025",
+   "outcome": "resolved",
+   "start": "2025-10-15",
+   "end": "2025-10-15"
+  },
+  {
+   "id": "date-150",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales from 2026-10-01 to 2026-10-15",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-151",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales between 2026-10-15 and 2026-10-01",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-152",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales from 1 october 2026 to 15 october 2026",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-15"
+  },
+  {
+   "id": "date-153",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in October 2025",
+   "outcome": "resolved",
+   "start": "2025-10-01",
+   "end": "2025-10-31"
+  },
+  {
+   "id": "date-154",
+   "group": "future_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in february 2028",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-155",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in November",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-156",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in December",
+   "outcome": "resolved",
+   "start": "2025-12-01",
+   "end": "2025-12-31"
+  },
+  {
+   "id": "date-157",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 15 December",
+   "outcome": "resolved",
+   "start": "2025-12-15",
+   "end": "2025-12-15"
+  },
+  {
+   "id": "date-158",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales since 2026-10-01",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-159",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales from 2026-10-01 to today",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-160",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales since 1 october",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-161",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "last 45 days sales",
+   "outcome": "resolved",
+   "start": "2026-09-19",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-162",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales for last 6 months",
+   "outcome": "resolved",
+   "start": "2026-05-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-163",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales previous month",
+   "outcome": "resolved",
+   "start": "2026-10-01",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "date-164",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales current week",
+   "outcome": "resolved",
+   "start": "2026-11-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-165",
+   "group": "absolute",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales year to date",
+   "outcome": "resolved",
+   "start": "2026-01-01",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "date-166",
+   "group": "invalid_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 31 february",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-167",
+   "group": "absolute",
+   "anchor": "leap-2028-03-01",
+   "now_utc": "2028-03-01T06:00:00+00:00",
+   "query": "sales in february 2028",
+   "outcome": "resolved",
+   "start": "2028-02-01",
+   "end": "2028-02-29"
+  },
+  {
+   "id": "date-168",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales last quarter",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-169",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales this quarter",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-170",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in q2",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-171",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "financial year sales",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-172",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales tomorrow",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-173",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales last night",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-174",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales this morning",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-175",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales before 2026-10-01",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-176",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales after 2026-10-01",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-177",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales until 2026-10-15",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-178",
+   "group": "needs_clarification",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales before 15/10/2026",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-179",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "show top selling products",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-180",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "how many customers do I have",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-181",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "stock of rice",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-182",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "which product has lowest stock",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-183",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "list all workers",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-184",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "total udhar balance",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-185",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "may i know my customers",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-186",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "what is my profit margin",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-187",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "all time sales",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "date-188",
+   "group": "no_date",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales of march rice brand",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  }
+ ]
+}

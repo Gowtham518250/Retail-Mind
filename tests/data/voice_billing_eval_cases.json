@@ -1,0 +1,5431 @@
+{
+ "catalogs": {
+  "main": [
+   {
+    "id": 1,
+    "name": "Sona Masoori Rice",
+    "unit": "kg",
+    "price": "62.00",
+    "stock": "50"
+   },
+   {
+    "id": 3,
+    "name": "Lux Soap 100g",
+    "unit": "pcs",
+    "price": "30.00",
+    "stock": "40"
+   },
+   {
+    "id": 4,
+    "name": "Lux Soap 150g",
+    "unit": "pcs",
+    "price": "42.00",
+    "stock": "40"
+   },
+   {
+    "id": 5,
+    "name": "Lifebuoy Soap 100g",
+    "unit": "pcs",
+    "price": "28.00",
+    "stock": "40"
+   },
+   {
+    "id": 6,
+    "name": "Tata Salt 1kg",
+    "unit": "pcs",
+    "price": "28.00",
+    "stock": "40"
+   },
+   {
+    "id": 7,
+    "name": "Tata Salt 2kg",
+    "unit": "pcs",
+    "price": "54.00",
+    "stock": "40"
+   },
+   {
+    "id": 8,
+    "name": "Sunflower Oil",
+    "unit": "l",
+    "price": "140.00",
+    "stock": "30"
+   },
+   {
+    "id": 9,
+    "name": "Sugar",
+    "unit": "kg",
+    "price": "44.00",
+    "stock": "60"
+   },
+   {
+    "id": 10,
+    "name": "Parle G Biscuits",
+    "unit": "pcs",
+    "price": "10.00",
+    "stock": "90"
+   },
+   {
+    "id": 11,
+    "name": "Boost",
+    "unit": "pcs",
+    "price": "260.00",
+    "stock": "12"
+   },
+   {
+    "id": 12,
+    "name": "Milk",
+    "unit": "l",
+    "price": "56.00",
+    "stock": "20"
+   },
+   {
+    "id": 13,
+    "name": "Toor Dal",
+    "unit": "kg",
+    "price": "120.00",
+    "stock": "35"
+   },
+   {
+    "id": 14,
+    "name": "Colgate Toothpaste",
+    "unit": "pcs",
+    "price": "95.00",
+    "stock": "25"
+   },
+   {
+    "id": 15,
+    "name": "Eggs",
+    "unit": "pcs",
+    "price": "7.00",
+    "stock": "300"
+   }
+  ],
+  "rice2": [
+   {
+    "id": 1,
+    "name": "Sona Masoori Rice",
+    "unit": "kg",
+    "price": "62.00",
+    "stock": "50"
+   },
+   {
+    "id": 3,
+    "name": "Lux Soap 100g",
+    "unit": "pcs",
+    "price": "30.00",
+    "stock": "40"
+   },
+   {
+    "id": 4,
+    "name": "Lux Soap 150g",
+    "unit": "pcs",
+    "price": "42.00",
+    "stock": "40"
+   },
+   {
+    "id": 5,
+    "name": "Lifebuoy Soap 100g",
+    "unit": "pcs",
+    "price": "28.00",
+    "stock": "40"
+   },
+   {
+    "id": 6,
+    "name": "Tata Salt 1kg",
+    "unit": "pcs",
+    "price": "28.00",
+    "stock": "40"
+   },
+   {
+    "id": 7,
+    "name": "Tata Salt 2kg",
+    "unit": "pcs",
+    "price": "54.00",
+    "stock": "40"
+   },
+   {
+    "id": 8,
+    "name": "Sunflower Oil",
+    "unit": "l",
+    "price": "140.00",
+    "stock": "30"
+   },
+   {
+    "id": 9,
+    "name": "Sugar",
+    "unit": "kg",
+    "price": "44.00",
+    "stock": "60"
+   },
+   {
+    "id": 10,
+    "name": "Parle G Biscuits",
+    "unit": "pcs",
+    "price": "10.00",
+    "stock": "90"
+   },
+   {
+    "id": 11,
+    "name": "Boost",
+    "unit": "pcs",
+    "price": "260.00",
+    "stock": "12"
+   },
+   {
+    "id": 12,
+    "name": "Milk",
+    "unit": "l",
+    "price": "56.00",
+    "stock": "20"
+   },
+   {
+    "id": 13,
+    "name": "Toor Dal",
+    "unit": "kg",
+    "price": "120.00",
+    "stock": "35"
+   },
+   {
+    "id": 14,
+    "name": "Colgate Toothpaste",
+    "unit": "pcs",
+    "price": "95.00",
+    "stock": "25"
+   },
+   {
+    "id": 15,
+    "name": "Eggs",
+    "unit": "pcs",
+    "price": "7.00",
+    "stock": "300"
+   },
+   {
+    "id": 2,
+    "name": "Basmati Rice",
+    "unit": "kg",
+    "price": "110.00",
+    "stock": "30"
+   }
+  ]
+ },
+ "cases": [
+  {
+   "id": "single_item_english-001",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "2 kg sona masoori rice",
+   "english": "2 kg sona masoori rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-002",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "3 lifebuoy soap",
+   "english": "3 lifebuoy soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-003",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "1 litre sunflower oil",
+   "english": "1 litre sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-004",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "4 kg sugar",
+   "english": "4 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-005",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "6 parle g biscuits",
+   "english": "6 parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "6",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "6",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-006",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "2 boost",
+   "english": "2 boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-007",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "2 litres milk",
+   "english": "2 litres milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 12,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-008",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "1 kg toor dal",
+   "english": "1 kg toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-009",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "3 colgate toothpaste",
+   "english": "3 colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-010",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "12 eggs",
+   "english": "12 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "12",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "12",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-011",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "5 sugar",
+   "english": "5 sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 9,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-012",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "7 milk",
+   "english": "7 milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "7",
+     "spoken_unit": "",
+     "expect": {
+      "product": 12,
+      "qty": "7",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-013",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "please add 2 kg sugar",
+   "english": "please add 2 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-014",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "give me 8 eggs",
+   "english": "give me 8 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "8",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "8",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-015",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "3 packets parle g biscuits",
+   "english": "3 packets parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-016",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "10 colgate toothpaste",
+   "english": "10 colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "10",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "10",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-017",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "2 toor dal",
+   "english": "2 toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 13,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-018",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "9 lifebuoy soap",
+   "english": "9 lifebuoy soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "9",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "9",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "single_item_english-019",
+   "category": "single_item_english",
+   "language": "en",
+   "spoken": "1 sona masoori rice",
+   "english": "1 sona masoori rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 1,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-001",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "2 kg rice and 3 lifebuoy soap",
+   "english": "2 kg rice and 3 lifebuoy soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-002",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "2 kg rice, 3 lifebuoy soap, 1 litre sunflower oil, 5 parle g biscuits",
+   "english": "2 kg rice, 3 lifebuoy soap, 1 litre sunflower oil, 5 parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-003",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "3 colgate toothpaste and 2 boost",
+   "english": "3 colgate toothpaste and 2 boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-004",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "1 kg sugar and 1 kg toor dal and 2 litres milk",
+   "english": "1 kg sugar and 1 kg toor dal and 2 litres milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 12,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-005",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "12 eggs and 2 parle g biscuits",
+   "english": "12 eggs and 2 parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "12",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "12",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-006",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "2 kg rice, 3 sugar",
+   "english": "2 kg rice, 3 sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-007",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "4 lifebuoy soap and 1 colgate toothpaste",
+   "english": "4 lifebuoy soap and 1 colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-008",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "2 litres sunflower oil and 5 eggs and 1 boost",
+   "english": "2 litres sunflower oil and 5 eggs and 1 boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 8,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-009",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "3 kg sona masoori rice and 2 kg toor dal",
+   "english": "3 kg sona masoori rice and 2 kg toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-010",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "6 milk and 4 sugar and 2 colgate toothpaste",
+   "english": "6 milk and 4 sugar and 2 colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "6",
+     "spoken_unit": "",
+     "expect": {
+      "product": 12,
+      "qty": "6",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 9,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-011",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "5 parle g biscuits and 3 lifebuoy soap and 2 kg rice",
+   "english": "5 parle g biscuits and 3 lifebuoy soap and 2 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-012",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "1 litre milk and 12 eggs",
+   "english": "1 litre milk and 12 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 12,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "12",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "12",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-013",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "2 boost and 2 colgate toothpaste and 2 sugar",
+   "english": "2 boost and 2 colgate toothpaste and 2 sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 9,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-014",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "1 kg rice and 1 litre sunflower oil",
+   "english": "1 kg rice and 1 litre sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-015",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "3 toor dal and 3 sugar and 3 milk",
+   "english": "3 toor dal and 3 sugar and 3 milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 13,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 12,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-016",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "8 eggs and 1 lifebuoy soap and 2 parle g biscuits",
+   "english": "8 eggs and 1 lifebuoy soap and 2 parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "8",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "8",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-017",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "2 kg sugar and 2 kg toor dal and 2 kg rice",
+   "english": "2 kg sugar and 2 kg toor dal and 2 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-018",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "4 boost and 1 milk",
+   "english": "4 boost and 1 milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 12,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-019",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "5 colgate toothpaste and 5 lifebuoy soap",
+   "english": "5 colgate toothpaste and 5 lifebuoy soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "multi_item-020",
+   "category": "multi_item",
+   "language": "en",
+   "spoken": "3 litres sunflower oil and 1 kg sugar and 2 boost",
+   "english": "3 litres sunflower oil and 1 kg sugar and 2 boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 8,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-001",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "5 lux soap",
+   "english": "5 lux soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-002",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 lux soap",
+   "english": "2 lux soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-003",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "1 lux soap",
+   "english": "1 lux soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-004",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "3 lux soap",
+   "english": "3 lux soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-005",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 tata salt",
+   "english": "2 tata salt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-006",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "4 tata salt",
+   "english": "4 tata salt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-007",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "1 tata salt",
+   "english": "1 tata salt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-008",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "6 tata salt",
+   "english": "6 tata salt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt",
+     "name_local": "",
+     "qty": "6",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "6",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-009",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 lux soap 150g",
+   "english": "2 lux soap 150g",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap 150g",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 4,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-010",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "3 lux soap 100g",
+   "english": "3 lux soap 100g",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap 100g",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 3,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-011",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 lux soap 100 g",
+   "english": "2 lux soap 100 g",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap 100g",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 3,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-012",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "5 lux soap 150 gram",
+   "english": "5 lux soap 150 gram",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap 150g",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 4,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-013",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "4 tata salt 1kg",
+   "english": "4 tata salt 1kg",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt 1kg",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 6,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-014",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "3 tata salt 2kg",
+   "english": "3 tata salt 2kg",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt 2kg",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 7,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-015",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 tata salt 2 kg",
+   "english": "2 tata salt 2 kg",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt 2kg",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 7,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-016",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "1 tata salt 1 kg",
+   "english": "1 tata salt 1 kg",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt 1kg",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 6,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-017",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 lux soap 100g and 3 lux soap 150g",
+   "english": "2 lux soap 100g and 3 lux soap 150g",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap 100g",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 3,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Lux Soap 150g",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 4,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-018",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "3 soap",
+   "english": "3 soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-019",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 soap",
+   "english": "2 soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Soap",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-020",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 salt",
+   "english": "2 salt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Salt",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-021",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 rice",
+   "english": "2 rice",
+   "catalog": "rice2",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-022",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 basmati rice",
+   "english": "2 basmati rice",
+   "catalog": "rice2",
+   "items": [
+    {
+     "name_en": "Basmati Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 2,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-023",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "3 kg sona masoori rice",
+   "english": "3 kg sona masoori rice",
+   "catalog": "rice2",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "ambiguous_variants-024",
+   "category": "ambiguous_variants",
+   "language": "en",
+   "spoken": "2 kg rice and 3 lux soap",
+   "english": "2 kg rice and 3 lux soap",
+   "catalog": "rice2",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Lux Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-001",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "500 grams sugar",
+   "english": "500 grams sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "500",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 9,
+      "qty": "0.500",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-002",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "250 grams toor dal",
+   "english": "250 grams toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "250",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 13,
+      "qty": "0.250",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-003",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "750 ml sunflower oil",
+   "english": "750 ml sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "750",
+     "spoken_unit": "ml",
+     "expect": {
+      "product": 8,
+      "qty": "0.750",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-004",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "1500 grams sona masoori rice",
+   "english": "1500 grams sona masoori rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "1500",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 1,
+      "qty": "1.500",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-005",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "1.5 kg sugar",
+   "english": "1.5 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "1.5",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "1.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-006",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "half kilo sugar",
+   "english": "half kilo sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "0.5",
+     "spoken_unit": "kilo",
+     "expect": {
+      "product": 9,
+      "qty": "0.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-007",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "quarter kilo toor dal",
+   "english": "quarter kilo toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "0.25",
+     "spoken_unit": "kilo",
+     "expect": {
+      "product": 13,
+      "qty": "0.25",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-008",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "2 dozen eggs",
+   "english": "2 dozen eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "dozen",
+     "expect": {
+      "product": 15,
+      "qty": "24.000",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-009",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "1 dozen eggs",
+   "english": "1 dozen eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "dozen",
+     "expect": {
+      "product": 15,
+      "qty": "12.000",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-010",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "a dozen eggs",
+   "english": "a dozen eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "dozen",
+     "expect": {
+      "product": 15,
+      "qty": "12.000",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-011",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "200 ml milk",
+   "english": "200 ml milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "200",
+     "spoken_unit": "ml",
+     "expect": {
+      "product": 12,
+      "qty": "0.200",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-012",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "500 ml milk",
+   "english": "500 ml milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "500",
+     "spoken_unit": "ml",
+     "expect": {
+      "product": 12,
+      "qty": "0.500",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-013",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "2 litres milk",
+   "english": "2 litres milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 12,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-014",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "1 litre sunflower oil",
+   "english": "1 litre sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-015",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "100 grams sugar",
+   "english": "100 grams sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "100",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 9,
+      "qty": "0.100",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-016",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "50 grams toor dal",
+   "english": "50 grams toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "50",
+     "spoken_unit": "gm",
+     "expect": {
+      "product": 13,
+      "qty": "0.050",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-017",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "3 kilos sugar",
+   "english": "3 kilos sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "kilos",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-018",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "2 kg toor dal",
+   "english": "2 kg toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-019",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "1250 ml milk",
+   "english": "1250 ml milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "1250",
+     "spoken_unit": "ml",
+     "expect": {
+      "product": 12,
+      "qty": "1.250",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-020",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "half dozen eggs",
+   "english": "half dozen eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "0.5",
+     "spoken_unit": "dozen",
+     "expect": {
+      "product": 15,
+      "qty": "6.000",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-021",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "2 packets parle g biscuits",
+   "english": "2 packets parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-022",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "3 boxes boost",
+   "english": "3 boxes boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "boxes",
+     "expect": {
+      "product": 11,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-023",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "900 grams sona masoori rice",
+   "english": "900 grams sona masoori rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "900",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 1,
+      "qty": "0.900",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_conversion-024",
+   "category": "unit_conversion",
+   "language": "en",
+   "spoken": "300 grams sugar",
+   "english": "300 grams sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "300",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 9,
+      "qty": "0.300",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-001",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "2 litres sugar",
+   "english": "2 litres sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 9,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-002",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "3 kg milk",
+   "english": "3 kg milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 12,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-003",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "2 kg eggs",
+   "english": "2 kg eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 15,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-004",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "1 litre toor dal",
+   "english": "1 litre toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 13,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-005",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "500 ml sona masoori rice",
+   "english": "500 ml sona masoori rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "500",
+     "spoken_unit": "ml",
+     "expect": {
+      "product": 1,
+      "qty": "500",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-006",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "2 kg boost",
+   "english": "2 kg boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-007",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "3 litres colgate toothpaste",
+   "english": "3 litres colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 14,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-008",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "250 grams sunflower oil",
+   "english": "250 grams sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "250",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 8,
+      "qty": "250",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-009",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "2 bottles sunflower oil",
+   "english": "2 bottles sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "bottles",
+     "expect": {
+      "product": 8,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-010",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "1 bottle sunflower oil",
+   "english": "1 bottle sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "bottle",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unit_incompatible-011",
+   "category": "unit_incompatible",
+   "language": "en",
+   "spoken": "3 bottles milk",
+   "english": "3 bottles milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "bottles",
+     "expect": {
+      "product": 12,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-001",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "రెండు కిలోల బియ్యం",
+   "english": "2 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "బియ్యం",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-002",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "మూడు కిలోల పంచదార",
+   "english": "3 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "పంచదార",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-003",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "ఒక లీటర్ నూనె",
+   "english": "1 litre oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "నూనె",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-004",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "అర కిలో చక్కెర",
+   "english": "half kilo sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "చక్కెర",
+     "qty": "0.5",
+     "spoken_unit": "kilo",
+     "expect": {
+      "product": 9,
+      "qty": "0.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-005",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "రెండు లీటర్ల పాలు",
+   "english": "2 litres milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "పాలు",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 12,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-006",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "ఒక కిలో పప్పు",
+   "english": "1 kg dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "పప్పు",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-007",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "ఐదు గుడ్లు",
+   "english": "5 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "గుడ్లు",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-008",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "మూడు కిలోల పంచదార, ఒక లీటర్ నూనె",
+   "english": "3 kg sugar, 1 litre oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "పంచదార",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "నూనె",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-009",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "నాలుగు బిస్కెట్ ప్యాకెట్లు",
+   "english": "4 packets biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "బిస్కెట్",
+     "qty": "4",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-010",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "రెండు ప్యాకెట్లు బిస్కెట్",
+   "english": "2 packets biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "బిస్కెట్",
+     "qty": "2",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-011",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "మూడు సబ్బులు",
+   "english": "3 soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Soap",
+     "name_local": "సబ్బు",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-012",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "రెండు కిలోల పంచదార",
+   "english": "2 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "పంచదార",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-013",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "ఆరు గుడ్లు",
+   "english": "6 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "గుడ్లు",
+     "qty": "6",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "6",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-014",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "ఒక కిలో బియ్యం",
+   "english": "1 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "బియ్యం",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-015",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "పది గుడ్లు",
+   "english": "10 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "గుడ్లు",
+     "qty": "10",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "10",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-016",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "రెండు లీటర్ల నూనె",
+   "english": "2 litres oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "నూనె",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 8,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-017",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "ఏడు బిస్కెట్ ప్యాకెట్లు",
+   "english": "7 packets biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "బిస్కెట్",
+     "qty": "7",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "7",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-018",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "అర లీటర్ పాలు",
+   "english": "half litre milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "పాలు",
+     "qty": "0.5",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 12,
+      "qty": "0.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-019",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "రెండు కిలోల బియ్యం, మూడు సబ్బులు, ఒక లీటర్ ఆయిల్, ఐదు బిస్కెట్ ప్యాకెట్లు",
+   "english": "2 kg rice, 3 soap, 1 litre oil, 5 packets biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "బియ్యం",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Soap",
+     "name_local": "సబ్బు",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "నూనె",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "బిస్కెట్",
+     "qty": "5",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "telugu_script-020",
+   "category": "telugu_script",
+   "language": "te",
+   "spoken": "ఒక డజను గుడ్లు",
+   "english": "1 dozen eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "గుడ్లు",
+     "qty": "1",
+     "spoken_unit": "dozen",
+     "expect": {
+      "product": 15,
+      "qty": "12.000",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-001",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "rendu kilolu biyyam",
+   "english": "2 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "biyyam",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-002",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "moodu kilolu panchadara",
+   "english": "3 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "panchadara",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-003",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "oka litre noone",
+   "english": "1 litre oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "noone",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-004",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "rendu litres paalu",
+   "english": "2 litres milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "paalu",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 12,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-005",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "aidu gudlu",
+   "english": "5 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "gudlu",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-006",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "oka kilo pappu",
+   "english": "1 kg dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "pappu",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-007",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "nalugu biscuit packets",
+   "english": "4 packets biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "biscuit",
+     "qty": "4",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-008",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "moodu sabbulu",
+   "english": "3 soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Soap",
+     "name_local": "sabbu",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-009",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "rendu kilolu chakkera",
+   "english": "2 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "chakkera",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-010",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "ara kilo pappu",
+   "english": "half kilo dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "pappu",
+     "qty": "0.5",
+     "spoken_unit": "kilo",
+     "expect": {
+      "product": 13,
+      "qty": "0.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-011",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "padi gudlu",
+   "english": "10 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "gudlu",
+     "qty": "10",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "10",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-012",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "oka kilo biyyam",
+   "english": "1 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "biyyam",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-013",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "aaru gudlu",
+   "english": "6 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "gudlu",
+     "qty": "6",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "6",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-014",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "rendu kilolu biyyam, moodu sabbulu",
+   "english": "2 kg rice, 3 soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "biyyam",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Soap",
+     "name_local": "sabbu",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-015",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "rendu litres noone",
+   "english": "2 litres oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "noone",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 8,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-016",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "edu gudlu",
+   "english": "7 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "gudlu",
+     "qty": "7",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "7",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-017",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "oka litre paalu",
+   "english": "1 litre milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "paalu",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 12,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-018",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "moodu kilolu pappu",
+   "english": "3 kg dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "pappu",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-019",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "aidu biscuit packets",
+   "english": "5 packets biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "biscuit",
+     "qty": "5",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "roman_telugu-020",
+   "category": "roman_telugu",
+   "language": "te-Latn",
+   "spoken": "nalugu kilolu panchadara",
+   "english": "4 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "panchadara",
+     "qty": "4",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-001",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "2 kg rice kavali",
+   "english": "2 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-002",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "5 Lux soaps ivvandi",
+   "english": "5 lux soaps",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lux Soap",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-003",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "oka litre sunflower oil",
+   "english": "1 litre sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-004",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "rendu packets parle g biscuits",
+   "english": "2 packets parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 10,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-005",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "3 kilos sugar and moodu eggs",
+   "english": "3 kilos sugar and 3 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "kilos",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-006",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "one litre oil and two soaps",
+   "english": "1 litre oil and 2 soaps",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 8,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Soap",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-007",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "rendu boost add cheyyandi",
+   "english": "2 boost add",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-008",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "5 eggs kavali",
+   "english": "5 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-009",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "1 kg toor dal ivvandi",
+   "english": "1 kg toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-010",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "nalugu colgate toothpaste",
+   "english": "4 colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-011",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "2 litres milk kavali",
+   "english": "2 litres milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 12,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-012",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "moodu lifebuoy soap",
+   "english": "3 lifebuoy soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-013",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "2 tata salt ivvandi",
+   "english": "2 tata salt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Tata Salt",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-014",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "half kilo sugar kavali",
+   "english": "half kilo sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "0.5",
+     "spoken_unit": "kilo",
+     "expect": {
+      "product": 9,
+      "qty": "0.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "code_switching-015",
+   "category": "code_switching",
+   "language": "te-en",
+   "spoken": "padi parle g biscuits",
+   "english": "10 parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "10",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "10",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-001",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "twenty five eggs",
+   "english": "twenty five eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "25",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "25",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-002",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "one hundred parle g biscuits",
+   "english": "one hundred parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "100",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "100",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-003",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "two hundred eggs",
+   "english": "two hundred eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "200",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "200",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-004",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "thirty colgate toothpaste",
+   "english": "thirty colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "30",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "30",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-005",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "fifteen milk",
+   "english": "fifteen milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "15",
+     "spoken_unit": "",
+     "expect": {
+      "product": 12,
+      "qty": "15",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-006",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "forty five eggs",
+   "english": "forty five eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "45",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "45",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-007",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "ten boost",
+   "english": "ten boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "10",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "10",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-008",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "eleven lifebuoy soap",
+   "english": "eleven lifebuoy soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "11",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "11",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-009",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "sixty eggs",
+   "english": "sixty eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "60",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "60",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-010",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "ninety parle g biscuits",
+   "english": "ninety parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "90",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "90",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-011",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "rendu vandalu eggs",
+   "english": "rendu vandalu eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "200",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "200",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-012",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "moodu vandalu parle g biscuits",
+   "english": "moodu vandalu parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "300",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "300",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-013",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "iravai eggs",
+   "english": "iravai eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "20",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "20",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-014",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "yabhai parle g biscuits",
+   "english": "yabhai parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "50",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "50",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "number_words-015",
+   "category": "number_words",
+   "language": "en/te",
+   "spoken": "padi eggs",
+   "english": "padi eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "10",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "10",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-001",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "3 eggs",
+   "english": "3 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "7",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "7",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-002",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "2 sugar",
+   "english": "2 sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "9",
+     "spoken_unit": "",
+     "expect": {
+      "product": 9,
+      "qty": "9",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-003",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "4 milk",
+   "english": "4 milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "14",
+     "spoken_unit": "",
+     "expect": {
+      "product": 12,
+      "qty": "14",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-004",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "5 boost",
+   "english": "5 boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "8",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "8",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-005",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "1 kg toor dal",
+   "english": "1 kg toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "6",
+     "spoken_unit": "",
+     "expect": {
+      "product": 13,
+      "qty": "6",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-006",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "2 colgate toothpaste",
+   "english": "2 colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "22",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "22",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-007",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "6 lifebuoy soap",
+   "english": "6 lifebuoy soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Lifebuoy Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 5,
+      "qty": "3",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-008",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "3 parle g biscuits",
+   "english": "3 parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "33",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "33",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-009",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "2 kg rice",
+   "english": "2 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sona Masoori Rice",
+     "name_local": "",
+     "qty": "12",
+     "spoken_unit": "",
+     "expect": {
+      "product": 1,
+      "qty": "12",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "hallucinated_quantity-010",
+   "category": "hallucinated_quantity",
+   "language": "en",
+   "spoken": "4 eggs",
+   "english": "4 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "8",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "8",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-001",
+   "category": "asr_variants",
+   "language": "te",
+   "spoken": "3 bubt",
+   "english": "3 bubt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-002",
+   "category": "asr_variants",
+   "language": "te",
+   "spoken": "2 bubt",
+   "english": "2 bubt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-003",
+   "category": "asr_variants",
+   "language": "te",
+   "spoken": "5 bubt",
+   "english": "5 bubt",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-004",
+   "category": "asr_variants",
+   "language": "en",
+   "spoken": "2 biskut",
+   "english": "2 biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-005",
+   "category": "asr_variants",
+   "language": "hi",
+   "spoken": "do kilo chawal",
+   "english": "2 kg rice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Rice",
+     "name_local": "chawal",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 1,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-006",
+   "category": "asr_variants",
+   "language": "hi",
+   "spoken": "teen kilo cheeni",
+   "english": "3 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "cheeni",
+     "qty": "3",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-007",
+   "category": "asr_variants",
+   "language": "hi",
+   "spoken": "paanch ande",
+   "english": "5 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "ande",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-008",
+   "category": "asr_variants",
+   "language": "hi",
+   "spoken": "ek litre doodh",
+   "english": "1 litre milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "doodh",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 12,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-009",
+   "category": "asr_variants",
+   "language": "hi",
+   "spoken": "do kilo dal",
+   "english": "2 kg dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "dal",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "asr_variants-010",
+   "category": "asr_variants",
+   "language": "hi",
+   "spoken": "char sabun",
+   "english": "4 soap",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Soap",
+     "name_local": "sabun",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-001",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "2 kg dragon fruit",
+   "english": "2 kg dragon fruit",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Dragon Fruit",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": null,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-002",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "3 mango juice",
+   "english": "3 mango juice",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Mango Juice",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": null,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-003",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "1 kg cashew nuts",
+   "english": "1 kg cashew nuts",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Cashew Nuts",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": null,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-004",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "2 shampoo",
+   "english": "2 shampoo",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Shampoo",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": null,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-005",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "4 notebooks",
+   "english": "4 notebooks",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Notebooks",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": null,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-006",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "1 litre coconut oil",
+   "english": "1 litre coconut oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Coconut Oil",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": null,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-007",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "5 pens",
+   "english": "5 pens",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Pens",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": null,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-008",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "2 kg jaggery",
+   "english": "2 kg jaggery",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Jaggery",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": null,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-009",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "3 detergent",
+   "english": "3 detergent",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Detergent",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": null,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "unknown_product-010",
+   "category": "unknown_product",
+   "language": "en",
+   "spoken": "1 kg onions",
+   "english": "1 kg onions",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Onions",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": null,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "duplicate_submission-001",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "2 kg sugar",
+   "english": "2 kg sugar",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sugar",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 9,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  },
+  {
+   "id": "duplicate_submission-002",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "3 eggs",
+   "english": "3 eggs",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Eggs",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 15,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  },
+  {
+   "id": "duplicate_submission-003",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "1 litre milk",
+   "english": "1 litre milk",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Milk",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "litre",
+     "expect": {
+      "product": 12,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  },
+  {
+   "id": "duplicate_submission-004",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "2 boost",
+   "english": "2 boost",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Boost",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 11,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  },
+  {
+   "id": "duplicate_submission-005",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "4 colgate toothpaste",
+   "english": "4 colgate toothpaste",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Colgate Toothpaste",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 14,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  },
+  {
+   "id": "duplicate_submission-006",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "1 kg toor dal",
+   "english": "1 kg toor dal",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Toor Dal",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 13,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  },
+  {
+   "id": "duplicate_submission-007",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "5 parle g biscuits",
+   "english": "5 parle g biscuits",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Parle G Biscuits",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": 10,
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  },
+  {
+   "id": "duplicate_submission-008",
+   "category": "duplicate_submission",
+   "language": "en",
+   "spoken": "2 litres sunflower oil",
+   "english": "2 litres sunflower oil",
+   "catalog": "main",
+   "items": [
+    {
+     "name_en": "Sunflower Oil",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 8,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": true
+  }
+ ]
+}

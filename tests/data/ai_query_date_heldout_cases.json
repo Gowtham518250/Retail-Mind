@@ -1,0 +1,264 @@
+{
+ "cases": [
+  {
+   "id": "heldout-date-01",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 1st nov",
+   "outcome": "resolved",
+   "start": "2026-11-01",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "heldout-date-02",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "how much did i sell on 28 oct",
+   "outcome": "resolved",
+   "start": "2026-10-28",
+   "end": "2026-10-28"
+  },
+  {
+   "id": "heldout-date-03",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "revenue of 5 sept 2025",
+   "outcome": "resolved",
+   "start": "2025-09-05",
+   "end": "2025-09-05"
+  },
+  {
+   "id": "heldout-date-04",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "expenses during september",
+   "outcome": "resolved",
+   "start": "2026-09-01",
+   "end": "2026-09-30"
+  },
+  {
+   "id": "heldout-date-05",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales for august 2026",
+   "outcome": "resolved",
+   "start": "2026-08-01",
+   "end": "2026-08-31"
+  },
+  {
+   "id": "heldout-date-06",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales from 10 oct till 20 oct",
+   "outcome": "resolved",
+   "start": "2026-10-10",
+   "end": "2026-10-20"
+  },
+  {
+   "id": "heldout-date-07",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales between 3 oct 2026 and 9 oct 2026",
+   "outcome": "resolved",
+   "start": "2026-10-03",
+   "end": "2026-10-09"
+  },
+  {
+   "id": "heldout-date-08",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales since 15th october",
+   "outcome": "resolved",
+   "start": "2026-10-15",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "heldout-date-09",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "what did i sell in the last 5 days",
+   "outcome": "resolved",
+   "start": "2026-10-29",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "heldout-date-10",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in the previous week",
+   "outcome": "resolved",
+   "start": "2026-10-26",
+   "end": "2026-11-01"
+  },
+  {
+   "id": "heldout-date-11",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "day before yesterday's sales",
+   "outcome": "resolved",
+   "start": "2026-10-31",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "heldout-date-12",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales for the past 2 months",
+   "outcome": "resolved",
+   "start": "2026-09-02",
+   "end": "2026-11-02"
+  },
+  {
+   "id": "heldout-date-13",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in jan 2026",
+   "outcome": "resolved",
+   "start": "2026-01-01",
+   "end": "2026-01-31"
+  },
+  {
+   "id": "heldout-date-14",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in may",
+   "outcome": "resolved",
+   "start": "2026-05-01",
+   "end": "2026-05-31"
+  },
+  {
+   "id": "heldout-date-15",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales in 2025",
+   "outcome": "resolved",
+   "start": "2025-01-01",
+   "end": "2025-12-31"
+  },
+  {
+   "id": "heldout-date-16",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales 2 days ago",
+   "outcome": "resolved",
+   "start": "2026-10-31",
+   "end": "2026-10-31"
+  },
+  {
+   "id": "heldout-date-17",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on 30 feb 2026",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-18",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on monday",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-19",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales last friday",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-20",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales on the 15th",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-21",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales of last 24 hours",
+   "outcome": "clarify",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-22",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "customers who bought rice in bulk",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-23",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "total number of products",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-24",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "sales by category",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-25",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "can i see my udhar list",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  },
+  {
+   "id": "heldout-date-26",
+   "group": "heldout",
+   "anchor": "mon-2026-11-02",
+   "now_utc": "2026-11-02T04:00:00+00:00",
+   "query": "what may be my profit",
+   "outcome": "none",
+   "start": null,
+   "end": null
+  }
+ ]
+}
