@@ -17,8 +17,9 @@ _SUPPORT_ARTICLES: tuple[dict[str, Any], ...] = (
         "id": "create_bill",
         "title": "Create a sales bill",
         "aliases": (
-            "create a bill", "make a bill", "generate a bill", "create invoice",
-            "make invoice", "billing process", "how to bill", "new sale",
+            "create a bill", "create bill", "bill create", "how do i create bill",
+            "make a bill", "make bill", "generate a bill", "create invoice",
+            "make invoice", "billing process", "how to bill", "bill preparation", "new sale",
             "add sale", "sales entry", "record a sale",
         ),
         "keywords": ("sales", "bill", "invoice", "customer", "payment", "quantity", "products"),
