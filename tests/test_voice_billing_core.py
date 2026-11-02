@@ -60,6 +60,7 @@ def test_quantity_the_speaker_never_said_is_flagged(monkeypatch):
         monkeypatch, [_item("Dettol Soap", 8, pid=7)], transcript="3 dettol soap", catalog_products=catalog)
     item = result["items"][0]
     assert item["quantity_grounded"] is False and item["needs_confirmation"] is True
+    assert item["product_id"] is None  # legacy clients must not deduct stock on an unverified quantity
 
 
 def test_multi_item_bill_matches_each_line_to_its_own_product(monkeypatch):
