@@ -24,6 +24,14 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
 from query_retrieval_optimization import canonical_schema_query, hybrid_rank_tables, build_bounded_schema_context
+from support_chat_retrieval import (
+    normalize_support_query,
+    is_simple_greeting,
+    greeting_answer,
+    classify_shop_data_intent,
+    retrieve_support_article,
+    clarification_answer,
+)
 from langchain_core.prompts import ChatPromptTemplate
 from groq import Groq
 from db import get_db
@@ -2234,41 +2242,53 @@ client = Groq(api_key=GROQ_API_KEY or "unconfigured-groq-api-key")
 
 
 def _support_chat_guidance(message: str) -> str | None:
-    """Answer common app-how-to questions without invoking the shop-data SQL engine."""
-    question = re.sub(r"\s+", " ", (message or "").strip().lower())
-    if not question:
-        return "Please enter a question so I can help."
-
-    guidance = (
-        (("create a bill", "make a bill", "generate a bill", "create invoice", "make invoice", "billing process"),
-         "To create a bill in Retail Mind:\n1. Open Sales or Add Sale from your shop dashboard.\n2. Select or add the customer (if needed).\n3. Add the products and enter their quantities.\n4. Review the total and choose the payment method.\n5. Save the sale or generate the bill. Open Invoices to view or share the saved bill.\n\nIf your screen uses different labels, tell me which page you are on and I’ll guide you."),
-        (("add a product", "create a product", "new product", "add item to inventory"),
-         "To add a product, open Inventory, choose Add Product, enter the product name and available details (such as price and stock), then save. Check the product in your inventory list after saving."),
-        (("reset my password", "forgot password", "change my password", "password reset"),
-         "On the sign-in screen, choose Forgot Password and follow the verification steps sent to your registered contact method. Never share your OTP or password with anyone."),
-        (("add a customer", "create customer", "new customer"),
-         "Open Customers, choose Add Customer, enter the customer's details, and save. You can then select that customer while recording a sale."),
-        (("worker attendance", "mark attendance", "staff attendance"),
-         "Open Attendance from the dashboard, select the worker, and use the available check-in or attendance action. Review the attendance entry after saving."),
-        (("online store", "enable online shopping", "online orders"),
-         "Open Online Store from your dashboard and follow the store setup steps. Once enabled, review your store settings and product availability before sharing the shop link."),
-    )
-    for phrases, answer in guidance:
-        if any(phrase in question for phrase in phrases):
-            return answer
-    return None
+    """Compatibility wrapper: retrieve a verified local help article, without an LLM."""
+    article = retrieve_support_article(message, "en")
+    return str(article["answer"]) if article else None
 
 
 def _is_shop_data_question(message: str) -> bool:
-    """Route actual business-data questions to the authenticated, tenant-scoped query engine."""
-    question = (message or "").strip().lower()
-    data_terms = (
-        "sales", "revenue", "stock", "inventory", "invoice", "customer",
-        "attendance", "profit", "expense", "payment", "khata", "udhar",
-        "receivable", "low stock", "top product", "sold today", "today's",
-        "yesterday", "this week", "this month", "how many", "total amount",
-    )
-    return any(term in question for term in data_terms)
+    """True only for a supported data intent handled by deterministic SQL."""
+    intent, _normalized = classify_shop_data_intent(message)
+    return intent is not None
+
+
+def _run_deterministic_support_data_query(
+    query: str,
+    intent: str,
+    db: Session,
+    user_id: int,
+) -> dict | None:
+    """Dispatch supported support-chat data questions to existing safe SQL handlers.
+
+    This function deliberately never calls ask_query(), Groq, translation APIs,
+    schema-generation prompts, or an LLM fallback. Unsupported intents return None.
+    """
+    normalized = normalize_support_query(query)
+    date_scope = _resolve_explicit_date_scope(normalized)
+
+    if intent == "low_stock":
+        return _fast_low_stock_query(normalized, db, user_id)
+    if intent == "overpayment":
+        return _fast_overpayment_query(normalized, db, user_id, date_scope)
+    if intent == "receivables":
+        # The existing receivables handler intentionally requires an explicit
+        # customer/khata/invoice-balance cue. Supply the safe shop-wide khata
+        # context for broad "who owes me?" and "outstanding balance" questions.
+        if not re.search(r"\b(customer|customers|khata|udhar|invoice|invoices|bill|bills)\b", normalized):
+            normalized = "show customers khata balances " + normalized
+        elif re.search(r"\b(who|which|total|overall|how much)\b", normalized) and not re.search(r"\b(balance|balances|khata|udhar)\b", normalized):
+            normalized = "show customer khata balances " + normalized
+        return _fast_receivables_query(normalized, db, user_id, date_scope)
+    if intent == "profit":
+        return _fast_profit_query(normalized, db, user_id, date_scope)
+    if intent == "top_product_revenue":
+        return _fast_top_product_revenue_query(normalized, db, user_id, date_scope)
+    if intent == "sold_products":
+        return _fast_sold_products_query(normalized, db, user_id, date_scope)
+    if intent in {"sales_amount", "sales_count", "units_sold", "expenses"}:
+        return _fast_business_query(normalized, db, user_id, date_scope)
+    return None
 
 
 @app.post("/chatbot/message")
@@ -2279,7 +2299,7 @@ async def support_chat_message(
     db: Session = Depends(get_db),
     user_id: int = Depends(check_current_user),
 ):
-    """Authenticated Help & Support chat; app guidance is separate from shop-data RAG."""
+    """Deterministic support assistant: local help retrieval + tenant-scoped SQL only."""
     question = (message or "").strip()
     language_code = (language_code or "en").strip().lower()
     if not question:
@@ -2288,7 +2308,8 @@ async def support_chat_message(
         raise HTTPException(status_code=422, detail="Please keep support questions under 2,000 characters.")
 
     # Validate the optional history payload contract, but never trust it for
-    # identity, tenant scope, or SQL filters.
+    # identity, tenant scope, or SQL filters. This no-LLM endpoint does not need
+    # history to generate answers; each answer is grounded in the current request.
     try:
         history = json.loads(conversation_history or "[]")
         if not isinstance(history, list):
@@ -2296,27 +2317,100 @@ async def support_chat_message(
     except (TypeError, ValueError, json.JSONDecodeError):
         raise HTTPException(status_code=422, detail="Conversation history must be a valid JSON list.")
 
-    guidance = _support_chat_guidance(question)
-    if guidance is not None:
-        localized = _translate_answer_to_language(guidance, language_code)
-        return {"answer": localized, "message": localized, "source": "retail_mind_help", "language_code": language_code}
+    if is_simple_greeting(question):
+        answer = greeting_answer(language_code)
+        return {
+            "answer": answer,
+            "message": answer,
+            "source": "greeting",
+            "language_code": language_code,
+            "results": [],
+            "retrieved_documents": [],
+            "llm_calls": 0,
+        }
 
-    if _is_shop_data_question(question):
-        result = await ask_query(query=question, language_code=language_code, db=db, user_id=user_id)
-        answer = result.get("answer") or result.get("message")
-        if answer:
-            localized = _translate_answer_to_language(str(answer), language_code)
-            return {"answer": localized, "message": localized, "source": "shop_data_query", "language_code": language_code}
-        raise HTTPException(status_code=502, detail="The shop-data assistant returned an empty answer.")
+    # Normalize common Telugu/Roman-Telugu retail terms locally. No cloud
+    # translation request is made from this support-chat route.
+    intent, normalized_query = classify_shop_data_intent(question)
+    if intent:
+        result = _run_deterministic_support_data_query(
+            normalized_query,
+            intent,
+            db,
+            user_id,
+        )
+        if result is not None:
+            answer = str(result.get("answer") or "").strip()
+            if not answer:
+                raise HTTPException(
+                    status_code=502,
+                    detail="The deterministic shop-data lookup returned no answer.",
+                )
+            _persist_query_history(
+                db=db,
+                user_id=user_id,
+                question=question,
+                answer=answer,
+                result_count=len(result.get("results") or []),
+            )
+            return {
+                "answer": answer,
+                "message": answer,
+                "source": "shop_data_query",
+                "language_code": language_code,
+                "query_engine_version": QUERY_ENGINE_VERSION,
+                "generated_sql": result.get("generated_sql", ""),
+                "generated_model_response": answer,
+                "results": jsonable_encoder(result.get("results") or []),
+                "row_count": len(result.get("results") or []),
+                "has_more": bool(result.get("has_more", False)),
+                "retrieved_documents": [],
+                "llm_calls": 0,
+            }
 
-    fallback = (
-        "I can help with Retail Mind features such as creating bills, adding products, "
-        "password recovery, customers, attendance, inventory, and online orders. "
-        "For live shop figures, ask a specific question such as “Show my sales today” "
-        "or “Which products are low in stock?”"
-    )
-    localized = _translate_answer_to_language(fallback, language_code)
-    return {"answer": localized, "message": localized, "source": "retail_mind_help", "language_code": language_code}
+        # An intent can be recognized while the wording is too ambiguous for
+        # the existing deterministic handler. Never fall through to text-to-SQL.
+        answer = clarification_answer(language_code)
+        return {
+            "answer": answer,
+            "message": answer,
+            "source": "clarification",
+            "language_code": language_code,
+            "results": [],
+            "retrieved_documents": [],
+            "llm_calls": 0,
+        }
+
+    # Application-help RAG uses curated local documents and lexical ranking.
+    # It does not load FAISS, call an embedding provider, or invoke Groq.
+    article = retrieve_support_article(question, language_code)
+    if article is not None:
+        answer = str(article["answer"])
+        return {
+            "answer": answer,
+            "message": answer,
+            "source": "retail_mind_help",
+            "language_code": language_code,
+            "results": [],
+            "retrieved_documents": [{
+                "id": article["id"],
+                "title": article["title"],
+                "score": article["score"],
+                "retrieval": article["retrieval"],
+            }],
+            "llm_calls": 0,
+        }
+
+    answer = clarification_answer(language_code)
+    return {
+        "answer": answer,
+        "message": answer,
+        "source": "clarification",
+        "language_code": language_code,
+        "results": [],
+        "retrieved_documents": [],
+        "llm_calls": 0,
+    }
 
 
 @app.get("/askquery/history")
