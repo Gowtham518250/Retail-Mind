@@ -339,7 +339,8 @@ class Product(Base):
     # Decimal stock supports loose goods sold by weight or volume (e.g. 0.500 kg).
     current_stock = Column(Numeric(12, 3), default=0)
     unit = Column(String(20), nullable=False, default="pcs", server_default="pcs")
-    min_stock = Column(Integer, default=10)  # Integer reorder threshold; interpreted in the product's unit
+    # Reorder threshold follows stock precision for kg/litre/loose goods.
+    min_stock = Column(Numeric(12, 3), default=10)
     max_stock = Column(Integer, default=100)
     reorder_level = Column(Integer, default=20)
     unit_price = Column(Numeric(10, 2), nullable=False)
@@ -361,6 +362,35 @@ class Product(Base):
     stock_movements = relationship("StockMovement", back_populates="product")
     batches = relationship("ProductBatch", back_populates="product")
     line_items = relationship("InvoiceLineItem", back_populates="product")
+
+
+class ProductCreateRequest(Base):
+    """Idempotency ledger for product-create operations synced by offline clients."""
+    __tablename__ = "product_create_requests"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("user_details.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    operation_id = Column(String(128), nullable=False)
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "operation_id",
+            name="uq_product_create_user_operation",
+        ),
+    )
 
 
 class StockMovement(Base):
