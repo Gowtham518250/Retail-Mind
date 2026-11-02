@@ -203,6 +203,8 @@ _STOP_WORDS = {
 # Deterministic vocabulary normalization for common Telugu and Roman-Telugu
 # retail questions. This is deliberately conservative; unknown wording is not guessed.
 _TRANSLATIONS = (
+    ("బిల్ ఎలా తయారు చేయాలి", "create bill"), ("బిల్ ఎలా చేయాలి", "create bill"),
+    ("అమ్మిన ఉత్పత్తులు", "products sold"), ("పెండింగ్ ఆర్డర్లు", "pending orders"),
     ("బిల్", "bill"), ("బిల్లులు", "bills"), ("తయారు చేయాలి", "create"),
     ("వాయిస్ బిల్లింగ్", "voice billing"), ("వాయిస్", "voice"),
     ("ఉత్పత్తులు", "products"), ("ఉత్పత్తి", "product"),
