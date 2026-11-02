@@ -199,6 +199,8 @@ jobs:
           pytest -q tests/test_realtime.py
           pytest -q tests/test_durable_sync.py
           pytest -q tests/test_ai_query_history_contract.py
+          pytest -q tests/test_fractional_stock_units_contract.py
+          pytest -q tests/test_product_duplicate_guard.py
           # Run this PR's new regressions before the known baseline support-chat failures.
           pytest -q tests/test_voice_query_contract.py
           pytest -q tests/test_ai_query_date_scope.py
