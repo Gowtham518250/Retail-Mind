@@ -19,6 +19,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from query_safety import validate_read_only_tenant_sql
+from voice_asr_guard import NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE, assess_transcription as _assess_transcription
 from query_answering import format_query_answer
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
@@ -779,6 +780,66 @@ def _can_use_translated_fast_business_query(
     return classifier_agrees or float(translation_confidence or 0.0) >= 0.80
 
 
+_MONTH_LOOKUP = {
+    "january": 1, "jan": 1, "february": 2, "feb": 2, "march": 3, "mar": 3, "april": 4, "apr": 4,
+    "may": 5, "june": 6, "jun": 6, "july": 7, "jul": 7, "august": 8, "aug": 8,
+    "september": 9, "sept": 9, "sep": 9, "october": 10, "oct": 10, "november": 11, "nov": 11,
+    "december": 12, "dec": 12,
+}
+_MONTH_WORDS = "|".join(sorted(_MONTH_LOOKUP, key=len, reverse=True))
+_NAMED_DAY_FIRST = re.compile(
+    rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({_MONTH_WORDS})\b\.?(?:,?\s+(20\d{{2}}))?(?!\d)"
+)
+_NAMED_MONTH_FIRST = re.compile(
+    rf"\b({_MONTH_WORDS})\b\.?\s+(\d{{1,2}})(?!\d)(?:st|nd|rd|th)?(?:,?\s+(20\d{{2}}))?(?!\d)"
+)
+_WHOLE_MONTH = re.compile(rf"\b(?:in|during|for)\s+({_MONTH_WORDS})\b\.?(?:\s+(20\d{{2}}))?(?!\s*\d)")
+
+
+def _named_dates(q: str, today: date) -> tuple[list[date], bool]:
+    """Find 'D Month [YYYY]' / 'Month D [YYYY]' dates; returns (dates in order, saw_invalid).
+
+    Without a year the most recent occurrence on or before today is used, because
+    a shop owner asking about "15 December" in November means last December.
+    """
+    found: list[tuple[int, date | None]] = []
+    taken: list[tuple[int, int]] = []
+    for pattern, day_group, month_group in ((_NAMED_DAY_FIRST, 1, 2), (_NAMED_MONTH_FIRST, 2, 1)):
+        for m in pattern.finditer(q):
+            if any(m.start() < b and a < m.end() for a, b in taken):
+                continue
+            taken.append((m.start(), m.end()))
+            month, day = _MONTH_LOOKUP[m.group(month_group)], int(m.group(day_group))
+            year_text = m.group(3)
+            try:
+                if year_text:
+                    value = date(int(year_text), month, day)
+                    if value > today:
+                        value = None
+                else:
+                    # Find the most recent valid occurrence, including leap days.
+                    value = None
+                    for candidate_year in range(today.year, today.year - 9, -1):
+                        try:
+                            candidate = date(candidate_year, month, day)
+                        except ValueError:
+                            continue
+                        if candidate <= today:
+                            value = candidate
+                            break
+            except ValueError:
+                value = None
+            found.append((m.start(), value))
+    found.sort(key=lambda item: item[0])
+    return [v for _, v in found if v is not None], any(v is None for _, v in found)
+
+
+def _scope_range(start: date, end: date, label: str) -> dict:
+    if start > end:
+        start, end = end, start
+    return {"kind": "range", "start_date": start, "end_date": end, "label": label}
+
+
 def _resolve_explicit_date_scope(query: str) -> dict:
     """Resolve exact and relative date ranges using the Asia/Kolkata business date.
 
@@ -813,6 +874,9 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             "end_date": today,
             "label": "last 1 month",
         }
+
+    if re.search(r"\bpast\s+week\b", q):
+        return {"kind": "range", "start_date": today - timedelta(days=6), "end_date": today, "label": "last 7 days"}
 
     # Relative windows with an explicit count are resolved deterministically.
     # Windows include today: "last 14 days" means today plus the previous 13 dates.
@@ -867,6 +931,19 @@ def _resolve_explicit_date_scope(query: str) -> dict:
         and len(re.findall(r"\b(?:20\d{2}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]20\d{2})\b", q)) == 1
     )
     if date_boundary_with_one_date:
+        open_ended = re.search(r"\b(since|from)\b", q) and not re.search(r"\b(before|after|until|till)\b", q)
+        iso_one = re.search(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b", q)
+        dmy_one = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b", q)
+        if open_ended:
+            try:
+                since = (
+                    date(int(iso_one.group(1)), int(iso_one.group(2)), int(iso_one.group(3)))
+                    if iso_one else date(int(dmy_one.group(3)), int(dmy_one.group(2)), int(dmy_one.group(1)))
+                )
+                if since <= today:
+                    return _scope_range(since, today, f"since {since.isoformat()}")
+            except (ValueError, AttributeError):
+                pass
         return {
             "kind": "unsupported",
             "start_date": None,
@@ -881,6 +958,8 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             start, end = date(*map(int, range_dates[0])), date(*map(int, range_dates[1]))
             if start > end:
                 start, end = end, start
+            if end > today:
+                return {"kind": "unsupported", "start_date": None, "end_date": None, "label": "future date range"}
             return {
                 "kind": "range",
                 "start_date": start,
@@ -889,6 +968,18 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             }
         except ValueError:
             pass
+
+    # "1 October to 15 October", "between 1st oct and 15th oct": two named dates.
+    named_dates, named_invalid = _named_dates(q, today)
+    if named_invalid:
+        return {"kind": "unsupported", "start_date": None, "end_date": None, "label": "invalid calendar date"}
+    if len(named_dates) >= 2 and re.search(r"\b(from|between|to|through|till|until|and)\b", q):
+        return _scope_range(named_dates[0], named_dates[1], f"{min(named_dates[:2]).isoformat()} to {max(named_dates[:2]).isoformat()}")
+    if len(named_dates) >= 2:
+        return {"kind": "unsupported", "start_date": None, "end_date": None, "label": "multiple dates need a range"}
+    if len(named_dates) == 1 and re.search(r"\b(since|from)\b", q) and not re.search(r"\b(before|after|until|till|to)\b", q):
+        return _scope_range(named_dates[0], today, f"since {named_dates[0].isoformat()}") if named_dates[0] <= today else {
+            "kind": "unsupported", "start_date": None, "end_date": None, "label": "unsupported date boundary"}
 
     # Calendar periods are distinct from rolling windows.
     if re.search(r"\b(last week|previous week)\b", q):
@@ -928,6 +1019,18 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             "label": "this year",
         }
 
+    days_ago = re.search(r"\b(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)\s+days?\s+ago\b", q)
+    if days_ago:
+        raw = days_ago.group(1)
+        count = int(raw) if raw.isdigit() else {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}[raw]
+        if 0 < count <= 3650:
+            target = today - timedelta(days=count)
+            return {"kind": "exact", "start_date": target, "end_date": target, "label": f"{count} days ago"}
+
+    if re.search(r"\bday\s+before\s+yesterday(?:'s)?\b", q):
+        two_days_ago = today - timedelta(days=2)
+        return {"kind": "exact", "start_date": two_days_ago, "end_date": two_days_ago, "label": "day before yesterday"}
+
     if re.search(r"\b(today|today's|todays)\b", q):
         return {"kind": "exact", "start_date": today, "end_date": today, "label": "today"}
 
@@ -945,6 +1048,8 @@ def _resolve_explicit_date_scope(query: str) -> dict:
     try:
         if iso:
             exact_date = date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+            if exact_date > today:
+                return {"kind": "unsupported", "start_date": None, "end_date": None, "label": "future date"}
             return {
                 "kind": "exact",
                 "start_date": exact_date,
@@ -953,6 +1058,8 @@ def _resolve_explicit_date_scope(query: str) -> dict:
             }
         if dmy:
             exact_date = date(int(dmy.group(3)), int(dmy.group(2)), int(dmy.group(1)))
+            if exact_date > today:
+                return {"kind": "unsupported", "start_date": None, "end_date": None, "label": "future date"}
             return {
                 "kind": "exact",
                 "start_date": exact_date,
@@ -962,27 +1069,32 @@ def _resolve_explicit_date_scope(query: str) -> dict:
     except ValueError:
         pass
 
-    month_numbers = {
-        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
-        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
-    }
-    month_pattern = "|".join(month_numbers)
-    named = re.search(rf"\b({month_pattern})\s+(\d{{1,2}})(?:,?\s+(20\d{{2}}))?\b", q)
-    if named:
-        try:
-            exact_date = date(
-                int(named.group(3) or today.year),
-                month_numbers[named.group(1)],
-                int(named.group(2)),
-            )
-            return {
-                "kind": "exact",
-                "start_date": exact_date,
-                "end_date": exact_date,
-                "label": exact_date.isoformat(),
-            }
-        except ValueError:
-            pass
+    if len(named_dates) >= 1:
+        exact_date = named_dates[0]
+        return {
+            "kind": "exact",
+            "start_date": exact_date,
+            "end_date": exact_date,
+            "label": exact_date.isoformat(),
+        }
+
+    # "in October" / "for october 2025": the whole calendar month (clipped at today).
+    whole_month = _WHOLE_MONTH.search(q)
+    if whole_month:
+        month = _MONTH_LOOKUP[whole_month.group(1)]
+        year = int(whole_month.group(2)) if whole_month.group(2) else (today.year if month <= today.month else today.year - 1)
+        first_day = date(year, month, 1)
+        last_day = date(year, month, calendar.monthrange(year, month)[1])
+        if first_day <= today:
+            return _scope_range(first_day, min(last_day, today), first_day.strftime("%B %Y"))
+        return {"kind": "unsupported", "start_date": None, "end_date": None, "label": "future month"}
+
+    whole_year = re.search(r"\b(?:in|during|for|of)\s+(20\d{2})(?![\d/-])", q)
+    if whole_year and not re.search(r"\d[/-]20\d{2}", q):
+        year = int(whole_year.group(1))
+        if year <= today.year:
+            return _scope_range(date(year, 1, 1), min(date(year, 12, 31), today), str(year))
+        return {"kind": "unsupported", "start_date": None, "end_date": None, "label": "future year"}
 
     return {"kind": "unspecified", "start_date": None, "end_date": None, "label": "not specified"}
 
@@ -1007,6 +1119,10 @@ def _has_unresolved_date_intent(query: str, resolved_scope: dict | None = None) 
         r"\b(?:in|during|for)\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+20\d{2})?\b",
         r"\b(?:from|between)\b.*\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b",
         r"\b(?:today|yesterday|tomorrow|last night|this morning|this evening)\b",
+        r"\b(?:on|last|this|coming|next)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        r"\bon\s+the\s+\d{1,2}(?:st|nd|rd|th)\b",
+        r"\b(?:last|past)\s+(?:\d+\s+)?(?:hours?|minutes?)\b",
+        r"\b(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hours?|weeks?|months?|years?)\s+ago\b",
     )
     return any(re.search(pattern, q) for pattern in patterns)
 
@@ -3152,7 +3268,9 @@ def _transcribe_audio_with_groq(
     kwargs = {
         "file": (filename, audio_bytes, content_type or "audio/wav"),
         "model": GROQ_STT_MODEL,
-        "response_format": "json",
+        # verbose_json carries per-segment no_speech_prob / avg_logprob, which the
+        # guard needs to reject silence and noise instead of trusting invented text.
+        "response_format": "verbose_json",
         "temperature": 0.0,
     }
     if language_code in GROQ_STT_LANGUAGE_CODES:
@@ -3168,13 +3286,26 @@ def _transcribe_audio_with_groq(
             detail="Groq could not transcribe this recording. Try a shorter, clearer recording.",
         ) from exc
 
-    transcript = str(getattr(transcription, "text", "") or "").strip()
-    if not transcript:
-        raise HTTPException(
-            status_code=422,
-            detail="No clear speech was detected. Please record your question again.",
-        )
-    return transcript
+    if isinstance(transcription, dict):
+        payload = transcription
+    elif hasattr(transcription, "model_dump"):
+        payload = transcription.model_dump()
+    else:
+        payload = {
+            "text": getattr(transcription, "text", ""),
+            "duration": getattr(transcription, "duration", None),
+            "segments": getattr(transcription, "segments", None) or [],
+        }
+    segments = [
+        seg if isinstance(seg, dict) else getattr(seg, "__dict__", {})
+        for seg in (payload.get("segments") or [])
+    ]
+    verdict = _assess_transcription({**payload, "segments": segments})
+    if not verdict.accepted:
+        # Log only the reason code: never the customer's speech.
+        print(f"AI-query ASR rejected: reason={verdict.reason} dropped={verdict.dropped_segments}")
+        raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
+    return verdict.text
 
 
 async def _read_voice_upload(audio: UploadFile) -> tuple[bytes, str, str]:
@@ -4130,7 +4261,7 @@ async def ask_query(
                 "retrieval": "faiss_chunk",
             })
     prompt = ChatPromptTemplate.from_template(
-    
+
     """You are a PostgreSQL Text-to-SQL generator for a retail management system.
 
 
@@ -4201,7 +4332,7 @@ async def ask_query(
     <postgresql query>
 
     Do not provide any explanation outside this format.
-    """ 
+    """
     )
     try:
         schema_context_limit = max(1000, min(int(os.getenv("ASKQUERY_SCHEMA_CONTEXT_CHARS", "18000")), 28000))
@@ -4686,4 +4817,4 @@ async def ask_query(
         "row_count": len(encoded_rows),
         "results": encoded_rows,
     }
-        
+

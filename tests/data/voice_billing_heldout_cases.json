@@ -1,0 +1,1082 @@
+{
+ "catalogs": {
+  "retail2": [
+   {
+    "id": 21,
+    "name": "Aashirvaad Atta 1kg",
+    "unit": "pcs",
+    "price": "55.00",
+    "stock": "50"
+   },
+   {
+    "id": 22,
+    "name": "Aashirvaad Atta 5kg",
+    "unit": "pcs",
+    "price": "260.00",
+    "stock": "50"
+   },
+   {
+    "id": 23,
+    "name": "Surf Excel 500g",
+    "unit": "pcs",
+    "price": "120.00",
+    "stock": "50"
+   },
+   {
+    "id": 24,
+    "name": "Vim Bar",
+    "unit": "pcs",
+    "price": "10.00",
+    "stock": "50"
+   },
+   {
+    "id": 25,
+    "name": "Maggi Noodles",
+    "unit": "pcs",
+    "price": "14.00",
+    "stock": "50"
+   },
+   {
+    "id": 26,
+    "name": "Amul Butter 100g",
+    "unit": "pcs",
+    "price": "56.00",
+    "stock": "50"
+   },
+   {
+    "id": 27,
+    "name": "Amul Butter 500g",
+    "unit": "pcs",
+    "price": "270.00",
+    "stock": "50"
+   },
+   {
+    "id": 28,
+    "name": "Fortune Oil",
+    "unit": "l",
+    "price": "150.00",
+    "stock": "50"
+   },
+   {
+    "id": 29,
+    "name": "Red Label Tea 250g",
+    "unit": "pcs",
+    "price": "130.00",
+    "stock": "50"
+   },
+   {
+    "id": 30,
+    "name": "Red Label Tea 500g",
+    "unit": "pcs",
+    "price": "250.00",
+    "stock": "50"
+   },
+   {
+    "id": 31,
+    "name": "Dettol Soap",
+    "unit": "pcs",
+    "price": "45.00",
+    "stock": "50"
+   },
+   {
+    "id": 32,
+    "name": "Basmati Rice",
+    "unit": "kg",
+    "price": "105.00",
+    "stock": "50"
+   },
+   {
+    "id": 33,
+    "name": "Jaggery",
+    "unit": "kg",
+    "price": "70.00",
+    "stock": "50"
+   },
+   {
+    "id": 34,
+    "name": "Curd",
+    "unit": "kg",
+    "price": "60.00",
+    "stock": "50"
+   },
+   {
+    "id": 35,
+    "name": "Tomato",
+    "unit": "kg",
+    "price": "30.00",
+    "stock": "50"
+   }
+  ]
+ },
+ "cases": [
+  {
+   "id": "heldout-001",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 maggi noodles",
+   "english": "2 maggi noodles",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Maggi Noodles",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 25,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-002",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "3 vim bar",
+   "english": "3 vim bar",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Vim Bar",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 24,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-003",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "1 surf excel",
+   "english": "1 surf excel",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Surf Excel",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 23,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-004",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 aashirvaad atta",
+   "english": "2 aashirvaad atta",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Aashirvaad Atta",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-005",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 aashirvaad atta 5kg",
+   "english": "2 aashirvaad atta 5kg",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Aashirvaad Atta 5kg",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 22,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-006",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "1 amul butter",
+   "english": "1 amul butter",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Amul Butter",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-007",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "4 amul butter 100g",
+   "english": "4 amul butter 100g",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Amul Butter 100g",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 26,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-008",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 red label tea",
+   "english": "2 red label tea",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Red Label Tea",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-009",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "3 red label tea 250 gram",
+   "english": "3 red label tea 250 gram",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Red Label Tea 250g",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 29,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-010",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 litres fortune oil",
+   "english": "2 litres fortune oil",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Fortune Oil",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "litres",
+     "expect": {
+      "product": 28,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-011",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "500 ml fortune oil",
+   "english": "500 ml fortune oil",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Fortune Oil",
+     "name_local": "",
+     "qty": "500",
+     "spoken_unit": "ml",
+     "expect": {
+      "product": 28,
+      "qty": "0.500",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-012",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "1 kg tomato and 2 kg jaggery",
+   "english": "1 kg tomato and 2 kg jaggery",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Tomato",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 35,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Jaggery",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 33,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-013",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "250 grams curd",
+   "english": "250 grams curd",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Curd",
+     "name_local": "",
+     "qty": "250",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 34,
+      "qty": "0.250",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-014",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 dettol soap and 3 vim bar",
+   "english": "2 dettol soap and 3 vim bar",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Dettol Soap",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 31,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Vim Bar",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 24,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-015",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 kg basmati rice",
+   "english": "2 kg basmati rice",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Basmati Rice",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 32,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-016",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "half kilo tomato",
+   "english": "half kilo tomato",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Tomato",
+     "name_local": "",
+     "qty": "0.5",
+     "spoken_unit": "kilo",
+     "expect": {
+      "product": 35,
+      "qty": "0.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-017",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "3 dettol soap, 2 maggi noodles, 1 surf excel, 2 kg tomato",
+   "english": "3 dettol soap, 2 maggi noodles, 1 surf excel, 2 kg tomato",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Dettol Soap",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 31,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Maggi Noodles",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 25,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Surf Excel",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "",
+     "expect": {
+      "product": 23,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Tomato",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 35,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-018",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 atta",
+   "english": "2 atta",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Atta",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-019",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "5 butter",
+   "english": "5 butter",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Butter",
+     "name_local": "",
+     "qty": "5",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-020",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 tea",
+   "english": "2 tea",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Tea",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": "AMBIGUOUS",
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-021",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "3 maggi noodles",
+   "english": "3 maggi noodles",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Maggi Noodles",
+     "name_local": "",
+     "qty": "8",
+     "spoken_unit": "",
+     "expect": {
+      "product": 25,
+      "qty": "8",
+      "grounded": false,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-022",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 kg dettol soap",
+   "english": "2 kg dettol soap",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Dettol Soap",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 31,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": true
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-023",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "1 dozen maggi noodles",
+   "english": "1 dozen maggi noodles",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Maggi Noodles",
+     "name_local": "",
+     "qty": "1",
+     "spoken_unit": "dozen",
+     "expect": {
+      "product": 25,
+      "qty": "12.000",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-024",
+   "category": "heldout",
+   "language": "te",
+   "spoken": "రెండు కిలోల టమాటా",
+   "english": "2 kg tomato",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Tomato",
+     "name_local": "టమాటా",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 35,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-025",
+   "category": "heldout",
+   "language": "te",
+   "spoken": "మూడు మ్యాగీ ప్యాకెట్లు",
+   "english": "3 packets maggi noodles",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Maggi Noodles",
+     "name_local": "మ్యాగీ",
+     "qty": "3",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 25,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-026",
+   "category": "heldout",
+   "language": "te-Latn",
+   "spoken": "oka kilo tomato",
+   "english": "1 kg tomato",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Tomato",
+     "name_local": "tomato",
+     "qty": "1",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 35,
+      "qty": "1",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-027",
+   "category": "heldout",
+   "language": "te-Latn",
+   "spoken": "rendu dettol soap",
+   "english": "2 dettol soap",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Dettol Soap",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 31,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-028",
+   "category": "heldout",
+   "language": "te-en",
+   "spoken": "2 kg jaggery kavali",
+   "english": "2 kg jaggery",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Jaggery",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 33,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-029",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 kg garlic",
+   "english": "2 kg garlic",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Garlic",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": null,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-030",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "3 colgate",
+   "english": "3 colgate",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Colgate",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": null,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-031",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 amul butter 500g and 3 amul butter 100g",
+   "english": "2 amul butter 500g and 3 amul butter 100g",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Amul Butter 500g",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 27,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    },
+    {
+     "name_en": "Amul Butter 100g",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "",
+     "expect": {
+      "product": 26,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-032",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "ten maggi noodles",
+   "english": "ten maggi noodles",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Maggi Noodles",
+     "name_local": "",
+     "qty": "10",
+     "spoken_unit": "",
+     "expect": {
+      "product": 25,
+      "qty": "10",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-033",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "twenty vim bar",
+   "english": "twenty vim bar",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Vim Bar",
+     "name_local": "",
+     "qty": "20",
+     "spoken_unit": "",
+     "expect": {
+      "product": 24,
+      "qty": "20",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-034",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "1.5 kg jaggery",
+   "english": "1.5 kg jaggery",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Jaggery",
+     "name_local": "",
+     "qty": "1.5",
+     "spoken_unit": "kg",
+     "expect": {
+      "product": 33,
+      "qty": "1.5",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-035",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "750 grams curd",
+   "english": "750 grams curd",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Curd",
+     "name_local": "",
+     "qty": "750",
+     "spoken_unit": "grams",
+     "expect": {
+      "product": 34,
+      "qty": "0.750",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-036",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "4 fortune oil",
+   "english": "4 fortune oil",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Fortune Oil",
+     "name_local": "",
+     "qty": "4",
+     "spoken_unit": "",
+     "expect": {
+      "product": 28,
+      "qty": "4",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-037",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "3 packets vim bar",
+   "english": "3 packets vim bar",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Vim Bar",
+     "name_local": "",
+     "qty": "3",
+     "spoken_unit": "packets",
+     "expect": {
+      "product": 24,
+      "qty": "3",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-038",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "2 tomato",
+   "english": "2 tomato",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Tomato",
+     "name_local": "",
+     "qty": "2",
+     "spoken_unit": "",
+     "expect": {
+      "product": 35,
+      "qty": "2",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  },
+  {
+   "id": "heldout-039",
+   "category": "heldout",
+   "language": "en",
+   "spoken": "6 curd",
+   "english": "6 curd",
+   "catalog": "retail2",
+   "items": [
+    {
+     "name_en": "Curd",
+     "name_local": "",
+     "qty": "6",
+     "spoken_unit": "",
+     "expect": {
+      "product": 34,
+      "qty": "6",
+      "grounded": true,
+      "unit_mismatch": false
+     }
+    }
+   ],
+   "replay_same_request": false
+  }
+ ]
+}
