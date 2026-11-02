@@ -113,7 +113,8 @@ def convert_quantity(
     * 500 g of a kg-product  -> 0.5
     * 1.5 l of a ml-product  -> 1500
     * 2 dozen of a pcs-product -> 24
-    * packets/boxes/bottles/pcs are treated as interchangeable counts
+    * package units (packet/box/bottle) only convert within their own dimension;
+      they are not assumed to equal loose pieces
     * kg spoken for a litre/pcs product -> ``incompatible`` (caller must confirm)
     """
     quantity = Decimal(quantity)
@@ -158,7 +159,7 @@ _EXTRA_NUMBER_WORDS: dict[str, int] = {
     "a": 1, "an": 1, "oka": 1, "ఒక": 1, "ఒకటి": 1, "single": 1,
     "couple": 2, "జంట": 2,
 }
-_DIGIT_RE = re.compile(r"\d+(?:,\d{2,3})*(?:\.\d+)?|\d+/\d+")
+_DIGIT_RE = re.compile(r"\d+/\d+|\d+(?:,\d{2,3})*(?:\.\d+)?")
 
 
 def _tokens(text: str) -> list[str]:
