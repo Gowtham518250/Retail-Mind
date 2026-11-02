@@ -96,3 +96,15 @@ def test_quantity_does_not_infer_dozen_from_an_unrelated_number():
     assert quantity_is_grounded(
         Decimal("24"), ["2 dozen eggs"], _VOICE_BILLING_NUMBER_WORDS, _VOICE_BILLING_SCALE_WORDS
     )
+
+
+def test_null_model_product_id_can_still_resolve_a_unique_catalog_item(monkeypatch):
+    catalog = [_p(42, "Sona Masoori Rice", unit="kg", price=50)]
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [_item("Sona Masoori Rice", 2, "kg", pid=None)],
+        transcript="2 kg sona masoori rice",
+        catalog_products=catalog,
+    )
+    assert result["items"][0]["product_id"] == 42
+    assert result["items"][0]["catalog_matched"] is True
