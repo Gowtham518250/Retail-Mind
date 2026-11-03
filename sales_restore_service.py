@@ -5,7 +5,7 @@ Restores: invoices, invoice items, stock impact, customer history, payment statu
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, desc, case
+from sqlalchemy import and_, func, desc, case, true
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -56,18 +56,43 @@ def get_cancelled_order_identifiers(
     order IDs and statuses, not customer names, addresses, items or payments.
     """
     owner_filter = OnlineOrder.shop_id == user_id
-    total_count = db.query(func.count(OnlineOrder.id)).filter(owner_filter).scalar() or 0
-    cancellation_rows = db.query(
-        OnlineOrder.id,
-        OnlineOrder.order_status,
-    ).filter(
-        owner_filter,
-        OnlineOrder.order_status.in_([
-            OnlineOrderStatus.CANCELLED,
-            OnlineOrderStatus.REJECTED,
-            OnlineOrderStatus.RETURNED,
-        ]),
-    ).all()
+    cancelled_statuses = (
+        OnlineOrderStatus.CANCELLED,
+        OnlineOrderStatus.REJECTED,
+        OnlineOrderStatus.RETURNED,
+    )
+
+    # Keep the lifetime count and cancellation references in one database
+    # round trip. The outer join preserves the total even when no cancelled
+    # orders exist for this shop.
+    total_orders = (
+        db.query(func.count(OnlineOrder.id).label("total_count"))
+        .filter(owner_filter)
+        .subquery()
+    )
+    cancelled_orders = (
+        db.query(
+            OnlineOrder.id.label("id"),
+            OnlineOrder.order_status.label("order_status"),
+        )
+        .filter(
+            owner_filter,
+            OnlineOrder.order_status.in_(cancelled_statuses),
+        )
+        .subquery()
+    )
+    combined_rows = (
+        db.query(
+            total_orders.c.total_count.label("total_count"),
+            cancelled_orders.c.id.label("id"),
+            cancelled_orders.c.order_status.label("order_status"),
+        )
+        .select_from(total_orders)
+        .outerjoin(cancelled_orders, true())
+        .all()
+    )
+    total_count = int(combined_rows[0].total_count or 0) if combined_rows else 0
+    cancellation_rows = [row for row in combined_rows if row.id is not None]
 
     # The dashboard's Total Online Orders metric is a lifetime count:
     # include pending, accepted, dispatched, delivered, cancelled, rejected
