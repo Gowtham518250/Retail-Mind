@@ -2075,6 +2075,172 @@ async def verified_payment_provider_webhook(
     }
 
 
+class PaymentDetectionEvidenceCreate(BaseModel):
+    """Untrusted owner-device observation. This endpoint never updates invoices."""
+    event_key: str = Field(..., min_length=8, max_length=128)
+    invoice_id: Optional[int] = Field(default=None, gt=0)
+    amount: Decimal = Field(..., gt=0, le=Decimal("100000000"))
+    direction: str = Field(default="unknown", max_length=16)
+    payer_name: Optional[str] = Field(default=None, max_length=120)
+    payer_phone: Optional[str] = Field(default=None, max_length=20)
+    payer_vpa: Optional[str] = Field(default=None, max_length=100)
+    bank_name: Optional[str] = Field(default=None, max_length=80)
+    account_suffix: Optional[str] = Field(default=None, max_length=4)
+    reference_id: Optional[str] = Field(default=None, max_length=100)
+    detected_source: str = Field(..., min_length=2, max_length=80)
+    payment_app: Optional[str] = Field(default=None, max_length=40)
+    confidence_score: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+    decision: str = Field(default="likely", max_length=16)
+    verification_status: str = Field(default="unverified", max_length=24)
+    source_event_hash: Optional[str] = Field(default=None, max_length=64)
+    detected_at: Optional[str] = None
+
+    @validator("direction")
+    def valid_direction(cls, value):
+        normalized = value.strip().lower()
+        if normalized not in {"credit", "debit", "unknown"}:
+            raise ValueError("direction must be credit, debit, or unknown")
+        return normalized
+
+    @validator("decision")
+    def valid_decision(cls, value):
+        normalized = value.strip().lower()
+        if normalized not in {"confirmed", "likely", "rejected"}:
+            raise ValueError("invalid detection decision")
+        return normalized
+
+    @validator("verification_status")
+    def force_untrusted_verification(cls, value):
+        # Client metadata is never sufficient to claim provider verification.
+        if value not in {"unverified", "merchant_confirmed", "provider_verified"}:
+            raise ValueError("invalid verification status")
+        return value
+
+
+@router.post("/payment-detections", status_code=201)
+def create_payment_detection_evidence(
+    data: PaymentDetectionEvidenceCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(worker_or_owner),
+):
+    """Store an app/SMS observation for the authenticated shop; no ledger mutation."""
+    from models import PaymentDetectionEvent
+
+    shop_id = resolve_shop_id(current_user)
+    event_key = data.event_key.strip()
+    existing = db.query(PaymentDetectionEvent).filter(
+        PaymentDetectionEvent.shop_id == shop_id,
+        PaymentDetectionEvent.event_key == event_key,
+    ).first()
+    if existing:
+        return {"success": True, "duplicate": True, "detection_id": existing.id, "event_key": existing.event_key}
+
+    if data.invoice_id is not None:
+        invoice = db.query(Invoice).filter(
+            Invoice.id == data.invoice_id,
+            Invoice.user_id == shop_id,
+        ).first()
+        if invoice is None:
+            raise HTTPException(status_code=404, detail="Invoice not found for this shop.")
+
+    detected_at = _parse_client_timestamp(data.detected_at) or datetime.utcnow()
+    payer_phone = re.sub(r"[^0-9+]", "", data.payer_phone or "") or None
+    account_suffix = re.sub(r"\D", "", data.account_suffix or "")[-4:] or None
+    direction = data.direction
+    decision = data.decision
+    verification_status = data.verification_status
+    # A device observation cannot self-assert settlement or provider verification.
+    if verification_status == "provider_verified":
+        verification_status = "unverified"
+    if direction != "credit":
+        decision = "likely" if direction == "unknown" else "rejected"
+        verification_status = "unverified"
+
+    row = PaymentDetectionEvent(
+        shop_id=shop_id,
+        event_key=event_key,
+        invoice_id=data.invoice_id,
+        amount=data.amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+        direction=direction,
+        payer_name=sanitize_input(data.payer_name, "payer_name") if data.payer_name else None,
+        payer_phone=payer_phone,
+        payer_vpa=(data.payer_vpa or "").strip()[:100] or None,
+        bank_name=sanitize_input(data.bank_name, "bank_name") if data.bank_name else None,
+        account_suffix=account_suffix,
+        reference_id=(data.reference_id or "").strip()[:100] or None,
+        detected_source=sanitize_input(data.detected_source, "detected_source"),
+        payment_app=(data.payment_app or "").strip()[:40] or None,
+        confidence_score=data.confidence_score,
+        decision=decision,
+        verification_status=verification_status,
+        source_event_hash=(data.source_event_hash or "").strip()[:64] or None,
+        detected_at=detected_at,
+    )
+    db.add(row)
+    try:
+        db.commit()
+        db.refresh(row)
+    except IntegrityError:
+        db.rollback()
+        row = db.query(PaymentDetectionEvent).filter(
+            PaymentDetectionEvent.shop_id == shop_id,
+            PaymentDetectionEvent.event_key == event_key,
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=409, detail="Detection evidence conflicted; retry safely.")
+        return {"success": True, "duplicate": True, "detection_id": row.id, "event_key": row.event_key}
+    return {
+        "success": True,
+        "duplicate": False,
+        "detection_id": row.id,
+        "event_key": row.event_key,
+        "decision": row.decision,
+        "verification_status": row.verification_status,
+        "message": "Detection evidence stored. Invoice balance was not changed.",
+    }
+
+
+@router.get("/payment-detections")
+def list_payment_detection_evidence(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    decision: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(owner_only),
+):
+    from models import PaymentDetectionEvent
+
+    shop_id = resolve_shop_id(current_user)
+    query = db.query(PaymentDetectionEvent).filter(PaymentDetectionEvent.shop_id == shop_id)
+    if decision:
+        query = query.filter(PaymentDetectionEvent.decision == decision.lower())
+    rows = query.order_by(desc(PaymentDetectionEvent.detected_at)).offset(skip).limit(limit).all()
+    return {
+        "items": [{
+            "id": row.id,
+            "event_key": row.event_key,
+            "invoice_id": row.invoice_id,
+            "amount": float(row.amount),
+            "direction": row.direction,
+            "payer_name": row.payer_name,
+            "payer_phone": row.payer_phone,
+            "payer_vpa": row.payer_vpa,
+            "bank_name": row.bank_name,
+            "account_suffix": row.account_suffix,
+            "reference_id": row.reference_id,
+            "detected_source": row.detected_source,
+            "payment_app": row.payment_app,
+            "confidence_score": float(row.confidence_score or 0),
+            "decision": row.decision,
+            "verification_status": row.verification_status,
+            "detected_at": row.detected_at.isoformat(),
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        } for row in rows],
+        "count": len(rows),
+    }
+
+
+
 @router.post("/payments")
 def create_invoice_payment(
     data: PaymentWriteRequest,
