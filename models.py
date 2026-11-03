@@ -1269,6 +1269,7 @@ class OnlineOrder(Base):
     """Customer orders placed via the separate customer login"""
     __tablename__ = "online_orders"
     __table_args__ = (
+        Index("ix_online_orders_shop_status", "shop_id", "order_status"),
         Index(
             "uq_online_order_shop_payment_key",
             "shop_id",
