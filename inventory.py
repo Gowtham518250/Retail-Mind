@@ -1767,43 +1767,71 @@ def get_low_stock_products(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all products below minimum stock"""
-    low_stock = db.query(Product).filter(
-        and_(
-            Product.user_id == user_id,
-            Product.current_stock <= Product.min_stock
-        )
+    """Get active products with positive stock at/below their reorder threshold.
+
+    Out-of-stock products are returned separately so the low-stock and
+    out-of-stock categories remain mutually exclusive in the Flutter UI.
+    Legacy NULL thresholds use the app's established default of 10.
+    """
+    active_products = db.query(Product).filter(
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
+    )
+    stock_value = func.coalesce(Product.current_stock, 0)
+    minimum_value = func.coalesce(Product.min_stock, 10)
+
+    low_stock = active_products.filter(
+        stock_value > 0,
+        stock_value <= minimum_value,
     ).all()
-    
+    out_of_stock = active_products.filter(
+        stock_value <= 0,
+    ).all()
+
     return {
         "low_stock_products": low_stock,
-        "count": len(low_stock)
+        "out_of_stock_products": out_of_stock,
+        "count": len(low_stock),
+        "out_of_stock_count": len(out_of_stock),
     }
+
 
 @router.get("/stock-alerts")
 def get_stock_alerts(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get detailed stock alerts and recommendations"""
-    products = db.query(Product).filter(Product.user_id == user_id).all()
-    
+    """Get alerts for active products, including fractional balances."""
+    products = db.query(Product).filter(
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
+    ).all()
+
     alerts = []
     for product in products:
-        if product.current_stock <= product.min_stock:
+        current_stock = Decimal(str(product.current_stock or 0))
+        min_stock = Decimal(str(
+            product.min_stock if product.min_stock is not None else 10
+        ))
+        if current_stock <= min_stock:
+            max_stock = Decimal(str(product.max_stock or 0))
+            reorder_level = Decimal(str(product.reorder_level or 0))
             alerts.append({
                 "product_id": product.id,
                 "product_name": product.product_name,
                 "sku": product.sku,
-                "current_stock": product.current_stock,
-                "min_stock": product.min_stock,
-                "reorder_quantity": max(product.max_stock - product.current_stock, product.reorder_level),
-                "status": "CRITICAL" if product.current_stock == 0 else "LOW"
+                "current_stock": float(current_stock),
+                "min_stock": float(min_stock),
+                "reorder_quantity": float(max(
+                    max_stock - current_stock,
+                    reorder_level,
+                )),
+                "status": "CRITICAL" if current_stock <= 0 else "LOW",
             })
-    
+
     return {
         "alerts": alerts,
-        "total_alerts": len(alerts)
+        "total_alerts": len(alerts),
     }
 
 # ==================== PRODUCT BATCHES ====================
@@ -1891,28 +1919,66 @@ def get_stock_value(
         "total_products": len(products)
     }
 
+def _inventory_status_summary(products):
+    """Classify active inventory with exclusive, fractional-safe stock bands.
+
+    Low stock means a positive balance at/below min_stock. A zero or negative
+    balance is counted as critical/out-of-stock instead of being double-counted.
+    Missing legacy min_stock values use the app default of 10.
+    """
+    active_products = [
+        product for product in products
+        if getattr(product, "is_active", True) is not False
+    ]
+
+    low_stock = 0
+    critical_stock = 0
+    optimal_stock = 0
+    overstocked = 0
+    total_items = Decimal("0")
+    total_stock_value = Decimal("0")
+
+    for product in active_products:
+        stock = Decimal(str(getattr(product, "current_stock", None) or 0))
+        minimum_raw = getattr(product, "min_stock", None)
+        minimum = Decimal(str(10 if minimum_raw is None else minimum_raw))
+        maximum = Decimal(str(getattr(product, "max_stock", None) or 0))
+        unit_price = Decimal(str(getattr(product, "unit_price", None) or 0))
+
+        if stock <= 0:
+            critical_stock += 1
+        elif stock <= minimum:
+            low_stock += 1
+        elif stock <= maximum:
+            optimal_stock += 1
+        else:
+            overstocked += 1
+
+        total_items += stock
+        total_stock_value += stock * unit_price
+
+    return {
+        "total_products": len(active_products),
+        "low_stock": low_stock,
+        "critical_stock": critical_stock,
+        "optimal_stock": optimal_stock,
+        "overstocked": overstocked,
+        "total_items_in_stock": float(total_items),
+        "total_stock_value": float(total_stock_value),
+    }
+
+
 @router.get("/analytics/inventory-status")
 def get_inventory_status(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get complete inventory status summary"""
-    products = db.query(Product).filter(Product.user_id == user_id).all()
-    
-    low_stock = sum(1 for p in products if p.current_stock <= p.min_stock)
-    critical_stock = sum(1 for p in products if p.current_stock == 0)
-    optimal_stock = sum(1 for p in products if p.min_stock < p.current_stock <= p.max_stock)
-    overstocked = sum(1 for p in products if p.current_stock > p.max_stock)
-    
-    return {
-        "total_products": len(products),
-        "low_stock": low_stock,
-        "critical_stock": critical_stock,
-        "optimal_stock": optimal_stock,
-        "overstocked": overstocked,
-        "total_items_in_stock": sum(p.current_stock for p in products),
-        "total_stock_value": sum(float(p.current_stock * p.unit_price) for p in products)
-    }
+    """Get complete status for active products using fractional-safe bands."""
+    products = db.query(Product).filter(
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
+    ).all()
+    return _inventory_status_summary(products)
 
 
 # ==================== GROQ-ASSISTED VOICE BILLING PARSER ====================
