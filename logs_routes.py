@@ -14,8 +14,9 @@ capture that log batch rather than dropping it.
 
 from datetime import datetime, timezone
 from typing import Any, Optional
+import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from db import get_db, Base
@@ -23,6 +24,7 @@ from sqlalchemy import Column, Integer, String, JSON, DateTime
 from sqlalchemy.orm import Session as OrmSession
 
 router = APIRouter(prefix="/api/logs", tags=["Client Logging"])
+logger = logging.getLogger(__name__)
 
 
 class ClientLogBatch(BaseModel):
@@ -49,13 +51,11 @@ class ClientLogEntry(Base):
 
 
 @router.post("/ingest")
-def ingest_logs(batch: ClientLogBatch):
+def ingest_logs(batch: ClientLogBatch, db: OrmSession = Depends(get_db)):
     """
-    Accept a batch of client-side logs. Always succeeds (short of a hard
-    DB outage) so the mobile client can safely drop the batch from its
-    local buffer once sent.
+    Accept a batch of client-side logs. Use the standard request-scoped DB
+    dependency so session cleanup and rollback are handled consistently.
     """
-    db: OrmSession = next(get_db())
     try:
         entry = ClientLogEntry(
             session_id=batch.session_id,
@@ -68,9 +68,8 @@ def ingest_logs(batch: ClientLogBatch):
         db.add(entry)
         db.commit()
         return {"success": True, "stored": len(batch.logs or [])}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        # Never fail the client's log flush over a storage hiccup.
-        return {"success": False, "error": str(e)}
-    finally:
-        db.close()
+        # Avoid exposing database details in a public telemetry response.
+        logger.exception("Client log batch could not be persisted")
+        return {"success": False, "error": "storage_unavailable"}
