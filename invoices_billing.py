@@ -2111,10 +2111,9 @@ class PaymentDetectionEvidenceCreate(BaseModel):
 
     @validator("verification_status")
     def force_untrusted_verification(cls, value):
-        # Client metadata is never sufficient to claim provider verification.
-        if value not in {"unverified", "merchant_confirmed", "provider_verified"}:
-            raise ValueError("invalid verification status")
-        return value
+        # A client-reported state is never authoritative evidence of settlement.
+        # Keep every device-originated observation unverified on the server.
+        return "unverified"
 
 
 @router.post("/payment-detections", status_code=201)
@@ -2148,10 +2147,9 @@ def create_payment_detection_evidence(
     account_suffix = re.sub(r"\D", "", data.account_suffix or "")[-4:] or None
     direction = data.direction
     decision = data.decision
-    verification_status = data.verification_status
-    # A device observation cannot self-assert settlement or provider verification.
-    if verification_status == "provider_verified":
-        verification_status = "unverified"
+    # Device-originated observations are evidence only. Neither an app label
+    # nor a client-supplied merchant/provider flag can mark funds as settled.
+    verification_status = "unverified"
     if direction != "credit":
         decision = "likely" if direction == "unknown" else "rejected"
         verification_status = "unverified"
