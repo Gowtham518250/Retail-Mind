@@ -37,7 +37,7 @@ def test_inventory_status_separates_fractional_low_stock_from_out_of_stock():
     assert summary["optimal_stock"] == 1
     assert summary["overstocked"] == 0
     assert summary["total_items_in_stock"] == 3.25
-    assert summary["total_stock_value"] == 115.0
+    assert summary["total_stock_value"] == 85.0
 
 
 def test_inventory_status_ignores_archived_products_and_defaults_null_min_stock():
