@@ -76,6 +76,7 @@ def test_product_response_includes_fractional_stock_and_unit():
 
     assert response.current_stock == 2.5
     assert response.unit == "kg"
+    assert response.category is None
 
 
 
