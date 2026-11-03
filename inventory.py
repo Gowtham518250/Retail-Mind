@@ -1149,7 +1149,7 @@ class ProductResponse(BaseModel):
     max_stock: int
     unit_price: float
     purchase_price: float = 0
-    category: Optional[str]
+    category: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=_MAX_PRODUCT_IMAGE_VALUE_LENGTH)
 
     @field_validator("image_url")
