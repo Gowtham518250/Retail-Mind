@@ -4,6 +4,7 @@ os.environ.setdefault("SECRET_KEY", "ci-sales-restore-test-secret-key-1234567890
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.schema import CreateTable
 
 from models import OnlineOrder, OnlineOrderStatus
 from sales_restore_service import get_cancelled_order_identifiers
@@ -11,7 +12,17 @@ from sales_restore_service import get_cancelled_order_identifiers
 
 def _session():
     engine = create_engine("sqlite:///:memory:")
-    OnlineOrder.__table__.create(bind=engine)
+    # This focused unit test creates only online_orders; omit foreign-key
+    # DDL because its referenced production tables are intentionally absent.
+    with engine.begin() as connection:
+        connection.execute(
+            CreateTable(
+                OnlineOrder.__table__,
+                include_foreign_key_constraints=[],
+            )
+        )
+        for index in OnlineOrder.__table__.indexes:
+            index.create(connection)
     return engine, sessionmaker(bind=engine)()
 
 
@@ -46,7 +57,7 @@ def test_cancelled_order_identifiers_use_one_select_and_preserve_counts():
         }
         assert result["cancelledCount"] == 2
         assert result["rejectedCount"] == 1
-        assert all(item["id"] != 5 for item in result["orders"])
+        assert {item["id"] for item in result["orders"]} == {2, 3, 4}
     finally:
         db.close()
         engine.dispose()
