@@ -591,6 +591,38 @@ class Payment(Base):
     invoice = relationship("Invoice", back_populates="payments")
 
 
+class PaymentDetectionEvent(Base):
+    """Owner-device notification/SMS observation; never a settled payment row."""
+    __tablename__ = "payment_detection_events"
+    __table_args__ = (
+        UniqueConstraint("shop_id", "event_key", name="uq_payment_detection_shop_event"),
+        Index("ix_payment_detection_shop_detected", "shop_id", "detected_at"),
+        Index("ix_payment_detection_shop_reference", "shop_id", "reference_id"),
+        Index("ix_payment_detection_shop_decision", "shop_id", "decision"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    event_key = Column(String(128), nullable=False)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True)
+    amount = Column(Numeric(10, 2), nullable=False)
+    direction = Column(String(16), nullable=False, default="unknown")
+    payer_name = Column(String(120), nullable=True)
+    payer_phone = Column(String(20), nullable=True)
+    payer_vpa = Column(String(100), nullable=True)
+    bank_name = Column(String(80), nullable=True)
+    account_suffix = Column(String(4), nullable=True)
+    reference_id = Column(String(100), nullable=True)
+    detected_source = Column(String(80), nullable=False)
+    payment_app = Column(String(40), nullable=True)
+    confidence_score = Column(Numeric(5, 4), nullable=False, default=0)
+    decision = Column(String(16), nullable=False, default="likely")
+    verification_status = Column(String(24), nullable=False, default="unverified")
+    source_event_hash = Column(String(64), nullable=True)
+    detected_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
 class VerifiedPaymentIntent(Base):
     """Server-created payment intent; only a signed provider callback can settle it."""
     __tablename__ = "verified_payment_intents"
