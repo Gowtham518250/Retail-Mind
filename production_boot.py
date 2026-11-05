@@ -163,7 +163,8 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             current = current.astimezone(IST).replace(tzinfo=None)
 
         shift_rows = db.execute(text("""
-            SELECT id, employee_id, worker_id, attendance_date, shift, check_in_time
+            SELECT id, employee_id, worker_id, attendance_date, shift,
+                   check_in_time, check_out_time, status, working_hours, checkout_reason
             FROM attendance_shifts
             WHERE check_in_time IS NOT NULL
               AND check_out_time IS NULL
@@ -208,6 +209,22 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             })
             if getattr(result, "rowcount", 1) != 0:
                 shift_updates += 1
+                day_records = []
+                for candidate in shift_rows:
+                    same_day_identity = (
+                        candidate["employee_id"] == row["employee_id"]
+                        and candidate.get("worker_id") == row.get("worker_id")
+                        and candidate["attendance_date"] == row["attendance_date"]
+                    )
+                    if not same_day_identity:
+                        continue
+                    candidate_data = dict(candidate)
+                    candidate_data["check_out_time"] = (
+                        shift_end if candidate["id"] == row["id"]
+                        else candidate_data.get("check_out_time")
+                    )
+                    day_records.append(_serialize_shift_row(candidate_data))
+                daily_summary = _attendance_summary_for_records(day_records)
                 durable_events.append(append_sync_event(db, {
                     "event_id": str(uuid.uuid4()),
                     "type": "attendance.changed",
@@ -218,8 +235,9 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
                     "attendance_date": str(row["attendance_date"]),
                     "check_in_time": check_in.isoformat() if hasattr(check_in, "isoformat") else str(check_in),
                     "check_out_time": shift_end.isoformat(),
-                    "status": attendance_status,
-                    "attendance_status": attendance_status,
+                    "status": daily_summary["attendance_status"],
+                    "attendance_status": daily_summary["attendance_status"],
+                    **daily_summary,
                     "change": "auto_checkout",
                     "checkout_reason": "SHIFT_EXPIRED",
                 }))
