@@ -1046,8 +1046,8 @@ def _patch_routes():
         daily_summary = _attendance_summary_for_records(
             [_serialize_shift_row(item) for item in day_rows]
         )
-        sync_event["attendance_status"] = daily_summary["attendance_status"]
-        sync_event["attended_sessions"] = daily_summary["attended_sessions"]
+        sync_event["status"] = daily_summary["attendance_status"]
+        sync_event.update(daily_summary)
         db.commit()
         publish_realtime_event(sync_event)
         return {
@@ -1057,7 +1057,7 @@ def _patch_routes():
             "worker_id": worker_id,
             "shift": shift,
             "check_in_time": now.isoformat(),
-            "status": "PRESENT",
+            "status": daily_summary["attendance_status"],
             "checkout_reason": None,
         }
 
@@ -1133,8 +1133,8 @@ def _patch_routes():
         daily_summary = _attendance_summary_for_records(
             [_serialize_shift_row(item) for item in day_rows]
         )
-        sync_event["attendance_status"] = daily_summary["attendance_status"]
-        sync_event["attended_sessions"] = daily_summary["attended_sessions"]
+        sync_event["status"] = daily_summary["attendance_status"]
+        sync_event.update(daily_summary)
         db.commit()
         publish_realtime_event(sync_event)
         return {
