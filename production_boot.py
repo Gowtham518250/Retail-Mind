@@ -909,6 +909,9 @@ def _decorate_attendance_records(records):
     summaries = []
     for identity, group in grouped.items():
         summary = _attendance_summary_for_records(group)
+        if any(str(record.get("status") or "").upper() == "LEAVE" for record in group):
+            summary["attendance_status"] = "LEAVE"
+            summary["attendance_complete"] = False
         for record in group:
             record.update(summary)
         summaries.append({
