@@ -36,10 +36,10 @@ from models import Worker, User
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
+# Canonical two-shift policy (Asia/Kolkata).
 SHIFT_WINDOWS = {
-    "MORNING": (time(6, 0), time(12, 0)),
-    "AFTERNOON": (time(12, 0), time(17, 0)),
-    "EVENING": (time(17, 0), time(23, 0)),
+    "MORNING": (time(9, 0), time(14, 0)),
+    "AFTERNOON": (time(14, 0), time(23, 0)),
 }
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -65,7 +65,7 @@ def _attendance_ist_iso(value):
 
 
 def _legacy_checkout_details(attendance_date, check_in_time, notes):
-    """Build checkout data using the active session's original check-in time."""
+    """Build a safe automatic checkout for the matching two-shift window."""
     raw_notes = notes or ""
     try:
         meta = json.loads(raw_notes) if raw_notes else {}
@@ -77,9 +77,16 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     sessions = meta.get(LEGACY_SESSION_META_KEY)
     if not isinstance(sessions, dict):
         sessions = {}
+    # Migrate the old second-slot key without losing timestamps.
+    if "afternoon" not in sessions and isinstance(sessions.get("evening"), dict):
+        sessions["afternoon"] = dict(sessions["evening"])
+    sessions.pop("evening", None)
+
     active_session = sessions.get("active_session")
-    if active_session not in {"morning", "evening"}:
-        active_session = "morning" if check_in_time.time() < time(14, 0) else "evening"
+    if active_session == "evening":
+        active_session = "afternoon"
+    if active_session not in {"morning", "afternoon"}:
+        active_session = "morning" if check_in_time.time() < time(14, 0) else "afternoon"
 
     session = sessions.get(active_session)
     if not isinstance(session, dict):
@@ -95,23 +102,22 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     except (TypeError, ValueError):
         session_check_in = scalar_check_in
 
-    # Ignore metadata from a prior session if it does not describe the current
-    # scalar check-in. This prevents a late check-in from inheriting an old
-    # morning record and receiving a 14:00 checkout.
     if session_check_in.date() != attendance_date or abs((session_check_in - scalar_check_in).total_seconds()) > 60:
         session_check_in = scalar_check_in
-        active_session = "morning" if session_check_in.time() < time(14, 0) else "evening"
+        active_session = "morning" if session_check_in.time() < time(14, 0) else "afternoon"
         session = sessions.get(active_session)
         if not isinstance(session, dict):
             session = {}
 
     if active_session == "morning":
-        checkout_at = datetime.combine(attendance_date, time(14, 0))
-        label, window = "Morning", "Before 2:00 PM"
+        shift_end = datetime.combine(attendance_date, time(14, 0))
+        label, window = "Morning", "9:00 AM–2:00 PM"
     else:
-        checkout_at = datetime.combine(attendance_date + timedelta(days=1), time.min)
-        label, window = "Afternoon", "2:00 PM onward"
+        shift_end = datetime.combine(attendance_date, time(23, 0))
+        label, window = "Afternoon", "2:00 PM–11:00 PM"
 
+    # Historical rows outside the new windows must never receive checkout < check-in.
+    checkout_at = max(shift_end, session_check_in)
     hours = max(0.0, (checkout_at - session_check_in).total_seconds() / 3600.0)
     session.update({
         "label": label,
@@ -124,6 +130,23 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     sessions.pop("active_session", None)
     meta[LEGACY_SESSION_META_KEY] = sessions
     return active_session, checkout_at, hours, json.dumps(meta, separators=(",", ":"), default=str)
+
+
+def _legacy_attendance_status(notes_json):
+    try:
+        meta = json.loads(notes_json or "{}")
+    except (TypeError, ValueError):
+        meta = {}
+    sessions = meta.get(LEGACY_SESSION_META_KEY, {}) if isinstance(meta, dict) else {}
+    if not isinstance(sessions, dict):
+        sessions = {}
+    if "afternoon" not in sessions and isinstance(sessions.get("evening"), dict):
+        sessions = {**sessions, "afternoon": sessions.get("evening")}
+    attended = sum(
+        1 for key in ("morning", "afternoon")
+        if isinstance(sessions.get(key), dict) and sessions[key].get("check_in_time")
+    )
+    return "PRESENT" if attended == 2 else ("HALF_DAY" if attended == 1 else "ABSENT")
 
 
 def _auto_checkout_expired_shifts(now=None, log_summary=False):
@@ -140,10 +163,10 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             current = current.astimezone(IST).replace(tzinfo=None)
 
         shift_rows = db.execute(text("""
-            SELECT id, employee_id, worker_id, attendance_date, shift, check_in_time
+            SELECT id, employee_id, worker_id, attendance_date, shift,
+                   check_in_time, check_out_time, status, working_hours, checkout_reason
             FROM attendance_shifts
             WHERE check_in_time IS NOT NULL
-              AND check_out_time IS NULL
               AND attendance_date <= :today
             ORDER BY attendance_date, check_in_time
         """), {"today": current.date()}).mappings().all()
@@ -151,7 +174,15 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
         shift_updates = 0
         durable_events = []
         for row in shift_rows:
-            window = SHIFT_WINDOWS.get(str(row["shift"]).upper())
+            # Completed rows are retained here so a second-shift auto-checkout
+            # can calculate the correct whole-day status.
+            if row.get("check_out_time") is not None:
+                continue
+            shift_name = str(row["shift"]).upper()
+            # Legacy EVENING rows are the old name for the new Afternoon slot.
+            if shift_name == "EVENING":
+                shift_name = "AFTERNOON"
+            window = SHIFT_WINDOWS.get(shift_name)
             if not window:
                 continue
 
@@ -165,6 +196,7 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
                 if check_in.tzinfo is not None
                 else check_in
             )
+            shift_end = max(shift_end, normalized_check_in)
             hours = max(0.0, (shift_end - normalized_check_in).total_seconds() / 3600.0)
             result = db.execute(text("""
                 UPDATE attendance_shifts
@@ -180,6 +212,22 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             })
             if getattr(result, "rowcount", 1) != 0:
                 shift_updates += 1
+                day_records = []
+                for candidate in shift_rows:
+                    same_day_identity = (
+                        candidate["employee_id"] == row["employee_id"]
+                        and candidate.get("worker_id") == row.get("worker_id")
+                        and candidate["attendance_date"] == row["attendance_date"]
+                    )
+                    if not same_day_identity:
+                        continue
+                    candidate_data = dict(candidate)
+                    candidate_data["check_out_time"] = (
+                        shift_end if candidate["id"] == row["id"]
+                        else candidate_data.get("check_out_time")
+                    )
+                    day_records.append(_serialize_shift_row(candidate_data))
+                daily_summary = _attendance_summary_for_records(day_records)
                 durable_events.append(append_sync_event(db, {
                     "event_id": str(uuid.uuid4()),
                     "type": "attendance.changed",
@@ -190,7 +238,9 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
                     "attendance_date": str(row["attendance_date"]),
                     "check_in_time": check_in.isoformat() if hasattr(check_in, "isoformat") else str(check_in),
                     "check_out_time": shift_end.isoformat(),
-                    "status": "PRESENT",
+                    "status": daily_summary["attendance_status"],
+                    "attendance_status": daily_summary["attendance_status"],
+                    **daily_summary,
                     "change": "auto_checkout",
                     "checkout_reason": "SHIFT_EXPIRED",
                 }))
@@ -214,16 +264,19 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             if checkout_at > current:
                 continue
 
+            attendance_status = _legacy_attendance_status(notes_json)
             result = db.execute(text("""
                 UPDATE attendance
                 SET check_out_time = :check_out_time,
                     working_hours = :working_hours,
+                    status = :status,
                     notes = :notes
                 WHERE id = :id
                   AND check_out_time IS NULL
             """), {
                 "check_out_time": checkout_at,
                 "working_hours": hours,
+                "status": attendance_status,
                 "notes": notes_json,
                 "id": row["id"],
             })
@@ -700,7 +753,10 @@ def _same_check_in(first, second):
 
 def _serialize_shift_row(row):
     shift = str(row["shift"] or "").upper()
-    session_index = {"MORNING": 0, "AFTERNOON": 1, "EVENING": 2}.get(shift, 0)
+    # Legacy EVENING rows are the old name for the second slot.
+    if shift == "EVENING":
+        shift = "AFTERNOON"
+    session_index = 0 if shift == "MORNING" else 1
     session_key = "morning" if shift == "MORNING" else "afternoon"
     hours = float(row.get("working_hours") or 0.0)
     attendance_date = row["attendance_date"]
@@ -724,85 +780,75 @@ def _serialize_shift_row(row):
 
 
 def _combine_shift_and_legacy_records(shift_rows, legacy_records):
+    """Merge shift-table rows with legacy daily JSON without inventing sessions."""
     shift_records = [_serialize_shift_row(row) for row in shift_rows]
-    shifts_by_date = {}
-    reserved_indexes = {}
-    for record in shift_records:
-        day = str(record.get("attendance_date") or "").split("T")[0]
-        shifts_by_date.setdefault(day, []).append(record)
-        reserved_indexes.setdefault(day, set()).add(int(record.get("session_index", 0)))
-
     records = list(shift_records)
-    for legacy in legacy_records or []:
-        day = str(legacy.get("attendance_date") or "").split("T")[0]
-        day_shifts = shifts_by_date.get(day, [])
-        if not day_shifts:
-            records.append(legacy)
-            continue
-
-        raw_sessions = legacy.get("sessions")
-        if isinstance(raw_sessions, dict) and raw_sessions:
-            session_items = list(raw_sessions.items())
-        else:
-            session_items = [(None, legacy)]
-
-        for session_key, session_value in session_items:
-            if not isinstance(session_value, dict):
-                continue
-            check_in = session_value.get("check_in_time") or legacy.get("check_in_time")
-            # The same check-in can exist in both formats during an upgrade.
-            # Prefer the shift row so its automatic checkout remains authoritative.
-            if any(_same_check_in(check_in, row.get("check_in_time")) for row in day_shifts):
-                continue
-
-            reserved = reserved_indexes.setdefault(day, set())
-            if session_key is None:
-                parsed = _parse_attendance_datetime(check_in)
-                session_index = 0 if parsed is None or parsed.hour < 14 else 1
-            else:
-                session_index = 0 if str(session_key).lower() == "morning" else 1
-            while session_index in reserved:
-                session_index += 1
-            reserved.add(session_index)
-
-            record = {key: value for key, value in legacy.items() if key != "sessions"}
-            record.update(session_value)
-            record["id"] = f"legacy-{legacy.get('id', 'attendance')}-{session_key or session_index}"
-            record["attendance_date"] = day
-            record["session_index"] = session_index
-            record["session_key"] = (
-                "morning" if str(session_key).lower() == "morning"
-                else ("afternoon" if session_key is not None else record.get("session_key", "morning"))
-            )
-            record["check_in_time"] = check_in
-            record["working_hours"] = float(session_value.get("working_hours") or 0.0)
-            record["total_working_hours"] = record["working_hours"]
-            record["local_pending"] = False
-            records.append(record)
-
-    # The Flutter local-first service assigns session_index in chronological
-    # order, starting at zero for the first check-in that day. Do the same for
-    # shift rows instead of using the shift name as the index (the first check-in
-    # might be at 15:00, in which case it must still use index 0).
-    records_by_identity_date = {}
-    for record in records:
+    shift_by_identity = {}
+    reserved = {}
+    for record in shift_records:
         day = str(record.get("attendance_date") or "").split("T")[0]
         identity = (
             str(record.get("employee_id") or ""),
             str(record.get("worker_id") or ""),
             day,
         )
-        records_by_identity_date.setdefault(identity, []).append(record)
+        shift_by_identity.setdefault(identity, []).append(record)
+        reserved.setdefault(identity, set()).add(int(record.get("session_index", 0)))
 
-    for daily_records in records_by_identity_date.values():
-        daily_records.sort(
-            key=lambda item: (
-                _parse_attendance_datetime(item.get("check_in_time")) is None,
-                _parse_attendance_datetime(item.get("check_in_time")) or datetime.max,
-            )
+    for legacy in legacy_records or []:
+        day = str(legacy.get("attendance_date") or "").split("T")[0]
+        identity = (
+            str(legacy.get("employee_id") or ""),
+            str(legacy.get("worker_id") or ""),
+            day,
         )
-        for session_index, record in enumerate(daily_records):
+        raw_sessions = legacy.get("sessions")
+        if isinstance(raw_sessions, dict) and raw_sessions:
+            session_items = list(raw_sessions.items())
+        else:
+            session_items = [(legacy.get("session_key") or legacy.get("session"), legacy)]
+
+        for session_key, session_value in session_items:
+            if not isinstance(session_value, dict):
+                continue
+            check_in = session_value.get("check_in_time") or legacy.get("check_in_time")
+            parsed = _parse_attendance_datetime(check_in)
+            raw_key = str(session_key or "").strip().lower()
+            if raw_key == "morning":
+                canonical_key = "morning"
+            elif raw_key in {"afternoon", "evening"}:
+                canonical_key = "afternoon"
+            else:
+                if parsed is None:
+                    continue
+                canonical_key = "morning" if parsed.time() < time(14, 0) else "afternoon"
+            session_index = 0 if canonical_key == "morning" else 1
+
+            # Prefer attendance_shifts only when it represents this same slot.
+            if any(
+                int(item.get("session_index", -1)) == session_index
+                and _same_check_in(check_in, item.get("check_in_time"))
+                for item in shift_by_identity.get(identity, [])
+            ):
+                continue
+            used = reserved.setdefault(identity, set())
+            if session_index in used:
+                # More than one source row for a single shift is ambiguous.
+                # Keep the shift-table copy; never invent session index 2+.
+                continue
+            used.add(session_index)
+
+            record = {key: value for key, value in legacy.items() if key != "sessions"}
+            record.update(session_value)
+            record["id"] = f"legacy-{legacy.get('id', 'attendance')}-{canonical_key}"
+            record["attendance_date"] = day
             record["session_index"] = session_index
+            record["session_key"] = canonical_key
+            record["check_in_time"] = check_in
+            record["working_hours"] = float(session_value.get("working_hours") or 0.0)
+            record["total_working_hours"] = record["working_hours"]
+            record["local_pending"] = False
+            records.append(record)
 
     records.sort(
         key=lambda item: (
@@ -812,6 +858,69 @@ def _combine_shift_and_legacy_records(shift_rows, legacy_records):
         reverse=True,
     )
     return records
+
+
+def _attendance_summary_for_records(records):
+    """Calculate daily attendance status from stable Morning/ Afternoon slots."""
+    by_index = {}
+    for record in records:
+        if not record.get("check_in_time"):
+            continue
+        raw_index = record.get("session_index")
+        try:
+            index = int(raw_index)
+        except (TypeError, ValueError):
+            index = 0 if str(record.get("session_key") or "").lower() == "morning" else 1
+        if index in (0, 1):
+            by_index[index] = record
+
+    attended = len(by_index)
+    completed = 0
+    open_sessions = 0
+    for record in by_index.values():
+        check_in = _parse_attendance_datetime(record.get("check_in_time"))
+        check_out = _parse_attendance_datetime(record.get("check_out_time"))
+        if check_in is not None and check_out is not None and check_out >= check_in:
+            completed += 1
+        else:
+            open_sessions += 1
+
+    return {
+        "attendance_status": "PRESENT" if attended == 2 else ("HALF_DAY" if attended == 1 else "ABSENT"),
+        "attended_sessions": attended,
+        "completed_sessions": completed,
+        "open_sessions": open_sessions,
+        "required_sessions": 2,
+        "attendance_complete": attended == 2 and completed == 2,
+    }
+
+
+def _decorate_attendance_records(records):
+    """Attach daily completion fields to each normalized session record."""
+    grouped = {}
+    for record in records:
+        identity = (
+            str(record.get("employee_id") or ""),
+            str(record.get("worker_id") or ""),
+            str(record.get("attendance_date") or "").split("T")[0],
+        )
+        grouped.setdefault(identity, []).append(record)
+
+    summaries = []
+    for identity, group in grouped.items():
+        summary = _attendance_summary_for_records(group)
+        if any(str(record.get("status") or "").upper() == "LEAVE" for record in group):
+            summary["attendance_status"] = "LEAVE"
+            summary["attendance_complete"] = False
+        for record in group:
+            record.update(summary)
+        summaries.append({
+            "employee_id": int(identity[0]) if identity[0].isdigit() else identity[0],
+            "worker_id": int(identity[1]) if identity[1].isdigit() else (identity[1] or None),
+            "attendance_date": identity[2],
+            **summary,
+        })
+    return records, summaries
 
 
 def _patch_routes():
@@ -866,8 +975,8 @@ def _patch_routes():
         if not shift:
             raise HTTPException(
                 400,
-                "No attendance session is active. Morning: 6 AM-12 PM, "
-                "Afternoon: 12 PM-5 PM, Evening: 5 PM-11 PM.",
+                "No attendance session is active. Morning: 9 AM-2 PM, "
+                "Afternoon: 2 PM-11 PM.",
             )
 
         actual_employee_id, worker_id = _resolve_employee(employee_id, current_user_id, db)
@@ -924,15 +1033,34 @@ def _patch_routes():
             "status": "PRESENT",
             "change": "check_in",
         })
+        day_rows = db.execute(text("""
+            SELECT id, employee_id, worker_id, attendance_date, shift,
+                   check_in_time, check_out_time, status, working_hours, checkout_reason
+            FROM attendance_shifts
+            WHERE employee_id = :employee_id
+              AND worker_id IS NOT DISTINCT FROM :worker_id
+              AND attendance_date = :attendance_date
+            ORDER BY check_in_time
+        """), {
+            "employee_id": actual_employee_id,
+            "worker_id": worker_id,
+            "attendance_date": today,
+        }).mappings().all()
+        daily_summary = _attendance_summary_for_records(
+            [_serialize_shift_row(item) for item in day_rows]
+        )
+        sync_event["status"] = daily_summary["attendance_status"]
+        sync_event.update(daily_summary)
         db.commit()
         publish_realtime_event(sync_event)
         return {
             "message": f"{shift.title()} check-in successful",
+            **daily_summary,
             "employee_id": actual_employee_id,
             "worker_id": worker_id,
             "shift": shift,
             "check_in_time": now.isoformat(),
-            "status": "PRESENT",
+            "status": daily_summary["attendance_status"],
             "checkout_reason": None,
         }
 
@@ -947,6 +1075,7 @@ def _patch_routes():
               AND worker_id IS NOT DISTINCT FROM :worker_id
               AND attendance_date = :attendance_date
               AND check_in_time IS NOT NULL
+              AND check_out_time IS NULL
             ORDER BY check_in_time DESC
             LIMIT 1
         """), {
@@ -956,15 +1085,20 @@ def _patch_routes():
         }).mappings().first()
 
         if not row:
-            raise HTTPException(400, "No active shift check-in found for today")
-        if row["check_out_time"]:
-            raise HTTPException(
-                400,
-                f"{row['shift'].title()} attendance already checked out. Try another session.",
-            )
-
-        now = datetime.now(IST).replace(tzinfo=None)
-        hours = max(0.0, (now - row["check_in_time"]).total_seconds() / 3600)
+            raise HTTPException(400, "No open attendance session found for today")
+        shift_name = str(row["shift"]).upper()
+        if shift_name == "EVENING":
+            shift_name = "AFTERNOON"
+        window = SHIFT_WINDOWS.get(shift_name)
+        if window is None:
+            raise HTTPException(409, "The recorded attendance shift is not supported.")
+        now = min(
+            datetime.now(IST).replace(tzinfo=None),
+            datetime.combine(today, window[1]),
+        )
+        if now < row["check_in_time"]:
+            raise HTTPException(409, "Checkout time cannot be before check-in time.")
+        hours = (now - row["check_in_time"]).total_seconds() / 3600.0
         db.execute(text("""
             UPDATE attendance_shifts
             SET check_out_time = :check_out_time, working_hours = :working_hours,
@@ -986,10 +1120,29 @@ def _patch_routes():
             "change": "check_out",
             "checkout_reason": "MANUAL",
         })
+        day_rows = db.execute(text("""
+            SELECT id, employee_id, worker_id, attendance_date, shift,
+                   check_in_time, check_out_time, status, working_hours, checkout_reason
+            FROM attendance_shifts
+            WHERE employee_id = :employee_id
+              AND worker_id IS NOT DISTINCT FROM :worker_id
+              AND attendance_date = :attendance_date
+            ORDER BY check_in_time
+        """), {
+            "employee_id": actual_employee_id,
+            "worker_id": worker_id,
+            "attendance_date": row["attendance_date"],
+        }).mappings().all()
+        daily_summary = _attendance_summary_for_records(
+            [_serialize_shift_row(item) for item in day_rows]
+        )
+        sync_event["status"] = daily_summary["attendance_status"]
+        sync_event.update(daily_summary)
         db.commit()
         publish_realtime_event(sync_event)
         return {
-            "message": f"{row['shift'].title()} check-out successful",
+            "message": f"{shift_name.title()} check-out successful",
+            **daily_summary,
             "checkout_reason": "MANUAL",
             "employee_id": actual_employee_id,
             "worker_id": worker_id,
@@ -1044,13 +1197,19 @@ def _patch_routes():
                 current_user_id=current_user_id,
             )
             legacy_records = legacy_payload.get("records", []) if isinstance(legacy_payload, dict) else []
-            if not rows:
-                return legacy_payload
-
-            records = _combine_shift_and_legacy_records(rows, legacy_records)
+            records = (
+                _combine_shift_and_legacy_records(rows, legacy_records)
+                if rows else [dict(item) for item in legacy_records]
+            )
+            records, summaries = _decorate_attendance_records(records)
+            latest_summary = summaries[0] if summaries else _attendance_summary_for_records([])
             return {
+                **(legacy_payload if isinstance(legacy_payload, dict) else {}),
                 "employee_id": employee_id,
                 "records": records,
+                "attendance_status": latest_summary["attendance_status"],
+                "attendance_summary": latest_summary,
+                "attendance_summaries": summaries,
                 "total_records": len(records),
             }
         return get_shift_attendance
@@ -1102,17 +1261,42 @@ def _patch_routes():
                 db=db,
             )
             legacy_records = legacy_payload.get("records", []) if isinstance(legacy_payload, dict) else []
-            if not rows:
-                return legacy_payload
-
-            records = _combine_shift_and_legacy_records(rows, legacy_records)
+            records = (
+                _combine_shift_and_legacy_records(rows, legacy_records)
+                if rows else [dict(item) for item in legacy_records]
+            )
+            records, summaries = _decorate_attendance_records(records)
+            summary = summaries[0] if summaries else _attendance_summary_for_records([])
             statuses = [str(item.get("status", "PRESENT")).upper() for item in records]
+            summary_statuses = [item["attendance_status"] for item in summaries]
+            leave_identities = {
+                (
+                    str(item.get("employee_id") or ""),
+                    str(item.get("worker_id") or ""),
+                    str(item.get("attendance_date") or "").split("T")[0],
+                )
+                for item in records
+                if str(item.get("status") or "").upper() == "LEAVE"
+            }
+            leave_count = sum(
+                1 for item in summaries
+                if (
+                    str(item.get("employee_id") or ""),
+                    str(item.get("worker_id") or ""),
+                    str(item.get("attendance_date") or "").split("T")[0],
+                ) in leave_identities
+            )
             return {
+                **(legacy_payload if isinstance(legacy_payload, dict) else {}),
                 "date": date_str,
                 "total_records": len(records),
-                "present": sum(1 for status in statuses if status == "PRESENT"),
-                "absent": sum(1 for status in statuses if status == "ABSENT"),
-                "leave": sum(1 for status in statuses if status == "LEAVE"),
+                "present": sum(1 for status in summary_statuses if status == "PRESENT"),
+                "absent": sum(1 for status in summary_statuses if status == "ABSENT"),
+                "half_day": sum(1 for status in summary_statuses if status == "HALF_DAY"),
+                "leave": leave_count,
+                **summary,
+                "attendance_summary": summary,
+                "attendance_summaries": summaries,
                 "records": records,
             }
         return get_shift_attendance_by_date
