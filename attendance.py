@@ -15,27 +15,21 @@ import uuid
 import logging
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
-from models import Attendance, LeaveRequest, User, Worker
+from models import Attendance, AttendanceStatus, LeaveRequest, User, Worker
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 logger = logging.getLogger(__name__)
 
-# Two attendance sessions per business day (morning shift + evening shift).
-# Times are evaluated in India time because Retail Mind is intended for the
-# Indian retail market.
-#
-# 🔧 Attendance is not time-window restricted. The clock only classifies
-# records for reporting: before 2:00 PM = Morning, 2:00 PM onward = Afternoon.
-# This means early-opening shops and late operations can still record attendance
-# without losing data or relying on a client-side clock window.
+# The attendance day has exactly two shifts. These windows and indices are
+# shared by live check-in, offline snapshots, history and auto-checkout.
+# 0 = Morning (09:00–14:00 IST); 1 = Afternoon (14:00–23:00 IST).
+# Legacy "evening" session metadata is migrated/read as "afternoon".
 ATTENDANCE_TZ = ZoneInfo("Asia/Kolkata")
 ATTENDANCE_SESSIONS = (
-    ("morning", 0, 14, "Morning", "Before 2:00 PM"),
-    # Keep the internal key "evening" for backward compatibility with
-    # existing production rows, but present it to users as Afternoon.
-    ("evening", 14, 24, "Afternoon", "2:00 PM onward"),
+    ("morning", 9, 14, "Morning", "9:00 AM–2:00 PM"),
+    ("afternoon", 14, 23, "Afternoon", "2:00 PM–11:00 PM"),
 )
 SESSION_META_KEY = "_retail_mind_sessions"
 
@@ -61,19 +55,11 @@ def _serialize_attendance_time(value):
 
 def _session_for_time(value=None):
     value = value or _local_now()
-    hour = value.hour
-
-    # Attendance is never rejected because of the clock. The timestamp only
-    # decides which reporting session owns the check-in:
-    #   00:00–13:59 -> Morning
-    #   14:00–23:59 -> Afternoon
+    local_time = value.astimezone(ATTENDANCE_TZ).time() if value.tzinfo else value.time()
     for key, start_hour, end_hour, label, window in ATTENDANCE_SESSIONS:
-        if start_hour <= hour < end_hour:
+        if time(start_hour, 0) <= local_time < time(end_hour, 0):
             return key, label, window
-
-    # Defensive fallback; ATTENDANCE_SESSIONS covers every hour.
-    key, _start, _end, label, window = ATTENDANCE_SESSIONS[0]
-    return key, label, window
+    return None, None, None
 
 
 def _session_meta(attendance):
@@ -86,6 +72,11 @@ def _session_meta(attendance):
     try:
         data = json.loads(raw)
         if isinstance(data, dict) and isinstance(data.get(SESSION_META_KEY), dict):
+            sessions = data[SESSION_META_KEY]
+            if "afternoon" not in sessions and isinstance(sessions.get("evening"), dict):
+                sessions["afternoon"] = dict(sessions["evening"])
+            if sessions.get("active_session") == "evening":
+                sessions["active_session"] = "afternoon"
             return data
     except (TypeError, ValueError):
         pass
@@ -94,6 +85,59 @@ def _session_meta(attendance):
 
 def _save_session_meta(attendance, data):
     attendance.notes = json.dumps(data, separators=(",", ":"), default=str)
+
+
+def _attendance_summary_from_sessions(sessions_out):
+    """Classify the day from its two shift check-ins.
+
+    Both shifts attended => PRESENT; one => HALF_DAY; none => ABSENT.
+    Checkout completion is separately exposed so an open session is not
+    mistaken for a completed shift.
+    """
+    attended = 0
+    completed = 0
+    open_sessions = 0
+    for key in ("morning", "afternoon"):
+        session = sessions_out.get(key) or {}
+        check_in_raw = session.get("check_in_time")
+        if not check_in_raw:
+            continue
+        attended += 1
+        check_out_raw = session.get("check_out_time")
+        try:
+            check_in = datetime.fromisoformat(str(check_in_raw).replace("Z", "+00:00"))
+            check_out = (
+                datetime.fromisoformat(str(check_out_raw).replace("Z", "+00:00"))
+                if check_out_raw else None
+            )
+            if check_in.tzinfo is None:
+                check_in = check_in.replace(tzinfo=ATTENDANCE_TZ)
+            if check_out is not None and check_out.tzinfo is None:
+                check_out = check_out.replace(tzinfo=ATTENDANCE_TZ)
+        except (TypeError, ValueError):
+            check_out = None
+            check_in = None
+        if check_in is not None and check_out is not None and check_out >= check_in:
+            completed += 1
+        else:
+            open_sessions += 1
+
+    return {
+        "attendance_status": "PRESENT" if attended == 2 else ("HALF_DAY" if attended == 1 else "ABSENT"),
+        "attended_sessions": attended,
+        "completed_sessions": completed,
+        "open_sessions": open_sessions,
+        "required_sessions": 2,
+        "attendance_complete": attended == 2 and completed == 2,
+    }
+
+
+def _apply_attendance_status(attendance, sessions_out=None):
+    if sessions_out is None:
+        sessions_out, _ = _session_breakdown(attendance)
+    summary = _attendance_summary_from_sessions(sessions_out)
+    attendance.status = AttendanceStatus(summary["attendance_status"])
+    return summary
 
 
 def _session_breakdown(attendance):
@@ -114,14 +158,17 @@ def _session_breakdown(attendance):
     sessions_out = {}
     total_hours = 0.0
 
-    for key, _start, _end, label, window in ATTENDANCE_SESSIONS:
+    for session_index, (key, _start, _end, label, window) in enumerate(ATTENDANCE_SESSIONS):
         s = session_data.get(key)
+        if key == "afternoon" and not s:
+            s = session_data.get("evening")
         if not s:
             continue
         hours = float(s.get("working_hours") or 0.0)
         total_hours += hours
         sessions_out[key] = {
-            "session_key": "afternoon" if key == "evening" else key,
+            "session_key": key,
+            "session_index": session_index,
             "label": label,
             "window": window,
             "check_in_time": s.get("check_in_time"),
@@ -129,14 +176,33 @@ def _session_breakdown(attendance):
             "working_hours": hours,
         }
 
+    # Older rows pre-date per-session metadata. Preserve their scalar session.
+    if not sessions_out and attendance.check_in_time:
+        legacy_key, legacy_label, legacy_window = _session_for_time(attendance.check_in_time)
+        if legacy_key:
+            sessions_out[legacy_key] = {
+                "session_key": legacy_key,
+                "session_index": 0 if legacy_key == "morning" else 1,
+                "label": legacy_label,
+                "window": legacy_window,
+                "check_in_time": _serialize_attendance_time(attendance.check_in_time),
+                "check_out_time": _serialize_attendance_time(attendance.check_out_time),
+                "working_hours": float(attendance.working_hours or 0.0),
+            }
+
     active_session = session_data.get("active_session")
+    if active_session == "evening":
+        active_session = "afternoon"
     if active_session and attendance.check_in_time and not attendance.check_out_time:
         # An active session starts with working_hours=0 in the database, but
         # the UI/payroll must still show elapsed time after an app-data clear.
         # Update the existing session entry when it is already present in the
         # session metadata instead of only adding elapsed time for a missing key.
-        elapsed = (_local_now().replace(tzinfo=None) - attendance.check_in_time).total_seconds() / 3600
-        elapsed = max(0.0, elapsed)
+        match = next((item for item in ATTENDANCE_SESSIONS if item[0] == active_session), None)
+        live_end = _local_now().replace(tzinfo=None)
+        if match is not None:
+            live_end = min(live_end, datetime.combine(attendance.attendance_date, time(match[2], 0)))
+        elapsed = max(0.0, (live_end - attendance.check_in_time).total_seconds() / 3600)
         existing = sessions_out.get(active_session)
         if existing is not None:
             previous_hours = float(existing.get("working_hours") or 0.0)
@@ -166,18 +232,18 @@ def _session_breakdown(attendance):
 
 
 def _completed_session_message(meta, current_key):
-    completed = meta.get(SESSION_META_KEY, {})
-    session = completed.get(current_key)
+    sessions = meta.get(SESSION_META_KEY, {})
+    if current_key == "afternoon" and "afternoon" not in sessions:
+        sessions = {**sessions, "afternoon": sessions.get("evening")}
+    session = sessions.get(current_key)
     if session and session.get("check_in_time"):
         label = session.get("label", current_key.title())
-        _, next_label, next_window = next((x for x in ATTENDANCE_SESSIONS if x[0] != current_key and x[2] == session.get("next_window")), (None, None, None)) if False else (None, None, None)
-        remaining = []
-        for key, start_hour, end_hour, session_label, window in ATTENDANCE_SESSIONS:
-            if key != current_key and not completed.get(key, {}).get("check_in_time"):
-                remaining.append(f"{session_label} ({window})")
-        # FIX: leftover text from an earlier 3-session design. There are
-        # only two sessions (morning/evening) now — see ATTENDANCE_SESSIONS.
-        next_text = f" Try {remaining[0]}." if remaining else " Both sessions are already marked for today."
+        remaining = [
+            f"{session_label} ({window})"
+            for key, _start, _end, session_label, window in ATTENDANCE_SESSIONS
+            if key != current_key and not sessions.get(key, {}).get("check_in_time")
+        ]
+        next_text = f" Try {remaining[0]}." if remaining else " Both shifts are already marked for today."
         return f"{label} attendance already marked for today.{next_text}"
     return None
 
@@ -341,7 +407,7 @@ class AttendanceRecord(BaseModel):
 
 
 class AttendanceSessionSync(BaseModel):
-    """Idempotent snapshot sync for one locally recorded worker session."""
+    """Idempotent snapshot sync for one of the two fixed daily shifts."""
     worker_id: int
     attendance_date: str
     session_index: int = Field(ge=0, le=1)
@@ -405,7 +471,10 @@ def employee_check_in(
     now = _local_now()
     session_key, session_label, session_window = _session_for_time(now)
     if not session_key:
-        raise HTTPException(status_code=400, detail="Attendance is currently outside the configured sessions.")
+        raise HTTPException(
+            status_code=400,
+            detail="Attendance check-in is available only during Morning (9:00 AM–2:00 PM) or Afternoon (2:00 PM–11:00 PM).",
+        )
 
     actual_employee_id = employee.shopkeeper_id if is_worker else employee_id
     worker_id_to_store = employee.id if is_worker else None
@@ -470,6 +539,8 @@ def employee_check_in(
         meta = _session_meta(attendance)
         meta.setdefault(SESSION_META_KEY, {})["active_session"] = session_key
         _save_session_meta(attendance, meta)
+        sessions_out, _total_hours = _session_breakdown(attendance)
+        attendance_summary = _apply_attendance_status(attendance, sessions_out)
         db.flush()
         sync_event = append_sync_event(db, {
             "event_id": str(uuid.uuid4()),
@@ -500,7 +571,8 @@ def employee_check_in(
         "session_window": session_window,
         "check_in_time": attendance.check_in_time,
         "check_out_time": attendance.check_out_time,
-        "status": attendance.status,
+        "status": attendance.status.value if hasattr(attendance.status, "value") else str(attendance.status),
+        **attendance_summary,
         "can_check_out": True
     }
 
@@ -550,22 +622,32 @@ def employee_check_out(
             raise HTTPException(status_code=400, detail=f"{label} attendance is already checked out. Try the next session when its time starts.")
         raise HTTPException(status_code=400, detail="Attendance is already checked out. Try the next session when its time starts.")
 
-    now = _local_now().replace(tzinfo=None)
-    attendance.check_out_time = now
-
-    duration = attendance.check_out_time - attendance.check_in_time
-    session_hours = max(0.0, duration.total_seconds() / 3600)
-    attendance.working_hours = session_hours
-
     meta = _session_meta(attendance)
     sessions = meta.setdefault(SESSION_META_KEY, {})
     active_session = sessions.get("active_session")
+    if active_session == "evening":
+        active_session = "afternoon"
     if not active_session:
-        active_session, session_label, session_window = _session_for_time()
+        active_session, session_label, session_window = _session_for_time(attendance.check_in_time)
     else:
         match = next((x for x in ATTENDANCE_SESSIONS if x[0] == active_session), None)
         session_label = match[3] if match else active_session.title()
         session_window = match[4] if match else ""
+    if not active_session:
+        raise HTTPException(status_code=409, detail="The active attendance shift could not be identified.")
+    match = next((x for x in ATTENDANCE_SESSIONS if x[0] == active_session), None)
+    if match is None:
+        raise HTTPException(status_code=409, detail="The active attendance shift is not supported.")
+    now = min(
+        _local_now().replace(tzinfo=None),
+        datetime.combine(today, time(match[2], 0)),
+    )
+    if now < attendance.check_in_time:
+        raise HTTPException(status_code=409, detail="Checkout time cannot be before check-in time.")
+    attendance.check_out_time = now
+    duration = attendance.check_out_time - attendance.check_in_time
+    session_hours = max(0.0, duration.total_seconds() / 3600)
+    attendance.working_hours = session_hours
 
     if active_session:
         sessions[active_session] = {
@@ -577,6 +659,8 @@ def employee_check_out(
         }
     sessions.pop("active_session", None)
     _save_session_meta(attendance, meta)
+    sessions_out, _total_hours = _session_breakdown(attendance)
+    attendance_summary = _apply_attendance_status(attendance, sessions_out)
 
     try:
         db.flush()
@@ -608,6 +692,7 @@ def employee_check_out(
         "session_label": session_label,
         "check_out_time": attendance.check_out_time,
         "working_hours": attendance.working_hours,
+        **attendance_summary,
         "can_check_in_next_session": True
     }
 
@@ -685,6 +770,10 @@ def sync_worker_attendance_session(
             "attendance_date": attendance_date.isoformat(),
             "session_key": session_key,
             "total_working_hours": round(total_hours, 2),
+            **_attendance_summary_from_sessions({
+                key: value for key, value in _session_meta(attendance).get(SESSION_META_KEY, {}).items()
+                if key in {"morning", "afternoon"} and isinstance(value, dict)
+            }),
         }
 
     check_in = local_aware(record.check_in_time)
@@ -698,8 +787,20 @@ def sync_worker_attendance_session(
             status_code=422,
             detail="The offline attendance session has no check-in timestamp; refresh attendance and retry.",
         )
+    shift_start_hour, shift_end_hour = ((9, 14) if record.session_index == 0 else (14, 23))
+    check_in_local = check_in.astimezone(ATTENDANCE_TZ)
+    if not (time(shift_start_hour, 0) <= check_in_local.time() < time(shift_end_hour, 0)):
+        raise HTTPException(
+            status_code=422,
+            detail="The recorded check-in time does not belong to the selected attendance shift.",
+        )
+    shift_end_at = datetime.combine(
+        attendance_date, time(shift_end_hour, 0), tzinfo=ATTENDANCE_TZ
+    )
 
     incoming_check_out = local_aware(record.check_out_time)
+    if incoming_check_out is not None:
+        incoming_check_out = min(incoming_check_out, shift_end_at)
     old_check_out = None
     if previous.get("check_out_time"):
         try:
@@ -738,10 +839,16 @@ def sync_worker_attendance_session(
         meta["_retail_mind_synced_operations"] = seen_operations[-100:]
 
     _save_session_meta(attendance, meta)
-    status = str(record.status or "PRESENT").strip().upper().replace("-", "_")
-    if status not in {"PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE"}:
-        status = "PRESENT"
-    attendance.status = status
+    # Derive the daily status from the two shift check-ins, not the legacy
+    # per-session status sent by an older client.
+    attendance_summary = _apply_attendance_status(
+        attendance,
+        {
+            key: value
+            for key, value in session_map.items()
+            if key in {"morning", "afternoon"} and isinstance(value, dict)
+        },
+    )
 
     # Keep the legacy scalar columns aligned with the active or latest session;
     # payroll uses the full session metadata, so multi-session hours stay intact.
@@ -802,6 +909,7 @@ def sync_worker_attendance_session(
         "attendance_date": attendance_date.isoformat(),
         "session_key": session_key,
         "total_working_hours": round(total_hours, 2),
+        **attendance_summary,
     }
 
 # ==================== ATTENDANCE RECORDS ====================
@@ -937,6 +1045,7 @@ def get_employee_attendance(
             "working_hours": float(r.working_hours or 0.0),  # last/active session only - kept for backward compat
             "total_working_hours": total_hours,               # correct value to use for payroll
             "sessions": sessions_out,
+            **_attendance_summary_from_sessions(sessions_out),
         })
     
     return {
@@ -995,6 +1104,7 @@ def get_attendance_by_date(
             "working_hours": float(r.working_hours or 0.0),
             "total_working_hours": total_hours,
             "sessions": sessions_out,
+            **_attendance_summary_from_sessions(sessions_out),
         })
 
     return {
@@ -1003,6 +1113,7 @@ def get_attendance_by_date(
         "present": present,
         "absent": absent,
         "leave": leave,
+        "half_day": sum(1 for r in records if r.status == AttendanceStatus.HALF_DAY),
         "records": records_out
     }
 
