@@ -36,10 +36,10 @@ from models import Worker, User
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
+# Canonical two-shift policy (Asia/Kolkata).
 SHIFT_WINDOWS = {
-    "MORNING": (time(6, 0), time(12, 0)),
-    "AFTERNOON": (time(12, 0), time(17, 0)),
-    "EVENING": (time(17, 0), time(23, 0)),
+    "MORNING": (time(9, 0), time(14, 0)),
+    "AFTERNOON": (time(14, 0), time(23, 0)),
 }
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -65,7 +65,7 @@ def _attendance_ist_iso(value):
 
 
 def _legacy_checkout_details(attendance_date, check_in_time, notes):
-    """Build checkout data using the active session's original check-in time."""
+    """Build a safe automatic checkout for the matching two-shift window."""
     raw_notes = notes or ""
     try:
         meta = json.loads(raw_notes) if raw_notes else {}
@@ -77,9 +77,16 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     sessions = meta.get(LEGACY_SESSION_META_KEY)
     if not isinstance(sessions, dict):
         sessions = {}
+    # Migrate the old second-slot key without losing timestamps.
+    if "afternoon" not in sessions and isinstance(sessions.get("evening"), dict):
+        sessions["afternoon"] = dict(sessions["evening"])
+    sessions.pop("evening", None)
+
     active_session = sessions.get("active_session")
-    if active_session not in {"morning", "evening"}:
-        active_session = "morning" if check_in_time.time() < time(14, 0) else "evening"
+    if active_session == "evening":
+        active_session = "afternoon"
+    if active_session not in {"morning", "afternoon"}:
+        active_session = "morning" if check_in_time.time() < time(14, 0) else "afternoon"
 
     session = sessions.get(active_session)
     if not isinstance(session, dict):
@@ -95,23 +102,22 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     except (TypeError, ValueError):
         session_check_in = scalar_check_in
 
-    # Ignore metadata from a prior session if it does not describe the current
-    # scalar check-in. This prevents a late check-in from inheriting an old
-    # morning record and receiving a 14:00 checkout.
     if session_check_in.date() != attendance_date or abs((session_check_in - scalar_check_in).total_seconds()) > 60:
         session_check_in = scalar_check_in
-        active_session = "morning" if session_check_in.time() < time(14, 0) else "evening"
+        active_session = "morning" if session_check_in.time() < time(14, 0) else "afternoon"
         session = sessions.get(active_session)
         if not isinstance(session, dict):
             session = {}
 
     if active_session == "morning":
-        checkout_at = datetime.combine(attendance_date, time(14, 0))
-        label, window = "Morning", "Before 2:00 PM"
+        shift_end = datetime.combine(attendance_date, time(14, 0))
+        label, window = "Morning", "9:00 AM–2:00 PM"
     else:
-        checkout_at = datetime.combine(attendance_date + timedelta(days=1), time.min)
-        label, window = "Afternoon", "2:00 PM onward"
+        shift_end = datetime.combine(attendance_date, time(23, 0))
+        label, window = "Afternoon", "2:00 PM–11:00 PM"
 
+    # Historical rows outside the new windows must never receive checkout < check-in.
+    checkout_at = max(shift_end, session_check_in)
     hours = max(0.0, (checkout_at - session_check_in).total_seconds() / 3600.0)
     session.update({
         "label": label,
@@ -124,6 +130,23 @@ def _legacy_checkout_details(attendance_date, check_in_time, notes):
     sessions.pop("active_session", None)
     meta[LEGACY_SESSION_META_KEY] = sessions
     return active_session, checkout_at, hours, json.dumps(meta, separators=(",", ":"), default=str)
+
+
+def _legacy_attendance_status(notes_json):
+    try:
+        meta = json.loads(notes_json or "{}")
+    except (TypeError, ValueError):
+        meta = {}
+    sessions = meta.get(LEGACY_SESSION_META_KEY, {}) if isinstance(meta, dict) else {}
+    if not isinstance(sessions, dict):
+        sessions = {}
+    if "afternoon" not in sessions and isinstance(sessions.get("evening"), dict):
+        sessions = {**sessions, "afternoon": sessions.get("evening")}
+    attended = sum(
+        1 for key in ("morning", "afternoon")
+        if isinstance(sessions.get(key), dict) and sessions[key].get("check_in_time")
+    )
+    return "PRESENT" if attended == 2 else ("HALF_DAY" if attended == 1 else "ABSENT")
 
 
 def _auto_checkout_expired_shifts(now=None, log_summary=False):
@@ -151,7 +174,11 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
         shift_updates = 0
         durable_events = []
         for row in shift_rows:
-            window = SHIFT_WINDOWS.get(str(row["shift"]).upper())
+            shift_name = str(row["shift"]).upper()
+            # Legacy EVENING rows are the old name for the new Afternoon slot.
+            if shift_name == "EVENING":
+                shift_name = "AFTERNOON"
+            window = SHIFT_WINDOWS.get(shift_name)
             if not window:
                 continue
 
@@ -165,6 +192,7 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
                 if check_in.tzinfo is not None
                 else check_in
             )
+            shift_end = max(shift_end, normalized_check_in)
             hours = max(0.0, (shift_end - normalized_check_in).total_seconds() / 3600.0)
             result = db.execute(text("""
                 UPDATE attendance_shifts
@@ -190,7 +218,8 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
                     "attendance_date": str(row["attendance_date"]),
                     "check_in_time": check_in.isoformat() if hasattr(check_in, "isoformat") else str(check_in),
                     "check_out_time": shift_end.isoformat(),
-                    "status": "PRESENT",
+                    "status": attendance_status,
+                    "attendance_status": attendance_status,
                     "change": "auto_checkout",
                     "checkout_reason": "SHIFT_EXPIRED",
                 }))
@@ -214,16 +243,19 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
             if checkout_at > current:
                 continue
 
+            attendance_status = _legacy_attendance_status(notes_json)
             result = db.execute(text("""
                 UPDATE attendance
                 SET check_out_time = :check_out_time,
                     working_hours = :working_hours,
+                    status = :status,
                     notes = :notes
                 WHERE id = :id
                   AND check_out_time IS NULL
             """), {
                 "check_out_time": checkout_at,
                 "working_hours": hours,
+                "status": attendance_status,
                 "notes": notes_json,
                 "id": row["id"],
             })
