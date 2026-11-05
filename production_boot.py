@@ -1265,14 +1265,32 @@ def _patch_routes():
             records, summaries = _decorate_attendance_records(records)
             summary = summaries[0] if summaries else _attendance_summary_for_records([])
             statuses = [str(item.get("status", "PRESENT")).upper() for item in records]
+            summary_statuses = [item["attendance_status"] for item in summaries]
+            leave_identities = {
+                (
+                    str(item.get("employee_id") or ""),
+                    str(item.get("worker_id") or ""),
+                    str(item.get("attendance_date") or "").split("T")[0],
+                )
+                for item in records
+                if str(item.get("status") or "").upper() == "LEAVE"
+            }
+            leave_count = sum(
+                1 for item in summaries
+                if (
+                    str(item.get("employee_id") or ""),
+                    str(item.get("worker_id") or ""),
+                    str(item.get("attendance_date") or "").split("T")[0],
+                ) in leave_identities
+            )
             return {
                 **(legacy_payload if isinstance(legacy_payload, dict) else {}),
                 "date": date_str,
                 "total_records": len(records),
-                "present": sum(1 for status in statuses if status == "PRESENT"),
-                "absent": sum(1 for status in statuses if status == "ABSENT"),
-                "half_day": sum(1 for item in summaries if item["attendance_status"] == "HALF_DAY"),
-                "leave": sum(1 for status in statuses if status == "LEAVE"),
+                "present": sum(1 for status in summary_statuses if status == "PRESENT"),
+                "absent": sum(1 for status in summary_statuses if status == "ABSENT"),
+                "half_day": sum(1 for status in summary_statuses if status == "HALF_DAY"),
+                "leave": leave_count,
                 **summary,
                 "attendance_summary": summary,
                 "attendance_summaries": summaries,
