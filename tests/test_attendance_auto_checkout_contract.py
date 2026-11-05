@@ -86,19 +86,29 @@ def test_legacy_checkout_uses_session_deadline_and_saves_session_metadata():
     assert session_history["morning"]["working_hours"] == 5.5
 
 
-def test_legacy_checkout_infers_evening_and_closes_at_midnight():
+def test_legacy_checkout_maps_evening_to_afternoon_and_closes_at_11pm():
     session_key, checkout, hours, updated_notes = production_boot._legacy_checkout_details(
         date(2026, 10, 9),
         datetime(2026, 10, 9, 15, 0),
-        None,
+        json.dumps({
+            "_retail_mind_sessions": {
+                "active_session": "evening",
+                "evening": {
+                    "check_in_time": "2026-10-09T15:00:00+05:30",
+                    "check_out_time": None,
+                    "working_hours": 0,
+                },
+            },
+        }),
     )
 
-    assert session_key == "evening"
-    assert checkout == datetime(2026, 10, 10, 0, 0)
-    assert hours == 9.0
+    assert session_key == "afternoon"
+    assert checkout == datetime(2026, 10, 9, 23, 0)
+    assert hours == 8.0
     metadata = json.loads(updated_notes)["_retail_mind_sessions"]
-    assert metadata["evening"]["check_out_time"] == "2026-10-10T00:00:00+05:30"
-    assert metadata["evening"]["working_hours"] == 9.0
+    assert metadata["afternoon"]["check_out_time"] == "2026-10-09T23:00:00+05:30"
+    assert metadata["afternoon"]["working_hours"] == 8.0
+    assert "evening" not in metadata
 
 
 def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
@@ -109,6 +119,10 @@ def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
         "attendance_date": date(2026, 10, 10),
         "shift": "MORNING",
         "check_in_time": datetime(2026, 10, 10, 9, 0),
+        "check_out_time": None,
+        "status": "PRESENT",
+        "working_hours": 0.0,
+        "checkout_reason": "MANUAL",
     }]
     legacy_rows = [{
         "id": 23,
@@ -159,8 +173,10 @@ def test_scheduler_closes_expired_rows_in_both_attendance_tables(monkeypatch):
 
     shift_update = fake_db.updates[0][1]
     assert shift_update["id"] == 17
-    assert shift_update["check_out_time"] == datetime(2026, 10, 10, 12, 0)
-    assert shift_update["working_hours"] == 3.0
+    assert shift_update["check_out_time"] == datetime(2026, 10, 10, 14, 0)
+    assert shift_update["working_hours"] == 5.0
+    assert durable_events[0]["attendance_status"] == "HALF_DAY"
+    assert durable_events[0]["attendance_complete"] is False
 
     legacy_update = fake_db.updates[1][1]
     assert legacy_update["id"] == 23
@@ -233,9 +249,10 @@ def test_shift_rows_use_chronological_session_indices_not_shift_names():
 
     normalized = production_boot._combine_shift_and_legacy_records(rows, [])
 
-    # A first check-in at 15:00 still corresponds to local session index 0.
+    # Afternoon has stable index 1 regardless of whether it is the first
+    # session recorded that day.
     assert len(normalized) == 1
-    assert normalized[0]["session_index"] == 0
+    assert normalized[0]["session_index"] == 1
     assert normalized[0]["session_key"] == "afternoon"
 
     rows.append({
@@ -253,6 +270,7 @@ def test_shift_rows_use_chronological_session_indices_not_shift_names():
     normalized = production_boot._combine_shift_and_legacy_records(rows, [])
     by_time = sorted(normalized, key=lambda row: row["check_in_time"])
     assert [row["session_index"] for row in by_time] == [0, 1]
+    assert [row["session_key"] for row in by_time] == ["morning", "afternoon"]
 
 
 
@@ -262,14 +280,14 @@ def test_huggingface_cache_directories_are_initialized_before_app_import():
     assert production_boot.HF_CACHE_DIR.parent == production_boot.RENDER_CACHE_DIR
 
 
-def test_legacy_checkout_uses_latest_evening_checkin_not_stale_morning_metadata():
+def test_legacy_checkout_uses_latest_afternoon_checkin_not_stale_morning_metadata():
     notes = json.dumps({
         "_retail_mind_sessions": {
             "active_session": "evening",
             "morning": {
-                "check_in_time": "2026-10-23T08:30:00+05:30",
-                "check_out_time": None,
-                "working_hours": 0,
+                "check_in_time": "2026-10-23T09:00:00+05:30",
+                "check_out_time": "2026-10-23T14:00:00+05:30",
+                "working_hours": 5,
             },
             "evening": {
                 "check_in_time": "2026-10-23T19:07:00+05:30",
@@ -281,15 +299,67 @@ def test_legacy_checkout_uses_latest_evening_checkin_not_stale_morning_metadata(
     key, checkout, hours, updated_notes = production_boot._legacy_checkout_details(
         date(2026, 10, 23), datetime(2026, 10, 23, 19, 7), notes
     )
-    assert key == "evening"
-    assert checkout == datetime(2026, 10, 24, 0, 0)
-    assert round(hours, 2) == 4.88
-    updated = json.loads(updated_notes)["_retail_mind_sessions"]["evening"]
+    assert key == "afternoon"
+    assert checkout == datetime(2026, 10, 23, 23, 0)
+    assert round(hours, 2) == 3.88
+    updated = json.loads(updated_notes)["_retail_mind_sessions"]["afternoon"]
     assert updated["check_in_time"] == "2026-10-23T19:07:00+05:30"
-    assert updated["check_out_time"] == "2026-10-24T00:00:00+05:30"
+    assert updated["check_out_time"] == "2026-10-23T23:00:00+05:30"
 
 
-def test_scheduler_has_separate_afternoon_and_evening_end_times():
-    assert production_boot.SHIFT_WINDOWS["MORNING"][1].isoformat() == "12:00:00"
-    assert production_boot.SHIFT_WINDOWS["AFTERNOON"][1].isoformat() == "17:00:00"
-    assert production_boot.SHIFT_WINDOWS["EVENING"][1].isoformat() == "23:00:00"
+def test_scheduler_has_exactly_two_configured_shift_windows():
+    assert set(production_boot.SHIFT_WINDOWS) == {"MORNING", "AFTERNOON"}
+    assert production_boot.SHIFT_WINDOWS["MORNING"][0].isoformat() == "09:00:00"
+    assert production_boot.SHIFT_WINDOWS["MORNING"][1].isoformat() == "14:00:00"
+    assert production_boot.SHIFT_WINDOWS["AFTERNOON"][0].isoformat() == "14:00:00"
+    assert production_boot.SHIFT_WINDOWS["AFTERNOON"][1].isoformat() == "23:00:00"
+
+
+
+def test_daily_attendance_payload_requires_two_completed_shifts_for_complete():
+    one_completed = production_boot._attendance_summary_for_records([
+        {
+            "session_index": 0,
+            "session_key": "morning",
+            "check_in_time": "2026-11-05T09:00:00+05:30",
+            "check_out_time": "2026-11-05T14:00:00+05:30",
+        },
+    ])
+    assert one_completed["attendance_status"] == "HALF_DAY"
+    assert one_completed["attended_sessions"] == 1
+    assert one_completed["completed_sessions"] == 1
+    assert one_completed["attendance_complete"] is False
+
+    both_completed = production_boot._attendance_summary_for_records([
+        {
+            "session_index": 0,
+            "session_key": "morning",
+            "check_in_time": "2026-11-05T09:00:00+05:30",
+            "check_out_time": "2026-11-05T14:00:00+05:30",
+        },
+        {
+            "session_index": 1,
+            "session_key": "afternoon",
+            "check_in_time": "2026-11-05T14:00:00+05:30",
+            "check_out_time": "2026-11-05T23:00:00+05:30",
+        },
+    ])
+    assert both_completed["attendance_status"] == "PRESENT"
+    assert both_completed["attended_sessions"] == 2
+    assert both_completed["completed_sessions"] == 2
+    assert both_completed["attendance_complete"] is True
+
+    no_attendance = production_boot._attendance_summary_for_records([])
+    assert no_attendance["attendance_status"] == "ABSENT"
+    assert no_attendance["attended_sessions"] == 0
+    assert no_attendance["attendance_complete"] is False
+
+
+def test_legacy_checkout_never_writes_before_an_out_of_window_checkin():
+    _key, checkout, hours, _notes = production_boot._legacy_checkout_details(
+        date(2026, 10, 9),
+        datetime(2026, 10, 9, 23, 20),
+        None,
+    )
+    assert checkout == datetime(2026, 10, 9, 23, 20)
+    assert hours == 0.0
