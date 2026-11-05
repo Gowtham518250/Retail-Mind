@@ -176,11 +176,13 @@ def _session_breakdown(attendance):
             "working_hours": hours,
         }
 
-    # Older rows pre-date per-session metadata. Preserve their scalar session.
+    # Older rows pre-date per-session metadata. Preserve their scalar session,
+    # even when the historical timestamp is outside the new check-in windows.
     if not sessions_out and attendance.check_in_time:
-        legacy_key, legacy_label, legacy_window = _session_for_time(attendance.check_in_time)
-        if legacy_key:
-            sessions_out[legacy_key] = {
+        legacy_key = "morning" if attendance.check_in_time.time() < time(14, 0) else "afternoon"
+        legacy_entry = next(item for item in ATTENDANCE_SESSIONS if item[0] == legacy_key)
+        legacy_label, legacy_window = legacy_entry[3], legacy_entry[4]
+        sessions_out[legacy_key] = {
                 "session_key": legacy_key,
                 "session_index": 0 if legacy_key == "morning" else 1,
                 "label": legacy_label,
@@ -800,7 +802,7 @@ def sync_worker_attendance_session(
 
     incoming_check_out = local_aware(record.check_out_time)
     if incoming_check_out is not None:
-        incoming_check_out = min(incoming_check_out, shift_end_at)
+        incoming_check_out = min(incoming_check_out, max(shift_end_at, check_in))
     old_check_out = None
     if previous.get("check_out_time"):
         try:
@@ -808,14 +810,19 @@ def sync_worker_attendance_session(
         except (TypeError, ValueError):
             old_check_out = None
     # A retry of an older check-in must not erase a checkout already synced.
+    # Cap an already-stored legacy checkout too, but never move it before check-in.
+    if old_check_out is not None:
+        old_check_out = min(old_check_out, max(shift_end_at, check_in))
     check_out = incoming_check_out or old_check_out
     if check_out is not None and check_out < check_in:
         raise HTTPException(status_code=422, detail="Checkout time cannot be before check-in time.")
 
-    if record.working_hours is not None:
-        session_hours = float(record.working_hours)
-    elif check_out is not None:
+    # The server computes hours from the validated timestamps. A stale or
+    # manipulated client working_hours value must not exceed the shift window.
+    if check_out is not None:
         session_hours = max(0.0, (check_out - check_in).total_seconds() / 3600.0)
+    elif record.working_hours is not None:
+        session_hours = max(0.0, float(record.working_hours))
     else:
         session_hours = float(previous.get("working_hours") or 0.0)
 
