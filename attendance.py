@@ -789,17 +789,15 @@ def sync_worker_attendance_session(
             status_code=422,
             detail="The offline attendance session has no check-in timestamp; refresh attendance and retry.",
         )
-    shift_start_hour, shift_end_hour = ((9, 14) if record.session_index == 0 else (14, 23))
-    check_in_local = check_in.astimezone(ATTENDANCE_TZ)
-    if not (time(shift_start_hour, 0) <= check_in_local.time() < time(shift_end_hour, 0)):
-        raise HTTPException(
-            status_code=422,
-            detail="The recorded check-in time does not belong to the selected attendance shift.",
-        )
+    _shift_start_hour, shift_end_hour = ((9, 14) if record.session_index == 0 else (14, 23))
     shift_end_at = datetime.combine(
         attendance_date, time(shift_end_hour, 0), tzinfo=ATTENDANCE_TZ
     )
 
+    # This endpoint also drains durable outbox entries created by older app
+    # releases. Do not reject their original check-in timestamp merely because
+    # it predates the new shift windows; the current UI blocks new check-ins
+    # outside 09:00–23:00. Preserve old history and keep checkout >= check-in.
     incoming_check_out = local_aware(record.check_out_time)
     if incoming_check_out is not None:
         incoming_check_out = min(incoming_check_out, max(shift_end_at, check_in))
