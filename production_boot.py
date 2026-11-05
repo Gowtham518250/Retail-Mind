@@ -167,7 +167,6 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
                    check_in_time, check_out_time, status, working_hours, checkout_reason
             FROM attendance_shifts
             WHERE check_in_time IS NOT NULL
-              AND check_out_time IS NULL
               AND attendance_date <= :today
             ORDER BY attendance_date, check_in_time
         """), {"today": current.date()}).mappings().all()
@@ -175,6 +174,10 @@ def _auto_checkout_expired_shifts(now=None, log_summary=False):
         shift_updates = 0
         durable_events = []
         for row in shift_rows:
+            # Completed rows are retained here so a second-shift auto-checkout
+            # can calculate the correct whole-day status.
+            if row.get("check_out_time") is not None:
+                continue
             shift_name = str(row["shift"]).upper()
             # Legacy EVENING rows are the old name for the new Afternoon slot.
             if shift_name == "EVENING":
