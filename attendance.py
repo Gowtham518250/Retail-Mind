@@ -136,7 +136,15 @@ def _apply_attendance_status(attendance, sessions_out=None):
     if sessions_out is None:
         sessions_out, _ = _session_breakdown(attendance)
     summary = _attendance_summary_from_sessions(sessions_out)
-    attendance.status = AttendanceStatus(summary["attendance_status"])
+    existing_status = getattr(attendance.status, "value", attendance.status)
+    # An approved leave/manual leave status must not be converted into Absent
+    # merely because the worker has no shift check-in snapshots.
+    if str(existing_status).upper() == "LEAVE" and summary["attended_sessions"] == 0:
+        summary["attendance_status"] = "LEAVE"
+        summary["attendance_complete"] = False
+        attendance.status = AttendanceStatus.LEAVE
+    else:
+        attendance.status = AttendanceStatus(summary["attendance_status"])
     return summary
 
 
