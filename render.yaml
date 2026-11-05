@@ -38,12 +38,3 @@ services:
         value: retail-mind:realtime:events
       - key: REALTIME_TICKET_TTL_SECONDS
         value: "120"
-
-  - type: static
-    name: retail-mind-frontend
-    env: static
-    buildCommand: "cd frontend && npm ci && npm run build"
-    publishPath: "frontend/dist"
-    envVars:
-      - key: NODE_ENV
-        value: production

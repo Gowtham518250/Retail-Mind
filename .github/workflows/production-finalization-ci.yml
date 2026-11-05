@@ -46,22 +46,6 @@ jobs:
             --recursive
             .
 
-  lockfile-integrity:
-    name: Verify lockfile consistency
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-      - name: Verify root pnpm lockfile without modifying the branch
-        shell: bash
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.15.0 --activate
-          pnpm install --lockfile-only --frozen-lockfile --ignore-scripts
   python-dependency-audit:
     name: Python dependency audit
     runs-on: ubuntu-latest
@@ -79,29 +63,6 @@ jobs:
       - name: Audit pinned test dependencies
         run: pip-audit -r requirements-dev.txt --progress-spinner off
 
-  node-dependency-audit:
-    name: Node dependency audit
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        working-directory: [frontend, frontend-web]
-    defaults:
-      run:
-        working-directory: ${{ matrix.working-directory }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: ${{ matrix.working-directory }}/package-lock.json
-      - name: Install locked dependencies
-        run: npm ci
-      - name: Fail on high or critical npm advisories
-        run: npm audit --audit-level=high
   backend:
     runs-on: ubuntu-latest
     services:
@@ -254,26 +215,6 @@ jobs:
           pytest -q tests/test_worker_payroll_query_contract.py
           pytest -q tests/test_customer_phone_normalization.py
           pytest -q tests/test_invoice_sync_payment_state.py
-
-  customer-web:
-    runs-on: ubuntu-latest
-    env:
-      # Safe placeholder only for build-time validation; it is not a deployed target.
-      NEXT_PUBLIC_API_URL: https://api.invalid
-    defaults:
-      run:
-        working-directory: frontend-web
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: frontend-web/package-lock.json
-      - name: Install dependencies
-        run: npm ci
-      - name: Build customer web
-        run: npm run build
 
 
   staging-ai-evaluation:
