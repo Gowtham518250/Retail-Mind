@@ -155,6 +155,9 @@ def test_marketing_automation_and_approval_routes_are_registered_and_owner_scope
     assert "expected_version" in approve_source
     assert "expected_version" in reject_source
     assert "GrowthMarketingAutomationSettings.shop_id == user_id" in settings_source
+    assert "Product.user_id == user_id" in approve_source
+    assert "current_shop_snapshot != saved_shop_snapshot" in approve_source
+    assert "Product.current_stock > 0" in approve_source
 
 
 def test_new_product_trigger_is_opt_in_and_deduplicated_by_shop_product():
