@@ -35,6 +35,53 @@ const initialForm: FormState = {
   city: '', pincode: '', address: '', landmark: '', phone: '', orderNotes: '',
 };
 
+type CashfreeCheckout = {
+  checkout(options: {
+    paymentSessionId: string;
+    redirectTarget?: '_self' | '_blank' | '_top' | '_modal';
+  }): Promise<unknown>;
+};
+
+type CashfreeFactory = (options: { mode: 'sandbox' | 'production' }) => CashfreeCheckout;
+
+declare global {
+  interface Window {
+    Cashfree?: CashfreeFactory;
+  }
+}
+
+function loadCashfreeSdk(): Promise<void> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Cashfree checkout is available only in a browser.'));
+  }
+  if (window.Cashfree) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    let script = document.querySelector<HTMLScriptElement>(
+      'script[data-retail-mind-cashfree="true"]',
+    );
+    const onLoad = () => {
+      if (window.Cashfree) resolve();
+      else reject(new Error('Cashfree checkout SDK could not be initialized.'));
+    };
+    const onError = () => reject(new Error('Unable to load Cashfree checkout. Check your connection and retry.'));
+
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+      script.async = true;
+      script.dataset.retailMindCashfree = 'true';
+      script.addEventListener('load', onLoad, { once: true });
+      script.addEventListener('error', onError, { once: true });
+      document.head.appendChild(script);
+      return;
+    }
+
+    script.addEventListener('load', onLoad, { once: true });
+    script.addEventListener('error', onError, { once: true });
+  });
+}
+
 export default function CheckoutClientPage() {
   const params = useParams();
   const router = useRouter();
@@ -352,19 +399,21 @@ export default function CheckoutClientPage() {
     setSubmitError('');
     setIsSubmitting(true);
 
+    const idempotencyKey = (() => {
+      const existing = sessionStorage.getItem(checkoutSessionKey);
+      if (existing) return existing;
+      const created = 'web-' + shopId + '-' + crypto.randomUUID();
+      sessionStorage.setItem(checkoutSessionKey, created);
+      return created;
+    })();
+
     const payload = {
       shop_id: shopId,
       payment_method: paymentMethod,
       items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
       delivery_address: combinedAddress,
       coupon_code: couponCode.trim().toUpperCase() || undefined,
-      idempotency_key: (() => {
-        const existing = sessionStorage.getItem(checkoutSessionKey);
-        if (existing) return existing;
-        const created = 'web-' + shopId + '-' + crypto.randomUUID();
-        sessionStorage.setItem(checkoutSessionKey, created);
-        return created;
-      })(),
+      idempotency_key: idempotencyKey,
     };
 
     try {
@@ -389,6 +438,11 @@ export default function CheckoutClientPage() {
         throw new Error(data.detail || data.message || 'Could not place your order. Please try again.');
       }
 
+      const orderId = String(data.order_id || '');
+      if (!orderId) {
+        throw new Error('Retail Mind did not return a valid order ID.');
+      }
+
       const placedOrder: PlacedOrder = {
         order_id: data.order_id,
         shop_name: data.shop_name,
@@ -407,10 +461,56 @@ export default function CheckoutClientPage() {
         placed_at: new Date().toISOString(),
       };
 
-      sessionStorage.setItem(`order:${data.order_id}`, JSON.stringify(placedOrder));
+      sessionStorage.setItem(`order:${orderId}`, JSON.stringify(placedOrder));
+
+      if (paymentMethod === 'UPI') {
+        // Keep the cart and its idempotency key until the server confirms
+        // payment. A reload/retry therefore reuses this exact order.
+        sessionStorage.setItem(
+          `cashfree:pending:${orderId}`,
+          JSON.stringify({ shopId, checkoutSessionKey, orderId }),
+        );
+
+        const sessionResponse = await fetch(
+          `${API_BASE}/store/order/${encodeURIComponent(orderId)}/cashfree/session`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-store',
+          },
+        );
+        const sessionData = await sessionResponse.json();
+        if (!sessionResponse.ok || sessionData.success !== true) {
+          throw new Error(
+            sessionData.detail || 'Unable to create a secure Cashfree checkout session.',
+          );
+        }
+
+        const paymentSessionId = String(sessionData.payment_session_id || '');
+        if (!paymentSessionId) {
+          throw new Error('Cashfree did not return a payment session ID.');
+        }
+
+        await loadCashfreeSdk();
+        if (!window.Cashfree) {
+          throw new Error('Cashfree checkout SDK is unavailable. Please retry.');
+        }
+        const cashfree = window.Cashfree({
+          mode: sessionData.environment === 'production' ? 'production' : 'sandbox',
+        });
+        await cashfree.checkout({
+          paymentSessionId,
+          redirectTarget: '_self',
+        });
+        return;
+      }
+
       sessionStorage.removeItem(checkoutSessionKey);
       clearCart();
-      router.push(`/shop/${shopId}/order-success?orderId=${data.order_id}`);
+      router.push(`/shop/${shopId}/order-success?orderId=${orderId}`);
     } catch (err: any) {
       setSubmitError(err.message || 'Something went wrong. Please try again.');
     } finally {
