@@ -10,6 +10,7 @@ from growth_suite import (
     list_marketing_campaigns,
     router,
     _growth_copy_fallback,
+    _contains_restricted_marketing_content,
 )
 
 
@@ -78,3 +79,12 @@ def test_campaign_save_contract_is_owner_scoped_and_upsertable():
             headline="Test",
             caption="Test",
         )
+
+
+
+def test_restricted_marketing_categories_are_rejected():
+    assert _contains_restricted_marketing_content("restricted product category")
+    assert _contains_restricted_marketing_content("age-limited goods")
+    assert _contains_restricted_marketing_content("unsafe promotional category")
+    assert not _contains_restricted_marketing_content("fresh vegetables")
+    assert not _contains_restricted_marketing_content("school stationery")
