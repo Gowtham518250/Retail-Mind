@@ -139,29 +139,49 @@ def _queue_due_weekly_triggers(db, now: datetime) -> int:
 
 
 def _build_auto_copy(profile: ShopProfile, product: Product | None, language: str, trigger_type: str) -> tuple[str, str]:
-    shop_name = str(profile.shop_name or "Our shop").strip()
-    if trigger_type == "weekly":
+    shop_name = str(profile.shop_name or 'Our shop').strip()
+    if trigger_type == 'weekly':
         headline = {
-            "te": "ఈ వారం మా దుకాణంలో అందుబాటులో ఉన్నవి",
-            "hi": "इस सप्ताह हमारी दुकान में उपलब्ध उत्पाद",
+            'te': 'ఈ వారం మా దుకాణంలో అందుబాటులో ఉన్నవి',
+            'hi': 'इस सप्ताह हमारी दुकान में उपलब्ध उत्पाद',
         }.get(language, "This week's shop highlights")
     else:
         headline = {
-            "te": "మా కొత్త ఉత్పత్తిని చూడండి",
-            "hi": "हमारा नया उत्पाद देखें",
-        }.get(language, "Discover our new product")
+            'te': 'మా కొత్త ఉత్పత్తిని చూడండి',
+            'hi': 'हमारा नया उत्पाद देखें',
+        }.get(language, 'Discover our new product')
 
-    lines = [f"{shop_name}", headline]
-    if product is not None:
-        lines.append(f"{product.product_name} — ₹{Decimal(str(product.unit_price or 0)):,.2f}")
     address = _shop_address(profile)
-    if address:
-        lines.append(f"Visit us: {address}")
-    if profile.phone:
-        lines.append(f"Contact: {str(profile.phone).strip()}")
-    lines.append("Review this draft and confirm the details before sharing.")
-    return headline[:120], "\n".join(lines)[:1200]
+    context = {
+        'shop_name': shop_name,
+        'shop_address': address,
+        'shop_city': profile.city,
+        'shop_state': profile.state,
+        'shop_phone': profile.phone,
+        'product_name': product.product_name if product is not None else None,
+        'product_price_inr': float(product.unit_price) if product is not None and product.unit_price is not None else None,
+        'goal': 'new_product' if trigger_type == 'new_product' else 'nearby',
+        'offer_provided_by_owner': '',
+    }
+    # Use Groq when it is configured; deterministic templates remain the fallback.
+    try:
+        from growth_suite import _generate_growth_copy_with_groq
 
+        generated = _generate_growth_copy_with_groq(context, language)
+        if generated and generated.get('headline') and generated.get('caption'):
+            return str(generated['headline'])[:120], str(generated['caption'])[:1200]
+    except Exception:
+        pass
+
+    lines = [shop_name, headline]
+    if product is not None:
+        lines.append(f'{product.product_name} — ₹{Decimal(str(product.unit_price or 0)):,.2f}')
+    if address:
+        lines.append(f'Visit us: {address}')
+    if profile.phone:
+        lines.append(f'Contact: {str(profile.phone).strip()}')
+    lines.append('Review this draft and confirm the details before sharing.')
+    return headline[:120], '\n'.join(lines)[:1200]
 
 def process_pending_marketing_triggers(db, limit: int = 50) -> dict:
     """Create owner-review drafts from queued triggers with per-shop limits."""
