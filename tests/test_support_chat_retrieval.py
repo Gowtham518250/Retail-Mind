@@ -177,6 +177,6 @@ def test_unsupported_chat_question_requests_clarification_without_groq(monkeypat
 
 
 def test_ambiguous_compound_business_questions_are_not_mapped_to_partial_metrics():
-    assert classify_shop_data_intent("Show my sales and expenses")[0] is None
-    assert classify_shop_data_intent("Show sales and low stock")[0] is None
-    assert classify_shop_data_intent("Show sales by product")[0] is None
+    assert classify_shop_data_intent("Show my sales and expenses") is None
+    assert classify_shop_data_intent("Show sales and low stock") is None
+    assert classify_shop_data_intent("Show sales by product") is None
