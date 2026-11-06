@@ -5,7 +5,9 @@ from pydantic import ValidationError
 
 from growth_suite import (
     MarketingCopyRequest,
+    MarketingCampaignSaveRequest,
     generate_marketing_copy,
+    list_marketing_campaigns,
     router,
     _growth_copy_fallback,
 )
@@ -31,10 +33,9 @@ def test_marketing_endpoint_is_authenticated_and_tenant_scoped():
     assert "ShopProfile.shop_id == user_id" in source
     assert "Product.user_id == user_id" in source
     assert "Product.id == data.product_id" in source
-    assert "Product.current_stock" not in source or "stock_quantity <= 0" in source
-    assert '"/marketing/generate"' in {
-        getattr(route, "path", "") for route in router.routes
-    }
+    assert "stock_quantity <= 0" in source
+    paths = {context.path for context in __import__("fastapi.routing", fromlist=["iter_route_contexts"]).iter_route_contexts(router.routes)}
+    assert "/growth/marketing/generate" in paths
 
 
 def test_fallback_copy_does_not_invent_an_offer():
@@ -52,3 +53,28 @@ def test_fallback_copy_does_not_invent_an_offer():
     assert "₹55.00" in result["caption"]
     assert "Offer:" not in result["caption"]
     assert "discount" not in result["caption"].lower()
+
+
+def test_campaign_save_contract_is_owner_scoped_and_upsertable():
+    request = MarketingCampaignSaveRequest(
+        campaign_id="campaign-1",
+        goal="nearby",
+        headline="Local grocery store",
+        caption="Visit our shop today.",
+        generation_source="manual",
+    )
+    assert request.campaign_id == "campaign-1"
+    source = inspect.getsource(list_marketing_campaigns)
+    save_source = inspect.getsource(__import__("growth_suite").save_marketing_campaign)
+    assert "GrowthMarketingCampaign.shop_id == user_id" in source
+    assert "GrowthMarketingCampaign.shop_id == user_id" in save_source
+    assert 'campaign.status = "DRAFT"' in save_source
+    paths = {context.path for context in __import__("fastapi.routing", fromlist=["iter_route_contexts"]).iter_route_contexts(router.routes)}
+    assert "/growth/marketing/campaigns" in paths
+    with pytest.raises(ValidationError):
+        MarketingCampaignSaveRequest(
+            campaign_id="campaign-2",
+            goal="invalid",
+            headline="Test",
+            caption="Test",
+        )
