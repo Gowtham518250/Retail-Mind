@@ -125,6 +125,19 @@ def test_marketing_save_requires_approval_submission_flag_and_supported_trigger_
         )
 
 
+def test_saved_campaign_caption_is_stamped_with_server_shop_and_offer_facts():
+    from growth_suite import save_marketing_campaign
+
+    source = inspect.getsource(save_marketing_campaign)
+    assert 'caption_lines = [caption]' in source
+    assert 'shop_name not in caption' in source
+    assert 'shop_snapshot["shop_address"]' in source
+    assert 'shop_snapshot["shop_phone"]' in source
+    assert 'Original price:' in source
+    assert 'Discounted price:' in source
+    assert '% OFF' in source
+
+
 def test_automation_settings_have_safe_off_by_default_defaults_and_limits():
     settings = MarketingAutomationSettingsRequest()
     assert settings.enabled is False
