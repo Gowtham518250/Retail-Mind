@@ -1556,6 +1556,27 @@ class GrowthMarketingCampaign(Base):
     product_id = Column(Integer, nullable=True)
     product_name = Column(String(120), nullable=True)
     product_price = Column(Numeric(12, 2), nullable=True)
+    original_price = Column(Numeric(12, 2), nullable=True)
+    discount_price = Column(Numeric(12, 2), nullable=True)
+    discount_percent = Column(Numeric(6, 2), nullable=True)
+    offer_valid_from = Column(Date, nullable=True)
+    offer_valid_until = Column(Date, nullable=True)
+    shop_address = Column(Text, nullable=True)
+    shop_location = Column(String(300), nullable=True)
+    shop_city = Column(String(100), nullable=True)
+    shop_state = Column(String(100), nullable=True)
+    shop_postal_code = Column(String(10), nullable=True)
+    shop_latitude = Column(Float, nullable=True)
+    shop_longitude = Column(Float, nullable=True)
+    shop_phone = Column(String(20), nullable=True)
+    shop_website = Column(String(200), nullable=True)
+    shop_logo_url = Column(String(500), nullable=True)
+    trigger_type = Column(String(32), nullable=False, default="manual", server_default="manual")
+    content_version = Column(Integer, nullable=False, default=1, server_default="1")
+    approved_version = Column(Integer, nullable=True)
+    approved_by = Column(Integer, ForeignKey("user_details.id", ondelete="SET NULL"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejected_reason = Column(Text, nullable=True)
     goal = Column(String(32), nullable=False)
     language = Column(String(8), nullable=False, default="en")
     ad_format = Column(String(16), nullable=False, default="feed")
@@ -1574,6 +1595,47 @@ class GrowthMarketingCampaign(Base):
     __table_args__ = (
         UniqueConstraint("shop_id", "campaign_key", name="uq_growth_campaign_shop_key"),
         Index("ix_growth_campaigns_shop_updated", "shop_id", "updated_at"),
+    )
+
+
+    )
+
+
+class GrowthMarketingAutomationSettings(Base):
+    """Per-shop controls for automatic draft generation; publishing is never enabled here."""
+    __tablename__ = "growth_marketing_automation_settings"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, unique=True)
+    enabled = Column(Boolean, nullable=False, default=False, server_default="false")
+    new_products_enabled = Column(Boolean, nullable=False, default=True, server_default="true")
+    weekly_enabled = Column(Boolean, nullable=False, default=False, server_default="false")
+    weekly_day = Column(Integer, nullable=False, default=0, server_default="0")
+    language = Column(String(8), nullable=False, default="en", server_default="en")
+    max_campaigns_per_week = Column(Integer, nullable=False, default=3, server_default="3")
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class GrowthMarketingTrigger(Base):
+    """Idempotent product/schedule event queue for auto-generated owner-review drafts."""
+    __tablename__ = "growth_marketing_triggers"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False)
+    trigger_key = Column(String(128), nullable=False)
+    trigger_type = Column(String(32), nullable=False)
+    product_id = Column(Integer, nullable=True)
+    status = Column(String(16), nullable=False, default="PENDING", server_default="PENDING")
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    processed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("shop_id", "trigger_key", name="uq_growth_marketing_trigger_key"),
+        Index("ix_growth_marketing_triggers_status_created", "status", "created_at"),
+        Index("ix_growth_marketing_triggers_shop_status", "shop_id", "status"),
     )
 
 
