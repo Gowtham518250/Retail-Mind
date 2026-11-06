@@ -245,14 +245,19 @@ def normalize_support_query(value: str) -> str:
 
 
 def is_simple_greeting(value: str) -> bool:
-    question = normalize_support_query(value)
-    if not question:
-        return False
-    return bool(re.fullmatch(
+    # Check native Telugu greetings before applying the shared phrase
+    # normalizer, which may rewrite language fragments as aliases.
+    raw_question = unicodedata.normalize("NFKC", str(value or "")).casefold().strip()
+    greeting_pattern = (
         r"(?:hi|hello|hey|good morning|good afternoon|good evening|namaste|namaskaram|"
-        r"హాయ్|హలో|నమస్కారం|namaskaram andi)(?: there)?",
-        question,
-    ))
+        r"హాయ్|హలో|నమస్కారం|namaskaram andi)(?: there)?"
+    )
+    if not raw_question:
+        return False
+    if re.fullmatch(greeting_pattern, raw_question):
+        return True
+    question = normalize_support_query(value)
+    return bool(question and re.fullmatch(greeting_pattern, question))
 
 
 def greeting_answer(language_code: str = "en") -> str:
@@ -279,7 +284,7 @@ def classify_shop_data_intent(value: str) -> tuple[str | None, str]:
     if sum(domains.values()) > 1:
         return None
 
-    if re.search(r"\b(low stock|stock low|running low|reorder|below minimum)\b", q):
+    if re.search(r"\b(low stock|low in stock|stock low|running low|reorder|below minimum)\b", q):
         return "low_stock", query
     if re.search(r"\b(overpayment|overpayments|overpaid|paid too much|extra payments)\b", q):
         return "overpayment", query
