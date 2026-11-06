@@ -40,6 +40,7 @@ from models import (
     OnlineLoyaltyTransaction,
     OnlineDeliveryAssignment,
     AIQueryHistory,
+    GrowthMarketingCampaign,
     UniversalTransaction,
     sales,
 )
@@ -243,6 +244,167 @@ def generate_marketing_copy(
         "generation_source": source,
         "requires_owner_review": True,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+class MarketingCampaignSaveRequest(BaseModel):
+    campaign_id: str = Field(..., min_length=1, max_length=64)
+    goal: Literal["nearby", "new_product", "clear_stock", "regular_customers"]
+    language: Literal["en", "te", "hi"] = "en"
+    ad_format: Literal["feed", "square", "story"] = "feed"
+    template: Literal["bold", "festive", "fresh", "minimal"] = "bold"
+    product_id: int | None = Field(default=None, ge=1)
+    product_name: str = Field(default="", max_length=120)
+    headline: str = Field(..., min_length=1, max_length=120)
+    caption: str = Field(..., min_length=1, max_length=650)
+    offer: str = Field(default="", max_length=90)
+    offer_code: str = Field(default="", max_length=32)
+    generation_source: Literal["groq", "template_fallback", "local_template", "manual"] = "manual"
+    redemptions: int = Field(default=0, ge=0, le=1000000)
+
+
+def _marketing_campaign_to_dict(campaign: GrowthMarketingCampaign) -> dict:
+    return {
+        "id": campaign.campaign_key,
+        "campaign_id": campaign.campaign_key,
+        "shop_id": campaign.shop_id,
+        "shop_name": campaign.shop_name,
+        "goal": campaign.goal,
+        "language": campaign.language,
+        "ad_format": campaign.ad_format,
+        "template": campaign.template,
+        "product_id": campaign.product_id,
+        "product_name": campaign.product_name or "",
+        "product_price": float(campaign.product_price) if campaign.product_price is not None else None,
+        "headline": campaign.headline,
+        "caption": campaign.caption,
+        "offer": campaign.offer or "",
+        "offer_code": campaign.offer_code or "",
+        "generation_source": campaign.generation_source,
+        "status": campaign.status,
+        "redemptions": int(campaign.redemptions or 0),
+        "requires_owner_review": True,
+        "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
+        "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None,
+    }
+
+
+@router.post("/marketing/campaigns", status_code=200)
+def save_marketing_campaign(
+    data: MarketingCampaignSaveRequest,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Idempotently save an owner-reviewed marketing draft under its shop."""
+    profile = db.query(ShopProfile).filter(ShopProfile.shop_id == user_id).first()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Shop profile not found.")
+
+    product = None
+    product_name = re.sub(r"\s+", " ", data.product_name or "").strip()[:120]
+    product_price = None
+    if data.product_id is not None:
+        product = db.query(Product).filter(
+            Product.id == data.product_id,
+            Product.user_id == user_id,
+            Product.is_active.is_(True),
+        ).first()
+        if product is None:
+            raise HTTPException(status_code=404, detail="Selected product was not found in this shop.")
+        if float(product.current_stock or 0) <= 0:
+            raise HTTPException(status_code=422, detail="Only an in-stock product can be saved to a campaign.")
+        product_name = str(product.product_name or "").strip()[:120]
+        product_price = Decimal(str(product.unit_price)) if product.unit_price is not None else None
+
+    shop_name = str(profile.shop_name or "My Shop").strip()[:200]
+    headline = re.sub(r"\s+", " ", data.headline or "").strip()
+    caption = str(data.caption or "").strip()
+    offer = re.sub(r"[\x00-\x1f\x7f]", " ", data.offer or "").strip()[:90]
+    offer_code = re.sub(r"[^A-Za-z0-9_-]", "", data.offer_code or "")[:32]
+
+    campaign = db.query(GrowthMarketingCampaign).filter(
+        GrowthMarketingCampaign.shop_id == user_id,
+        GrowthMarketingCampaign.campaign_key == data.campaign_id,
+    ).first()
+
+    if campaign is None:
+        campaign = GrowthMarketingCampaign(
+            shop_id=user_id,
+            campaign_key=data.campaign_id,
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        db.add(campaign)
+
+    campaign.product_id = product.id if product else None
+    campaign.product_name = product_name or None
+    campaign.product_price = product_price
+    campaign.goal = data.goal
+    campaign.language = data.language
+    campaign.ad_format = data.ad_format
+    campaign.template = data.template
+    campaign.shop_name = shop_name
+    campaign.headline = headline
+    campaign.caption = caption
+    campaign.offer = offer
+    campaign.offer_code = offer_code
+    campaign.generation_source = data.generation_source
+    campaign.status = "DRAFT"
+    campaign.redemptions = int(data.redemptions or 0)
+    campaign.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        # A concurrent retry may have inserted the same shop/campaign key.
+        # Load it only within this owner and apply the same idempotent update.
+        campaign = db.query(GrowthMarketingCampaign).filter(
+            GrowthMarketingCampaign.shop_id == user_id,
+            GrowthMarketingCampaign.campaign_key == data.campaign_id,
+        ).first()
+        if campaign is None:
+            raise
+        campaign.product_id = product.id if product else None
+        campaign.product_name = product_name or None
+        campaign.product_price = product_price
+        campaign.goal = data.goal
+        campaign.language = data.language
+        campaign.ad_format = data.ad_format
+        campaign.template = data.template
+        campaign.shop_name = shop_name
+        campaign.headline = headline
+        campaign.caption = caption
+        campaign.offer = offer
+        campaign.offer_code = offer_code
+        campaign.generation_source = data.generation_source
+        campaign.status = "DRAFT"
+        campaign.redemptions = int(data.redemptions or 0)
+        campaign.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.commit()
+
+    db.refresh(campaign)
+    return _marketing_campaign_to_dict(campaign)
+
+
+@router.get("/marketing/campaigns")
+def list_marketing_campaigns(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return only this authenticated shop's saved marketing drafts."""
+    query = db.query(GrowthMarketingCampaign).filter(
+        GrowthMarketingCampaign.shop_id == user_id,
+    )
+    total = query.count()
+    campaigns = query.order_by(
+        GrowthMarketingCampaign.updated_at.desc(),
+        GrowthMarketingCampaign.id.desc(),
+    ).offset(offset).limit(limit).all()
+    return {
+        "campaigns": [_marketing_campaign_to_dict(campaign) for campaign in campaigns],
+        "count": total,
     }
 
 
