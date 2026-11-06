@@ -6,12 +6,28 @@ from inventory import (
     _voice_billing_normalize,
     _voice_billing_product_has_evidence,
     _voice_billing_should_translate,
+    _voice_billing_rank_prompt_names,
     router,
 )
 
 
 def _product(product_id: int, name: str, sku: str = ""):
     return SimpleNamespace(id=product_id, product_name=name, sku=sku)
+
+
+def test_voice_billing_prompt_vocabulary_prioritizes_shop_bestsellers():
+    names = _voice_billing_rank_prompt_names(
+        ["Sona Masoori Rice", "Sunflower Oil", "Sugar", "Sona Masoori Rice"],
+        ["Soap", "Sugar", "Tea", "Toothpaste"],
+        limit=5,
+    )
+    assert names == [
+        "Sona Masoori Rice",
+        "Sunflower Oil",
+        "Sugar",
+        "Soap",
+        "Tea",
+    ]
 
 
 def test_voice_billing_parse_endpoints_are_registered():
