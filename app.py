@@ -107,6 +107,7 @@ from khata_ledger import router as khata_router
 from khata_router import router as new_khata_engine_router
 from purchase_orders import router as purchase_orders_router
 from online_store import router as online_store_router
+from cashfree_online_payments import router as cashfree_online_payments_router
 from customer_ai_shopping import router as customer_ai_router
 from growth_suite import router as growth_router, customer_router as customer_growth_router
 from whatsapp_orders import router as whatsapp_orders_router
@@ -570,6 +571,7 @@ api.include_router(khata_router)                  # /khata/*
 api.include_router(new_khata_engine_router)          # /api/khata/*
 api.include_router(purchase_orders_router)        # /purchase-orders/*
 api.include_router(online_store_router)           # /store/*
+api.include_router(cashfree_online_payments_router)  # /store/* Cashfree PG checkout/webhook
 api.include_router(customer_ai_router)              # /store/customer-ai
 api.include_router(growth_router)                   # /growth/*
 api.include_router(customer_growth_router)           # /store/customer growth
