@@ -30,7 +30,10 @@ import time
 from uuid import uuid4
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
-from models import Product, ProductCreateRequest, StockMovement, ProductBatch, Notification
+from models import (
+    Product, ProductCreateRequest, StockMovement, ProductBatch, Notification,
+    Invoice, InvoiceLineItem, InvoiceStatus,
+)
 from growth_marketing_automation import enqueue_product_created_trigger
 from stock_service import StockService
 from voice_billing_core import (
@@ -2923,6 +2926,107 @@ _VOICE_BILLING_WHISPER_PREFIXES = {
 }
 
 
+_VOICE_BILLING_PROMPT_VOCAB_CACHE: dict[int, tuple[float, tuple[str, ...]]] = {}
+_VOICE_BILLING_PROMPT_VOCAB_CACHE_TTL_SECONDS = 300
+_VOICE_BILLING_PROMPT_VOCAB_LOOKBACK_DAYS = 90
+
+
+def _voice_billing_rank_prompt_names(
+    popular_names: list[str],
+    catalog_names: list[str],
+    *,
+    limit: int = 80,
+) -> list[str]:
+    """Put recently and frequently sold products before alphabetical catalog fallback."""
+    ranked: list[str] = []
+    max_names = max(0, int(limit))
+    if max_names == 0:
+        return ranked
+    seen: set[str] = set()
+    for raw_name in [*(popular_names or []), *(catalog_names or [])]:
+        name = re.sub(r"\s+", " ", str(raw_name or "")).strip()[:100]
+        if not name:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        ranked.append(name)
+        if len(ranked) >= max_names:
+            break
+    return ranked
+
+
+def _voice_billing_prompt_catalog_names(db: Session, user_id: int) -> list[str]:
+    """Build a tenant-scoped ASR vocabulary from best-selling items, then fill from the catalog.
+
+    Whisper accepts a short spelling prompt. An alphabetical slice of the catalog
+    systematically omits products that happen to sort later. Recent finalized
+    invoice lines provide a better shop-specific prior without changing any sale data.
+    """
+    shop_id = int(user_id)
+    now = time.time()
+    cached = _VOICE_BILLING_PROMPT_VOCAB_CACHE.get(shop_id)
+    if cached and now - cached[0] < _VOICE_BILLING_PROMPT_VOCAB_CACHE_TTL_SECONDS:
+        return list(cached[1])
+
+    popular_names: list[str] = []
+    cutoff = datetime.now().date() - timedelta(days=_VOICE_BILLING_PROMPT_VOCAB_LOOKBACK_DAYS)
+    try:
+        popular_rows = (
+            db.query(Product.product_name)
+            .join(InvoiceLineItem, InvoiceLineItem.product_id == Product.id)
+            .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+            .filter(
+                Product.user_id == shop_id,
+                Product.is_active.is_(True),
+                Invoice.user_id == shop_id,
+                Invoice.invoice_date >= cutoff,
+                Invoice.status.in_([
+                    InvoiceStatus.SENT,
+                    InvoiceStatus.PAID,
+                    InvoiceStatus.OVERDUE,
+                    InvoiceStatus.PARTIAL,
+                ]),
+            )
+            .group_by(Product.id, Product.product_name)
+            .order_by(
+                func.count(InvoiceLineItem.id).desc(),
+                func.sum(InvoiceLineItem.quantity).desc(),
+                Product.product_name.asc(),
+            )
+            .limit(80)
+            .all()
+        )
+        popular_names = [str(row[0] or "").strip() for row in popular_rows]
+    except Exception as exc:
+        # The ASR hint is an optimization, not a billing dependency. If historical
+        # sales cannot be queried, keep voice billing available using the live catalog.
+        logging.warning(
+            "voice-billing popular vocabulary lookup unavailable: %s",
+            type(exc).__name__,
+        )
+        rollback = getattr(db, "rollback", None)
+        if callable(rollback):
+            try:
+                rollback()
+            except Exception:
+                pass
+
+    catalog_rows = (
+        db.query(Product.product_name)
+        .filter(Product.user_id == shop_id, Product.is_active == True)
+        .order_by(Product.product_name.asc())
+        .limit(120)
+        .all()
+    )
+    catalog_names = [str(row[0] or "").strip() for row in catalog_rows]
+    ranked_names = _voice_billing_rank_prompt_names(popular_names, catalog_names, limit=120)
+    if ranked_names:
+        _VOICE_BILLING_PROMPT_VOCAB_CACHE[shop_id] = (now, tuple(ranked_names))
+    return ranked_names
+
+
 def _voice_billing_whisper_prompt(
     language_code: str,
     product_names: list[str],
@@ -2986,14 +3090,10 @@ async def parse_voice_billing_audio(
     # The selected locale is an ASR hint, not just a downstream translation hint.
     # Whisper documents that this improves transcription accuracy and latency.
     whisper_language = _voice_billing_whisper_language_hint(language_code)
-    catalog_rows = (
-        db.query(Product.product_name)
-        .filter(Product.user_id == int(user_id), Product.is_active == True)
-        .order_by(Product.product_name.asc())
-        .limit(25)
-        .all()
-    )
-    catalog_names = [str(row[0] or "").strip() for row in catalog_rows]
+    # Prefer products actually sold by this shop in the last 90 days. The
+    # remaining vocabulary is filled from the active catalog, so newer/rare
+    # products remain available to the translation and matching stages.
+    catalog_names = _voice_billing_prompt_catalog_names(db, user_id)
     whisper_prompt = _voice_billing_whisper_prompt(language_code, catalog_names)
     transcription_data = {
         "model": stt_model,
