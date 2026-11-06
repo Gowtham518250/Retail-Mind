@@ -712,3 +712,38 @@ def test_overpayment_lookup_explains_when_no_recorded_excess_exists():
     assert result["results"] == []
     assert "couldn't find any invoices" in result["answer"].lower()
     assert "unrecorded disputes" in result["answer"].lower()
+
+
+def test_ai_query_asr_can_return_quality_and_detected_language_metadata(monkeypatch):
+    from types import SimpleNamespace
+    import query_retrival
+
+    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    response = SimpleNamespace(
+        text="  నిన్న\u00a0అమ్మకాలు ఎంత?  ",
+        language="te",
+        duration=2.0,
+        segments=[{
+            "text": "నిన్న\u00a0అమ్మకాలు ఎంత?",
+            "no_speech_prob": 0.02,
+            "avg_logprob": -0.2,
+            "compression_ratio": 1.1,
+            "start": 0.0,
+            "end": 2.0,
+        }],
+    )
+    monkeypatch.setattr(
+        query_retrival,
+        "client",
+        SimpleNamespace(audio=SimpleNamespace(
+            transcriptions=SimpleNamespace(create=lambda **kwargs: response),
+        )),
+    )
+
+    result = query_retrival._transcribe_audio_with_groq(
+        b"test-audio", "query.wav", "audio/wav", "te", include_metadata=True,
+    )
+    assert result["transcript"] == "నిన్న అమ్మకాలు ఎంత?"
+    assert result["detected_language"] == "te"
+    assert result["speech_quality"]["accepted"] is True
+    assert result["speech_quality"]["scored"] is True

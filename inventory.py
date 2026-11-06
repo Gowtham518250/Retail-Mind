@@ -32,7 +32,7 @@ from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import (
     Product, ProductCreateRequest, StockMovement, ProductBatch, Notification,
-    Invoice, InvoiceLineItem, InvoiceStatus,
+    Invoice, InvoiceLineItem, InvoiceStatus, ProductVoiceAlias,
 )
 from growth_marketing_automation import enqueue_product_created_trigger
 from stock_service import StockService
@@ -43,7 +43,11 @@ from voice_billing_core import (
     resolve_catalog_product as _vb_resolve_catalog_product,
     stem_token as _vb_stem_token,
 )
-from voice_asr_guard import NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE, assess_transcription as _assess_transcription
+from voice_asr_guard import (
+    NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE,
+    assess_transcription as _assess_transcription,
+    normalize_voice_transcript as _normalize_voice_transcript,
+)
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
@@ -1996,6 +2000,13 @@ class VoiceBillingParseRequest(BaseModel):
     language_code: str = Field(default="auto", max_length=16)
 
 
+class VoiceBillingAliasCorrectionRequest(BaseModel):
+    """Cashier-confirmed pronunciation correction for an existing catalog product."""
+    alias_text: str = Field(..., min_length=1, max_length=80)
+    product_name: str = Field(..., min_length=1, max_length=120)
+    language_code: str = Field(default="en", min_length=2, max_length=16)
+
+
 _VOICE_BILLING_ALIASES = {
     "rice": {
         "rice", "chawal", "chaval", "biyyam", "vari", "arisi", "akki",
@@ -2075,6 +2086,167 @@ def _voice_billing_normalize(value: str) -> str:
         for char in value
     )
     return re.sub(r"\s+", " ", normalized).strip()
+
+
+
+_VOICE_BILLING_ALIAS_SIZE_TOKENS = {
+    "kg", "kgs", "kilogram", "kilograms", "kilo", "kilos",
+    "g", "gm", "gms", "gram", "grams", "ml", "l", "ltr",
+    "litre", "litres", "liter", "liters", "pc", "pcs", "piece",
+    "pieces", "pack", "packet", "packets", "box", "boxes",
+    "bottle", "bottles", "dozen", "small", "medium", "large",
+    "kilogramme", "kilogrammes", "gramme", "grammes", "milliliter",
+    "millilitre", "litre", "rupee", "rupees", "rs", "inr", "price",
+    "కిలో", "కిలోలు", "కిలోగ్రాములు", "గ్రాము", "గ్రాములు", "లీటరు", "లీటర్లు",
+    "किलो", "किलोग्राम", "ग्राम", "लीटर", "ಲೀಟರ್", "ಕಿಲೋ", "ಗ್ರಾಂ",
+    "கிலோ", "கிராம்", "லிட்டர்", "കിലോ", "ഗ്രാം", "ലിറ്റർ",
+    "કિલો", "ગ્રામ", "લિટર", "किलो", "ग्रॅम", "लिटर",
+}
+_VOICE_BILLING_ALIAS_NUMBER_WORDS = {
+    "zero", "one", "two", "three", "four", "five", "six", "seven",
+    "eight", "nine", "ten", "eleven", "twelve", "half", "quarter",
+    "ek", "do", "teen", "char", "chaar", "panch", "paach", "saat",
+    "aath", "nau", "das", "एक", "दो", "तीन", "चार", "पांच", "पाँच",
+    "छह", "सात", "आठ", "नौ", "दस", "ఒకటి", "రెండు", "మూడు",
+    "నాలుగు", "ఐదు", "ఆరు", "ఏడు", "ఎనిమిది", "తొమ్మిది", "పది",
+}
+
+
+def _voice_billing_base_language_code(value: str) -> str:
+    normalized = (value or "").strip().lower().replace("_", "-")
+    if normalized in {"", "auto", "und"}:
+        return "auto"
+    return normalized.split("-", 1)[0]
+
+
+def _voice_billing_safe_alias_product_phrase(product_name: str) -> str:
+    """Return product-name evidence without pack/size tokens that were not spoken."""
+    kept = []
+    for token in _voice_billing_normalize(product_name).split():
+        if any(char.isdigit() for char in token):
+            continue
+        if token in _VOICE_BILLING_ALIAS_SIZE_TOKENS:
+            continue
+        kept.append(token)
+    return " ".join(kept)
+
+
+def _voice_billing_validate_alias_text(alias_text: str) -> str:
+    normalized = _voice_billing_normalize(alias_text)
+    tokens = normalized.split()
+    if not tokens or len(tokens) > 4:
+        raise HTTPException(status_code=422, detail="Use a short product pronunciation (up to four words).")
+    blocked_number_words = set(_VOICE_BILLING_ALIAS_NUMBER_WORDS)
+    blocked_number_words.update(_VOICE_BILLING_NUMBER_WORDS)
+    blocked_number_words.update(_VOICE_BILLING_SCALE_WORDS)
+    if any(
+        any(char.isdigit() for char in token)
+        or token in _VOICE_BILLING_ALIAS_SIZE_TOKENS
+        or token in blocked_number_words
+        for token in tokens
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="A pronunciation alias cannot contain a quantity, price, pack size, or measurement.",
+        )
+    return normalized
+
+
+def _voice_billing_alias_conflicts_with_catalog(
+    normalized_alias: str,
+    selected_product_id: int,
+    products,
+) -> bool:
+    """Reject an alias that is already a phrase inside another product name."""
+    alias_tokens = tuple(_voice_billing_normalize(normalized_alias).split())
+    if not alias_tokens:
+        return True
+    for product in products or []:
+        try:
+            if int(getattr(product, "id", 0)) == int(selected_product_id):
+                continue
+        except (TypeError, ValueError):
+            continue
+        other_tokens = tuple(
+            _voice_billing_safe_alias_product_phrase(
+                str(getattr(product, "product_name", "") or "")
+            ).split()
+        )
+        size = len(alias_tokens)
+        if size <= len(other_tokens) and any(
+            other_tokens[index:index + size] == alias_tokens
+            for index in range(len(other_tokens) - size + 1)
+        ):
+            return True
+    return False
+
+
+def _voice_billing_expand_shop_aliases(transcript: str, aliases) -> tuple[str, list[str]]:
+    """Expand exact, cashier-confirmed phrases without adding pack-size evidence."""
+    tokens = _voice_billing_normalize(transcript).split()
+    prepared = []
+    for row in aliases or []:
+        if isinstance(row, dict):
+            alias_text = str(row.get("alias_text") or "")
+            product_name = str(row.get("product_name") or "")
+        else:
+            alias_text = str(getattr(row, "alias_text", "") or "")
+            product_name = str(getattr(row, "product_name", "") or "")
+        alias_tokens = tuple(_voice_billing_normalize(alias_text).split())
+        product_tokens = tuple(_voice_billing_safe_alias_product_phrase(product_name).split())
+        if alias_tokens and product_tokens:
+            prepared.append((alias_tokens, product_tokens, alias_text))
+    prepared.sort(key=lambda entry: len(entry[0]), reverse=True)
+
+    output = []
+    applied = []
+    index = 0
+    while index < len(tokens):
+        match = next(
+            (entry for entry in prepared
+             if tuple(tokens[index:index + len(entry[0])]) == entry[0]),
+            None,
+        )
+        if match is None:
+            output.append(tokens[index])
+            index += 1
+            continue
+        alias_tokens, product_tokens, alias_label = match
+        output.extend(product_tokens)
+        applied.append(alias_label)
+        index += len(alias_tokens)
+    return " ".join(output), applied
+
+
+def _voice_billing_active_alias_rows(db: Session, user_id: int, language_code: str):
+    """Return only active aliases and active products belonging to this shop."""
+    shop_id = int(user_id)
+    language = _voice_billing_base_language_code(language_code)
+    allowed_languages = {"auto"} if language == "auto" else {language, "auto"}
+    try:
+        return (
+            db.query(ProductVoiceAlias.alias_text, Product.product_name)
+            .join(Product, Product.id == ProductVoiceAlias.product_id)
+            .filter(
+                ProductVoiceAlias.user_id == shop_id,
+                ProductVoiceAlias.is_active.is_(True),
+                ProductVoiceAlias.language_code.in_(allowed_languages),
+                Product.user_id == shop_id,
+                Product.is_active.is_(True),
+            )
+            .order_by(ProductVoiceAlias.confirmation_count.desc(), ProductVoiceAlias.alias_text.asc())
+            .limit(120)
+            .all()
+        )
+    except Exception as exc:
+        # Voice billing must remain available during rolling deploys where the
+        # additive alias migration has not yet been applied.
+        logging.warning("voice-billing alias lookup unavailable: %s", type(exc).__name__)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return []
 
 
 _VOICE_BILLING_NUMBER_WORDS = {
@@ -2509,6 +2681,142 @@ async def _voice_billing_translate_search_query(
 
 
 
+@router.post("/voice-billing/aliases")
+async def record_voice_billing_alias(
+    request: VoiceBillingAliasCorrectionRequest,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Record an explicit cashier correction for a product in the authenticated shop.
+
+    Aliases become active after three matching corrections. The client cannot
+    provide a tenant ID, and a product from another shop cannot be referenced.
+    """
+    shop_id = int(user_id)
+    language_code = _voice_billing_base_language_code(request.language_code)
+    if language_code == "auto" or not re.fullmatch(r"[a-z]{2,3}", language_code):
+        raise HTTPException(status_code=422, detail="Choose a supported voice language.")
+
+    normalized_alias = _voice_billing_validate_alias_text(request.alias_text)
+    canonical_name = _voice_billing_normalize(request.product_name)
+    active_products = (
+        db.query(Product)
+        .filter(Product.user_id == shop_id, Product.is_active.is_(True))
+        .all()
+    )
+    matching_products = [
+        product
+        for product in active_products
+        if _voice_billing_normalize(product.product_name) == canonical_name
+    ]
+    if not matching_products:
+        return {
+            "recorded": False,
+            "active": False,
+            "confirmation_count": 0,
+            "minimum_confirmations": 3,
+            "reason": "Choose the exact name of an active catalog product before saving this pronunciation.",
+        }
+    if len(matching_products) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="More than one catalog product has this exact name. The pronunciation was not saved.",
+        )
+    product = matching_products[0]
+
+    if _voice_billing_alias_conflicts_with_catalog(
+        normalized_alias,
+        int(product.id),
+        active_products,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This pronunciation overlaps another product name in this shop. "
+                "Use a more distinctive spoken phrase."
+            ),
+        )
+
+    canonical_phrase = _voice_billing_safe_alias_product_phrase(product.product_name)
+    if not canonical_phrase:
+        raise HTTPException(
+            status_code=422,
+            detail="This catalog product does not have a safe name phrase for voice learning.",
+        )
+    if normalized_alias == _voice_billing_normalize(canonical_phrase):
+        return {
+            "recorded": False,
+            "active": False,
+            "confirmation_count": 0,
+            "minimum_confirmations": 3,
+            "reason": "The recognized phrase already matches the catalog product.",
+        }
+
+    alias = (
+        db.query(ProductVoiceAlias)
+        .filter(
+            ProductVoiceAlias.user_id == shop_id,
+            ProductVoiceAlias.language_code == language_code,
+            ProductVoiceAlias.normalized_alias == normalized_alias,
+        )
+        .first()
+    )
+    if alias is not None and int(alias.product_id) != int(product.id):
+        raise HTTPException(
+            status_code=409,
+            detail="This pronunciation is already linked to a different product in this shop and language.",
+        )
+
+    if alias is None:
+        existing_count = (
+            db.query(func.count(ProductVoiceAlias.id))
+            .filter(ProductVoiceAlias.user_id == shop_id)
+            .scalar()
+            or 0
+        )
+        if int(existing_count) >= 500:
+            raise HTTPException(
+                status_code=429,
+                detail="This shop has reached the voice-alias limit. Remove unused aliases before adding more.",
+            )
+        alias = ProductVoiceAlias(
+            user_id=shop_id,
+            product_id=int(product.id),
+            alias_text=request.alias_text.strip(),
+            normalized_alias=normalized_alias,
+            language_code=language_code,
+            confirmation_count=1,
+            is_active=False,
+        )
+        db.add(alias)
+    else:
+        alias.confirmation_count = min(int(alias.confirmation_count or 0) + 1, 1000000)
+        alias.alias_text = request.alias_text.strip()
+        alias.updated_at = datetime.now()
+
+    alias.is_active = int(alias.confirmation_count or 0) >= 3
+    try:
+        db.commit()
+        db.refresh(alias)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This pronunciation was updated by another request. Please retry once.",
+        ) from exc
+
+    for cache_key in [key for key in _VOICE_BILLING_PROMPT_VOCAB_CACHE if key[0] == shop_id]:
+        _VOICE_BILLING_PROMPT_VOCAB_CACHE.pop(cache_key, None)
+    return {
+        "recorded": True,
+        "active": bool(alias.is_active),
+        "confirmation_count": int(alias.confirmation_count or 0),
+        "minimum_confirmations": 3,
+        "language_code": language_code,
+        "product_id": int(product.id),
+    }
+
+
 @router.post("/voice-billing/parse")
 async def parse_voice_billing(
     request: VoiceBillingParseRequest,
@@ -2521,7 +2829,7 @@ async def parse_voice_billing(
     A product absent from the authenticated shop's catalog remains a sellable custom line,
     but has no product ID and therefore cannot reduce inventory stock.
     """
-    transcript = (request.transcript or "").strip()
+    transcript = _normalize_voice_transcript(request.transcript)
     if not transcript:
         raise HTTPException(status_code=422, detail="Please speak or enter the products to add.")
 
@@ -2532,9 +2840,15 @@ async def parse_voice_billing(
             detail="Voice billing AI is not configured. Set GROQ_API_KEY on the backend.",
         )
 
-    # Deterministically normalize spoken scale expressions before translation.
-    # Keep the original transcript in the response for the cashier's review.
-    parser_transcript = _voice_billing_normalize_spoken_scales(transcript)
+    # Only repeated cashier-approved aliases from this authenticated shop are used.
+    # The visible transcript remains untouched for review and audit.
+    alias_rows = _voice_billing_active_alias_rows(db, int(user_id), request.language_code or "auto")
+    alias_expanded_transcript, aliases_applied = _voice_billing_expand_shop_aliases(
+        transcript,
+        [{"alias_text": row[0], "product_name": row[1]} for row in alias_rows],
+    )
+    # Normalize spoken scale expressions after safe alias expansion.
+    parser_transcript = _voice_billing_normalize_spoken_scales(alias_expanded_transcript)
 
     # Normalize non-English/native-script and common Romanized Indian speech BEFORE matching.
     model = (os.getenv("GROQ_VOICE_BILLING_MODEL") or "qwen/qwen3.8-27b").strip()
@@ -2890,7 +3204,8 @@ async def parse_voice_billing(
         "transcript": transcript,
         "normalized_transcript": parser_transcript,
         "interpreted_text_en": interpreted_text_en,
-        "translation_required": _voice_billing_should_translate(transcript, request.language_code or "auto"),
+        "translation_required": _voice_billing_should_translate(parser_transcript, request.language_code or "auto"),
+        "voice_aliases_applied": bool(aliases_applied),
         "provider": "Groq",
         "model": model,
         "catalog_candidates": len(candidates),
@@ -2926,7 +3241,7 @@ _VOICE_BILLING_WHISPER_PREFIXES = {
 }
 
 
-_VOICE_BILLING_PROMPT_VOCAB_CACHE: dict[int, tuple[float, tuple[str, ...]]] = {}
+_VOICE_BILLING_PROMPT_VOCAB_CACHE: dict[tuple[int, str], tuple[float, tuple[str, ...]]] = {}
 _VOICE_BILLING_PROMPT_VOCAB_CACHE_TTL_SECONDS = 300
 _VOICE_BILLING_PROMPT_VOCAB_LOOKBACK_DAYS = 90
 
@@ -2957,7 +3272,7 @@ def _voice_billing_rank_prompt_names(
     return ranked
 
 
-def _voice_billing_prompt_catalog_names(db: Session, user_id: int) -> list[str]:
+def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code: str = "auto") -> list[str]:
     """Build a tenant-scoped ASR vocabulary from best-selling items, then fill from the catalog.
 
     Whisper accepts a short spelling prompt. An alphabetical slice of the catalog
@@ -2965,8 +3280,10 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int) -> list[str]:
     invoice lines provide a better shop-specific prior without changing any sale data.
     """
     shop_id = int(user_id)
+    language = _voice_billing_base_language_code(language_code)
+    cache_key = (shop_id, language)
     now = time.time()
-    cached = _VOICE_BILLING_PROMPT_VOCAB_CACHE.get(shop_id)
+    cached = _VOICE_BILLING_PROMPT_VOCAB_CACHE.get(cache_key)
     if cached and now - cached[0] < _VOICE_BILLING_PROMPT_VOCAB_CACHE_TTL_SECONDS:
         return list(cached[1])
 
@@ -3021,9 +3338,39 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int) -> list[str]:
         .all()
     )
     catalog_names = [str(row[0] or "").strip() for row in catalog_rows]
-    ranked_names = _voice_billing_rank_prompt_names(popular_names, catalog_names, limit=120)
+    # Activated pronunciations are included as ASR hints only; product identity
+    # is still resolved later from the authenticated catalog and spoken evidence.
+    alias_languages = {"auto"} if language == "auto" else {language, "auto"}
+    try:
+        alias_rows = (
+            db.query(ProductVoiceAlias.alias_text)
+            .join(Product, Product.id == ProductVoiceAlias.product_id)
+            .filter(
+                ProductVoiceAlias.user_id == shop_id,
+                ProductVoiceAlias.is_active.is_(True),
+                ProductVoiceAlias.language_code.in_(alias_languages),
+                Product.user_id == shop_id,
+                Product.is_active.is_(True),
+            )
+            .order_by(ProductVoiceAlias.confirmation_count.desc())
+            .limit(40)
+            .all()
+        )
+        alias_names = [str(row[0] or "").strip() for row in alias_rows]
+    except Exception as exc:
+        logging.warning("voice-billing ASR alias hints unavailable: %s", type(exc).__name__)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        alias_names = []
+    ranked_names = _voice_billing_rank_prompt_names(
+        popular_names + alias_names,
+        catalog_names,
+        limit=120,
+    )
     if ranked_names:
-        _VOICE_BILLING_PROMPT_VOCAB_CACHE[shop_id] = (now, tuple(ranked_names))
+        _VOICE_BILLING_PROMPT_VOCAB_CACHE[cache_key] = (now, tuple(ranked_names))
     return ranked_names
 
 
@@ -3093,7 +3440,7 @@ async def parse_voice_billing_audio(
     # Prefer products actually sold by this shop in the last 90 days. The
     # remaining vocabulary is filled from the active catalog, so newer/rare
     # products remain available to the translation and matching stages.
-    catalog_names = _voice_billing_prompt_catalog_names(db, user_id)
+    catalog_names = _voice_billing_prompt_catalog_names(db, user_id, language_code)
     whisper_prompt = _voice_billing_whisper_prompt(language_code, catalog_names)
     transcription_data = {
         "model": stt_model,

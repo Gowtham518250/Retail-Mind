@@ -22,6 +22,7 @@ shops; see docs/VOICE_AI_EVALUATION.md.  They are not measured accuracy figures.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
@@ -43,6 +44,29 @@ _HALLUCINATED_FRAGMENTS = (
     "subscribe to", "like and subscribe", "thanks for watching", "thank you for watching",
 )
 _STRIP = " \t\r\n.,!?;:।॥…\"'“”‘’()[]{}-–—"
+
+def normalize_voice_transcript(value: Any) -> str:
+    """Apply loss-minimizing Unicode and whitespace cleanup to ASR text.
+
+    Keep native-script joiners and punctuation intact. Normalize Unicode to NFC,
+    remove only zero-width space/BOM artefacts, convert Unicode decimal digits
+    to ASCII digits, and collapse whitespace. This is shared by billing and AI Ask.
+    """
+    if value is None:
+        return ""
+    text = unicodedata.normalize("NFC", str(value))
+    text = text.replace("\u00a0", " ").replace("\u200b", "").replace("\ufeff", "")
+    normalized_chars = []
+    for char in text:
+        if unicodedata.category(char) == "Nd":
+            try:
+                normalized_chars.append(str(unicodedata.digit(char)))
+                continue
+            except (TypeError, ValueError):
+                pass
+        normalized_chars.append(char)
+    return re.sub(r"\s+", " ", "".join(normalized_chars)).strip()
+
 
 
 @dataclass(frozen=True)
@@ -196,7 +220,7 @@ def assess_transcription(
         return SpeechVerdict(False, "invalid_payload")
     t = thresholds
     segments = [s for s in (payload.get("segments") or []) if isinstance(s, dict)]
-    full_text = str(payload.get("text") or "").strip()
+    full_text = normalize_voice_transcript(payload.get("text"))
     duration = _num(payload.get("duration"))
 
     if duration is not None and duration < t.min_audio_seconds:
@@ -247,7 +271,7 @@ def assess_transcription(
         start, end = _num(segment.get("start")), _num(segment.get("end"))
         if start is not None and end is not None and end > start:
             speech_seconds += end - start
-    text = " ".join(str(s.get("text") or "").strip() for s in kept).strip()
+    text = normalize_voice_transcript(" ".join(str(s.get("text") or "") for s in kept))
     has_timing = any(_num(s.get("end")) is not None for s in kept)
     if has_timing and speech_seconds < t.min_speech_seconds:
         return verdict(False, "too_short", speech=speech_seconds)

@@ -364,6 +364,39 @@ class Product(Base):
     line_items = relationship("InvoiceLineItem", back_populates="product")
 
 
+class ProductVoiceAlias(Base):
+    """Shop-scoped, repeatedly cashier-confirmed speech alias for one catalog product."""
+    __tablename__ = "product_voice_aliases"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("user_details.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    alias_text = Column(String(80), nullable=False)
+    normalized_alias = Column(String(120), nullable=False)
+    language_code = Column(String(16), nullable=False, default="en")
+    confirmation_count = Column(Integer, nullable=False, default=1, server_default="1")
+    is_active = Column(Boolean, nullable=False, default=False, server_default="false")
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "language_code", "normalized_alias",
+            name="uq_product_voice_alias_shop_language_phrase",
+        ),
+        Index("ix_product_voice_alias_shop_language_active", "user_id", "language_code", "is_active"),
+    )
+
 class ProductCreateRequest(Base):
     """Idempotency ledger for product-create operations synced by offline clients."""
     __tablename__ = "product_create_requests"

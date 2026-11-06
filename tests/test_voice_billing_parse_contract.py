@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
+from fastapi import HTTPException
+
 from inventory import (
     _voice_billing_catalog_candidates,
     _voice_billing_normalize_spoken_scales,
@@ -7,6 +10,9 @@ from inventory import (
     _voice_billing_product_has_evidence,
     _voice_billing_should_translate,
     _voice_billing_rank_prompt_names,
+    _voice_billing_expand_shop_aliases,
+    _voice_billing_validate_alias_text,
+    _voice_billing_alias_conflicts_with_catalog,
     router,
 )
 
@@ -30,6 +36,71 @@ def test_voice_billing_prompt_vocabulary_prioritizes_shop_bestsellers():
     ]
 
 
+
+
+
+def test_voice_billing_shop_aliases_expand_exact_words_without_pack_size():
+    expanded, applied = _voice_billing_expand_shop_aliases(
+        "2 kg Bubt, 50",
+        [{"alias_text": "bubt", "product_name": "Boost 500g"}],
+    )
+    assert expanded == "2 kg boost 50"
+    assert applied == ["bubt"]
+    assert "500g" not in expanded
+
+
+def test_voice_billing_shop_aliases_do_not_replace_substrings():
+    expanded, applied = _voice_billing_expand_shop_aliases(
+        "bubtish 2 kg bubt",
+        [{"alias_text": "bubt", "product_name": "Boost 1kg"}],
+    )
+    assert expanded == "bubtish 2 kg boost"
+    assert applied == ["bubt"]
+
+
+def test_voice_billing_alias_rejects_quantity_and_pack_size_tokens():
+    assert _voice_billing_validate_alias_text("Bubt") == "bubt"
+    for unsafe in ("Boost 500g", "two kg", "₹50", "500 gm boost"):
+        with pytest.raises(HTTPException):
+            _voice_billing_validate_alias_text(unsafe)
+
+
+def test_voice_billing_alias_must_be_distinct_from_other_catalog_names():
+    selected = _product(1, "Sunflower Oil 1L")
+    other = _product(2, "Mustard Oil 1L")
+    different = _product(3, "Bubt Special Drink 500g")
+
+    assert _voice_billing_alias_conflicts_with_catalog(
+        "oil", selected.id, [selected, other, different]
+    )
+    assert not _voice_billing_alias_conflicts_with_catalog(
+        "bubt", different.id, [selected, other, different]
+    )
+
+
+def test_voice_billing_alias_expansion_does_not_choose_between_pack_sizes():
+    from voice_billing_core import resolve_catalog_product
+
+    products = [
+        _product(101, "Boost 500g", "BOOST-500"),
+        _product(102, "Boost 1kg", "BOOST-1000"),
+    ]
+    expanded, applied = _voice_billing_expand_shop_aliases(
+        "2 kg bubt 50",
+        [{"alias_text": "bubt", "product_name": "Boost 500g"}],
+    )
+    result = resolve_catalog_product(
+        ["Boost 500g"],
+        expanded,
+        products,
+        normalize=_voice_billing_normalize,
+        expand_tokens=lambda value: set(_voice_billing_normalize(value).split()),
+    )
+    assert applied == ["bubt"]
+    assert result.status == "ambiguous"
+    assert result.product is None
+
+
 def test_voice_billing_parse_endpoints_are_registered():
     paths = {
         (getattr(route, "path", ""), frozenset(getattr(route, "methods", set())))
@@ -37,6 +108,8 @@ def test_voice_billing_parse_endpoints_are_registered():
     }
     assert ("/api/inventory/voice-billing/parse", frozenset({"POST"})) in paths
     assert ("/api/inventory/voice-billing/parse-audio", frozenset({"POST"})) in paths
+    assert ("/api/inventory/voice-billing/aliases", frozenset({"POST"})) in paths
+    assert ("/api/inventory/voice-billing/aliases", frozenset({"POST"})) in paths
 
 
 def test_voice_billing_normalization_preserves_indian_script_and_numbers():
