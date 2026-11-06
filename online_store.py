@@ -1342,11 +1342,7 @@ def find_nearby_shops(
                 "shop_type": s.shop_type or "General",
                 "tagline": s.shop_tagline or "",
                 "description": s.shop_description or "",
-                "categories": (
-                    [item.strip() for item in str(s.shop_categories or "").split(",") if item.strip()]
-                    if s.shop_categories and not str(s.shop_categories).strip().startswith("[")
-                    else s.shop_categories
-                ),
+                "categories": _safe_json_list(s.shop_categories),
                 "website": s.website or "",
                 "is_online": True,
                 "distance_km": (
