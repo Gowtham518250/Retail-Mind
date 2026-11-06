@@ -12,6 +12,7 @@ from inventory import (
     _voice_billing_rank_prompt_names,
     _voice_billing_expand_shop_aliases,
     _voice_billing_validate_alias_text,
+    _voice_billing_alias_conflicts_with_catalog,
     router,
 )
 
@@ -62,6 +63,19 @@ def test_voice_billing_alias_rejects_quantity_and_pack_size_tokens():
     for unsafe in ("Boost 500g", "two kg", "₹50", "500 gm boost"):
         with pytest.raises(HTTPException):
             _voice_billing_validate_alias_text(unsafe)
+
+
+def test_voice_billing_alias_must_be_distinct_from_other_catalog_names():
+    selected = _product(1, "Sunflower Oil 1L")
+    other = _product(2, "Mustard Oil 1L")
+    different = _product(3, "Bubt Special Drink 500g")
+
+    assert _voice_billing_alias_conflicts_with_catalog(
+        "oil", selected.id, [selected, other, different]
+    )
+    assert not _voice_billing_alias_conflicts_with_catalog(
+        "bubt", different.id, [selected, other, different]
+    )
 
 
 def test_voice_billing_alias_expansion_does_not_choose_between_pack_sizes():
