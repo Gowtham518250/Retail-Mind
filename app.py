@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, Response
 import os
 import time
 import logging
+import threading
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 from performance_middleware import setup_performance_middleware
@@ -251,6 +252,63 @@ def _start_attendance_auto_checkout_on_startup():
         logger.info("Attendance auto-checkout scheduler initialized")
     except Exception:
         logger.exception("Attendance auto-checkout scheduler failed to initialize")
+
+# ========================
+# GROW MY SHOP AUTOMATION WORKER
+# ========================
+_growth_marketing_worker_started = False
+
+
+@api.on_event("startup")
+def _start_growth_marketing_automation_worker():
+    """Run the idempotent campaign-draft queue on one Postgres replica at a time."""
+    global _growth_marketing_worker_started
+    if _growth_marketing_worker_started:
+        return
+    if os.getenv("GROWTH_MARKETING_AUTOMATION_WORKER_ENABLED", "1").strip().lower() in {"0", "false", "no", "off"}:
+        logger.info("Grow My Shop automation worker disabled by configuration")
+        return
+    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING", "").strip() == "1":
+        return
+
+    stop_event = threading.Event()
+
+    def _worker_loop():
+        while not stop_event.is_set():
+            def _process_batch():
+                from db import sessionLocal
+                from growth_marketing_automation import process_pending_marketing_triggers
+
+                session = sessionLocal()
+                try:
+                    outcome = process_pending_marketing_triggers(session, limit=50)
+                    if outcome.get("processed") or outcome.get("weekly_triggers_queued"):
+                        logger.info("Grow My Shop automation batch: %s", outcome)
+                except Exception:
+                    session.rollback()
+                    logger.exception("Grow My Shop automation batch failed")
+                finally:
+                    session.close()
+
+            try:
+                from distributed_job_lock import run_with_advisory_lock
+                run_with_advisory_lock(
+                    _process_batch,
+                    lock_id=7412061106,
+                )
+            except Exception:
+                logger.exception("Could not run Grow My Shop automation batch")
+            stop_event.wait(60)
+
+    worker = threading.Thread(
+        target=_worker_loop,
+        name="growth-marketing-automation",
+        daemon=True,
+    )
+    worker.start()
+    _growth_marketing_worker_started = True
+    logger.info("Grow My Shop automatic draft worker initialized")
+
 
 # ========================
 # LEGACY SCHEMA REPAIR (DEVELOPMENT / DIRECT ASGI ONLY)

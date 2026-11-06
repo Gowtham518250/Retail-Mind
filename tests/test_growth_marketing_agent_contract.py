@@ -73,7 +73,7 @@ def test_campaign_save_contract_is_owner_scoped_and_upsertable():
     save_source = inspect.getsource(__import__("growth_suite").save_marketing_campaign)
     assert "GrowthMarketingCampaign.shop_id == user_id" in source
     assert "GrowthMarketingCampaign.shop_id == user_id" in save_source
-    assert 'campaign.status = "DRAFT"' in save_source
+    assert 'campaign.status = "PENDING_APPROVAL" if data.submit_for_approval else "DRAFT"' in save_source
     paths = {context.path for context in __import__("fastapi.routing", fromlist=["iter_route_contexts"]).iter_route_contexts(router.routes)}
     assert "/growth/marketing/campaigns" in paths
     with pytest.raises(ValidationError):

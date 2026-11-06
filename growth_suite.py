@@ -9,8 +9,8 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
 from datetime_utils import is_after_utc, is_before_utc
@@ -42,6 +42,7 @@ from models import (
     OnlineDeliveryAssignment,
     AIQueryHistory,
     GrowthMarketingCampaign,
+    GrowthMarketingAutomationSettings,
     UniversalTransaction,
     sales,
 )
@@ -67,6 +68,79 @@ class MarketingCopyRequest(BaseModel):
     product_name: str = Field(default="", max_length=100)
     offer: str = Field(default="", max_length=90)
     offer_code: str = Field(default="", max_length=32)
+    discount_price: Decimal | None = Field(default=None, ge=0, le=100000000)
+    offer_valid_from: date | None = None
+    offer_valid_until: date | None = None
+
+
+def _marketing_shop_snapshot(profile: ShopProfile) -> dict:
+    address_parts = [
+        profile.address_line1,
+        profile.address_line2,
+        profile.address,
+        profile.location,
+        profile.city,
+        profile.state,
+        profile.postal_code,
+    ]
+    normalized = []
+    for value in address_parts:
+        item = str(value or "").strip()
+        if item and item not in normalized:
+            normalized.append(item)
+    return {
+        "shop_address": ", ".join(normalized)[:1000],
+        "shop_location": profile.location,
+        "shop_city": profile.city,
+        "shop_state": profile.state,
+        "shop_postal_code": profile.postal_code,
+        "shop_latitude": profile.latitude,
+        "shop_longitude": profile.longitude,
+        "shop_phone": profile.phone,
+        "shop_website": profile.website,
+        "shop_logo_url": profile.logo_url,
+    }
+
+
+def _calculate_marketing_discount(
+    original_price: Decimal | float | int | None,
+    discount_price: Decimal | float | int | None,
+    offer_valid_from: date | None = None,
+    offer_valid_until: date | None = None,
+    today: date | None = None,
+) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+    """Validate an owner-entered offer against the selected product's current price."""
+    if discount_price is None:
+        if offer_valid_from is not None or offer_valid_until is not None:
+            raise ValueError("Offer dates require a discounted price.")
+        return (
+            Decimal(str(original_price)) if original_price is not None else None,
+            None,
+            None,
+        )
+
+    original = Decimal(str(original_price or 0)).quantize(Decimal("0.01"))
+    discounted = Decimal(str(discount_price)).quantize(Decimal("0.01"))
+    if original <= 0:
+        raise ValueError("A verified product price is required before adding a discount.")
+    if discounted < 0 or discounted >= original:
+        raise ValueError("Discounted price must be lower than the original product price.")
+    current_day = today or date.today()
+    if offer_valid_from and offer_valid_until and offer_valid_until < offer_valid_from:
+        raise ValueError("Offer end date cannot be before its start date.")
+    if offer_valid_until and offer_valid_until < current_day:
+        raise ValueError("This offer has already expired.")
+    percent = (((original - discounted) / original) * Decimal("100")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    return original, discounted, percent
+
+
+def _raise_marketing_discount_error(*args, **kwargs):
+    try:
+        return _calculate_marketing_discount(*args, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 _RESTRICTED_MARKETING_PATTERN = re.compile(
@@ -242,12 +316,26 @@ def generate_marketing_copy(
             detail="Promotional drafts are unavailable for this product or content category.",
         )
 
+    original_price, discount_price, discount_percent = _raise_marketing_discount_error(
+        product_price,
+        data.discount_price,
+        data.offer_valid_from,
+        data.offer_valid_until,
+    )
+    shop_details = _marketing_shop_snapshot(profile)
     context = {
         "shop_name": shop_name,
+        "shop_address": shop_details["shop_address"],
+        "shop_phone": shop_details["shop_phone"],
+        "shop_city": shop_details["shop_city"],
         "goal": data.goal,
         "ad_format": data.ad_format,
         "product_name": product_name,
-        "product_price_inr": product_price,
+        "original_price_inr": float(original_price) if original_price is not None else None,
+        "discount_price_inr": float(discount_price) if discount_price is not None else None,
+        "discount_percent": float(discount_percent) if discount_percent is not None else None,
+        "offer_valid_from": data.offer_valid_from.isoformat() if data.offer_valid_from else None,
+        "offer_valid_until": data.offer_valid_until.isoformat() if data.offer_valid_until else None,
         "offer_provided_by_owner": offer,
         "offer_code_provided_by_owner": offer_code if offer else "",
     }
@@ -275,19 +363,39 @@ def generate_marketing_copy(
             detail="The generated draft could not pass the content safety check.",
         )
 
+    verified_lines = [generated["caption"]]
+    if discount_price is not None:
+        verified_lines.append(
+            f"Price: ₹{original_price:,.2f} → ₹{discount_price:,.2f} ({discount_percent}% OFF)"
+        )
+        if data.offer_valid_until:
+            verified_lines.append(f"Offer valid until: {data.offer_valid_until.isoformat()}")
+    if shop_details["shop_address"]:
+        verified_lines.append(f"Shop location: {shop_details['shop_address']}")
+    if shop_details["shop_phone"]:
+        verified_lines.append(f"Contact: {shop_details['shop_phone']}")
+    verified_caption = "\n".join(verified_lines)[:1200]
+
     return {
         "shop_id": user_id,
         "shop_name": shop_name,
+        "shop_details": shop_details,
         "product_id": product.id if product else None,
         "product_name": product_name,
         "product_price": product_price,
+        "original_price": float(original_price) if original_price is not None else None,
+        "discount_price": float(discount_price) if discount_price is not None else None,
+        "discount_percent": float(discount_percent) if discount_percent is not None else None,
+        "offer_valid_from": data.offer_valid_from.isoformat() if data.offer_valid_from else None,
+        "offer_valid_until": data.offer_valid_until.isoformat() if data.offer_valid_until else None,
         "stock_at_generation": stock_quantity,
         "goal": data.goal,
         "language": data.language,
         "ad_format": data.ad_format,
         "headline": generated["headline"],
-        "caption": generated["caption"],
+        "caption": verified_caption,
         "generation_source": source,
+        "trigger_type": "owner_offer" if discount_price is not None or offer else "manual",
         "requires_owner_review": True,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -302,12 +410,84 @@ class MarketingCampaignSaveRequest(BaseModel):
     product_id: int | None = Field(default=None, ge=1)
     product_name: str = Field(default="", max_length=120)
     product_price: float | None = Field(default=None, ge=0, le=100000000)
+    discount_price: Decimal | None = Field(default=None, ge=0, le=100000000)
+    offer_valid_from: date | None = None
+    offer_valid_until: date | None = None
     headline: str = Field(..., min_length=1, max_length=120)
-    caption: str = Field(..., min_length=1, max_length=650)
+    caption: str = Field(..., min_length=1, max_length=1200)
     offer: str = Field(default="", max_length=90)
     offer_code: str = Field(default="", max_length=32)
-    generation_source: Literal["groq", "template_fallback", "local_template", "manual"] = "manual"
+    generation_source: Literal["groq", "template_fallback", "local_template", "automation", "manual"] = "manual"
+    trigger_type: Literal["manual", "owner_offer", "new_product", "weekly"] = "manual"
+    submit_for_approval: bool = False
     redemptions: int = Field(default=0, ge=0, le=1000000)
+
+
+class MarketingAutomationSettingsRequest(BaseModel):
+    enabled: bool = False
+    new_products_enabled: bool = True
+    weekly_enabled: bool = False
+    weekly_day: int = Field(default=0, ge=0, le=6)
+    language: Literal["en", "te", "hi"] = "en"
+    max_campaigns_per_week: int = Field(default=3, ge=1, le=7)
+
+
+class MarketingCampaignApprovalRequest(BaseModel):
+    expected_version: int = Field(..., ge=1)
+    reason: str = Field(default="", max_length=500)
+
+
+@router.get("/marketing/automation/settings")
+def get_marketing_automation_settings(
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    settings = db.query(GrowthMarketingAutomationSettings).filter(
+        GrowthMarketingAutomationSettings.shop_id == user_id,
+    ).first()
+    if settings is None:
+        return {
+            "shop_id": user_id,
+            "enabled": False,
+            "new_products_enabled": True,
+            "weekly_enabled": False,
+            "weekly_day": 0,
+            "language": "en",
+            "max_campaigns_per_week": 3,
+        }
+    return {
+        "shop_id": user_id,
+        "enabled": bool(settings.enabled),
+        "new_products_enabled": bool(settings.new_products_enabled),
+        "weekly_enabled": bool(settings.weekly_enabled),
+        "weekly_day": int(settings.weekly_day or 0),
+        "language": settings.language or "en",
+        "max_campaigns_per_week": int(settings.max_campaigns_per_week or 3),
+    }
+
+
+@router.put("/marketing/automation/settings")
+def update_marketing_automation_settings(
+    data: MarketingAutomationSettingsRequest,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    settings = db.query(GrowthMarketingAutomationSettings).filter(
+        GrowthMarketingAutomationSettings.shop_id == user_id,
+    ).first()
+    if settings is None:
+        settings = GrowthMarketingAutomationSettings(shop_id=user_id)
+        db.add(settings)
+    settings.enabled = bool(data.enabled)
+    settings.new_products_enabled = bool(data.new_products_enabled)
+    settings.weekly_enabled = bool(data.weekly_enabled)
+    settings.weekly_day = int(data.weekly_day)
+    settings.language = data.language
+    settings.max_campaigns_per_week = int(data.max_campaigns_per_week)
+    settings.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+    db.refresh(settings)
+    return get_marketing_automation_settings(user_id=user_id, db=db)
 
 
 def _marketing_campaign_to_dict(campaign: GrowthMarketingCampaign) -> dict:
@@ -323,6 +503,29 @@ def _marketing_campaign_to_dict(campaign: GrowthMarketingCampaign) -> dict:
         "product_id": campaign.product_id,
         "product_name": campaign.product_name or "",
         "product_price": float(campaign.product_price) if campaign.product_price is not None else None,
+        "original_price": float(campaign.original_price) if campaign.original_price is not None else None,
+        "discount_price": float(campaign.discount_price) if campaign.discount_price is not None else None,
+        "discount_percent": float(campaign.discount_percent) if campaign.discount_percent is not None else None,
+        "offer_valid_from": campaign.offer_valid_from.isoformat() if campaign.offer_valid_from else None,
+        "offer_valid_until": campaign.offer_valid_until.isoformat() if campaign.offer_valid_until else None,
+        "shop_details": {
+            "address": campaign.shop_address or "",
+            "location": campaign.shop_location or "",
+            "city": campaign.shop_city or "",
+            "state": campaign.shop_state or "",
+            "postal_code": campaign.shop_postal_code or "",
+            "latitude": campaign.shop_latitude,
+            "longitude": campaign.shop_longitude,
+            "phone": campaign.shop_phone or "",
+            "website": campaign.shop_website or "",
+            "logo_url": campaign.shop_logo_url or "",
+        },
+        "trigger_type": campaign.trigger_type or "manual",
+        "content_version": int(campaign.content_version or 1),
+        "approved_version": campaign.approved_version,
+        "approved_by": campaign.approved_by,
+        "approved_at": campaign.approved_at.isoformat() if campaign.approved_at else None,
+        "rejected_reason": campaign.rejected_reason or "",
         "headline": campaign.headline,
         "caption": campaign.caption,
         "offer": campaign.offer or "",
@@ -342,7 +545,7 @@ def save_marketing_campaign(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
-    """Idempotently save an owner-reviewed marketing draft under its shop."""
+    """Idempotently save a shop-scoped campaign and reset approval after edits."""
     profile = db.query(ShopProfile).filter(ShopProfile.shop_id == user_id).first()
     if profile is None:
         raise HTTPException(status_code=404, detail="Shop profile not found.")
@@ -363,12 +566,20 @@ def save_marketing_campaign(
         product_name = str(product.product_name or "").strip()[:120]
         product_price = Decimal(str(product.unit_price)) if product.unit_price is not None else None
     elif data.product_price is not None:
-        # Offline/local inventory may not exist on the server yet. This value
-        # remains a private DRAFT snapshot requiring owner review; it is not
-        # treated as verified inventory data or auto-published.
+        # Offline-only snapshots remain draft content; discounted offers require a server-owned product.
         product_price = Decimal(str(data.product_price))
 
+    if data.discount_price is not None and product is None:
+        raise HTTPException(status_code=422, detail="Select a server-verified product before applying a discount.")
+
+    original_price, discount_price, discount_percent = _raise_marketing_discount_error(
+        product_price,
+        data.discount_price,
+        data.offer_valid_from,
+        data.offer_valid_until,
+    )
     shop_name = str(profile.shop_name or "My Shop").strip()[:200]
+    shop_snapshot = _marketing_shop_snapshot(profile)
     headline = re.sub(r"\s+", " ", data.headline or "").strip()
     caption = str(data.caption or "").strip()
     offer = re.sub(r"[\x00-\x1f\x7f]", " ", data.offer or "").strip()[:90]
@@ -387,64 +598,111 @@ def save_marketing_campaign(
             detail="Promotional drafts are unavailable for this product or content category.",
         )
 
+    # Stamp the authenticated shop's canonical facts server-side. This
+    # prevents an offline/stale client draft from omitting or misrepresenting
+    # the shop identity, address, contact details or validated offer.
+    caption_lines = [caption]
+    if shop_name and shop_name not in caption:
+        caption_lines.append(f"Shop: {shop_name}")
+    if discount_price is not None and original_price is not None and discount_percent is not None:
+        caption_lines.append(f"Original price: ₹{original_price:,.2f}")
+        caption_lines.append(f"Discounted price: ₹{discount_price:,.2f}")
+        caption_lines.append(f"{discount_percent}% OFF")
+        if data.offer_valid_from:
+            caption_lines.append(f"Offer valid from: {data.offer_valid_from.isoformat()}")
+        if data.offer_valid_until:
+            caption_lines.append(f"Offer valid until: {data.offer_valid_until.isoformat()}")
+    if shop_snapshot["shop_address"] and shop_snapshot["shop_address"] not in caption:
+        caption_lines.append(f"Shop location: {shop_snapshot['shop_address']}")
+    if shop_snapshot["shop_phone"] and str(shop_snapshot["shop_phone"]) not in caption:
+        caption_lines.append(f"Contact: {shop_snapshot['shop_phone']}")
+    caption = "\n".join(caption_lines)[:1200]
+
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     campaign = db.query(GrowthMarketingCampaign).filter(
         GrowthMarketingCampaign.shop_id == user_id,
         GrowthMarketingCampaign.campaign_key == data.campaign_id,
-    ).first()
-
+    ).with_for_update().first()
+    is_new = campaign is None
     if campaign is None:
         campaign = GrowthMarketingCampaign(
             shop_id=user_id,
             campaign_key=data.campaign_id,
-            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            created_at=now_naive,
         )
         db.add(campaign)
 
-    campaign.product_id = product.id if product else None
-    campaign.product_name = product_name or None
-    campaign.product_price = product_price
+    next_values = {
+        "product_id": product.id if product else None,
+        "product_name": product_name or None,
+        "product_price": product_price,
+        "original_price": original_price,
+        "discount_price": discount_price,
+        "discount_percent": discount_percent,
+        "offer_valid_from": data.offer_valid_from,
+        "offer_valid_until": data.offer_valid_until,
+        "shop_name": shop_name,
+        "headline": headline,
+        "caption": caption,
+        "offer": offer,
+        "offer_code": offer_code,
+        "goal": data.goal,
+        "language": data.language,
+        "ad_format": data.ad_format,
+        "template": data.template,
+        "trigger_type": data.trigger_type,
+        "generation_source": data.generation_source,
+        **shop_snapshot,
+    }
+    content_changed = is_new or any(
+        getattr(campaign, key, None) != value for key, value in next_values.items()
+    )
+    if content_changed:
+        campaign.content_version = max(1, int(campaign.content_version or 0) + 1)
+        campaign.approved_version = None
+        campaign.approved_by = None
+        campaign.approved_at = None
+
+    for key, value in next_values.items():
+        setattr(campaign, key, value)
     campaign.goal = data.goal
     campaign.language = data.language
     campaign.ad_format = data.ad_format
     campaign.template = data.template
-    campaign.shop_name = shop_name
-    campaign.headline = headline
-    campaign.caption = caption
-    campaign.offer = offer
-    campaign.offer_code = offer_code
+    campaign.trigger_type = data.trigger_type
     campaign.generation_source = data.generation_source
-    campaign.status = "DRAFT"
+    campaign.status = "PENDING_APPROVAL" if data.submit_for_approval else "DRAFT"
+    campaign.rejected_reason = None
     campaign.redemptions = int(data.redemptions or 0)
-    campaign.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    campaign.updated_at = now_naive
 
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        # A concurrent retry may have inserted the same shop/campaign key.
-        # Load it only within this owner and apply the same idempotent update.
+        # Retry a concurrent idempotent insert within this authenticated shop only.
         campaign = db.query(GrowthMarketingCampaign).filter(
             GrowthMarketingCampaign.shop_id == user_id,
             GrowthMarketingCampaign.campaign_key == data.campaign_id,
-        ).first()
+        ).with_for_update().first()
         if campaign is None:
             raise
-        campaign.product_id = product.id if product else None
-        campaign.product_name = product_name or None
-        campaign.product_price = product_price
+        campaign.content_version = max(1, int(campaign.content_version or 0) + 1)
+        campaign.approved_version = None
+        campaign.approved_by = None
+        campaign.approved_at = None
+        for key, value in next_values.items():
+            setattr(campaign, key, value)
         campaign.goal = data.goal
         campaign.language = data.language
         campaign.ad_format = data.ad_format
         campaign.template = data.template
-        campaign.shop_name = shop_name
-        campaign.headline = headline
-        campaign.caption = caption
-        campaign.offer = offer
-        campaign.offer_code = offer_code
+        campaign.trigger_type = data.trigger_type
         campaign.generation_source = data.generation_source
-        campaign.status = "DRAFT"
+        campaign.status = "PENDING_APPROVAL" if data.submit_for_approval else "DRAFT"
+        campaign.rejected_reason = None
         campaign.redemptions = int(data.redemptions or 0)
-        campaign.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        campaign.updated_at = now_naive
         db.commit()
 
     db.refresh(campaign)
@@ -471,6 +729,115 @@ def list_marketing_campaigns(
         "campaigns": [_marketing_campaign_to_dict(campaign) for campaign in campaigns],
         "count": total,
     }
+
+
+@router.post("/marketing/campaigns/{campaign_id}/approve")
+def approve_marketing_campaign(
+    campaign_id: str,
+    data: MarketingCampaignApprovalRequest,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    campaign = db.query(GrowthMarketingCampaign).filter(
+        GrowthMarketingCampaign.shop_id == user_id,
+        GrowthMarketingCampaign.campaign_key == campaign_id,
+    ).with_for_update().first()
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    current_version = int(campaign.content_version or 1)
+    if data.expected_version != current_version:
+        raise HTTPException(status_code=409, detail="Campaign changed. Refresh and review the latest version.")
+    if campaign.status != "PENDING_APPROVAL":
+        raise HTTPException(status_code=409, detail="Only campaigns pending owner approval can be approved.")
+    profile = db.query(ShopProfile).filter(
+        ShopProfile.shop_id == user_id,
+    ).first()
+    if profile is None:
+        raise HTTPException(status_code=409, detail="Shop profile is unavailable. Refresh the campaign.")
+    current_shop_snapshot = _marketing_shop_snapshot(profile)
+    saved_shop_snapshot = {
+        "shop_address": campaign.shop_address,
+        "shop_location": campaign.shop_location,
+        "shop_city": campaign.shop_city,
+        "shop_state": campaign.shop_state,
+        "shop_postal_code": campaign.shop_postal_code,
+        "shop_latitude": campaign.shop_latitude,
+        "shop_longitude": campaign.shop_longitude,
+        "shop_phone": campaign.shop_phone,
+        "shop_website": campaign.shop_website,
+        "shop_logo_url": campaign.shop_logo_url,
+    }
+    if current_shop_snapshot != saved_shop_snapshot:
+        raise HTTPException(
+            status_code=409,
+            detail="Shop details changed after this campaign was generated. Regenerate and review it again.",
+        )
+
+    if campaign.product_id is not None:
+        product = db.query(Product).filter(
+            Product.id == campaign.product_id,
+            Product.user_id == user_id,
+            Product.is_active.is_(True),
+            Product.current_stock > 0,
+        ).first()
+        if product is None:
+            raise HTTPException(
+                status_code=409,
+                detail="The campaign product is no longer active or in stock. Update the campaign before approval.",
+            )
+        current_price = Decimal(str(product.unit_price)) if product.unit_price is not None else None
+        if current_price != campaign.original_price:
+            raise HTTPException(
+                status_code=409,
+                detail="The product price changed after this campaign was generated. Regenerate and review it again.",
+            )
+    elif campaign.discount_price is not None:
+        raise HTTPException(status_code=409, detail="A discounted campaign must reference a verified inventory product.")
+
+    if campaign.discount_price is not None:
+        _raise_marketing_discount_error(
+            campaign.original_price,
+            campaign.discount_price,
+            campaign.offer_valid_from,
+            campaign.offer_valid_until,
+        )
+    campaign.status = "APPROVED"
+    campaign.approved_version = current_version
+    campaign.approved_by = user_id
+    campaign.approved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    campaign.rejected_reason = None
+    campaign.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+    db.refresh(campaign)
+    return _marketing_campaign_to_dict(campaign)
+
+
+@router.post("/marketing/campaigns/{campaign_id}/reject")
+def reject_marketing_campaign(
+    campaign_id: str,
+    data: MarketingCampaignApprovalRequest,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    campaign = db.query(GrowthMarketingCampaign).filter(
+        GrowthMarketingCampaign.shop_id == user_id,
+        GrowthMarketingCampaign.campaign_key == campaign_id,
+    ).with_for_update().first()
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    if data.expected_version != int(campaign.content_version or 1):
+        raise HTTPException(status_code=409, detail="Campaign changed. Refresh before rejecting it.")
+    if campaign.status != "PENDING_APPROVAL":
+        raise HTTPException(status_code=409, detail="Only campaigns pending owner approval can be rejected.")
+    campaign.status = "REJECTED"
+    campaign.rejected_reason = data.reason.strip()[:500]
+    campaign.approved_version = None
+    campaign.approved_by = None
+    campaign.approved_at = None
+    campaign.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+    db.refresh(campaign)
+    return _marketing_campaign_to_dict(campaign)
 
 
 # ---------------------------------------------------------------------------

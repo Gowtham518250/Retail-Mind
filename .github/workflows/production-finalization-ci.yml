@@ -131,13 +131,19 @@ jobs:
               "shop_reviews",
               "workers",
               "growth_marketing_campaigns",
+              "growth_marketing_automation_settings",
+              "growth_marketing_triggers",
           }
           missing = sorted(required_tables - tables)
           if missing:
               raise SystemExit(f"Fresh schema is missing required tables: {missing}")
 
           campaign_columns = {item["name"] for item in inspector.get_columns("growth_marketing_campaigns")}
-          required_campaign_columns = {"shop_id", "campaign_key", "headline", "caption", "status"}
+          required_campaign_columns = {
+              "shop_id", "campaign_key", "headline", "caption", "status",
+              "shop_address", "discount_price", "content_version",
+              "approved_version", "trigger_type",
+          }
           if not required_campaign_columns.issubset(campaign_columns):
               raise SystemExit("Fresh growth_marketing_campaigns schema is missing required columns")
 
