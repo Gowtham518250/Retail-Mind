@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
@@ -60,13 +60,19 @@ function loadCashfreeSdk(): Promise<void> {
 }
 
 function parseRetailMindOrderId(providerOrderId: string): string | null {
-  const match = /^rm_order_(\d+)$/.exec(providerOrderId.trim());
+  const match = /^rm_order_(\d+)(?:_[a-f0-9]{8})?$/.exec(providerOrderId.trim());
   return match?.[1] ?? null;
 }
 
 export default function CashfreePaymentReturnPage() {
   const router = useRouter();
   const { clearCart } = useCart();
+  const clearCartRef = useRef(clearCart);
+  const didStartVerification = useRef(false);
+  useEffect(() => {
+    clearCartRef.current = clearCart;
+  }, [clearCart]);
+
   const [orderId, setOrderId] = useState('');
   const [pending, setPending] = useState<PendingOrder | null>(null);
   const [checking, setChecking] = useState(true);
@@ -85,7 +91,7 @@ export default function CashfreePaymentReturnPage() {
       sessionStorage.removeItem(storedOrder.checkoutSessionKey);
     }
     sessionStorage.removeItem(`cashfree:pending:${id}`);
-    clearCart();
+    clearCartRef.current();
 
     const shopId = storedOrder?.shopId;
     if (shopId !== undefined && String(shopId).trim() !== '') {
@@ -93,7 +99,7 @@ export default function CashfreePaymentReturnPage() {
     } else {
       router.replace('/orders');
     }
-  }, [clearCart, router]);
+  }, [router]);
 
   const checkPayment = useCallback(async (id: string, pendingOrder: PendingOrder | null, attempts = 1) => {
     const token = localStorage.getItem('customerToken');
@@ -147,6 +153,8 @@ export default function CashfreePaymentReturnPage() {
   }, [finishPaidOrder, router]);
 
   useEffect(() => {
+    if (didStartVerification.current) return;
+    didStartVerification.current = true;
     const params = new URLSearchParams(window.location.search);
     const providerOrderId = params.get('order_id') || params.get('orderId') || '';
     const internalOrderId = parseRetailMindOrderId(providerOrderId);
