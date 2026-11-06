@@ -1598,9 +1598,6 @@ class GrowthMarketingCampaign(Base):
     )
 
 
-    )
-
-
 class GrowthMarketingAutomationSettings(Base):
     """Per-shop controls for automatic draft generation; publishing is never enabled here."""
     __tablename__ = "growth_marketing_automation_settings"
