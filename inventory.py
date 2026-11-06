@@ -3192,7 +3192,7 @@ def _voice_billing_rank_prompt_names(
     return ranked
 
 
-def _voice_billing_prompt_catalog_names(db: Session, user_id: int) -> list[str]:
+def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code: str = "auto") -> list[str]:
     """Build a tenant-scoped ASR vocabulary from best-selling items, then fill from the catalog.
 
     Whisper accepts a short spelling prompt. An alphabetical slice of the catalog
@@ -3256,7 +3256,30 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int) -> list[str]:
         .all()
     )
     catalog_names = [str(row[0] or "").strip() for row in catalog_rows]
-    ranked_names = _voice_billing_rank_prompt_names(popular_names, catalog_names, limit=120)
+    # Activated pronunciations are included as ASR hints only; product identity
+    # is still resolved later from the authenticated catalog and spoken evidence.
+    language = _voice_billing_base_language_code(language_code)
+    alias_languages = {"auto"} if language == "auto" else {language, "auto"}
+    alias_rows = (
+        db.query(ProductVoiceAlias.alias_text)
+        .join(Product, Product.id == ProductVoiceAlias.product_id)
+        .filter(
+            ProductVoiceAlias.user_id == shop_id,
+            ProductVoiceAlias.is_active.is_(True),
+            ProductVoiceAlias.language_code.in_(alias_languages),
+            Product.user_id == shop_id,
+            Product.is_active.is_(True),
+        )
+        .order_by(ProductVoiceAlias.confirmation_count.desc())
+        .limit(40)
+        .all()
+    )
+    alias_names = [str(row[0] or "").strip() for row in alias_rows]
+    ranked_names = _voice_billing_rank_prompt_names(
+        popular_names + alias_names,
+        catalog_names,
+        limit=120,
+    )
     if ranked_names:
         _VOICE_BILLING_PROMPT_VOCAB_CACHE[shop_id] = (now, tuple(ranked_names))
     return ranked_names
@@ -3328,7 +3351,7 @@ async def parse_voice_billing_audio(
     # Prefer products actually sold by this shop in the last 90 days. The
     # remaining vocabulary is filled from the active catalog, so newer/rare
     # products remain available to the translation and matching stages.
-    catalog_names = _voice_billing_prompt_catalog_names(db, user_id)
+    catalog_names = _voice_billing_prompt_catalog_names(db, user_id, language_code)
     whisper_prompt = _voice_billing_whisper_prompt(language_code, catalog_names)
     transcription_data = {
         "model": stt_model,
