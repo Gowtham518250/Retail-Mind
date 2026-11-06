@@ -120,6 +120,26 @@ from audit_logging import AuditAction, AuditService
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
 
+def _safe_json_list(value) -> list[str]:
+    """Normalize a JSON-list or comma-separated shop field for public APIs."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    raw = str(value).strip()
+    if not raw:
+        return []
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, ValueError):
+        decoded = None
+    if isinstance(decoded, list):
+        return [str(item).strip() for item in decoded if str(item).strip()]
+    if isinstance(decoded, str) and decoded.strip():
+        return [decoded.strip()]
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def _add_stock_quantity(current_stock, quantity) -> Decimal:
     """Add stock quantities using Decimal because Numeric columns load as Decimal."""
     return Decimal(str(current_stock or 0)) + Decimal(str(quantity or 0))
