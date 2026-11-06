@@ -18,11 +18,11 @@ from models import (
 
 
 _RESTRICTED_MARKETING_PATTERN = re.compile(
-    r"\\b(?:alcohol|beer|wine|liquor|vodka|whisky|whiskey|rum|tequila|gin|champagne|cider|"
+    r"\b(?:alcohol|beer|wine|liquor|vodka|whisky|whiskey|rum|tequila|gin|champagne|cider|"
     r"tobacco|cigarette|cigar|vape|vaping|e-cigarette|nicotine|"
     r"marijuana|cannabis|weed|thc|cbd|prescription|controlled-substance|steroid|"
     r"gambling|betting|casino|sports-betting|lottery|firearm|gun|ammunition|weapon|"
-    r"switchblade|taser|pepper-spray|pornography|adult-toy|sex-toy|diet-pill|laxative)\\b",
+    r"switchblade|taser|pepper-spray|pornography|adult-toy|sex-toy|diet-pill|laxative)\b",
     re.IGNORECASE,
 )
 
