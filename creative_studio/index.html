@@ -59,7 +59,7 @@
         onLoadStart: function () { setStatus("Opening Adobe Express…"); },
         onError: function (error) { setStatus("Adobe Express: " + errorMessage(error)); },
         onPublishStart: function () { setStatus("Preparing your file…"); },
-        onPublish: async function (_intent, publishParams) {
+        onPublish: function (_intent, publishParams) {
           try {
             const rawAssets = publishParams && publishParams.asset;
             const asset = Array.isArray(rawAssets) ? rawAssets[0] : rawAssets;
