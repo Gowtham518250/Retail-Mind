@@ -1542,6 +1542,41 @@ class AIQueryHistory(Base):
     result_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
 
+class GrowthMarketingCampaign(Base):
+    """Owner-scoped marketing draft history; it does not represent a published ad."""
+    __tablename__ = "growth_marketing_campaigns"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    shop_id = Column(
+        Integer,
+        ForeignKey("user_details.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    campaign_key = Column(String(64), nullable=False)
+    product_id = Column(Integer, nullable=True)
+    product_name = Column(String(120), nullable=True)
+    product_price = Column(Numeric(12, 2), nullable=True)
+    goal = Column(String(32), nullable=False)
+    language = Column(String(8), nullable=False, default="en")
+    ad_format = Column(String(16), nullable=False, default="feed")
+    template = Column(String(32), nullable=False, default="bold")
+    shop_name = Column(String(200), nullable=False)
+    headline = Column(String(120), nullable=False)
+    caption = Column(Text, nullable=False)
+    offer = Column(String(90), nullable=False, default="")
+    offer_code = Column(String(32), nullable=False, default="")
+    generation_source = Column(String(32), nullable=False, default="local_template")
+    status = Column(String(16), nullable=False, default="DRAFT", server_default="DRAFT")
+    redemptions = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("shop_id", "campaign_key", name="uq_growth_campaign_shop_key"),
+        Index("ix_growth_campaigns_shop_updated", "shop_id", "updated_at"),
+    )
+
+
 class GiftCard(Base):
     """Digital Gift Cards issued by the shop"""
     __tablename__ = "gift_cards"

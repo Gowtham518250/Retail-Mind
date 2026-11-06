@@ -9,6 +9,26 @@ def test_customer_marketplace_contract_is_online_only_and_stock_aware():
     assert "Product.current_stock > 0" in source
 
 
+def test_marketplace_shop_cards_include_full_public_location_and_contact_fields():
+    source = inspect.getsource(marketplace_search)
+    for field in (
+        '"address": shop.address or ""',
+        '"address_line1": shop.address_line1 or ""',
+        '"address_line2": shop.address_line2 or ""',
+        '"city": shop.city or ""',
+        '"state": shop.state or ""',
+        '"postal_code": shop.postal_code or ""',
+        '"latitude": shop.latitude',
+        '"longitude": shop.longitude',
+        '"phone": shop.phone or ""',
+        '"email": shop.email or ""',
+        '"website": shop.website or ""',
+        '"logo_url": shop.logo_url',
+        '"shop_description": shop.shop_description or ""',
+    ):
+        assert field in source
+
+
 def test_customer_ai_recommendation_searches_enabled_shops_and_in_stock_items():
     source = inspect.getsource(ai_shopping_recommendations)
     assert "ShopProfile.is_online_store_enabled == True" in source
@@ -24,16 +44,12 @@ def test_delivery_otp_contract_requires_customer_otp_for_delivery_action():
 
 
 def test_customer_marketplace_can_find_shops_by_category_metadata():
-    import inspect
-
     source = inspect.getsource(marketplace_search)
     assert "ShopProfile.shop_type.ilike(like)" in source
     assert "ShopProfile.shop_categories.ilike(like)" in source
 
 
 def test_shop_product_page_batches_flash_sale_lookups_by_category():
-    import inspect
-
     from online_store import browse_shop_products
 
     source = inspect.getsource(browse_shop_products)
@@ -74,4 +90,34 @@ def test_token_lifetimes_keep_short_access_and_seven_day_refresh():
     security_source = (root / "security.py").read_text(encoding="utf-8")
     assert "key: ACCESS_TOKEN_EXPIRE_MINUTES\n        value: 30" in render_source
     assert "key: REFRESH_TOKEN_EXPIRE_DAYS\n        value: 7" in render_source
-    assert "ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv(\"ACCESS_TOKEN_EXPIRE_MINUTES\", 30))" in security_source
+    assert 'ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))' in security_source
+
+
+def test_nearby_shops_returns_complete_location_details_and_distance():
+    from online_store import find_nearby_shops
+
+    source = inspect.getsource(find_nearby_shops)
+    for field in (
+        '"address_line1": s.address_line1 or ""',
+        '"address_line2": s.address_line2 or ""',
+        '"location": s.location or ""',
+        '"city": s.city or ""',
+        '"state": s.state or ""',
+        '"postal_code": s.postal_code or ""',
+        '"latitude": s.latitude',
+        '"longitude": s.longitude',
+        '"distance_km": (',
+        '"phone": s.phone or ""',
+        '"website": s.website or ""',
+        '"categories": _safe_json_list(s.shop_categories)',
+    ):
+        assert field in source
+    assert 'all_shops.sort(key=lambda shop: haversine' in source
+
+
+def test_safe_shop_categories_support_json_and_legacy_comma_values():
+    from online_store import _safe_json_list
+
+    assert _safe_json_list('["Groceries", "Fresh Food"]') == ["Groceries", "Fresh Food"]
+    assert _safe_json_list("Groceries, Fresh Food") == ["Groceries", "Fresh Food"]
+    assert _safe_json_list(None) == []

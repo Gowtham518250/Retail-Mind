@@ -120,6 +120,26 @@ from audit_logging import AuditAction, AuditService
 router = APIRouter(prefix="/store", tags=["Online Store"])
 
 
+def _safe_json_list(value) -> list[str]:
+    """Normalize a JSON-list or comma-separated shop field for public APIs."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    raw = str(value).strip()
+    if not raw:
+        return []
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, ValueError):
+        decoded = None
+    if isinstance(decoded, list):
+        return [str(item).strip() for item in decoded if str(item).strip()]
+    if isinstance(decoded, str) and decoded.strip():
+        return [decoded.strip()]
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def _add_stock_quantity(current_stock, quantity) -> Decimal:
     """Add stock quantities using Decimal because Numeric columns load as Decimal."""
     return Decimal(str(current_stock or 0)) + Decimal(str(quantity or 0))
@@ -1048,12 +1068,19 @@ def marketplace_search(
                 "description": shop.shop_description or "",
                 "shop_type": shop.shop_type or "General",
                 "address": shop.address or "",
+                "address_line1": shop.address_line1 or "",
+                "address_line2": shop.address_line2 or "",
+                "location": shop.location or "",
                 "city": shop.city or "",
                 "state": shop.state or "",
                 "postal_code": shop.postal_code or "",
+                "latitude": shop.latitude,
+                "longitude": shop.longitude,
                 "phone": shop.phone or "",
+                "email": shop.email or "",
                 "website": shop.website or "",
                 "logo_url": shop.logo_url,
+                "shop_description": shop.shop_description or "",
                 "categories": (
                     [item.strip() for item in str(shop.shop_categories or "").split(",") if item.strip()]
                     if shop.shop_categories and not str(shop.shop_categories).strip().startswith("[")
@@ -1276,7 +1303,13 @@ def find_nearby_shops(
 
     if city:
         city_clean = sanitize_input(city, "city")
-        query = query.filter(ShopProfile.address.ilike(f"%{city_clean}%"))
+        query = query.filter(
+            or_(
+                ShopProfile.address.ilike(f"%{city_clean}%"),
+                ShopProfile.city.ilike(f"%{city_clean}%"),
+                ShopProfile.location.ilike(f"%{city_clean}%"),
+            )
+        )
 
     if lat is not None and lng is not None:
         # Bounding box pre-filter for DB speed (BUG-B12)
@@ -1305,6 +1338,7 @@ def find_nearby_shops(
             return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
         all_shops = [s for s in all_shops if haversine(lat, lng, s.latitude, s.longitude) <= radius_km]
+        all_shops.sort(key=lambda shop: haversine(lat, lng, shop.latitude, shop.longitude))
 
     all_shops = all_shops[skip:skip + limit]
 
@@ -1313,15 +1347,29 @@ def find_nearby_shops(
             {
                 "shop_id": s.shop_id,
                 "shop_name": s.shop_name,
-                "address": s.address,
-                "phone": s.phone,
+                "address": s.address or "",
+                "address_line1": s.address_line1 or "",
+                "address_line2": s.address_line2 or "",
+                "location": s.location or "",
+                "city": s.city or "",
+                "state": s.state or "",
+                "postal_code": s.postal_code or "",
+                "latitude": s.latitude,
+                "longitude": s.longitude,
+                "phone": s.phone or "",
+                "email": s.email or "",
                 "logo_url": s.logo_url,
                 "shop_type": s.shop_type or "General",
                 "tagline": s.shop_tagline or "",
                 "description": s.shop_description or "",
-                "city": s.city or "",
-                "state": s.state or "",
+                "categories": _safe_json_list(s.shop_categories),
                 "website": s.website or "",
+                "is_online": True,
+                "distance_km": (
+                    round(haversine(lat, lng, s.latitude, s.longitude), 2)
+                    if lat is not None and lng is not None
+                    else None
+                ),
                 **_shop_reputation(s),
             }
             for s in all_shops
