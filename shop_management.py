@@ -721,10 +721,17 @@ def set_online_settings(
             data.get("accept_online", getattr(profile, "online_accept_online", False))
         )
 
-        # Do not publish a checkout configuration that the customer checkout
-        # cannot actually fulfill. The current production checkout supports
-        # COD only; real UPI/card collection requires a payment-gateway
-        # integration and webhook verification before it can be enabled.
+        # Online UPI/card collection stays disabled until the PG feature flag,
+        # API credentials and dedicated signed-webhook secret are configured.
+        if accept_online:
+            from cashfree_online_payments import cashfree_pg_is_configured
+
+            if not cashfree_pg_is_configured(require_webhook=True):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Cashfree online payments are not enabled/configured on the backend. Keep COD enabled until the sandbox gateway and webhook are configured.",
+                )
+
         if profile.is_online_store_enabled:
             if not offer_delivery and not offer_pickup:
                 raise HTTPException(
@@ -736,12 +743,6 @@ def set_online_settings(
                     status_code=422,
                     detail="Enable at least one supported payment method.",
                 )
-            if accept_online:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Online UPI/card payments are not configured yet. Keep COD enabled until a payment gateway is connected.",
-                )
-
         profile.online_offer_delivery = offer_delivery
         profile.online_offer_pickup = offer_pickup
         profile.online_accept_cod = accept_cod
