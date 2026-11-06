@@ -3333,7 +3333,9 @@ def _transcribe_audio_with_groq(
     filename: str,
     content_type: str,
     language_code: str,
-) -> str:
+    *,
+    include_metadata: bool = False,
+) -> str | dict:
     """Use Groq Whisper to convert uploaded audio into text in the spoken language."""
     if not GROQ_API_KEY:
         raise HTTPException(
@@ -3370,6 +3372,7 @@ def _transcribe_audio_with_groq(
             "text": getattr(transcription, "text", ""),
             "duration": getattr(transcription, "duration", None),
             "segments": getattr(transcription, "segments", None) or [],
+            "language": getattr(transcription, "language", None),
         }
     segments = [
         seg if isinstance(seg, dict) else getattr(seg, "__dict__", {})
@@ -3380,6 +3383,15 @@ def _transcribe_audio_with_groq(
         # Log only the reason code: never the customer's speech.
         print(f"AI-query ASR rejected: reason={verdict.reason} dropped={verdict.dropped_segments}")
         raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
+    if include_metadata:
+        detected_language = str(payload.get("language") or "").strip().lower()
+        return {
+            "transcript": verdict.text,
+            "detected_language": detected_language or None,
+            "speech_quality": verdict.public(),
+            "asr_model": GROQ_STT_MODEL,
+            "provider": "Groq",
+        }
     return verdict.text
 
 
@@ -3415,18 +3427,17 @@ async def transcribe_ask_query_audio(
         raise HTTPException(status_code=422, detail="Unsupported voice language.")
 
     content, filename, media_type = await _read_voice_upload(audio)
-    transcript = await run_in_threadpool(
+    transcription = await run_in_threadpool(
         _transcribe_audio_with_groq,
         content,
         filename,
         media_type,
         language_code,
+        include_metadata=True,
     )
     return {
-        "transcript": transcript,
+        **transcription,
         "language_code": language_code,
-        "asr_model": GROQ_STT_MODEL,
-        "provider": "Groq",
     }
 
 
