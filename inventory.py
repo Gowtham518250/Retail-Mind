@@ -2181,20 +2181,30 @@ def _voice_billing_active_alias_rows(db: Session, user_id: int, language_code: s
     shop_id = int(user_id)
     language = _voice_billing_base_language_code(language_code)
     allowed_languages = {"auto"} if language == "auto" else {language, "auto"}
-    return (
-        db.query(ProductVoiceAlias.alias_text, Product.product_name)
-        .join(Product, Product.id == ProductVoiceAlias.product_id)
-        .filter(
-            ProductVoiceAlias.user_id == shop_id,
-            ProductVoiceAlias.is_active.is_(True),
-            ProductVoiceAlias.language_code.in_(allowed_languages),
-            Product.user_id == shop_id,
-            Product.is_active.is_(True),
+    try:
+        return (
+            db.query(ProductVoiceAlias.alias_text, Product.product_name)
+            .join(Product, Product.id == ProductVoiceAlias.product_id)
+            .filter(
+                ProductVoiceAlias.user_id == shop_id,
+                ProductVoiceAlias.is_active.is_(True),
+                ProductVoiceAlias.language_code.in_(allowed_languages),
+                Product.user_id == shop_id,
+                Product.is_active.is_(True),
+            )
+            .order_by(ProductVoiceAlias.confirmation_count.desc(), ProductVoiceAlias.alias_text.asc())
+            .limit(120)
+            .all()
         )
-        .order_by(ProductVoiceAlias.confirmation_count.desc(), ProductVoiceAlias.alias_text.asc())
-        .limit(120)
-        .all()
-    )
+    except Exception as exc:
+        # Voice billing must remain available during rolling deploys where the
+        # additive alias migration has not yet been applied.
+        logging.warning("voice-billing alias lookup unavailable: %s", type(exc).__name__)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return []
 
 
 _VOICE_BILLING_NUMBER_WORDS = {
@@ -3271,21 +3281,29 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code
     # is still resolved later from the authenticated catalog and spoken evidence.
     language = _voice_billing_base_language_code(language_code)
     alias_languages = {"auto"} if language == "auto" else {language, "auto"}
-    alias_rows = (
-        db.query(ProductVoiceAlias.alias_text)
-        .join(Product, Product.id == ProductVoiceAlias.product_id)
-        .filter(
-            ProductVoiceAlias.user_id == shop_id,
-            ProductVoiceAlias.is_active.is_(True),
-            ProductVoiceAlias.language_code.in_(alias_languages),
-            Product.user_id == shop_id,
-            Product.is_active.is_(True),
+    try:
+        alias_rows = (
+            db.query(ProductVoiceAlias.alias_text)
+            .join(Product, Product.id == ProductVoiceAlias.product_id)
+            .filter(
+                ProductVoiceAlias.user_id == shop_id,
+                ProductVoiceAlias.is_active.is_(True),
+                ProductVoiceAlias.language_code.in_(alias_languages),
+                Product.user_id == shop_id,
+                Product.is_active.is_(True),
+            )
+            .order_by(ProductVoiceAlias.confirmation_count.desc())
+            .limit(40)
+            .all()
         )
-        .order_by(ProductVoiceAlias.confirmation_count.desc())
-        .limit(40)
-        .all()
-    )
-    alias_names = [str(row[0] or "").strip() for row in alias_rows]
+        alias_names = [str(row[0] or "").strip() for row in alias_rows]
+    except Exception as exc:
+        logging.warning("voice-billing ASR alias hints unavailable: %s", type(exc).__name__)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        alias_names = []
     ranked_names = _voice_billing_rank_prompt_names(
         popular_names + alias_names,
         catalog_names,
