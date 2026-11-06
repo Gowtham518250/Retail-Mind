@@ -266,7 +266,7 @@ def test_shared_transcript_normalizer_preserves_indic_text_and_converts_unicode_
     from voice_asr_guard import normalize_voice_transcript
 
     transcript = "రెండు\u00a0కిలోల\u200b బియ్యం १२.૫૦\ufeff"
-    assert normalize_voice_transcript("  " + transcript + "  ") == "రెండు కిలోల బియ్యం 12.૫૦"
+    assert normalize_voice_transcript("  " + transcript + "  ") == "రెండు కిలోల బియ్యం 12.50"
 
 
 def test_shared_transcript_normalizer_keeps_indic_joiners():
