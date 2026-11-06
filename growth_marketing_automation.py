@@ -4,6 +4,7 @@ This worker creates private drafts only. It never publishes to social networks.
 """
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import re
 
 from sqlalchemy import func
 
@@ -14,6 +15,25 @@ from models import (
     Product,
     ShopProfile,
 )
+
+
+_RESTRICTED_MARKETING_PATTERN = re.compile(
+    r"\\b(?:alcohol|beer|wine|liquor|vodka|whisky|whiskey|rum|tequila|gin|champagne|cider|"
+    r"tobacco|cigarette|cigar|vape|vaping|e-cigarette|nicotine|"
+    r"marijuana|cannabis|weed|thc|cbd|prescription|controlled-substance|steroid|"
+    r"gambling|betting|casino|sports-betting|lottery|firearm|gun|ammunition|weapon|"
+    r"switchblade|taser|pepper-spray|pornography|adult-toy|sex-toy|diet-pill|laxative)\\b",
+    re.IGNORECASE,
+)
+
+
+def _is_restricted_marketing_product(product: Product | None) -> bool:
+    if product is None:
+        return False
+    return any(
+        _RESTRICTED_MARKETING_PATTERN.search(str(value or ""))
+        for value in (product.product_name, getattr(product, "category", None))
+    )
 
 
 def enqueue_product_created_trigger(db, shop_id: int, product_id: int) -> bool:
@@ -165,6 +185,10 @@ def process_pending_marketing_triggers(db, limit: int = 50) -> dict:
             GrowthMarketingAutomationSettings.enabled.is_(True),
         ).first()
         if settings is None:
+            trigger.status = "SKIPPED"
+            trigger.error = "Marketing automation was disabled before this trigger was processed."
+            trigger.processed_at = now
+            skipped += 1
             continue
         if trigger.trigger_type == "new_product" and not settings.new_products_enabled:
             trigger.status = "SKIPPED"
@@ -211,6 +235,12 @@ def process_pending_marketing_triggers(db, limit: int = 50) -> dict:
         if trigger.trigger_type in {"new_product", "weekly"} and product is None:
             trigger.status = "SKIPPED"
             trigger.error = "No eligible in-stock product was found."
+            trigger.processed_at = now
+            skipped += 1
+            continue
+        if _is_restricted_marketing_product(product):
+            trigger.status = "SKIPPED"
+            trigger.error = "This product category is not eligible for promotional drafts."
             trigger.processed_at = now
             skipped += 1
             continue
