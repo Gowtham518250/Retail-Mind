@@ -3,7 +3,6 @@
 This worker creates private drafts only. It never publishes to social networks.
 """
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 from decimal import Decimal
 
 from sqlalchemy import func
@@ -91,7 +90,8 @@ def _weekly_limit_reached(db, shop_id: int, settings, now: datetime) -> bool:
 def _queue_due_weekly_triggers(db, now: datetime) -> int:
     """Create at most one weekly trigger per shop and ISO week."""
     created = 0
-    local_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    india_timezone = timezone(timedelta(hours=5, minutes=30))
+    local_now = datetime.now(timezone.utc).astimezone(india_timezone)
     settings_rows = db.query(GrowthMarketingAutomationSettings).filter(
         GrowthMarketingAutomationSettings.enabled.is_(True),
         GrowthMarketingAutomationSettings.weekly_enabled.is_(True),
