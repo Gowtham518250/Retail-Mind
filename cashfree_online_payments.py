@@ -460,17 +460,23 @@ async def create_cashfree_order_session(
     current_customer: dict = Depends(customer_only),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """Create or reuse a Cashfree checkout session for the signed-in customer's UPI order."""
+    """Create or reuse a Cashfree checkout session for a signed-in customer's UPI order."""
     app_id, secret, env, base_url = _cashfree_config()
     customer_id = int(current_customer["user_id"])
-    order = db.query(OnlineOrder).with_for_update().filter(
-        OnlineOrder.id == order_id,
-        OnlineOrder.customer_id == customer_id,
-    ).first()
+    order = (
+        db.query(OnlineOrder)
+        .with_for_update()
+        .filter(
+            OnlineOrder.id == order_id,
+            OnlineOrder.customer_id == customer_id,
+        )
+        .first()
+    )
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found.")
     if str(order.payment_method or "").upper() != "UPI":
         raise HTTPException(status_code=409, detail="This order is not configured for online payment.")
+
     order_status = str(getattr(order.order_status, "value", order.order_status) or "").upper()
     if order_status in {"CANCELLED", "REJECTED", "RETURNED", "DELIVERED"}:
         raise HTTPException(status_code=409, detail="This order can no longer be paid.")
@@ -481,6 +487,7 @@ async def create_cashfree_order_session(
             "order_id": order.id,
             "payment_status": "PAID",
         }
+
     amount = _money(order.total_amount, label="Retail Mind order amount")
     if amount <= Decimal("0"):
         raise HTTPException(status_code=400, detail="Order amount must be greater than zero.")
@@ -495,11 +502,11 @@ async def create_cashfree_order_session(
     provider_order_id = str(order.cashfree_order_id or f"rm_order_{order.id}")
     idempotency_key = str(uuid.uuid5(
         uuid.NAMESPACE_URL,
-        f"retail-mind:cashfree:online-order:{order.id}",
+        f"retail-mind:cashfree:online-order:{order.id}:{provider_order_id}",
     ))
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0)) as client:
-        if order.cashfree_payment_session_id:
+        if order.cashfree_order_id:
             provider_order = await _cashfree_request(
                 client,
                 "GET",
@@ -510,6 +517,7 @@ async def create_cashfree_order_session(
             )
             if not isinstance(provider_order, dict):
                 raise HTTPException(status_code=502, detail="Cashfree order response is invalid.")
+
             provider_status = str(provider_order.get("order_status") or "").upper()
             if provider_status == "PAID":
                 payment = await _get_verified_successful_payment(
@@ -521,45 +529,58 @@ async def create_cashfree_order_session(
                     expected_amount=amount,
                 )
                 if payment is None:
-                    raise HTTPException(status_code=502, detail="Cashfree reports a paid order but no matching successful payment is available yet.")
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Cashfree reports a paid order but no matching successful payment is available yet.",
+                    )
                 result = _settle_verified_payment(
-                    db, provider_order_id=provider_order_id, payment=payment
+                    db,
+                    provider_order_id=provider_order_id,
+                    payment=payment,
                 )
                 return {
                     "success": True,
                     "already_paid": True,
                     "order_id": order.id,
                     "payment_status": result.get("payment_status", "PAID"),
-                }
-            if provider_status == "EXPIRED":
-                raise HTTPException(
-                    status_code=409,
-                    detail="The Cashfree checkout session expired. Cancel this order and place a new order to retry payment.",
-                )
-            session_id = str(provider_order.get("payment_session_id") or order.cashfree_payment_session_id)
-            if provider_status == "ACTIVE" and session_id:
-                order.cashfree_payment_session_id = session_id
-                db.commit()
-                return {
-                    "success": True,
-                    "order_id": order.id,
-                    "cashfree_order_id": provider_order_id,
-                    "payment_session_id": session_id,
-                    "environment": env,
-                    "currency": "INR",
-                    "amount": float(amount),
+                    "refund_required": bool(result.get("refund_required", False)),
                 }
 
-        customer_phone = re.sub(r"\\D", "", str(customer.phone or ""))
-    if len(customer_phone) == 12 and customer_phone.startswith("91"):
-        customer_phone = customer_phone[2:]
-    if len(customer_phone) != 10:
-        raise HTTPException(
-            status_code=422,
-            detail="The customer account must have a valid 10-digit Indian mobile number for Cashfree checkout.",
-        )
+            if provider_status == "ACTIVE":
+                session_id = str(
+                    provider_order.get("payment_session_id")
+                    or order.cashfree_payment_session_id
+                    or ""
+                ).strip()
+                if session_id:
+                    return {
+                        "success": True,
+                        "order_id": order.id,
+                        "cashfree_order_id": provider_order_id,
+                        "payment_session_id": session_id,
+                        "environment": env,
+                        "currency": "INR",
+                        "amount": float(amount),
+                    }
 
-    payload = {
+            # Cashfree order IDs cannot be reused after an expired/failed
+            # checkout. A new provider order ID keeps payment retries safe.
+            provider_order_id = f"rm_order_{order.id}_{uuid.uuid4().hex[:8]}"
+            idempotency_key = str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"retail-mind:cashfree:online-order:{order.id}:{provider_order_id}",
+            ))
+
+        customer_phone = re.sub(r"\D", "", str(customer.phone or ""))
+        if len(customer_phone) == 12 and customer_phone.startswith("91"):
+            customer_phone = customer_phone[2:]
+        if len(customer_phone) != 10:
+            raise HTTPException(
+                status_code=422,
+                detail="The customer account must have a valid 10-digit Indian mobile number for Cashfree checkout.",
+            )
+
+        payload = {
             "order_id": provider_order_id,
             "order_amount": float(amount),
             "order_currency": "INR",
