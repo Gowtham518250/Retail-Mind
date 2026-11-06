@@ -8,6 +8,7 @@ import os
 import time
 import logging
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 from performance_middleware import setup_performance_middleware
 
 # ========================
@@ -18,6 +19,31 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 logger = logging.getLogger("ai_shop_pro")
+
+
+def build_shop_frontend_redirect_url(request: Request, shop_id: str) -> str:
+    """Build a safe shop deep link, using the current host unless a UI URL is set."""
+    shop_key = str(shop_id or "").strip()
+    if not shop_key or len(shop_key) > 64:
+        raise ValueError("A valid shop identifier is required.")
+
+    configured_frontend = (
+        os.getenv("NEXTJS_FRONTEND_URL")
+        or os.getenv("FRONTEND_URL")
+        or os.getenv("PUBLIC_BASE_URL")
+        or ""
+    ).strip()
+    query = urlencode({"shop_id": shop_key})
+    if not configured_frontend:
+        # A relative URL deliberately keeps the current request host, which
+        # is important when the same app is served behind different domains.
+        return f"/?{query}"
+
+    base = configured_frontend.rstrip("/")
+    if "://" not in base:
+        scheme = getattr(getattr(request, "url", None), "scheme", "https") or "https"
+        base = f"{scheme}://{base}"
+    return f"{base}/?{query}"
 
 # ========================
 # FIREBASE ADMIN SETUP
