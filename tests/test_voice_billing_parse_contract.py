@@ -95,6 +95,7 @@ def test_voice_billing_parse_endpoints_are_registered():
     assert ("/api/inventory/voice-billing/parse", frozenset({"POST"})) in paths
     assert ("/api/inventory/voice-billing/parse-audio", frozenset({"POST"})) in paths
     assert ("/api/inventory/voice-billing/aliases", frozenset({"POST"})) in paths
+    assert ("/api/inventory/voice-billing/aliases", frozenset({"POST"})) in paths
 
 
 def test_voice_billing_normalization_preserves_indian_script_and_numbers():
