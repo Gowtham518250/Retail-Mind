@@ -2388,6 +2388,7 @@ def get_invoice(
         "status":         invoice.status,
         "payment_status": invoice.payment_status,
         "invoice_date":   str(invoice.invoice_date),
+        "due_date":       str(invoice.due_date) if invoice.due_date else None,
         "created_at":     invoice.created_at.isoformat(),
         "line_items": [
             {
@@ -2407,6 +2408,9 @@ class InvoiceUpdate(BaseModel):
     payment_status: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    # Invoice-page deadline edits must be part of the persisted PUT payload.
+    # Optional[date] also permits an explicit null to clear the deadline.
+    due_date: Optional[date] = None
 
 @router.put("/{invoice_id}")
 def update_invoice(
@@ -2440,7 +2444,12 @@ def update_invoice(
     
     if data.notes is not None:
         invoice.notes = data.notes
-    
+
+    # Do not update the deadline when the client omitted the field; an explicit
+    # JSON null is allowed to clear it, while YYYY-MM-DD is parsed by Pydantic.
+    if "due_date" in data.__fields_set__:
+        invoice.due_date = data.due_date
+
     try:
         update_event = append_sync_event(db, {
             "event_id": str(uuid.uuid4()),
@@ -2456,8 +2465,13 @@ def update_invoice(
                 else str(invoice.payment_status)
             ),
             "status": invoice.status.value if hasattr(invoice.status, "value") else str(invoice.status),
+            "due_date": invoice.due_date.isoformat() if invoice.due_date else None,
             "source": invoice.source,
-            "change": "invoice_updated",
+            "change": (
+                "invoice_due_date_updated"
+                if "due_date" in data.__fields_set__
+                else "invoice_updated"
+            ),
         })
         db.commit()
         db.refresh(invoice)
