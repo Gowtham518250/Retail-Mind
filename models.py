@@ -1574,7 +1574,7 @@ class GrowthMarketingCampaign(Base):
     trigger_type = Column(String(32), nullable=False, default="manual", server_default="manual")
     content_version = Column(Integer, nullable=False, default=1, server_default="1")
     approved_version = Column(Integer, nullable=True)
-    approved_by = Column(Integer, ForeignKey("user_details.id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column(Integer, nullable=True)
     approved_at = Column(DateTime, nullable=True)
     rejected_reason = Column(Text, nullable=True)
     goal = Column(String(32), nullable=False)
