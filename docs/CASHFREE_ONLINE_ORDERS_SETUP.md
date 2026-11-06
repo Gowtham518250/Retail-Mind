@@ -26,12 +26,12 @@ Optional settings:
 
 ```env
 CASHFREE_PG_RETURN_URL=https://CUSTOMER_WEB_DOMAIN/payment-return?order_id={order_id}
-CASHFREE_PG_NOTIFY_URL=https://BACKEND_API_DOMAIN/api/store/cashfree/webhook
+CASHFREE_PG_NOTIFY_URL=https://BACKEND_API_DOMAIN/store/cashfree/webhook
 ```
 
 The webhook endpoint must also be configured in the Cashfree PG webhook settings for the same environment:
 
-`https://BACKEND_API_DOMAIN/api/store/cashfree/webhook`
+`https://BACKEND_API_DOMAIN/store/cashfree/webhook`
 
 Do not point sandbox webhooks at production credentials, or vice versa.
 
@@ -50,17 +50,17 @@ Revision `045_cashfree_online_order_payments` adds the Cashfree provider order/s
 The existing customer order endpoint creates the Retail Mind order and reserves stock. The client chooses `payment_method: "UPI"` only when the shop has enabled online payments.
 
 1. Create the Retail Mind order using the existing authenticated customer endpoint:
-   `POST /api/store/order`
+   `POST /store/order`
 2. Create/reuse the provider checkout session:
-   `POST /api/store/order/{order_id}/cashfree/session`
+   `POST /store/order/{order_id}/cashfree/session`
    The backend calculates the amount from the saved Retail Mind order and returns `cashfree_order_id`, `payment_session_id`, `environment`, and `amount`.
 3. Open Cashfree Hosted Checkout with the returned session ID:
    - Web: Cashfree JS SDK `cashfree.checkout({ paymentSessionId, redirectTarget: "_self" })` using mode `sandbox`.
    - Flutter: use Cashfree's Flutter SDK with the returned `order_id` and `payment_session_id`, and environment `CFEnvironment.SANDBOX`.
 4. After the SDK callback or customer return, call:
-   `GET /api/store/order/{order_id}/cashfree/status`
+   `GET /store/order/{order_id}/cashfree/status`
 5. Cashfree sends a signed event to:
-   `POST /api/store/cashfree/webhook`
+   `POST /store/cashfree/webhook`
 
 The callback/return URL is only a reason to refresh status. It is never proof of payment. The backend verifies the webhook signature over the exact raw request body, fetches the order and payment from Cashfree's server APIs, checks the order ID, INR currency and exact amount against PostgreSQL, and only then updates `OnlineOrder` and any already-created invoice/payment ledger rows.
 
