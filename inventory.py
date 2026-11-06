@@ -2629,6 +2629,114 @@ async def _voice_billing_translate_search_query(
 
 
 
+@router.post("/voice-billing/aliases")
+async def record_voice_billing_alias(
+    request: VoiceBillingAliasCorrectionRequest,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Record an explicit cashier correction for a product in the authenticated shop.
+
+    Aliases become active after three matching corrections. The client cannot
+    provide a tenant ID, and a product from another shop cannot be referenced.
+    """
+    shop_id = int(user_id)
+    language_code = _voice_billing_base_language_code(request.language_code)
+    if language_code == "auto" or not re.fullmatch(r"[a-z]{2,3}", language_code):
+        raise HTTPException(status_code=422, detail="Choose a supported voice language.")
+
+    normalized_alias = _voice_billing_validate_alias_text(request.alias_text)
+    product = (
+        db.query(Product)
+        .filter(
+            Product.id == int(request.product_id),
+            Product.user_id == shop_id,
+            Product.is_active.is_(True),
+        )
+        .first()
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail="The corrected product was not found in this shop.")
+
+    canonical_phrase = _voice_billing_safe_alias_product_phrase(product.product_name)
+    if not canonical_phrase:
+        raise HTTPException(
+            status_code=422,
+            detail="This catalog product does not have a safe name phrase for voice learning.",
+        )
+    if normalized_alias == _voice_billing_normalize(canonical_phrase):
+        return {
+            "recorded": False,
+            "active": False,
+            "confirmation_count": 0,
+            "minimum_confirmations": 3,
+            "reason": "The recognized phrase already matches the catalog product.",
+        }
+
+    alias = (
+        db.query(ProductVoiceAlias)
+        .filter(
+            ProductVoiceAlias.user_id == shop_id,
+            ProductVoiceAlias.language_code == language_code,
+            ProductVoiceAlias.normalized_alias == normalized_alias,
+        )
+        .first()
+    )
+    if alias is not None and int(alias.product_id) != int(product.id):
+        raise HTTPException(
+            status_code=409,
+            detail="This pronunciation is already linked to a different product in this shop and language.",
+        )
+
+    if alias is None:
+        existing_count = (
+            db.query(func.count(ProductVoiceAlias.id))
+            .filter(ProductVoiceAlias.user_id == shop_id)
+            .scalar()
+            or 0
+        )
+        if int(existing_count) >= 500:
+            raise HTTPException(
+                status_code=429,
+                detail="This shop has reached the voice-alias limit. Remove unused aliases before adding more.",
+            )
+        alias = ProductVoiceAlias(
+            user_id=shop_id,
+            product_id=int(product.id),
+            alias_text=request.alias_text.strip(),
+            normalized_alias=normalized_alias,
+            language_code=language_code,
+            confirmation_count=1,
+            is_active=False,
+        )
+        db.add(alias)
+    else:
+        alias.confirmation_count = min(int(alias.confirmation_count or 0) + 1, 1000000)
+        alias.alias_text = request.alias_text.strip()
+        alias.updated_at = datetime.now()
+
+    alias.is_active = int(alias.confirmation_count or 0) >= 3
+    try:
+        db.commit()
+        db.refresh(alias)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This pronunciation was updated by another request. Please retry once.",
+        ) from exc
+
+    _VOICE_BILLING_PROMPT_VOCAB_CACHE.pop(shop_id, None)
+    return {
+        "recorded": True,
+        "active": bool(alias.is_active),
+        "confirmation_count": int(alias.confirmation_count or 0),
+        "minimum_confirmations": 3,
+        "language_code": language_code,
+        "product_id": int(product.id),
+    }
+
+
 @router.post("/voice-billing/parse")
 async def parse_voice_billing(
     request: VoiceBillingParseRequest,
