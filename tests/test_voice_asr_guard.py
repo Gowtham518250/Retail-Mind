@@ -260,3 +260,18 @@ def test_ai_query_voice_accepts_real_question_as_pydantic_like_object(monkeypatc
             return {"text": "yesterday sales", "duration": 2.0, "segments": [seg("yesterday sales")]}
 
     assert _query_transcribe(monkeypatch, Resp(text="yesterday sales")) == "yesterday sales"
+
+
+def test_shared_transcript_normalizer_preserves_indic_text_and_converts_unicode_digits():
+    from voice_asr_guard import normalize_voice_transcript
+
+    transcript = "రెండు\u00a0కిలోల\u200b బియ్యం १२.૫૦\ufeff"
+    assert normalize_voice_transcript("  " + transcript + "  ") == "రెండు కిలోల బియ్యం 12.૫૦"
+
+
+def test_shared_transcript_normalizer_keeps_indic_joiners():
+    from voice_asr_guard import normalize_voice_transcript
+
+    # ZWJ/ZWNJ can be meaningful in Indic orthography; only ZWSP/BOM are removed.
+    transcript = "क्\u200dषीर"
+    assert normalize_voice_transcript(transcript) == transcript
