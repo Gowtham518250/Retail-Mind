@@ -1851,6 +1851,14 @@ def place_guest_order(
         logger.error(f"Error validating shop: {e}")
         raise HTTPException(status_code=500, detail="Error validating shop.")
 
+    # Guest orders do not expose an unauthenticated payment-status endpoint.
+    # Require a signed-in customer account for Cashfree checkout in this rollout.
+    if str(data.payment_method or "COD").upper() == "UPI":
+        raise HTTPException(
+            status_code=422,
+            detail="Online payment requires a signed-in customer account. Please sign in and place the order again, or choose COD.",
+        )
+
     # 3. Find or create guest customer in OnlineCustomerAuth
     customer = db.query(OnlineCustomerAuth).filter(OnlineCustomerAuth.phone == data.phone).first()
     if not customer:
@@ -3070,7 +3078,11 @@ def update_order_status(
                     amount=float(order.total_amount),
                     payment_date=payment_date,
                     reference_number=order.payment_reference,
-                    notes="Online order payment matched from owner-device notification",
+                    notes=(
+                        "Cashfree PG payment for online order"
+                        if order.payment_confirmation_source == "CASHFREE_PG"
+                        else "Online order payment matched from owner-device notification"
+                    ),
                     idempotency_key=payment_key,
                 ))
                 db.add(UniversalTransaction(
