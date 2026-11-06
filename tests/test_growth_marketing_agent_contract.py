@@ -20,6 +20,7 @@ def test_marketing_copy_request_only_accepts_supported_campaign_options():
         language="te",
         ad_format="story",
         product_id=12,
+        product_name="Fresh produce",
         offer="Owner-approved offer",
     )
     assert request.product_id == 12
@@ -35,6 +36,9 @@ def test_marketing_endpoint_is_authenticated_and_tenant_scoped():
     assert "Product.user_id == user_id" in source
     assert "Product.id == data.product_id" in source
     assert "stock_quantity <= 0" in source
+    assert "data.product_name" in source
+    assert 'generated.get("headline")' in source
+    assert 'generated.get("caption")' in source
     paths = {context.path for context in __import__("fastapi.routing", fromlist=["iter_route_contexts"]).iter_route_contexts(router.routes)}
     assert "/growth/marketing/generate" in paths
 
