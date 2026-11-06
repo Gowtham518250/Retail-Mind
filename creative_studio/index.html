@@ -71,9 +71,9 @@
       function reportError(context, error) {
         const detail = context + ": " + errorMessage(error);
         console.error("[Retail Mind Creative Studio] " + detail, error);
-        const existing = diagnosticsNode.textContent.split("\\n").filter(Boolean);
+        const existing = diagnosticsNode.textContent.split("\n").filter(Boolean);
         existing.push(new Date().toISOString() + " " + detail);
-        diagnosticsNode.textContent = existing.slice(-8).join("\\n");
+        diagnosticsNode.textContent = existing.slice(-8).join("\n");
         diagnosticsNode.style.display = "block";
         setStatus(detail);
       }
