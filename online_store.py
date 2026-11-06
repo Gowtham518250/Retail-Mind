@@ -1048,12 +1048,19 @@ def marketplace_search(
                 "description": shop.shop_description or "",
                 "shop_type": shop.shop_type or "General",
                 "address": shop.address or "",
+                "address_line1": shop.address_line1 or "",
+                "address_line2": shop.address_line2 or "",
+                "location": shop.location or "",
                 "city": shop.city or "",
                 "state": shop.state or "",
                 "postal_code": shop.postal_code or "",
+                "latitude": shop.latitude,
+                "longitude": shop.longitude,
                 "phone": shop.phone or "",
+                "email": shop.email or "",
                 "website": shop.website or "",
                 "logo_url": shop.logo_url,
+                "shop_description": shop.shop_description or "",
                 "categories": (
                     [item.strip() for item in str(shop.shop_categories or "").split(",") if item.strip()]
                     if shop.shop_categories and not str(shop.shop_categories).strip().startswith("[")
