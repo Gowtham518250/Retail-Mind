@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
+from fastapi import HTTPException
+
 from inventory import (
     _voice_billing_catalog_candidates,
     _voice_billing_normalize_spoken_scales,
@@ -9,7 +12,6 @@ from inventory import (
     _voice_billing_rank_prompt_names,
     _voice_billing_expand_shop_aliases,
     _voice_billing_validate_alias_text,
-    _voice_billing_safe_alias_product_phrase,
     router,
 )
 
@@ -92,6 +94,7 @@ def test_voice_billing_parse_endpoints_are_registered():
     }
     assert ("/api/inventory/voice-billing/parse", frozenset({"POST"})) in paths
     assert ("/api/inventory/voice-billing/parse-audio", frozenset({"POST"})) in paths
+    assert ("/api/inventory/voice-billing/aliases", frozenset({"POST"})) in paths
 
 
 def test_voice_billing_normalization_preserves_indian_script_and_numbers():
