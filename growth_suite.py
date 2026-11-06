@@ -598,6 +598,26 @@ def save_marketing_campaign(
             detail="Promotional drafts are unavailable for this product or content category.",
         )
 
+    # Stamp the authenticated shop's canonical facts server-side. This
+    # prevents an offline/stale client draft from omitting or misrepresenting
+    # the shop identity, address, contact details or validated offer.
+    caption_lines = [caption]
+    if shop_name and shop_name not in caption:
+        caption_lines.append(f"Shop: {shop_name}")
+    if discount_price is not None and original_price is not None and discount_percent is not None:
+        caption_lines.append(f"Original price: ₹{original_price:,.2f}")
+        caption_lines.append(f"Discounted price: ₹{discount_price:,.2f}")
+        caption_lines.append(f"{discount_percent}% OFF")
+        if data.offer_valid_from:
+            caption_lines.append(f"Offer valid from: {data.offer_valid_from.isoformat()}")
+        if data.offer_valid_until:
+            caption_lines.append(f"Offer valid until: {data.offer_valid_until.isoformat()}")
+    if shop_snapshot["shop_address"] and shop_snapshot["shop_address"] not in caption:
+        caption_lines.append(f"Shop location: {shop_snapshot['shop_address']}")
+    if shop_snapshot["shop_phone"] and str(shop_snapshot["shop_phone"]) not in caption:
+        caption_lines.append(f"Contact: {shop_snapshot['shop_phone']}")
+    caption = "\\n".join(caption_lines)[:1200]
+
     now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     campaign = db.query(GrowthMarketingCampaign).filter(
         GrowthMarketingCampaign.shop_id == user_id,
