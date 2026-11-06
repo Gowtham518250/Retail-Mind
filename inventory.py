@@ -43,7 +43,11 @@ from voice_billing_core import (
     resolve_catalog_product as _vb_resolve_catalog_product,
     stem_token as _vb_stem_token,
 )
-from voice_asr_guard import NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE, assess_transcription as _assess_transcription
+from voice_asr_guard import (
+    NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE,
+    assess_transcription as _assess_transcription,
+    normalize_voice_transcript as _normalize_voice_transcript,
+)
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
@@ -2770,7 +2774,7 @@ async def parse_voice_billing(
     A product absent from the authenticated shop's catalog remains a sellable custom line,
     but has no product ID and therefore cannot reduce inventory stock.
     """
-    transcript = (request.transcript or "").strip()
+    transcript = _normalize_voice_transcript(request.transcript)
     if not transcript:
         raise HTTPException(status_code=422, detail="Please speak or enter the products to add.")
 
