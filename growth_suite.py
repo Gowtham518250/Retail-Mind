@@ -401,6 +401,42 @@ def generate_marketing_copy(
     }
 
 
+class MarketingCampaignSaveRequest(BaseModel):
+    campaign_id: str = Field(..., min_length=1, max_length=64)
+    goal: Literal["nearby", "new_product", "clear_stock", "regular_customers"]
+    language: Literal["en", "te", "hi"] = "en"
+    ad_format: Literal["feed", "square", "story"] = "feed"
+    template: Literal["bold", "festive", "fresh", "minimal"] = "bold"
+    product_id: int | None = Field(default=None, ge=1)
+    product_name: str = Field(default="", max_length=120)
+    product_price: float | None = Field(default=None, ge=0, le=100000000)
+    discount_price: Decimal | None = Field(default=None, ge=0, le=100000000)
+    offer_valid_from: date | None = None
+    offer_valid_until: date | None = None
+    headline: str = Field(..., min_length=1, max_length=120)
+    caption: str = Field(..., min_length=1, max_length=1200)
+    offer: str = Field(default="", max_length=90)
+    offer_code: str = Field(default="", max_length=32)
+    generation_source: Literal["groq", "template_fallback", "local_template", "automation", "manual"] = "manual"
+    trigger_type: Literal["manual", "owner_offer", "new_product", "weekly"] = "manual"
+    submit_for_approval: bool = False
+    redemptions: int = Field(default=0, ge=0, le=1000000)
+
+
+class MarketingAutomationSettingsRequest(BaseModel):
+    enabled: bool = False
+    new_products_enabled: bool = True
+    weekly_enabled: bool = False
+    weekly_day: int = Field(default=0, ge=0, le=6)
+    language: Literal["en", "te", "hi"] = "en"
+    max_campaigns_per_week: int = Field(default=3, ge=1, le=7)
+
+
+class MarketingCampaignApprovalRequest(BaseModel):
+    expected_version: int = Field(..., ge=1)
+    reason: str = Field(default="", max_length=500)
+
+
 @router.get("/marketing/automation/settings")
 def get_marketing_automation_settings(
     user_id: int = Depends(check_current_user),
@@ -453,41 +489,6 @@ def update_marketing_automation_settings(
     db.refresh(settings)
     return get_marketing_automation_settings(user_id=user_id, db=db)
 
-
-class MarketingCampaignSaveRequest(BaseModel):
-    campaign_id: str = Field(..., min_length=1, max_length=64)
-    goal: Literal["nearby", "new_product", "clear_stock", "regular_customers"]
-    language: Literal["en", "te", "hi"] = "en"
-    ad_format: Literal["feed", "square", "story"] = "feed"
-    template: Literal["bold", "festive", "fresh", "minimal"] = "bold"
-    product_id: int | None = Field(default=None, ge=1)
-    product_name: str = Field(default="", max_length=120)
-    product_price: float | None = Field(default=None, ge=0, le=100000000)
-    discount_price: Decimal | None = Field(default=None, ge=0, le=100000000)
-    offer_valid_from: date | None = None
-    offer_valid_until: date | None = None
-    headline: str = Field(..., min_length=1, max_length=120)
-    caption: str = Field(..., min_length=1, max_length=1200)
-    offer: str = Field(default="", max_length=90)
-    offer_code: str = Field(default="", max_length=32)
-    generation_source: Literal["groq", "template_fallback", "local_template", "automation", "manual"] = "manual"
-    trigger_type: Literal["manual", "owner_offer", "new_product", "weekly"] = "manual"
-    submit_for_approval: bool = False
-    redemptions: int = Field(default=0, ge=0, le=1000000)
-
-
-class MarketingAutomationSettingsRequest(BaseModel):
-    enabled: bool = False
-    new_products_enabled: bool = True
-    weekly_enabled: bool = False
-    weekly_day: int = Field(default=0, ge=0, le=6)
-    language: Literal["en", "te", "hi"] = "en"
-    max_campaigns_per_week: int = Field(default=3, ge=1, le=7)
-
-
-class MarketingCampaignApprovalRequest(BaseModel):
-    expected_version: int = Field(..., ge=1)
-    reason: str = Field(default="", max_length=500)
 
 def _marketing_campaign_to_dict(campaign: GrowthMarketingCampaign) -> dict:
     return {
@@ -625,6 +626,12 @@ def save_marketing_campaign(
         "caption": caption,
         "offer": offer,
         "offer_code": offer_code,
+        "goal": data.goal,
+        "language": data.language,
+        "ad_format": data.ad_format,
+        "template": data.template,
+        "trigger_type": data.trigger_type,
+        "generation_source": data.generation_source,
         **shop_snapshot,
     }
     content_changed = is_new or any(
