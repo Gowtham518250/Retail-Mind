@@ -1283,7 +1283,13 @@ def find_nearby_shops(
 
     if city:
         city_clean = sanitize_input(city, "city")
-        query = query.filter(ShopProfile.address.ilike(f"%{city_clean}%"))
+        query = query.filter(
+            or_(
+                ShopProfile.address.ilike(f"%{city_clean}%"),
+                ShopProfile.city.ilike(f"%{city_clean}%"),
+                ShopProfile.location.ilike(f"%{city_clean}%"),
+            )
+        )
 
     if lat is not None and lng is not None:
         # Bounding box pre-filter for DB speed (BUG-B12)
@@ -1312,6 +1318,7 @@ def find_nearby_shops(
             return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
         all_shops = [s for s in all_shops if haversine(lat, lng, s.latitude, s.longitude) <= radius_km]
+        all_shops.sort(key=lambda shop: haversine(lat, lng, shop.latitude, shop.longitude))
 
     all_shops = all_shops[skip:skip + limit]
 
@@ -1320,15 +1327,33 @@ def find_nearby_shops(
             {
                 "shop_id": s.shop_id,
                 "shop_name": s.shop_name,
-                "address": s.address,
-                "phone": s.phone,
+                "address": s.address or "",
+                "address_line1": s.address_line1 or "",
+                "address_line2": s.address_line2 or "",
+                "location": s.location or "",
+                "city": s.city or "",
+                "state": s.state or "",
+                "postal_code": s.postal_code or "",
+                "latitude": s.latitude,
+                "longitude": s.longitude,
+                "phone": s.phone or "",
+                "email": s.email or "",
                 "logo_url": s.logo_url,
                 "shop_type": s.shop_type or "General",
                 "tagline": s.shop_tagline or "",
                 "description": s.shop_description or "",
-                "city": s.city or "",
-                "state": s.state or "",
+                "categories": (
+                    [item.strip() for item in str(s.shop_categories or "").split(",") if item.strip()]
+                    if s.shop_categories and not str(s.shop_categories).strip().startswith("[")
+                    else s.shop_categories
+                ),
                 "website": s.website or "",
+                "is_online": True,
+                "distance_km": (
+                    round(haversine(lat, lng, s.latitude, s.longitude), 2)
+                    if lat is not None and lng is not None
+                    else None
+                ),
                 **_shop_reputation(s),
             }
             for s in all_shops
