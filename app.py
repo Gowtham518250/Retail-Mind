@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 import os
 import time
 import logging
@@ -688,6 +688,35 @@ async def serve_shop_frontend(request: Request, shop_id: str):
             return {"error": "Shop not found", "shop_id": shop_id}, 404
     except Exception as e:
         return {"error": "Failed to retrieve shop data", "details": str(e)}, 500
+
+# Adobe Express Creative Studio is a separate app route and directory.
+# Keep it isolated from the existing /static asset mount below.
+@api.get("/creative-studio", include_in_schema=False)
+async def serve_creative_studio():
+    page_path = os.path.join(
+        os.path.dirname(__file__),
+        "creative_studio",
+        "index.html",
+    )
+    if not os.path.isfile(page_path):
+        raise HTTPException(status_code=404, detail="Creative Studio page is not installed.")
+    return FileResponse(page_path, media_type="text/html")
+
+
+@api.get("/api/creative-studio/config", tags=["Creative Studio"])
+async def get_creative_studio_config():
+    # The Embed SDK Client ID is a public client identifier, not a client secret.
+    client_id = os.getenv("ADOBE_EXPRESS_CLIENT_ID", "").strip()
+    app_name = (
+        os.getenv("ADOBE_EXPRESS_APP_NAME", "Retail Mind Creative Studio").strip()
+        or "Retail Mind Creative Studio"
+    )
+    return {
+        "configured": bool(client_id),
+        "client_id": client_id or None,
+        "app_name": app_name,
+    }
+
 
 # Serve backend-managed media such as uploaded shop logos.
 static_root = os.path.join(os.path.dirname(__file__), "static")

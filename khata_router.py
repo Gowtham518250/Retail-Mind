@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +10,8 @@ from sqlalchemy import func, or_, and_
 from db import get_db
 from models import User, Customer, Invoice, Payment, PaymentStatus, InvoiceStatus, PaymentMethod
 from security import get_current_user
+from durable_sync import append_sync_event
+from realtime import publish_realtime_event
 
 logger = logging.getLogger(__name__)
 
@@ -451,47 +454,124 @@ def update_khata_deadline(
     db: Session = Depends(get_db)
 ):
     """
-    Set or update payment deadline date for customer's pending invoices.
+    Update every open invoice for one customer and publish durable invoice events.
+    The invoices table remains the source of truth for due dates.
     """
     try:
         try:
-            target_date = datetime.strptime(payload.due_date.strip(), "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+            target_date = datetime.strptime(
+                (payload.due_date or "").strip(), "%Y-%m-%d"
+            ).date()
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid date format. Use YYYY-MM-DD",
+            )
+
+        customer_phone = (payload.customer_phone or "").strip()
+        customer_id = (
+            int(payload.customer_id)
+            if payload.customer_id is not None and int(payload.customer_id) > 0
+            else None
+        )
+        if not customer_phone and customer_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Must specify a customer phone or positive customer ID",
+            )
 
         query = db.query(Invoice).filter(
             Invoice.user_id == user_id,
-            Invoice.payment_status.in_([PaymentStatus.UNPAID, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE]),
-            Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES)
+            Invoice.payment_status.in_([
+                PaymentStatus.UNPAID,
+                PaymentStatus.PARTIAL,
+                PaymentStatus.OVERDUE,
+            ]),
+            Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES),
         )
-
-        if payload.customer_phone:
-            query = query.filter(Invoice.customer_phone == payload.customer_phone)
-        elif payload.customer_id:
-            query = query.filter(Invoice.customer_id == payload.customer_id)
+        if customer_phone and customer_id is not None:
+            # Legacy invoice rows may have the phone but no customer_id.
+            # Both identifiers belong to this same authenticated customer.
+            query = query.filter(
+                or_(
+                    Invoice.customer_phone == customer_phone,
+                    Invoice.customer_id == customer_id,
+                )
+            )
+        elif customer_phone:
+            query = query.filter(Invoice.customer_phone == customer_phone)
         else:
-            raise HTTPException(status_code=400, detail="Must specify customer_phone or customer_id")
+            query = query.filter(Invoice.customer_id == customer_id)
 
-        invoices = query.all()
+        invoices = query.with_for_update().all()
         if not invoices:
-            raise HTTPException(status_code=404, detail="No pending invoices found for customer")
+            raise HTTPException(
+                status_code=404,
+                detail="No pending invoices found for customer",
+            )
 
-        for inv in invoices:
-            inv.due_date = target_date
+        events = []
+        for invoice in invoices:
+            invoice.due_date = target_date
+            events.append(append_sync_event(db, {
+                "event_id": str(uuid.uuid4()),
+                "type": "invoice.updated",
+                "shop_id": int(user_id),
+                "invoice_id": int(invoice.id),
+                "invoice_number": invoice.invoice_number,
+                "customer_id": invoice.customer_id,
+                "customer_phone": invoice.customer_phone,
+                "total_amount": float(invoice.total_amount or 0),
+                "paid_amount": float(invoice.paid_amount or 0),
+                "payment_status": (
+                    invoice.payment_status.value
+                    if hasattr(invoice.payment_status, "value")
+                    else str(invoice.payment_status)
+                ),
+                "status": (
+                    invoice.status.value
+                    if hasattr(invoice.status, "value")
+                    else str(invoice.status)
+                ),
+                "due_date": target_date.isoformat(),
+                "source": invoice.source,
+                "change": "invoice_due_date_updated",
+            }))
 
         db.commit()
+        updated_invoice_ids = [int(invoice.id) for invoice in invoices]
+
+        # Realtime delivery is best effort; the durable event above remains
+        # available for clients that reconnect after this request.
+        for event in events:
+            try:
+                publish_realtime_event(event)
+            except Exception as publish_error:
+                logger.warning(
+                    "Khata deadline realtime publish failed after commit: %s",
+                    publish_error,
+                )
 
         return {
             "success": True,
-            "message": f"Updated due date to {target_date} for {len(invoices)} pending invoice(s)",
-            "due_date": str(target_date)
+            "message": (
+                f"Updated due date to {target_date} for "
+                f"{len(updated_invoice_ids)} pending invoice(s)"
+            ),
+            "due_date": target_date.isoformat(),
+            "updated_count": len(updated_invoice_ids),
+            "invoice_ids": updated_invoice_ids,
         }
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating deadline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error updating deadline: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update customer invoice deadlines.",
+        )
 
 
 @router.get("/whatsapp-reminders")
