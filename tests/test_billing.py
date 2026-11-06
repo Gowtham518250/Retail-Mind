@@ -22,7 +22,9 @@ def test_sync_offline_invoice_deduplication():
 def test_next_bill_number_route_exists():
     from app import api
 
-    routes = {getattr(route, "path", "") for route in api.routes}
+    from fastapi.routing import iter_route_contexts
+
+    routes = {context.path for context in iter_route_contexts(api.routes)}
     assert "/api/invoices/next-bill-number" in routes
 
 
@@ -59,7 +61,9 @@ def test_ai_queries_require_positive_daily_quota():
 def test_feature_access_route_is_registered():
     from app import api
 
-    paths = {getattr(route, "path", "") for route in api.routes}
+    from fastapi.routing import iter_route_contexts
+
+    paths = {context.path for context in iter_route_contexts(api.routes)}
     assert "/api/billing/feature-access/{feature_code}" in paths
 
 
