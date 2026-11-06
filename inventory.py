@@ -2095,6 +2095,12 @@ _VOICE_BILLING_ALIAS_SIZE_TOKENS = {
     "litre", "litres", "liter", "liters", "pc", "pcs", "piece",
     "pieces", "pack", "packet", "packets", "box", "boxes",
     "bottle", "bottles", "dozen", "small", "medium", "large",
+    "kilogramme", "kilogrammes", "gramme", "grammes", "milliliter",
+    "millilitre", "litre", "rupee", "rupees", "rs", "inr", "price",
+    "కిలో", "కిలోలు", "కిలోగ్రాములు", "గ్రాము", "గ్రాములు", "లీటరు", "లీటర్లు",
+    "किलो", "किलोग्राम", "ग्राम", "लीटर", "ಲೀಟರ್", "ಕಿಲೋ", "ಗ್ರಾಂ",
+    "கிலோ", "கிராம்", "லிட்டர்", "കിലോ", "ഗ്രാം", "ലിറ്റർ",
+    "કિલો", "ગ્રામ", "લિટર", "किलो", "ग्रॅम", "लिटर",
 }
 _VOICE_BILLING_ALIAS_NUMBER_WORDS = {
     "zero", "one", "two", "three", "four", "five", "six", "seven",
@@ -2130,10 +2136,13 @@ def _voice_billing_validate_alias_text(alias_text: str) -> str:
     tokens = normalized.split()
     if not tokens or len(tokens) > 4:
         raise HTTPException(status_code=422, detail="Use a short product pronunciation (up to four words).")
+    blocked_number_words = set(_VOICE_BILLING_ALIAS_NUMBER_WORDS)
+    blocked_number_words.update(_VOICE_BILLING_NUMBER_WORDS)
+    blocked_number_words.update(_VOICE_BILLING_SCALE_WORDS)
     if any(
         any(char.isdigit() for char in token)
         or token in _VOICE_BILLING_ALIAS_SIZE_TOKENS
-        or token in _VOICE_BILLING_ALIAS_NUMBER_WORDS
+        or token in blocked_number_words
         for token in tokens
     ):
         raise HTTPException(
