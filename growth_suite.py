@@ -64,6 +64,7 @@ class MarketingCopyRequest(BaseModel):
     language: Literal["en", "te", "hi"] = "en"
     ad_format: Literal["feed", "square", "story"] = "feed"
     product_id: int | None = Field(default=None, ge=1)
+    product_name: str = Field(default="", max_length=100)
     offer: str = Field(default="", max_length=90)
     offer_code: str = Field(default="", max_length=32)
 
@@ -222,6 +223,8 @@ def generate_marketing_copy(
             raise HTTPException(status_code=422, detail="Only an in-stock product can be featured.")
         product_name = str(product.product_name or "").strip()[:100]
         product_price = float(product.unit_price) if product.unit_price is not None else None
+    else:
+        product_name = re.sub(r"\\s+", " ", data.product_name or "").strip()[:100]
 
     # Strip markup/control characters and keep owner-entered offer text as data.
     offer = re.sub(r"<[^>]*>", "", data.offer or "").strip()
@@ -262,6 +265,15 @@ def generate_marketing_copy(
             offer_code=offer_code,
         )
         source = "template_fallback"
+
+    if _contains_restricted_marketing_content(
+        generated.get("headline"),
+        generated.get("caption"),
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="The generated draft could not pass the content safety check.",
+        )
 
     return {
         "shop_id": user_id,
