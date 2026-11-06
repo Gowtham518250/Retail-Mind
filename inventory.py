@@ -1999,7 +1999,7 @@ class VoiceBillingParseRequest(BaseModel):
 class VoiceBillingAliasCorrectionRequest(BaseModel):
     """Cashier-confirmed pronunciation correction for an existing catalog product."""
     alias_text: str = Field(..., min_length=1, max_length=80)
-    product_id: int = Field(..., gt=0)
+    product_name: str = Field(..., min_length=1, max_length=120)
     language_code: str = Field(default="en", min_length=2, max_length=16)
 
 
@@ -2646,17 +2646,28 @@ async def record_voice_billing_alias(
         raise HTTPException(status_code=422, detail="Choose a supported voice language.")
 
     normalized_alias = _voice_billing_validate_alias_text(request.alias_text)
-    product = (
-        db.query(Product)
-        .filter(
-            Product.id == int(request.product_id),
-            Product.user_id == shop_id,
-            Product.is_active.is_(True),
+    canonical_name = _voice_billing_normalize(request.product_name)
+    matching_products = [
+        product
+        for product in db.query(Product)
+        .filter(Product.user_id == shop_id, Product.is_active.is_(True))
+        .all()
+        if _voice_billing_normalize(product.product_name) == canonical_name
+    ]
+    if not matching_products:
+        return {
+            "recorded": False,
+            "active": False,
+            "confirmation_count": 0,
+            "minimum_confirmations": 3,
+            "reason": "Choose the exact name of an active catalog product before saving this pronunciation.",
+        }
+    if len(matching_products) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="More than one catalog product has this exact name. The pronunciation was not saved.",
         )
-        .first()
-    )
-    if product is None:
-        raise HTTPException(status_code=404, detail="The corrected product was not found in this shop.")
+    product = matching_products[0]
 
     canonical_phrase = _voice_billing_safe_alias_product_phrase(product.product_name)
     if not canonical_phrase:
