@@ -2805,7 +2805,8 @@ async def record_voice_billing_alias(
             detail="This pronunciation was updated by another request. Please retry once.",
         ) from exc
 
-    _VOICE_BILLING_PROMPT_VOCAB_CACHE.pop(shop_id, None)
+    for cache_key in [key for key in _VOICE_BILLING_PROMPT_VOCAB_CACHE if key[0] == shop_id]:
+        _VOICE_BILLING_PROMPT_VOCAB_CACHE.pop(cache_key, None)
     return {
         "recorded": True,
         "active": bool(alias.is_active),
@@ -3240,7 +3241,7 @@ _VOICE_BILLING_WHISPER_PREFIXES = {
 }
 
 
-_VOICE_BILLING_PROMPT_VOCAB_CACHE: dict[int, tuple[float, tuple[str, ...]]] = {}
+_VOICE_BILLING_PROMPT_VOCAB_CACHE: dict[tuple[int, str], tuple[float, tuple[str, ...]]] = {}
 _VOICE_BILLING_PROMPT_VOCAB_CACHE_TTL_SECONDS = 300
 _VOICE_BILLING_PROMPT_VOCAB_LOOKBACK_DAYS = 90
 
@@ -3279,8 +3280,10 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code
     invoice lines provide a better shop-specific prior without changing any sale data.
     """
     shop_id = int(user_id)
+    language = _voice_billing_base_language_code(language_code)
+    cache_key = (shop_id, language)
     now = time.time()
-    cached = _VOICE_BILLING_PROMPT_VOCAB_CACHE.get(shop_id)
+    cached = _VOICE_BILLING_PROMPT_VOCAB_CACHE.get(cache_key)
     if cached and now - cached[0] < _VOICE_BILLING_PROMPT_VOCAB_CACHE_TTL_SECONDS:
         return list(cached[1])
 
@@ -3337,7 +3340,6 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code
     catalog_names = [str(row[0] or "").strip() for row in catalog_rows]
     # Activated pronunciations are included as ASR hints only; product identity
     # is still resolved later from the authenticated catalog and spoken evidence.
-    language = _voice_billing_base_language_code(language_code)
     alias_languages = {"auto"} if language == "auto" else {language, "auto"}
     try:
         alias_rows = (
@@ -3368,7 +3370,7 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code
         limit=120,
     )
     if ranked_names:
-        _VOICE_BILLING_PROMPT_VOCAB_CACHE[shop_id] = (now, tuple(ranked_names))
+        _VOICE_BILLING_PROMPT_VOCAB_CACHE[cache_key] = (now, tuple(ranked_names))
     return ranked_names
 
 
