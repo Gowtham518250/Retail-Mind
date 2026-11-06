@@ -19,6 +19,7 @@
     button.secondary { background: #302e55; border: 1px solid #56527d; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     #status { font-size: 13px; min-height: 22px; color: #c4b5fd; overflow-wrap: anywhere; }
+    #diagnostics { display: none; margin-top: 10px; padding: 10px; max-height: 190px; overflow: auto; border: 1px solid #6b4760; border-radius: 10px; background: #24182b; color: #ffd9e4; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.45 ui-monospace, monospace; }
     .note { font-size: 12px; color: #aaa9c4; }
     @media (min-width: 560px) { .actions { grid-template-columns: 1fr 1fr; } }
   </style>
@@ -30,6 +31,7 @@
     <p>Choose a ready-made template or start with a blank design. Edit your shop promotion in Adobe Express, then save the completed file to your phone. Upload it to your social accounts yourself.</p>
     <section class="panel">
       <div id="status" role="status" aria-live="polite">Checking Adobe setup…</div>
+      <pre id="diagnostics" aria-live="polite"></pre>
       <div class="actions">
         <button id="templates" disabled>Browse templates</button>
         <button id="blank" class="secondary" disabled>Create blank design</button>
@@ -38,14 +40,27 @@
     </section>
   </main>
 
-  <script src="https://cc-embed.adobe.com/sdk/v4/CCEverywhere.js"></script>
+  <script src="https://cc-embed.adobe.com/sdk/v4/CCEverywhere.js" onerror="window.__ADOBE_SDK_SCRIPT_FAILED__ = true;"></script>
   <script>
     (function () {
       const statusNode = document.getElementById("status");
+      const diagnosticsNode = document.getElementById("diagnostics");
       const templatesButton = document.getElementById("templates");
       const blankButton = document.getElementById("blank");
       let sdkPromise = null;
       let express = null;
+
+      const requestedPlatform = new URLSearchParams(window.location.search).get("platform");
+      const detectedPlatform = /android/i.test(navigator.userAgent)
+        ? "android"
+        : /iphone|ipad|ipod/i.test(navigator.userAgent)
+          ? "iOS"
+          : (/mobile|android|iphone|ipad/i.test(navigator.userAgent) ? "mobile-web" : "desktop-web");
+      const platform = requestedPlatform
+        ? (requestedPlatform.toLowerCase() === "ios" ? "iOS" : requestedPlatform.toLowerCase())
+        : detectedPlatform;
+      window.__PLATFORM__ = platform;
+      window.PLATFORM = platform;
 
       function setStatus(message) { statusNode.textContent = message; }
       function errorMessage(error) {
@@ -53,11 +68,33 @@
           ? String(error.message || error.code)
           : String(error || "Unknown error");
       }
+      function reportError(context, error) {
+        const detail = context + ": " + errorMessage(error);
+        console.error("[Retail Mind Creative Studio] " + detail, error);
+        const existing = diagnosticsNode.textContent.split("\\n").filter(Boolean);
+        existing.push(new Date().toISOString() + " " + detail);
+        diagnosticsNode.textContent = existing.slice(-8).join("\\n");
+        diagnosticsNode.style.display = "block";
+        setStatus(detail);
+      }
+
+      window.addEventListener("error", function (event) {
+        const target = event.target;
+        if (target && target.tagName === "SCRIPT" && target.src) {
+          reportError("Unable to load script", target.src);
+        } else if (event.message) {
+          reportError("JavaScript error", event.message);
+        }
+      }, true);
+      window.addEventListener("unhandledrejection", function (event) {
+        reportError("Unhandled promise rejection", event.reason);
+      });
 
       const callbacks = {
-        onLoad: function () { setStatus("Adobe Express is ready."); },
-        onLoadStart: function () { setStatus("Opening Adobe Express…"); },
-        onError: function (error) { setStatus("Adobe Express: " + errorMessage(error)); },
+        onLoad: function () { setStatus("Adobe Express editor loaded."); },
+        onLoadStart: function () { setStatus("Adobe Express editor is loading…"); },
+        onCancel: function () { setStatus("Adobe Express editor closed."); },
+        onError: function (error) { reportError("Adobe Express SDK callback", error); },
         onPublishStart: function () { setStatus("Preparing your file…"); },
         onPublish: function (_intent, publishParams) {
           try {
@@ -143,14 +180,16 @@
           if (!config || config.configured !== true || !config.client_id) {
             throw new Error("Adobe is not configured. Set ADOBE_EXPRESS_CLIENT_ID in the Retail Mind backend environment.");
           }
-          if (!window.CCEverywhere) {
-            throw new Error("Adobe Express SDK could not load. Check the internet connection and try again.");
+          if (window.__ADOBE_SDK_SCRIPT_FAILED__ || !window.CCEverywhere) {
+            throw new Error("Adobe Express SDK could not load. Check the internet connection, content blockers and WebView network access, then try again.");
           }
 
           express = await window.CCEverywhere.initialize(
             {
               clientId: config.client_id,
-              appName: config.app_name || "Retail Mind Creative Studio"
+              appName: config.app_name || "Retail Mind Creative Studio",
+              appVersion: { major: 1, minor: 0 },
+              platformCategory: "web"
             },
             {
               loginMode: "delayed",
@@ -173,34 +212,48 @@
         try {
           const sdk = await initialize();
           setStatus("Loading business templates…");
-          sdk.module.startFromContent(
+          if (!sdk || !sdk.module || typeof sdk.module.startFromContent !== "function") {
+            throw new Error("Adobe Template Browser is unavailable in the initialized SDK.");
+          }
+          await sdk.module.startFromContent(
             {
               contentBrowseConfig: {
                 searchQuery: "small business promotion",
                 headerText: "Create a shop advertisement"
               },
+              metaData: { platform: platform },
               callbacks: callbacks
             },
             exportOptions
           );
-        } catch (_) {}
+        } catch (error) {
+          reportError("Template Browser launch failed", error);
+        }
       });
 
       blankButton.addEventListener("click", async function () {
         try {
           const sdk = await initialize();
           setStatus("Opening a new design…");
-          sdk.editor.create(
+          if (!sdk || !sdk.editor || typeof sdk.editor.create !== "function") {
+            throw new Error("Adobe Express editor is unavailable in the initialized SDK.");
+          }
+          await sdk.editor.create(
             { canvasSize: "InstagramPostPortrait" },
             {
+              metaData: { platform: platform },
               callbacks: callbacks
             },
             exportOptions
           );
-        } catch (_) {}
+        } catch (error) {
+          reportError("Blank editor launch failed", error);
+        }
       });
 
-      initialize().catch(function () {});
+      initialize().catch(function (error) {
+        reportError("Adobe initialization failed", error);
+      });
     })();
   </script>
 </body>
