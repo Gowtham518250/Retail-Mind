@@ -96,12 +96,38 @@
         }
       };
 
-      const exportOptions = [{
-        id: "save-to-device",
-        label: "Save to phone",
-        action: { target: "publish", outputType: "base64" },
-        style: { uiType: "button" }
-      }];
+      const exportOptions = [
+        {
+          id: "save-png-to-device",
+          label: "Save PNG to phone",
+          action: {
+            target: "publish",
+            outputType: "base64",
+            publishFileType: "image/png"
+          },
+          style: { uiType: "button" }
+        },
+        {
+          id: "save-jpeg-to-device",
+          label: "Save JPEG to phone",
+          action: {
+            target: "publish",
+            outputType: "base64",
+            publishFileType: "image/jpeg"
+          },
+          style: { uiType: "button" }
+        },
+        {
+          id: "save-pdf-to-device",
+          label: "Save PDF to phone",
+          action: {
+            target: "publish",
+            outputType: "base64",
+            publishFileType: "application/pdf"
+          },
+          style: { uiType: "button" }
+        }
+      ];
 
       async function initialize() {
         if (sdkPromise) return sdkPromise;
@@ -153,8 +179,7 @@
                 searchQuery: "small business promotion",
                 headerText: "Create a shop advertisement"
               },
-              callbacks: callbacks,
-              allowedFileTypes: ["image/png", "image/jpeg", "application/pdf"]
+              callbacks: callbacks
             },
             exportOptions
           );
@@ -168,8 +193,7 @@
           sdk.editor.create(
             { canvasSize: "InstagramPostPortrait" },
             {
-              callbacks: callbacks,
-              allowedFileTypes: ["image/png", "image/jpeg", "application/pdf"]
+              callbacks: callbacks
             },
             exportOptions
           );
