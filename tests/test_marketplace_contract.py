@@ -91,3 +91,24 @@ def test_token_lifetimes_keep_short_access_and_seven_day_refresh():
     assert "key: ACCESS_TOKEN_EXPIRE_MINUTES\n        value: 30" in render_source
     assert "key: REFRESH_TOKEN_EXPIRE_DAYS\n        value: 7" in render_source
     assert 'ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))' in security_source
+
+
+def test_nearby_shops_returns_complete_location_details_and_distance():
+    from online_store import find_nearby_shops
+
+    source = inspect.getsource(find_nearby_shops)
+    for field in (
+        '"address_line1": s.address_line1 or ""',
+        '"address_line2": s.address_line2 or ""',
+        '"location": s.location or ""',
+        '"city": s.city or ""',
+        '"state": s.state or ""',
+        '"postal_code": s.postal_code or ""',
+        '"latitude": s.latitude',
+        '"longitude": s.longitude',
+        '"distance_km": (',
+        '"phone": s.phone or ""',
+        '"website": s.website or ""',
+    ):
+        assert field in source
+    assert 'all_shops.sort(key=lambda shop: haversine' in source
