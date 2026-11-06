@@ -109,6 +109,7 @@ def test_nearby_shops_returns_complete_location_details_and_distance():
         '"distance_km": (',
         '"phone": s.phone or ""',
         '"website": s.website or ""',
+        '"categories": _safe_json_list(s.shop_categories)',
     ):
         assert field in source
     assert 'all_shops.sort(key=lambda shop: haversine' in source
