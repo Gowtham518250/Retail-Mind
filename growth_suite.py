@@ -729,6 +729,51 @@ def approve_marketing_campaign(
         raise HTTPException(status_code=409, detail="Campaign changed. Refresh and review the latest version.")
     if campaign.status != "PENDING_APPROVAL":
         raise HTTPException(status_code=409, detail="Only campaigns pending owner approval can be approved.")
+    profile = db.query(ShopProfile).filter(
+        ShopProfile.shop_id == user_id,
+    ).first()
+    if profile is None:
+        raise HTTPException(status_code=409, detail="Shop profile is unavailable. Refresh the campaign.")
+    current_shop_snapshot = _marketing_shop_snapshot(profile)
+    saved_shop_snapshot = {
+        "shop_address": campaign.shop_address,
+        "shop_location": campaign.shop_location,
+        "shop_city": campaign.shop_city,
+        "shop_state": campaign.shop_state,
+        "shop_postal_code": campaign.shop_postal_code,
+        "shop_latitude": campaign.shop_latitude,
+        "shop_longitude": campaign.shop_longitude,
+        "shop_phone": campaign.shop_phone,
+        "shop_website": campaign.shop_website,
+        "shop_logo_url": campaign.shop_logo_url,
+    }
+    if current_shop_snapshot != saved_shop_snapshot:
+        raise HTTPException(
+            status_code=409,
+            detail="Shop details changed after this campaign was generated. Regenerate and review it again.",
+        )
+
+    if campaign.product_id is not None:
+        product = db.query(Product).filter(
+            Product.id == campaign.product_id,
+            Product.user_id == user_id,
+            Product.is_active.is_(True),
+            Product.current_stock > 0,
+        ).first()
+        if product is None:
+            raise HTTPException(
+                status_code=409,
+                detail="The campaign product is no longer active or in stock. Update the campaign before approval.",
+            )
+        current_price = Decimal(str(product.unit_price)) if product.unit_price is not None else None
+        if current_price != campaign.original_price:
+            raise HTTPException(
+                status_code=409,
+                detail="The product price changed after this campaign was generated. Regenerate and review it again.",
+            )
+    elif campaign.discount_price is not None:
+        raise HTTPException(status_code=409, detail="A discounted campaign must reference a verified inventory product.")
+
     if campaign.discount_price is not None:
         _raise_marketing_discount_error(
             campaign.original_price,
