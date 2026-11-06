@@ -113,3 +113,11 @@ def test_nearby_shops_returns_complete_location_details_and_distance():
     ):
         assert field in source
     assert 'all_shops.sort(key=lambda shop: haversine' in source
+
+
+def test_safe_shop_categories_support_json_and_legacy_comma_values():
+    from online_store import _safe_json_list
+
+    assert _safe_json_list('["Groceries", "Fresh Food"]') == ["Groceries", "Fresh Food"]
+    assert _safe_json_list("Groceries, Fresh Food") == ["Groceries", "Fresh Food"]
+    assert _safe_json_list(None) == []
