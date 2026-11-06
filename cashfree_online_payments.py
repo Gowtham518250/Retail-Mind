@@ -228,8 +228,9 @@ async def _get_verified_successful_payment(
             continue
         if str(payment.get("order_id") or "") != provider_order_id:
             continue
-        if str(payment.get("order_currency") or "").upper() != "INR":
-            continue
+        # Cashfree's Get Payments for an Order response provides
+        # payment_currency and payment_amount; order currency was validated
+        # from GET /orders/{order_id} above.
         if str(payment.get("payment_currency") or "").upper() != "INR":
             continue
         if _money(payment.get("payment_amount"), label="payment amount") != expected_amount:
