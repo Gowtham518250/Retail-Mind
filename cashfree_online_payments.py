@@ -9,7 +9,9 @@ import hmac
 import json
 import logging
 import os
+import re
 import uuid
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
@@ -29,13 +31,24 @@ router = APIRouter(prefix="/store", tags=["Cashfree Online Payments"])
 CASHFREE_API_VERSION = os.getenv("CASHFREE_API_VERSION", "2025-01-01")
 
 
+def _cashfree_webhook_secret() -> str:
+    # Cashfree PG normally signs webhooks with the app secret. Dedicated
+    # overrides are supported for deployments that intentionally separate it.
+    return (
+        os.getenv("CASHFREE_PG_WEBHOOK_SECRET")
+        or os.getenv("CASHFREE_WEBHOOK_SECRET")
+        or os.getenv("CASHFREE_SECRET_KEY")
+        or ""
+    ).strip()
+
+
 def cashfree_pg_is_configured(*, require_webhook: bool = True) -> bool:
     """Return whether one-time PG collection is explicitly enabled and configured."""
     enabled = (os.getenv("CASHFREE_PG_ENABLED") or "").strip().lower() == "true"
     app_id = (os.getenv("CASHFREE_APP_ID") or "").strip()
     secret = (os.getenv("CASHFREE_SECRET_KEY") or "").strip()
     env = (os.getenv("CASHFREE_ENV") or "sandbox").strip().lower()
-    webhook_secret = (os.getenv("CASHFREE_PG_WEBHOOK_SECRET") or "").strip()
+    webhook_secret = _cashfree_webhook_secret()
     return bool(
         enabled
         and app_id
@@ -93,9 +106,7 @@ def _verify_cashfree_signature(
     secret: Optional[str] = None,
 ) -> None:
     """Verify Cashfree's Base64(HMAC-SHA256(timestamp + raw body)) signature."""
-    signing_secret = (
-        secret if secret is not None else os.getenv("CASHFREE_PG_WEBHOOK_SECRET", "")
-    ).strip()
+    signing_secret = secret if secret is not None else _cashfree_webhook_secret()
     if len(signing_secret) < 32:
         raise HTTPException(status_code=503, detail="Cashfree PG webhook secret is not configured.")
     if not timestamp or not supplied_signature:
@@ -328,7 +339,7 @@ def _settle_verified_payment(
         order.cashfree_payment_id = payment_id
         order.payment_reference = payment_id
         order.payment_confirmation_source = "CASHFREE_PG"
-        order.payment_confirmed_at = __import__("datetime").datetime.utcnow()
+        order.payment_confirmed_at = datetime.utcnow()
         _refund_journal_entry(db, order=order, payment_id=payment_id, amount=amount)
         event = append_sync_event(db, {
             "event_id": str(uuid.uuid4()),
@@ -351,7 +362,7 @@ def _settle_verified_payment(
     order.cashfree_payment_id = payment_id
     order.payment_reference = payment_id
     order.payment_confirmation_source = "CASHFREE_PG"
-    order.payment_confirmed_at = __import__("datetime").datetime.utcnow()
+    order.payment_confirmed_at = datetime.utcnow()
     order.payment_status = "PAID"
 
     events = []
@@ -539,14 +550,23 @@ async def create_cashfree_order_session(
                     "amount": float(amount),
                 }
 
-        payload = {
+        customer_phone = re.sub(r"\\D", "", str(customer.phone or ""))
+    if len(customer_phone) == 12 and customer_phone.startswith("91"):
+        customer_phone = customer_phone[2:]
+    if len(customer_phone) != 10:
+        raise HTTPException(
+            status_code=422,
+            detail="The customer account must have a valid 10-digit Indian mobile number for Cashfree checkout.",
+        )
+
+    payload = {
             "order_id": provider_order_id,
             "order_amount": float(amount),
             "order_currency": "INR",
             "customer_details": {
                 "customer_id": f"retailmind_customer_{customer.id}",
                 "customer_name": (customer.user_name or "Retail Mind Customer")[:100],
-                "customer_phone": str(customer.phone or ""),
+                "customer_phone": customer_phone,
             },
             "order_note": f"Retail Mind online order #{order.id}"[:250],
         }
