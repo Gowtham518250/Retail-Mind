@@ -395,7 +395,6 @@ class ProductVoiceAlias(Base):
             name="uq_product_voice_alias_shop_language_phrase",
         ),
         Index("ix_product_voice_alias_shop_language_active", "user_id", "language_code", "is_active"),
-        Index("ix_product_voice_alias_product", "product_id"),
     )
 
 class ProductCreateRequest(Base):
