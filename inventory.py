@@ -2152,6 +2152,35 @@ def _voice_billing_validate_alias_text(alias_text: str) -> str:
     return normalized
 
 
+def _voice_billing_alias_conflicts_with_catalog(
+    normalized_alias: str,
+    selected_product_id: int,
+    products,
+) -> bool:
+    """Reject an alias that is already a phrase inside another product name."""
+    alias_tokens = tuple(_voice_billing_normalize(normalized_alias).split())
+    if not alias_tokens:
+        return True
+    for product in products or []:
+        try:
+            if int(getattr(product, "id", 0)) == int(selected_product_id):
+                continue
+        except (TypeError, ValueError):
+            continue
+        other_tokens = tuple(
+            _voice_billing_safe_alias_product_phrase(
+                str(getattr(product, "product_name", "") or "")
+            ).split()
+        )
+        size = len(alias_tokens)
+        if size <= len(other_tokens) and any(
+            other_tokens[index:index + size] == alias_tokens
+            for index in range(len(other_tokens) - size + 1)
+        ):
+            return True
+    return False
+
+
 def _voice_billing_expand_shop_aliases(transcript: str, aliases) -> tuple[str, list[str]]:
     """Expand exact, cashier-confirmed phrases without adding pack-size evidence."""
     tokens = _voice_billing_normalize(transcript).split()
@@ -2670,11 +2699,14 @@ async def record_voice_billing_alias(
 
     normalized_alias = _voice_billing_validate_alias_text(request.alias_text)
     canonical_name = _voice_billing_normalize(request.product_name)
-    matching_products = [
-        product
-        for product in db.query(Product)
+    active_products = (
+        db.query(Product)
         .filter(Product.user_id == shop_id, Product.is_active.is_(True))
         .all()
+    )
+    matching_products = [
+        product
+        for product in active_products
         if _voice_billing_normalize(product.product_name) == canonical_name
     ]
     if not matching_products:
@@ -2691,6 +2723,19 @@ async def record_voice_billing_alias(
             detail="More than one catalog product has this exact name. The pronunciation was not saved.",
         )
     product = matching_products[0]
+
+    if _voice_billing_alias_conflicts_with_catalog(
+        normalized_alias,
+        int(product.id),
+        active_products,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This pronunciation overlaps another product name in this shop. "
+                "Use a more distinctive spoken phrase."
+            ),
+        )
 
     canonical_phrase = _voice_billing_safe_alias_product_phrase(product.product_name)
     if not canonical_phrase:
