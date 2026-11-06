@@ -68,6 +68,27 @@ class MarketingCopyRequest(BaseModel):
     offer_code: str = Field(default="", max_length=32)
 
 
+_RESTRICTED_MARKETING_PATTERN = re.compile(
+    r"\b(?:alcohol|beer|wine|liquor|vodka|whisky|whiskey|rum|tequila|gin|champagne|cider|"
+    r"tobacco|cigarette|cigar|vape|vaping|e-cigarette|nicotine|"
+    r"marijuana|cannabis|weed|thc|cbd|prescription|controlled-substance|steroid|"
+    r"gambling|betting|casino|sports-betting|lottery|"
+    r"firearm|gun|ammunition|weapon|switchblade|taser|pepper-spray|"
+    r"pornography|adult-toy|sex-toy|self-harm|diet-pill|laxative)\b",
+    re.IGNORECASE,
+)
+
+
+def _contains_restricted_marketing_content(*values: object) -> bool:
+    """Reject ad copy for unsafe or age-restricted product categories."""
+    return any(
+        value is not None and _RESTRICTED_MARKETING_PATTERN.search(str(value))
+        for value in values
+    )
+
+
+
+
 def _growth_copy_fallback(
     shop_name: str,
     goal: str,
@@ -206,6 +227,18 @@ def generate_marketing_copy(
     offer = re.sub(r"<[^>]*>", "", data.offer or "").strip()
     offer = re.sub(r"[\x00-\x1f\x7f]", " ", offer)[:90]
     offer_code = re.sub(r"[^A-Za-z0-9_-]", "", data.offer_code or "")[:32]
+    if _contains_restricted_marketing_content(
+        shop_name,
+        product_name,
+        getattr(product, "category", None) if product else None,
+        offer,
+        offer_code,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Promotional drafts are unavailable for this product or content category.",
+        )
+
     context = {
         "shop_name": shop_name,
         "goal": data.goal,
@@ -328,6 +361,19 @@ def save_marketing_campaign(
     caption = str(data.caption or "").strip()
     offer = re.sub(r"[\x00-\x1f\x7f]", " ", data.offer or "").strip()[:90]
     offer_code = re.sub(r"[^A-Za-z0-9_-]", "", data.offer_code or "")[:32]
+
+    if _contains_restricted_marketing_content(
+        shop_name,
+        product_name,
+        getattr(product, "category", None) if product else None,
+        offer,
+        headline,
+        caption,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Promotional drafts are unavailable for this product or content category.",
+        )
 
     campaign = db.query(GrowthMarketingCampaign).filter(
         GrowthMarketingCampaign.shop_id == user_id,
