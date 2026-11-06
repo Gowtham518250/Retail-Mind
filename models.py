@@ -1297,6 +1297,20 @@ class OnlineOrder(Base):
                 "AND order_status IN ('PENDING', 'ACCEPTED')"
             ),
         ),
+        Index(
+            "uq_online_orders_cashfree_order_id",
+            "cashfree_order_id",
+            unique=True,
+            postgresql_where=text("cashfree_order_id IS NOT NULL"),
+            sqlite_where=text("cashfree_order_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_online_orders_cashfree_payment_id",
+            "cashfree_payment_id",
+            unique=True,
+            postgresql_where=text("cashfree_payment_id IS NOT NULL"),
+            sqlite_where=text("cashfree_payment_id IS NOT NULL"),
+        ),
     )
     
     id = Column(Integer, primary_key=True)
@@ -1310,10 +1324,14 @@ class OnlineOrder(Base):
     payment_method = Column(String(20), nullable=False, default="COD", server_default="COD")
     payment_status = Column(String(24), nullable=False, default="COD_DUE", server_default="COD_DUE")
     payment_reference = Column(String(128), nullable=True)
-    # Records that a PAID state came from owner-device notification matching, not a provider webhook.
+    # CASHFREE_PG is set only after the signed webhook or server-side provider
+    # status lookup confirms a successful payment.
     payment_confirmation_source = Column(String(50), nullable=True)
     payment_detection_key = Column(String(128), nullable=True)
     payment_confirmed_at = Column(DateTime, nullable=True)
+    cashfree_order_id = Column(String(45), nullable=True)
+    cashfree_payment_session_id = Column(Text, nullable=True)
+    cashfree_payment_id = Column(String(128), nullable=True)
     # Snapshot of the online-only setup fee applied to this order.
     online_setup_fee = Column(Numeric(10, 2), nullable=False, default=0)
     coupon_code = Column(String(50), nullable=True)
