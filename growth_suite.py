@@ -616,7 +616,7 @@ def save_marketing_campaign(
         caption_lines.append(f"Shop location: {shop_snapshot['shop_address']}")
     if shop_snapshot["shop_phone"] and str(shop_snapshot["shop_phone"]) not in caption:
         caption_lines.append(f"Contact: {shop_snapshot['shop_phone']}")
-    caption = "\\n".join(caption_lines)[:1200]
+    caption = "\n".join(caption_lines)[:1200]
 
     now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     campaign = db.query(GrowthMarketingCampaign).filter(
