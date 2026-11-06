@@ -489,7 +489,16 @@ def update_khata_deadline(
             ]),
             Invoice.status.notin_(NON_RECEIVABLE_INVOICE_STATUSES),
         )
-        if customer_phone:
+        if customer_phone and customer_id is not None:
+            # Legacy invoice rows may have the phone but no customer_id.
+            # Both identifiers belong to this same authenticated customer.
+            query = query.filter(
+                or_(
+                    Invoice.customer_phone == customer_phone,
+                    Invoice.customer_id == customer_id,
+                )
+            )
+        elif customer_phone:
             query = query.filter(Invoice.customer_phone == customer_phone)
         else:
             query = query.filter(Invoice.customer_id == customer_id)
