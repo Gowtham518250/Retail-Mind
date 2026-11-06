@@ -19,6 +19,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func, text
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from db import get_db
 from security import check_login_lockout, get_current_user as check_current_user, customer_only
@@ -255,6 +256,7 @@ class MarketingCampaignSaveRequest(BaseModel):
     template: Literal["bold", "festive", "fresh", "minimal"] = "bold"
     product_id: int | None = Field(default=None, ge=1)
     product_name: str = Field(default="", max_length=120)
+    product_price: float | None = Field(default=None, ge=0, le=100000000)
     headline: str = Field(..., min_length=1, max_length=120)
     caption: str = Field(..., min_length=1, max_length=650)
     offer: str = Field(default="", max_length=90)
@@ -315,6 +317,11 @@ def save_marketing_campaign(
             raise HTTPException(status_code=422, detail="Only an in-stock product can be saved to a campaign.")
         product_name = str(product.product_name or "").strip()[:120]
         product_price = Decimal(str(product.unit_price)) if product.unit_price is not None else None
+    elif data.product_price is not None:
+        # Offline/local inventory may not exist on the server yet. This value
+        # remains a private DRAFT snapshot requiring owner review; it is not
+        # treated as verified inventory data or auto-published.
+        product_price = Decimal(str(data.product_price))
 
     shop_name = str(profile.shop_name or "My Shop").strip()[:200]
     headline = re.sub(r"\s+", " ", data.headline or "").strip()
@@ -354,7 +361,7 @@ def save_marketing_campaign(
 
     try:
         db.commit()
-    except Exception:
+    except IntegrityError:
         db.rollback()
         # A concurrent retry may have inserted the same shop/campaign key.
         # Load it only within this owner and apply the same idempotent update.
