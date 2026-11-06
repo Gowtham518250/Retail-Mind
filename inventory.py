@@ -2939,9 +2939,12 @@ def _voice_billing_rank_prompt_names(
 ) -> list[str]:
     """Put recently and frequently sold products before alphabetical catalog fallback."""
     ranked: list[str] = []
+    max_names = max(0, int(limit))
+    if max_names == 0:
+        return ranked
     seen: set[str] = set()
     for raw_name in [*(popular_names or []), *(catalog_names or [])]:
-        name = re.sub(r"\\s+", " ", str(raw_name or "")).strip()[:100]
+        name = re.sub(r"\s+", " ", str(raw_name or "")).strip()[:100]
         if not name:
             continue
         key = name.casefold()
@@ -2949,7 +2952,7 @@ def _voice_billing_rank_prompt_names(
             continue
         seen.add(key)
         ranked.append(name)
-        if len(ranked) >= max(0, int(limit)):
+        if len(ranked) >= max_names:
             break
     return ranked
 
