@@ -31,6 +31,7 @@ from uuid import uuid4
 from db import sessionLocal, get_db
 from security import get_current_user as check_current_user
 from models import Product, ProductCreateRequest, StockMovement, ProductBatch, Notification
+from growth_marketing_automation import enqueue_product_created_trigger
 from stock_service import StockService
 from voice_billing_core import (
     convert_quantity as _vb_convert_quantity,
@@ -1335,6 +1336,10 @@ def create_product(
                 operation_id=operation_id,
                 product_id=db_product.id,
             ))
+
+        # Create a marketing trigger in the same transaction as the product.
+        # The trigger is queued only when this shop has opted into new-product drafts.
+        enqueue_product_created_trigger(db, user_id, db_product.id)
 
         sync_event = _queue_inventory_change(
             db, user_id, "product_created", product_id=db_product.id
