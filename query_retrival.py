@@ -678,7 +678,67 @@ def _generate_sql_with_groq(formatted_prompt: str, model: str) -> str:
     return str(getattr(message, "content", None) or "").strip()
 
 
-def _make_deterministic_query_plan(query: str) -> dict:
+# Vocabulary that may appear in a *pure* shop-wide KPI question. Any other word (a product,
+# customer, branch, payment mode ...) is a filter the fixed KPI SQL cannot apply, so such a
+# question must go to the schema-grounded SQL path instead of returning a shop-wide total.
+_KPI_PLAN_ALLOWED_WORDS = frozenset(
+    """
+    what whats what's which were was is are be been the a an my our me i we us you your
+    did do does done how much many tell show give get see check find know let please kindly
+    can could would will want need like report summary figure figures number numbers stat stats
+    of in on for from to till until upto up between and or at as so far now yet
+    total totals sum overall all amount amounts value values count counts
+    sale sales sold sell selling revenue turnover business shop shops shop's store stores
+    expense expenses spent spending item items unit units quantity quantities
+    make makes made making earn earns earned earning had have has having got generate generated
+    come came happen happened
+    rupee rupees rs inr
+    today todays today's yesterday yesterdays yesterday's day days week weeks month months
+    year years this last past previous current ago before after since during date dated
+    rolling calendar first second third fourth fifth sixth seventh eighth ninth tenth
+    st nd rd th
+    """.split()
+)
+
+
+def _kpi_residual_words(normalized_query: str) -> list[str]:
+    """Words or unexplained numeric filters outside the pure KPI/date vocabulary."""
+    month_words = set(_MONTH_LOOKUP)
+    residual = []
+    for word in re.findall(r"[a-z][a-z']*", normalized_query):
+        if word in _KPI_PLAN_ALLOWED_WORDS or word in month_words:
+            continue
+        residual.append(word)
+
+    # Do not silently discard a numeric customer/product filter such as
+    # "sales to 123". Permit numbers only when clearly part of a date or
+    # rolling date window.
+    month_pattern = "|".join(sorted((re.escape(m) for m in month_words), key=len, reverse=True))
+    has_numeric_date = bool(
+        re.search(r"\b(?:19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}\b", normalized_query)
+        or re.search(r"\b\d{1,2}[-/]\d{1,2}[-/](?:19|20)\d{2}\b", normalized_query)
+    )
+    for match in re.finditer(r"(?<![a-z0-9])\d{1,4}(?:st|nd|rd|th)?(?![a-z0-9])", normalized_query):
+        token = match.group(0)
+        if has_numeric_date or re.search(r"(?:st|nd|rd|th)$", token):
+            continue
+        left = normalized_query[:match.start()]
+        right = normalized_query[match.end():]
+        next_to_month = bool(
+            (month_pattern and re.search(r"\b(?:" + month_pattern + r")\s*$", left))
+            or (month_pattern and re.match(r"\s*(?:" + month_pattern + r")\b", right))
+        )
+        rolling_window = bool(
+            re.search(r"\b(?:last|past|previous|rolling)\s*$", left)
+            and re.match(r"\s*(?:calendar\s+)?(?:day|week|month|year)s?\b", right)
+        )
+        if not next_to_month and not rolling_window:
+            residual.append("numeric filter")
+            break
+    return residual
+
+
+def _make_deterministic_query_plan(query: str, date_scope: dict | None = None) -> dict:
     """Classify unambiguous aggregate KPIs before RAG/SQL generation.
 
     "Items sold" and short date-scoped phrases (for example, "sales today")
@@ -713,12 +773,29 @@ def _make_deterministic_query_plan(query: str) -> dict:
     # Users often ask short questions such as "sales today" or "yesterday's
     # revenue". Resolve those to billed sales amount unless they explicitly ask
     # for a count or quantity, or request a breakdown.
+    # A date scope the resolver fully bounded (this/last week or month, an exact date, a
+    # rolling "last N days" ...) is as unambiguous as today/yesterday.
+    resolved_bounded_scope = bool(
+        isinstance(date_scope, dict)
+        and date_scope.get("kind") in {"exact", "range"}
+        and date_scope.get("start_date") is not None
+        and date_scope.get("end_date") is not None
+    )
     date_scoped_sales_cue = (
         wants_sales
-        and bool(re.search(r"\b(today|todays|today's|yesterday|yesterday's)\b", normalized))
+        and (
+            bool(re.search(r"\b(today|todays|today's|yesterday|yesterday's)\b", normalized))
+            or resolved_bounded_scope
+        )
     )
     simple_metric = wants_sales != wants_expenses
-    if simple_metric and (aggregate_cue or unit_sales_cue or date_scoped_sales_cue) and not blocked_dimensions.search(normalized):
+    if (
+        simple_metric
+        and (aggregate_cue or unit_sales_cue or date_scoped_sales_cue)
+        and not blocked_dimensions.search(normalized)
+        # Fail closed: "sales of rice today" is NOT the shop-wide total.
+        and not _kpi_residual_words(normalized)
+    ):
         if unit_sales_cue:
             metric = "units_sold"
         elif re.search(r"\b(how many|number of|count)\b.*\bsales?\b|\b(count|number)\s+of\s+sales?\b", normalized):
@@ -760,7 +837,7 @@ def _can_use_fast_business_query(query: str, date_scope: dict) -> bool:
     )
     if not safe_fast_date:
         return False
-    plan = _make_deterministic_query_plan(query)
+    plan = _make_deterministic_query_plan(query, date_scope)
     if plan.get("intent") != "aggregate" or plan.get("confidence", 0) < 0.9:
         return False
     return plan.get("metric") in {"sales_amount", "sales_count", "units_sold", "expenses"}

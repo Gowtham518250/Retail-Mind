@@ -367,6 +367,7 @@ def resolve_catalog_product(
     if not expanded_item:
         return Resolution("none", reasons=["no spoken product words"])
 
+    item_norm = " ".join(normalize(text) for text in item_texts if text)
     pool: list[Candidate] = []
     spoken_sizes = size_tokens(transcript)
     for product in products:
@@ -376,7 +377,15 @@ def resolve_catalog_product(
         reasons: list[str] = []
         sku_norm = normalize(sku_of(product))
         exact_name = bool(name_norm and name_norm in transcript_norm)
-        exact_sku = bool(sku_norm and sku_norm in transcript_norm)
+        # A SKU only identifies THIS line when its words belong to this line's own spoken
+        # words. Another line's SKU appearing elsewhere in the utterance (SKU "MILK" in
+        # "3 soap and 1 litre milk") must not pull that product into the "soap" line.
+        sku_tokens = set(sku_norm.split())
+        exact_sku = bool(
+            sku_norm
+            and sku_norm in transcript_norm
+            and (sku_norm in item_norm or sku_tokens & expanded_item)
+        )
         if exact_name:
             reasons.append("full product name spoken")
         if exact_sku:
