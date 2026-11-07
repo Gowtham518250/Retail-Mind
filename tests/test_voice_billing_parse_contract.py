@@ -229,12 +229,16 @@ def _run_voice_billing_endpoint(
     language_code="en-IN",
     catalog_products=None,
     translated_text="2 kg Dragon Fruit 30",
+    fast_path=False,
 ):
     import asyncio
     import json
     import inventory as inventory_module
 
     monkeypatch.setenv("GROQ_API_KEY", "unit-test-key")
+    # These harness tests validate the safety net applied to LLM output, so the
+    # deterministic fast path is off unless a test opts in with fast_path=True.
+    monkeypatch.setenv("VOICE_BILLING_FAST_PATH", "1" if fast_path else "0")
     product = SimpleNamespace(
         id=42,
         product_name="Sona Masoori Rice",

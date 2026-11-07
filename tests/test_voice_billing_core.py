@@ -109,3 +109,36 @@ def test_null_model_product_id_can_still_resolve_a_unique_catalog_item(monkeypat
     )
     assert result["items"][0]["product_id"] == 42
     assert result["items"][0]["catalog_matched"] is True
+
+
+def test_another_lines_sku_does_not_hijack_this_line():
+    """SKU "MILK" spoken in a different line must not turn the soap line into Milk."""
+    from types import SimpleNamespace
+    from voice_billing_core import resolve_catalog_product
+    import inventory as inv
+
+    soap = SimpleNamespace(id=2, product_name="Lux Soap", sku="LUXS")
+    milk = SimpleNamespace(id=3, product_name="Milk", sku="MILK")
+    kwargs = dict(
+        normalize=inv._voice_billing_normalize,
+        expand_tokens=inv._voice_billing_expanded_tokens,
+    )
+    utterance = "3 soap and 1 litre milk"
+    result = resolve_catalog_product(["soap"], utterance, [milk, soap], **kwargs)
+    assert result.status == "matched" and result.product.id == 2
+    result = resolve_catalog_product(["milk"], utterance, [milk, soap], **kwargs)
+    assert result.status == "matched" and result.product.id == 3
+
+
+def test_spoken_sku_still_identifies_its_own_line():
+    from types import SimpleNamespace
+    from voice_billing_core import resolve_catalog_product
+    import inventory as inv
+
+    a = SimpleNamespace(id=1, product_name="Boost Drink", sku="BST-1")
+    b = SimpleNamespace(id=2, product_name="Boost Drink Large", sku="BST-2")
+    result = resolve_catalog_product(
+        ["bst 2"], "2 bst 2", [a, b],
+        normalize=inv._voice_billing_normalize, expand_tokens=inv._voice_billing_expanded_tokens,
+    )
+    assert result.status == "matched" and result.product.id == 2
