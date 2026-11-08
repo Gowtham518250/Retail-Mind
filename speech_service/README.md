@@ -1,6 +1,6 @@
 # Retail Mind open-source Indian voice service
 
-> **Architecture note (2026-10-10):** The current AI Query app uses Groq Whisper through the authenticated backend endpoints `POST /askquery/transcribe` and `POST /askquery/voice`. It then sends the recognized transcript to `POST /askquery`, where the existing Groq text model translates it to English before the RAG/SQL pipeline. The current app flow does **not** require `INDIC_SPEECH_SERVICE_URL` or `INDIC_SPEECH_SERVICE_API_KEY`.
+> **Architecture note (2026-11-08):** The production Retail Mind API now uses Sarvam Saaras v4 for speech recognition on both authenticated voice-billing and AI Query transcription routes. Set `SARVAM_API_KEY` on the main API deployment. `GROQ_API_KEY` is still used by the existing Groq text/LLM features; it is no longer required for speech recognition. The optional self-hosted Indic speech service described below remains separate and is not part of the default ASR path.
 
 This directory preserves an optional self-hosted open-source Indian-language speech service. It is separate from the default Groq-based AI Query voice flow and should only be deployed if the project intentionally switches back to this architecture.
 
