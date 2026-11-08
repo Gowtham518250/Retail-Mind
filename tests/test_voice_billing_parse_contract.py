@@ -353,6 +353,73 @@ def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
     assert any("user_id" in str(clause) for clause in db.query_obj.filters)
 
 
+def test_weighted_quantity_bare_amount_is_line_total(monkeypatch):
+    chicken = SimpleNamespace(
+        id=42,
+        product_name="Chicken",
+        sku="CHICKEN-01",
+        category="Meat",
+        unit_price=100,
+        current_stock=20,
+        user_id=7,
+        is_active=True,
+        unit="kg",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 42,
+            "product_name_en": "Chicken",
+            "quantity": 2,
+            "spoken_unit": "kg",
+            "spoken_price_amount": 200,
+            # Simulate the extraction model incorrectly calling the bare amount a unit price.
+            "spoken_price_kind": "unit",
+            "confidence": 0.98,
+        }],
+        transcript="2 kg chicken 200",
+        catalog_products=[chicken],
+    )
+
+    item = result["items"][0]
+    assert item["quantity"] == 2.0
+    assert item["unit_price"] == 100.0
+    assert item["price_source"] == "spoken_line_total"
+
+
+def test_explicit_per_kg_price_remains_unit_price(monkeypatch):
+    chicken = SimpleNamespace(
+        id=42,
+        product_name="Chicken",
+        sku="CHICKEN-01",
+        category="Meat",
+        unit_price=100,
+        current_stock=20,
+        user_id=7,
+        is_active=True,
+        unit="kg",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 42,
+            "product_name_en": "Chicken",
+            "quantity": 2,
+            "spoken_unit": "kg",
+            "spoken_price_amount": 100,
+            "spoken_price_kind": "line_total",
+            "confidence": 0.98,
+        }],
+        transcript="2 kg chicken 100 per kg",
+        catalog_products=[chicken],
+    )
+
+    item = result["items"][0]
+    assert item["quantity"] == 2.0
+    assert item["unit_price"] == 100.0
+    assert item["price_source"] == "spoken_unit"
+
+
 def test_groq_cannot_inject_product_id_not_in_shop_catalog(monkeypatch):
     result, _, _, _ = _run_voice_billing_endpoint(
         monkeypatch,
