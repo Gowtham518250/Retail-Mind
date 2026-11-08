@@ -2998,6 +2998,9 @@ async def parse_voice_billing(
     but has no product ID and therefore cannot reduce inventory stock.
     """
     transcript = _normalize_voice_transcript(request.transcript)
+    voice_started = time.perf_counter()
+    translation_ms = 0.0
+    extraction_ms = 0.0
     if not transcript:
         raise HTTPException(status_code=422, detail="Please speak or enter the products to add.")
 
@@ -3038,10 +3041,12 @@ async def parse_voice_billing(
             expand_tokens=_voice_billing_expanded_tokens,
         )
     if fast_parsed is None and _voice_billing_should_translate(transcript, request.language_code or "auto"):
+        translation_started = time.perf_counter()
         translated_search_text = await _voice_billing_translate_search_query(
             parser_transcript, request.language_code or "auto", api_key, model,
             shop_vocabulary=[str(product.product_name or "") for product in products],
         )
+        translation_ms = (time.perf_counter() - translation_started) * 1000.0
         if not translated_search_text or not _voice_billing_is_english_text(translated_search_text):
             return {
                 "success": False,
@@ -3113,6 +3118,7 @@ async def parse_voice_billing(
         )
 
         try:
+            extraction_started = time.perf_counter()
             async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, connect=8.0)) as client:
                 response = await client.post(
                     "https://api.groq.com/openai/v1/chat/completions",
@@ -3142,6 +3148,7 @@ async def parse_voice_billing(
                 response.raise_for_status()
                 payload = response.json()
                 content = str((((payload.get("choices") or [{}])[0]).get("message") or {}).get("content") or "").strip()
+            extraction_ms = (time.perf_counter() - extraction_started) * 1000.0
         except HTTPException:
             raise
         except httpx.TimeoutException:
@@ -3437,8 +3444,22 @@ async def parse_voice_billing(
     interpreted_text_en = str(
         translated_search_text or parsed.get("interpreted_text_en") or english_transcript
     ).strip()[:320]
+    timing_ms = {
+        "translation": round(translation_ms, 1),
+        "extraction": round(extraction_ms, 1),
+        "total_parse": round((time.perf_counter() - voice_started) * 1000.0, 1),
+    }
+    logging.info(
+        "VOICE_BILLING_PARSE timing_ms=%s path=%s candidates=%s items=%s clarification=%s",
+        timing_ms,
+        "deterministic" if fast_parsed is not None else "llm",
+        len(candidates),
+        len(output_items),
+        bool(needs_clarification or not output_items),
+    )
     result = {
         "success": bool(output_items),
+        "timing_ms": timing_ms,
         "items": output_items,
         "needs_clarification": needs_clarification or not output_items,
         "clarification_question": clarification,
