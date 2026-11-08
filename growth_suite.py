@@ -548,6 +548,8 @@ def _marketing_campaign_to_dict(campaign: GrowthMarketingCampaign) -> dict:
         "rejected_reason": campaign.rejected_reason or "",
         "headline": campaign.headline,
         "caption": campaign.caption,
+        "poster_svg": campaign.poster_svg or "",
+        "poster_mime_type": "image/svg+xml" if campaign.poster_svg else None,
         "offer": campaign.offer or "",
         "offer_code": campaign.offer_code or "",
         "generation_source": campaign.generation_source,
@@ -638,6 +640,25 @@ def save_marketing_campaign(
         caption_lines.append(f"Contact: {shop_snapshot['shop_phone']}")
     caption = "\n".join(caption_lines)[:1200]
 
+    from marketing_poster_renderer import render_retail_poster
+    poster_asset = render_retail_poster({
+        "shop_name": shop_name,
+        "shop_address": shop_snapshot["shop_address"],
+        "shop_phone": shop_snapshot["shop_phone"],
+        "shop_logo_url": shop_snapshot["shop_logo_url"],
+        "product_name": product_name,
+        "product_image_url": getattr(product, "image_url", None) if product else None,
+        "original_price_inr": float(original_price) if original_price is not None else None,
+        "discount_price_inr": float(discount_price) if discount_price is not None else None,
+        "discount_percent": float(discount_percent) if discount_percent is not None else None,
+        "offer_provided_by_owner": offer,
+        "headline": headline,
+        "caption": caption,
+        "goal": data.goal,
+        "language": data.language,
+        "ad_format": data.ad_format,
+    }, template=data.template)
+
     now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     campaign = db.query(GrowthMarketingCampaign).filter(
         GrowthMarketingCampaign.shop_id == user_id,
@@ -669,7 +690,8 @@ def save_marketing_campaign(
         "goal": data.goal,
         "language": data.language,
         "ad_format": data.ad_format,
-        "template": data.template,
+        "template": poster_asset["template"],
+        "poster_svg": poster_asset["poster_svg"],
         "trigger_type": data.trigger_type,
         "generation_source": data.generation_source,
         **shop_snapshot,
