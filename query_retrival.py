@@ -1624,6 +1624,7 @@ def _fast_low_stock_query(query: str, db: Session, user_id: int):
         "p.current_stock, p.min_stock, p.reorder_level "
         "FROM products p "
         "WHERE p.user_id = :user_id "
+        "AND p.is_active IS TRUE "
         "AND p.current_stock <= p.min_stock "
         "ORDER BY p.current_stock ASC, p.product_name ASC "
         "LIMIT 100"
