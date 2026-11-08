@@ -426,7 +426,7 @@ class MarketingCampaignSaveRequest(BaseModel):
     goal: Literal["nearby", "new_product", "clear_stock", "regular_customers"]
     language: Literal["en", "te", "hi"] = "en"
     ad_format: Literal["feed", "square", "story"] = "feed"
-    template: Literal["bold", "festive", "fresh", "minimal"] = "bold"
+    template: Literal["auto", "bold", "festive", "fresh", "minimal", "price_burst", "market", "editorial"] = "auto"
     product_id: int | None = Field(default=None, ge=1)
     product_name: str = Field(default="", max_length=120)
     product_price: float | None = Field(default=None, ge=0, le=100000000)
@@ -657,7 +657,7 @@ def save_marketing_campaign(
         "goal": data.goal,
         "language": data.language,
         "ad_format": data.ad_format,
-    }, template=data.template)
+    }, template=None if data.template == "auto" else data.template)
 
     now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     campaign = db.query(GrowthMarketingCampaign).filter(
