@@ -17,6 +17,7 @@ _LANGUAGE_CODES = {
     "sd": "sd-IN", "ta": "ta-IN", "te": "te-IN", "ur": "ur-IN",
 }
 _SARVAM_TO_APP = {value.lower(): key for key, value in _LANGUAGE_CODES.items()}
+_SARVAM_TO_APP["od-in"] = "or"
 
 class SarvamSpeechError(RuntimeError):
     """Provider error carrying only a safe status code."""
