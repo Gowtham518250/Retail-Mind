@@ -1450,10 +1450,11 @@ def update_product(
     _lock_product_identity_scope(db, user_id)
     db_product = db.query(Product).with_for_update().filter(
         Product.id == product_id,
-        Product.user_id == user_id
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
     ).first()
     if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Active product not found")
 
     update_data = product_update.dict(exclude_unset=True)
     candidate_name = update_data.get("product_name", db_product.product_name)
