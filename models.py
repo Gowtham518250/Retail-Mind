@@ -1614,7 +1614,7 @@ class GrowthMarketingCampaign(Base):
     shop_website = Column(String(200), nullable=True)
     shop_logo_url = Column(String(500), nullable=True)
     poster_svg = Column(Text, nullable=True)
-    trigger_type =(String(32), nullable=False, default="manual", server_default="manual")
+    trigger_type = Column(String(32), nullable=False, default="manual", server_default="manual")
     content_version = Column(Integer, nullable=False, default=1, server_default="1")
     approved_version = Column(Integer, nullable=True)
     approved_by = Column(Integer, nullable=True)
