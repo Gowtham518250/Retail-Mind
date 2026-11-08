@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from uuid import uuid4
 
 # Core Database Access
 from db import get_db
@@ -21,8 +22,10 @@ from upi_ledger_service import UpiLedgerService
 from security import get_current_user as check_current_user
 from models import (
     User, ShopProfile, sales, Invoice, InvoiceLineItem, 
-    Payment, KhataBalance, KhataHistory, ShopExpense, Worker
+    Payment, KhataBalance, KhataHistory, ShopExpense, Worker, Product
 )
+from durable_sync import append_sync_event
+from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/api", tags=["New Features"])
 
@@ -953,12 +956,23 @@ async def sync_invoices_chunked(
 @router.delete("/products/{product_id}")
 def soft_delete_product(product_id: int, user_id: int = Depends(check_current_user), db: Session = Depends(get_db)):
     """Soft-delete a product (marks it inactive, preserves history on all old invoices)"""
-    from models import Product
-    product = db.query(Product).filter(Product.id == product_id, Product.user_id == user_id).first()
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
+    ).with_for_update().first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Active product not found")
     product.is_active = False
+    event = append_sync_event(db, {
+        "event_id": str(uuid4()),
+        "type": "inventory.changed",
+        "shop_id": int(user_id),
+        "change": "product_archived",
+        "product_id": int(product.id),
+    })
     db.commit()
+    publish_realtime_event(event)
     return {"status": "success", "message": f"Product '{product.product_name}' archived. Historical invoices preserved."}
 
 
