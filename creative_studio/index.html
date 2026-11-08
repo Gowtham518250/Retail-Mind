@@ -150,7 +150,8 @@
           express = await window.CCEverywhere.initialize(
             {
               clientId: config.client_id,
-              appName: config.app_name || "Retail Mind Creative Studio"
+              appName: config.app_name || "Retail Mind Creative Studio",
+              platformCategory: "web"
             },
             {
               loginMode: "delayed",
@@ -176,6 +177,12 @@
           sdk.module.startFromContent(
             {
               contentBrowseConfig: {
+                categoriesConfig: [
+                  {
+                    category: "templates",
+                    collectionId: "urn:aaid:sc:VA6C2:34756608-9fa0-4fdc-80b0-65e17ffb29c8"
+                  }
+                ],
                 searchQuery: "small business promotion",
                 headerText: "Create a shop advertisement"
               },
@@ -190,10 +197,13 @@
         try {
           const sdk = await initialize();
           setStatus("Opening a new design…");
+          // Let Adobe choose its default blank canvas. The old string canvas
+          // identifier was rejected by the current v4 CreateDesignConfig schema.
           sdk.editor.create(
-            { canvasSize: "InstagramPostPortrait" },
+            undefined,
             {
-              callbacks: callbacks
+              callbacks: callbacks,
+              allowedFileTypes: ["image/png", "image/jpeg", "application/pdf"]
             },
             exportOptions
           );
