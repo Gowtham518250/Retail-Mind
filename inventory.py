@@ -5,6 +5,7 @@ Low stock alerts, inventory analytics
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile
+from fastapi.concurrency import run_in_threadpool
 import base64
 import difflib
 import hashlib
@@ -52,6 +53,7 @@ from voice_asr_guard import (
     assess_transcription as _assess_transcription,
     normalize_voice_transcript as _normalize_voice_transcript,
 )
+from sarvam_speech import transcribe_with_sarvam, SarvamSpeechError, app_language_code
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
@@ -3639,7 +3641,7 @@ async def parse_voice_billing_audio(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
-    """Transcribe a short billing recording with Groq Whisper, then extract a catalog-grounded draft."""
+    """Transcribe with Sarvam Saaras v4, then extract a catalog-grounded draft."""
     language_code = (language_code or "auto").strip().lower()
     content_type = (audio.content_type or "").lower()
     suffix = Path(audio.filename or "").suffix.lower()
@@ -3653,66 +3655,38 @@ async def parse_voice_billing_audio(
     if len(audio_bytes) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="The audio recording exceeds the 20 MB limit.")
 
-    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    api_key = (os.getenv("SARVAM_API_KEY") or "").strip()
     if not api_key:
         raise HTTPException(
             status_code=503,
-            detail="Voice billing AI is not configured. Set GROQ_API_KEY on the backend.",
+            detail="Voice billing speech recognition is not configured. Set SARVAM_API_KEY on the backend.",
         )
 
-    stt_model = (os.getenv("GROQ_VOICE_STT_MODEL") or "whisper-large-v3").strip()
-    # The selected locale is an ASR hint, not just a downstream translation hint.
-    # Whisper documents that this improves transcription accuracy and latency.
-    whisper_language = _voice_billing_whisper_language_hint(language_code)
-    # Prefer products actually sold by this shop in the last 90 days. The
-    # remaining vocabulary is filled from the active catalog, so newer/rare
-    # products remain available to the translation and matching stages.
+    # Bias Saaras v4 toward this shop's real product vocabulary.
     catalog_names = _voice_billing_prompt_catalog_names(db, user_id, language_code)
-    whisper_prompt = _voice_billing_whisper_prompt(language_code, catalog_names)
-    transcription_data = {
-        "model": stt_model,
-        "response_format": "verbose_json",
-        "temperature": "0",
-    }
-    if whisper_prompt:
-        transcription_data["prompt"] = whisper_prompt
-    if whisper_language:
-        transcription_data["language"] = whisper_language
-
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=8.0)) as client:
-            response = await client.post(
-                "https://api.groq.com/openai/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                data=transcription_data,
-                files={
-                    "file": (
-                        Path(audio.filename or "voice-billing.wav").name,
-                        audio_bytes,
-                        content_type if content_type.startswith("audio/") else "audio/wav",
-                    )
-                },
-            )
-            if response.status_code == 429:
-                raise HTTPException(status_code=429, detail="Groq speech recognition is busy. Please retry.")
-            response.raise_for_status()
-            transcription = response.json()
-    except HTTPException:
-        raise
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Speech recognition timed out. Please record a shorter phrase.")
-    except httpx.HTTPStatusError as exc:
-        logging.warning("Groq voice billing transcription returned HTTP %s", exc.response.status_code)
-        raise HTTPException(status_code=502, detail="Groq could not transcribe this recording. Please try again.")
-    except Exception as exc:
-        logging.warning("Groq voice billing transcription failed: %s", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="Groq could not transcribe this recording. Please try again.")
+        transcription = await run_in_threadpool(
+            transcribe_with_sarvam,
+            audio_bytes=audio_bytes,
+            filename=Path(audio.filename or "voice-billing.wav").name,
+            content_type=content_type if content_type.startswith("audio/") else "audio/wav",
+            language_code=language_code,
+            keyterms=catalog_names,
+            api_key=api_key,
+        )
+    except SarvamSpeechError as exc:
+        logging.warning("Sarvam voice billing transcription failed: status=%s", exc.status_code or "network")
+        if exc.status_code == 504:
+            raise HTTPException(status_code=504, detail="Speech recognition timed out. Please record a shorter phrase.")
+        if exc.status_code == 429:
+            raise HTTPException(status_code=429, detail="Sarvam speech recognition is busy. Please retry.")
+        if exc.status_code == 403:
+            raise HTTPException(status_code=503, detail="Sarvam rejected the API key. Check SARVAM_API_KEY on the backend.")
+        if exc.status_code == 422:
+            raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
+        raise HTTPException(status_code=502, detail="Sarvam could not transcribe this recording. Please try again.")
 
-    verdict = _assess_transcription(
-        transcription,
-        prompt_prefix=_VOICE_BILLING_WHISPER_PREFIXES.get(whisper_language or "", ""),
-        catalog_names=catalog_names,
-    )
+    verdict = _assess_transcription({"text": transcription["transcript"]}, catalog_names=catalog_names)
     if not verdict.accepted:
         # Never log the transcript itself (customer speech); the reason code is enough to tune thresholds.
         logging.info(
@@ -3722,11 +3696,10 @@ async def parse_voice_billing_audio(
         raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
     transcript = verdict.text
 
-    detected_language = str(transcription.get("language") or "").strip().lower()
+    detected_language = app_language_code(transcription.get("language_code")) or ""
     effective_language = language_code
     if language_code in {"", "auto", "und"} and detected_language:
-        # Whisper's result gives us a language hint even when the UI requested auto.
-        # English can skip translation; other languages must be translated first.
+        # Use Sarvam's detected locale when the UI requested automatic detection.
         effective_language = detected_language
 
     parsed = await parse_voice_billing(
@@ -3738,8 +3711,8 @@ async def parse_voice_billing_audio(
         db=db,
     )
     parsed["transcript"] = transcript
-    parsed["transcription_provider"] = "Groq"
-    parsed["transcription_model"] = stt_model
+    parsed["transcription_provider"] = transcription["provider"]
+    parsed["transcription_model"] = transcription["model"]
     parsed["detected_language"] = detected_language or None
     parsed["speech_quality"] = verdict.public()
     return parsed

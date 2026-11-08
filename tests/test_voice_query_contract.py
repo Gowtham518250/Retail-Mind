@@ -17,14 +17,16 @@ def test_voice_query_route_is_registered_and_has_full_language_set():
     } <= VOICE_LANGUAGE_CODES
 
 
-def test_groq_whisper_language_handling_covers_selected_voice_codes():
-    from query_retrival import GROQ_STT_LANGUAGE_CODES, VOICE_LANGUAGE_CODES
+def test_sarvam_language_mapping_covers_selected_voice_codes():
+    from sarvam_speech import sarvam_language_code
+    from query_retrival import VOICE_LANGUAGE_CODES
 
-    assert "hi" in GROQ_STT_LANGUAGE_CODES
-    assert "te" in GROQ_STT_LANGUAGE_CODES
-    assert "ta" in GROQ_STT_LANGUAGE_CODES
+    assert sarvam_language_code("hi") == "hi-IN"
+    assert sarvam_language_code("te") == "te-IN"
+    assert sarvam_language_code("ta") == "ta-IN"
     assert "brx" in VOICE_LANGUAGE_CODES
-    assert "brx" not in GROQ_STT_LANGUAGE_CODES  # let Whisper auto-detect three-letter codes
+    assert sarvam_language_code("brx") == "brx-IN"
+    assert sarvam_language_code("auto") == "unknown"
 
 
 def test_text_query_route_accepts_language_and_translate_helper_is_registered():
@@ -92,68 +94,37 @@ def test_transcription_only_endpoint_is_registered():
     assert ("/askquery/transcribe", frozenset({"POST"})) in routes
 
 
-def test_groq_audio_transcription_returns_spoken_text(monkeypatch):
-    from types import SimpleNamespace
+def test_sarvam_audio_transcription_returns_spoken_text(monkeypatch):
     import query_retrival
 
-    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    monkeypatch.setenv("SARVAM_API_KEY", "test-key")
     calls = {}
 
-    def fake_create(**kwargs):
+    def fake_transcribe(**kwargs):
         calls.update(kwargs)
-        return SimpleNamespace(text="నిన్న నా అమ్మకాలు ఎంత?")
+        return {
+            "transcript": "నిన్న నా అమ్మకాలు ఎంత?",
+            "language_code": "te-IN",
+            "model": "saaras:v4",
+            "provider": "Sarvam AI",
+        }
 
-    monkeypatch.setattr(
-        query_retrival,
-        "client",
-        SimpleNamespace(
-            audio=SimpleNamespace(
-                transcriptions=SimpleNamespace(create=fake_create),
-            ),
-        ),
-    )
-
-    transcript = query_retrival._transcribe_audio_with_groq(
-        b"test-wave-bytes",
-        "question.wav",
-        "audio/wav",
-        "te",
+    monkeypatch.setattr(query_retrival, "transcribe_with_sarvam", fake_transcribe)
+    transcript = query_retrival._transcribe_audio_with_sarvam(
+        b"test-wave-bytes", "question.wav", "audio/wav", "te"
     )
 
     assert transcript == "నిన్న నా అమ్మకాలు ఎంత?"
-    assert calls["model"] == query_retrival.GROQ_STT_MODEL
-    assert calls["language"] == "te"
-    assert calls["response_format"] == "verbose_json"
-    assert calls["temperature"] == 0.0
-    assert calls["file"][0] == "question.wav"
+    assert calls["language_code"] == "te"
+    assert calls["filename"] == "question.wav"
 
 
-def test_three_letter_language_uses_whisper_language_detection(monkeypatch):
-    from types import SimpleNamespace
-    import query_retrival
+def test_three_letter_indic_language_is_sent_to_sarvam_as_bcp47():
+    from sarvam_speech import sarvam_language_code
 
-    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
-    calls = {}
-
-    def fake_create(**kwargs):
-        calls.update(kwargs)
-        return SimpleNamespace(text="recognised words")
-
-    monkeypatch.setattr(
-        query_retrival,
-        "client",
-        SimpleNamespace(
-            audio=SimpleNamespace(
-                transcriptions=SimpleNamespace(create=fake_create),
-            ),
-        ),
-    )
-
-    assert query_retrival._transcribe_audio_with_groq(
-        b"test-wave-bytes", "question.wav", "audio/wav", "brx"
-    ) == "recognised words"
-    assert "language" not in calls
-
+    assert sarvam_language_code("brx") == "brx-IN"
+    assert sarvam_language_code("doi") == "doi-IN"
+    assert sarvam_language_code("auto") == "unknown"
 
 
 def test_answer_translation_route_is_registered():
@@ -714,36 +685,28 @@ def test_overpayment_lookup_explains_when_no_recorded_excess_exists():
     assert "unrecorded disputes" in result["answer"].lower()
 
 
-def test_ai_query_asr_can_return_quality_and_detected_language_metadata(monkeypatch):
-    from types import SimpleNamespace
+def test_ai_query_sarvam_asr_returns_quality_and_detected_language_metadata(monkeypatch):
     import query_retrival
 
-    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
-    response = SimpleNamespace(
-        text="  నిన్న\u00a0అమ్మకాలు ఎంత?  ",
-        language="te",
-        duration=2.0,
-        segments=[{
-            "text": "నిన్న\u00a0అమ్మకాలు ఎంత?",
-            "no_speech_prob": 0.02,
-            "avg_logprob": -0.2,
-            "compression_ratio": 1.1,
-            "start": 0.0,
-            "end": 2.0,
-        }],
-    )
+    monkeypatch.setenv("SARVAM_API_KEY", "test-key")
     monkeypatch.setattr(
         query_retrival,
-        "client",
-        SimpleNamespace(audio=SimpleNamespace(
-            transcriptions=SimpleNamespace(create=lambda **kwargs: response),
-        )),
+        "transcribe_with_sarvam",
+        lambda **kwargs: {
+            "transcript": "  నిన్న\u00a0అమ్మకాలు ఎంత?  ",
+            "language_code": "te-IN",
+            "model": "saaras:v4",
+            "provider": "Sarvam AI",
+        },
     )
 
-    result = query_retrival._transcribe_audio_with_groq(
-        b"test-audio", "query.wav", "audio/wav", "te", include_metadata=True,
+    result = query_retrival._transcribe_audio_with_sarvam(
+        b"test-audio", "q.wav", "audio/wav", "te", include_metadata=True,
     )
     assert result["transcript"] == "నిన్న అమ్మకాలు ఎంత?"
     assert result["detected_language"] == "te"
+    assert result["provider"] == "Sarvam AI"
+    assert result["asr_model"] == "saaras:v4"
     assert result["speech_quality"]["accepted"] is True
-    assert result["speech_quality"]["scored"] is True
+    assert result["speech_quality"]["scored"] is False
+

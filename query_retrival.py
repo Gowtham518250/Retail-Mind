@@ -35,6 +35,7 @@ from support_chat_retrieval import (
 )
 from langchain_core.prompts import ChatPromptTemplate
 from groq import Groq
+from sarvam_speech import transcribe_with_sarvam, SarvamSpeechError, app_language_code
 from db import get_db
 from security import get_current_user as check_current_user
 from contextvars import ContextVar
@@ -3436,16 +3437,8 @@ def _translate_text_batch_to_language(texts: list[str], language_code: str) -> l
 
 VOICE_AUDIO_MAX_BYTES = 20 * 1024 * 1024
 VOICE_AUDIO_SUFFIXES = {".wav", ".m4a", ".aac", ".mp3", ".ogg", ".webm", ".flac"}
-GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3")
-# Whisper's API language parameter is ISO-639-1. Three-letter picker codes are
-# deliberately left out so Whisper can detect those languages automatically.
-GROQ_STT_LANGUAGE_CODES = {
-    "as", "bn", "en", "gu", "hi", "kn", "ks", "ml", "mr", "ne",
-    "or", "pa", "sd", "ta", "te", "ur",
-}
 
-
-def _transcribe_audio_with_groq(
+def _transcribe_audio_with_sarvam(
     audio_bytes: bytes,
     filename: str,
     content_type: str,
@@ -3453,61 +3446,38 @@ def _transcribe_audio_with_groq(
     *,
     include_metadata: bool = False,
 ) -> str | dict:
-    """Use Groq Whisper to convert uploaded audio into text in the spoken language."""
-    if not GROQ_API_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="Speech recognition is not configured. Set GROQ_API_KEY on the Retail Mind backend.",
-        )
-    kwargs = {
-        "file": (filename, audio_bytes, content_type or "audio/wav"),
-        "model": GROQ_STT_MODEL,
-        # verbose_json carries per-segment no_speech_prob / avg_logprob, which the
-        # guard needs to reject silence and noise instead of trusting invented text.
-        "response_format": "verbose_json",
-        "temperature": 0.0,
-    }
-    if language_code in GROQ_STT_LANGUAGE_CODES:
-        kwargs["language"] = language_code
-
+    """Use Sarvam Saaras v4 for Indic and code-mixed speech recognition."""
+    if not (os.getenv("SARVAM_API_KEY") or "").strip():
+        raise HTTPException(status_code=503, detail="Speech recognition is not configured. Set SARVAM_API_KEY on the Retail Mind backend.")
     try:
-        transcription = client.audio.transcriptions.create(**kwargs)
-    except Exception as exc:
-        # Do not expose provider diagnostics or secrets to callers.
-        print(f"Groq audio transcription failed: {type(exc).__name__}")
-        raise HTTPException(
-            status_code=502,
-            detail="Groq could not transcribe this recording. Try a shorter, clearer recording.",
-        ) from exc
-
-    if isinstance(transcription, dict):
-        payload = transcription
-    elif hasattr(transcription, "model_dump"):
-        payload = transcription.model_dump()
-    else:
-        payload = {
-            "text": getattr(transcription, "text", ""),
-            "duration": getattr(transcription, "duration", None),
-            "segments": getattr(transcription, "segments", None) or [],
-            "language": getattr(transcription, "language", None),
-        }
-    segments = [
-        seg if isinstance(seg, dict) else getattr(seg, "__dict__", {})
-        for seg in (payload.get("segments") or [])
-    ]
-    verdict = _assess_transcription({**payload, "segments": segments})
+        payload = transcribe_with_sarvam(
+            audio_bytes=audio_bytes,
+            filename=filename,
+            content_type=content_type or "audio/wav",
+            language_code=language_code,
+        )
+    except SarvamSpeechError as exc:
+        print(f"AI-query Sarvam transcription failed: status={exc.status_code or 'network'}")
+        if exc.status_code == 504:
+            raise HTTPException(status_code=504, detail="Speech recognition timed out. Try a shorter recording.") from exc
+        if exc.status_code == 429:
+            raise HTTPException(status_code=429, detail="Sarvam speech recognition is busy. Please retry.") from exc
+        if exc.status_code == 403:
+            raise HTTPException(status_code=503, detail="Sarvam rejected the API key. Check SARVAM_API_KEY on the backend.") from exc
+        if exc.status_code == 422:
+            raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE) from exc
+        raise HTTPException(status_code=502, detail="Sarvam could not transcribe this recording. Try a shorter, clearer recording.") from exc
+    verdict = _assess_transcription({"text": payload["transcript"]})
     if not verdict.accepted:
-        # Log only the reason code: never the customer's speech.
         print(f"AI-query ASR rejected: reason={verdict.reason} dropped={verdict.dropped_segments}")
         raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
     if include_metadata:
-        detected_language = str(payload.get("language") or "").strip().lower()
         return {
             "transcript": verdict.text,
-            "detected_language": detected_language or None,
+            "detected_language": app_language_code(payload.get("language_code")),
             "speech_quality": verdict.public(),
-            "asr_model": GROQ_STT_MODEL,
-            "provider": "Groq",
+            "asr_model": payload["model"],
+            "provider": payload["provider"],
         }
     return verdict.text
 
@@ -3545,7 +3515,7 @@ async def transcribe_ask_query_audio(
 
     content, filename, media_type = await _read_voice_upload(audio)
     transcription = await run_in_threadpool(
-        _transcribe_audio_with_groq,
+        _transcribe_audio_with_sarvam,
         content,
         filename,
         media_type,
@@ -3650,14 +3620,14 @@ async def ask_query_voice(
     db: Session = Depends(get_db),
     user_id: int = Depends(check_current_user),
 ):
-    """Backward-compatible one-shot voice query using Groq STT + Groq text translation."""
+    """Backward-compatible one-shot voice query using Sarvam STT + the existing Groq text translation."""
     language_code = (language_code or "").strip().lower()
     if language_code not in VOICE_LANGUAGE_CODES:
         raise HTTPException(status_code=422, detail="Unsupported voice language.")
 
     content, filename, media_type = await _read_voice_upload(audio)
     transcript = await run_in_threadpool(
-        _transcribe_audio_with_groq,
+        _transcribe_audio_with_sarvam,
         content,
         filename,
         media_type,
@@ -3679,7 +3649,7 @@ async def ask_query_voice(
         "language_code": language_code,
         "transcript": transcript,
         "translated_query": english_query,
-        "asr_model": GROQ_STT_MODEL,
+        "asr_model": os.getenv("SARVAM_STT_MODEL", "saaras:v4"),
         "translation_model": (
             os.getenv("GROQ_TRANSLATION_MODEL")
             or os.getenv("GROQ_MODEL")

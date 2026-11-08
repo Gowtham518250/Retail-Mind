@@ -163,7 +163,7 @@ class _Db:
 
 
 def _run_audio(monkeypatch, whisper_json):
-    monkeypatch.setenv("GROQ_API_KEY", "unit-test-key")
+    monkeypatch.setenv("SARVAM_API_KEY", "unit-test-key")
     calls = {"parse": 0}
 
     class FakeResponse:
@@ -181,7 +181,16 @@ def _run_audio(monkeypatch, whisper_json):
         calls["parse"] += 1
         return {"success": True, "items": [], "needs_clarification": False}
 
-    monkeypatch.setattr(inventory_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(
+        inventory_module,
+        "transcribe_with_sarvam",
+        lambda **kwargs: {
+            "transcript": whisper_json.get("text", ""),
+            "language_code": "te-IN",
+            "model": "saaras:v4",
+            "provider": "Sarvam AI",
+        },
+    )
     monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
     audio = UploadFile(filename="v.m4a", file=io.BytesIO(b"fake"), headers=Headers({"content-type": "audio/mp4"}))
     result = asyncio.run(inventory_module.parse_voice_billing_audio(
@@ -189,8 +198,9 @@ def _run_audio(monkeypatch, whisper_json):
     return result, calls
 
 
-def test_silent_recording_returns_422_and_never_reaches_the_llm(monkeypatch):
-    silent = payload(seg("ఇదాం ఎద్దారు మాస్ట్ నిత్రం.", nsp=0.8, lp=-1.2), duration=4.0)
+def test_known_silence_hallucination_returns_422_and_never_reaches_the_llm(monkeypatch):
+    # Saaras REST does not expose Whisper-style no-speech probabilities; guard known silence hallucinations textually.
+    silent = payload(seg("Thank you.", nsp=0.8, lp=-1.2), duration=4.0)
     with pytest.raises(HTTPException) as exc:
         _run_audio(monkeypatch, silent)
     assert exc.value.status_code == 422
@@ -233,15 +243,23 @@ def test_extractor_invented_item_is_not_added_to_the_bill(monkeypatch):
 # ---- AI Query voice path uses the same guard ---------------------------------
 
 def _query_transcribe(monkeypatch, response):
-    from types import SimpleNamespace
     import query_retrival
 
-    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
+    monkeypatch.setenv("SARVAM_API_KEY", "unit-test-key")
+    text_value = getattr(response, "text", "")
+    if isinstance(response, dict):
+        text_value = response.get("text", "")
     monkeypatch.setattr(
-        query_retrival, "client",
-        SimpleNamespace(audio=SimpleNamespace(transcriptions=SimpleNamespace(create=lambda **kw: response))),
+        query_retrival,
+        "transcribe_with_sarvam",
+        lambda **kwargs: {
+            "transcript": text_value,
+            "language_code": "te-IN",
+            "model": "saaras:v4",
+            "provider": "Sarvam AI",
+        },
     )
-    return query_retrival._transcribe_audio_with_groq(b"x", "q.wav", "audio/wav", "te")
+    return query_retrival._transcribe_audio_with_sarvam(b"x", "q.wav", "audio/wav", "te")
 
 
 def test_ai_query_voice_rejects_silence_hallucination(monkeypatch):
