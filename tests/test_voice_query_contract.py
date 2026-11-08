@@ -119,32 +119,12 @@ def test_sarvam_audio_transcription_returns_spoken_text(monkeypatch):
     assert calls["filename"] == "question.wav"
 
 
-def test_three_letter_language_uses_whisper_language_detection(monkeypatch):
-    from types import SimpleNamespace
-    import query_retrival
+def test_three_letter_indic_language_is_sent_to_sarvam_as_bcp47():
+    from sarvam_speech import sarvam_language_code
 
-    monkeypatch.setattr(query_retrival, "GROQ_API_KEY", "test-key")
-    calls = {}
-
-    def fake_create(**kwargs):
-        calls.update(kwargs)
-        return SimpleNamespace(text="recognised words")
-
-    monkeypatch.setattr(
-        query_retrival,
-        "client",
-        SimpleNamespace(
-            audio=SimpleNamespace(
-                transcriptions=SimpleNamespace(create=fake_create),
-            ),
-        ),
-    )
-
-    assert query_retrival._transcribe_audio_with_groq(
-        b"test-wave-bytes", "question.wav", "audio/wav", "brx"
-    ) == "recognised words"
-    assert "language" not in calls
-
+    assert sarvam_language_code("brx") == "brx-IN"
+    assert sarvam_language_code("doi") == "doi-IN"
+    assert sarvam_language_code("auto") == "unknown"
 
 
 def test_answer_translation_route_is_registered():
