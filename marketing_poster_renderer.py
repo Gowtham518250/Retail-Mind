@@ -21,7 +21,7 @@ _PALETTES = {
 
 
 def _safe_text(value, limit=180):
-    return html.escape(re.sub(r"\\s+", " ", str(value or "")).strip()[:limit])
+    return html.escape(re.sub(r"\s+", " ", str(value or "")).strip()[:limit])
 
 
 def _safe_image_url(value):
