@@ -487,41 +487,37 @@ def test_voice_parser_requires_english_normalization_when_language_is_auto():
 
 
 
-def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monkeypatch):
+def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch):
     import asyncio
     import io
     import inventory as inventory_module
     from fastapi import UploadFile
     from starlette.datastructures import Headers
+    from types import SimpleNamespace
 
-    monkeypatch.setenv("GROQ_API_KEY", "unit-test-key")
+    monkeypatch.setenv("SARVAM_API_KEY", "unit-test-key")
     captured = {}
 
-    class FakeResponse:
-        status_code = 200
+    def fake_vocab(db, user_id, language_code):
+        captured["vocab_args"] = (user_id, language_code)
+        return []
 
-        def raise_for_status(self):
-            return None
+    def fake_transcribe(**kwargs):
+        captured["transcribe_args"] = kwargs
+        return {
+            "transcript": "2 kg rice 50",
+            "language_code": "en-IN",
+            "request_id": "test-request",
+            "model": "saaras:v4",
+            "provider": "Sarvam AI",
+        }
 
-        def json(self):
-            return {"text": "2 kg rice 50", "language": "english"}
-
-    class FakeAsyncClient:
-        def __init__(self, *args, **kwargs):
-            captured["timeout"] = kwargs.get("timeout")
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            return None
-
-        async def post(self, url, *, headers, data, files):
-            captured["url"] = url
-            captured["headers"] = headers
-            captured["data"] = data
-            captured["files"] = files
-            return FakeResponse()
+    def fake_assess(payload, **kwargs):
+        captured["assessed_text"] = payload["text"]
+        return SimpleNamespace(
+            accepted=True, reason="ok_unscored", text=payload["text"],
+            kept_segments=0, dropped_segments=0, public=lambda: {"accepted": True},
+        )
 
     async def fake_parse(request, *, user_id, db):
         captured["transcript"] = request.transcript
@@ -529,25 +525,10 @@ def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monke
         captured["user_id"] = user_id
         return {"success": True, "items": [], "needs_clarification": False}
 
-    monkeypatch.setattr(inventory_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(inventory_module, "_voice_billing_prompt_catalog_names", fake_vocab)
+    monkeypatch.setattr(inventory_module, "transcribe_with_sarvam", fake_transcribe)
+    monkeypatch.setattr(inventory_module, "_assess_transcription", fake_assess)
     monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
-
-    class FakeQuery:
-        def filter(self, *args):
-            return self
-
-        def order_by(self, *args):
-            return self
-
-        def limit(self, *args):
-            return self
-
-        def all(self):
-            return []
-
-    class FakeDb:
-        def query(self, *args):
-            return FakeQuery()
 
     audio = UploadFile(
         filename="voice-billing.wav",
@@ -559,19 +540,17 @@ def test_audio_endpoint_uses_groq_whisper_then_passes_transcript_to_parser(monke
             audio=audio,
             language_code="auto",
             user_id=7,
-            db=FakeDb(),
+            db=object(),
         )
     )
 
-    assert captured["url"].endswith("/audio/transcriptions")
-    assert captured["data"]["model"] == "whisper-large-v3"
-    assert captured["data"]["response_format"] == "verbose_json"
-    assert "prompt" not in captured["data"]  # no shop terms were supplied
-    assert "language" not in captured["data"]  # auto-detection should remain enabled
-    assert captured["headers"]["Authorization"] == "Bearer unit-test-key"
+    assert captured["vocab_args"] == (7, "auto")
+    assert captured["transcribe_args"]["api_key"] == "unit-test-key"
+    assert captured["transcribe_args"]["language_code"] == "auto"
+    assert captured["assessed_text"] == "2 kg rice 50"
     assert captured["transcript"] == "2 kg rice 50"
-    assert captured["language_code"] == "english"
+    assert captured["language_code"] == "en"
     assert captured["user_id"] == 7
-    assert result["transcription_provider"] == "Groq"
-    assert result["transcription_model"] == "whisper-large-v3"
-    assert result["detected_language"] == "english"
+    assert result["transcription_provider"] == "Sarvam AI"
+    assert result["transcription_model"] == "saaras:v4"
+    assert result["detected_language"] == "en"
