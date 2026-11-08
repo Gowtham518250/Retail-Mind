@@ -1432,10 +1432,11 @@ def get_product(
     """Get product details — account-scoped"""
     product = db.query(Product).filter(
         Product.id == product_id,
-        Product.user_id == user_id
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
     ).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Active product not found")
     return product
 
 @router.put("/products/{product_id}", response_model=ProductResponse)
@@ -1596,14 +1597,16 @@ def delete_product(
     db: Session = Depends(get_db)
 ):
     """Soft-delete product — marks inactive, all historical invoices remain intact"""
-    db_product = db.query(Product).filter(
+    _lock_product_identity_scope(db, user_id)
+    db_product = db.query(Product).with_for_update().filter(
         Product.id == product_id,
-        Product.user_id == user_id
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
     ).first()
     if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(status_code=404, detail="Active product not found")
     
-    db_product.is_active = False  # Soft delete — preserves all invoice line item history
+    db_product.is_active = False  # Soft delete — releases its shop SKU while preserving invoice history
     try:
         sync_event = _queue_inventory_change(
             db, user_id, "product_archived", product_id=db_product.id
