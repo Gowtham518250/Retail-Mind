@@ -82,3 +82,21 @@ def test_accepts_scoped_cte_and_ignores_its_name_as_a_physical_table():
         ") SELECT * FROM scoped_invoices",
         CATALOG,
     ) == (True, "ok")
+
+
+
+def test_product_catalog_queries_must_exclude_archived_products():
+    valid, reason = validate_read_only_tenant_sql(
+        "SELECT p.id, p.product_name FROM products p "
+        "WHERE p.user_id = :user_id AND p.is_active = TRUE",
+        CATALOG,
+    )
+    assert (valid, reason) == (True, "ok")
+
+    valid, reason = validate_read_only_tenant_sql(
+        "SELECT p.id, p.product_name FROM products p "
+        "WHERE p.user_id = :user_id",
+        CATALOG,
+    )
+    assert not valid
+    assert reason == "inactive_products_not_excluded"
