@@ -305,7 +305,7 @@ def process_pending_marketing_triggers(db, limit: int = 50) -> dict:
                 goal="new_product" if trigger.trigger_type == "new_product" else "nearby",
                 language=settings.language or "en",
                 ad_format="feed",
-                template="fresh",
+                template=poster_asset["template"],
                 shop_name=str(profile.shop_name or "My Shop")[:200],
                 headline=headline,
                 caption=caption,
