@@ -21,7 +21,7 @@ from sqlalchemy import and_, func, desc, text
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 import httpx
 import re
@@ -43,6 +43,8 @@ from voice_billing_core import (
     custom_name_is_grounded as _vb_custom_name_is_grounded,
     quantity_is_grounded as _vb_quantity_is_grounded,
     resolve_catalog_product as _vb_resolve_catalog_product,
+    spoken_unit_is_grounded as _vb_unit_is_grounded,
+    repair_spoken_unit as _vb_repair_spoken_unit,
     stem_token as _vb_stem_token,
 )
 from voice_asr_guard import (
@@ -2080,13 +2082,19 @@ _VOICE_BILLING_ALIASES["oil"].update({"నూనె", "నూనే"})
 def _voice_billing_normalize(value: str) -> str:
     """Normalize punctuation/spacing without stripping combining marks in Indian scripts."""
     value = (value or "").casefold()
+    # Thousands separators are part of the number: "1,200" / "1,00,000" -> 1200 / 100000.
+    value = re.sub(r"\d{1,3}(?:,\d{2,3})+(?!\d)", lambda m: m.group().replace(",", ""), value)
     # Python's Unicode regex \\w excludes several combining marks used by Telugu,
-    # Hindi and other Indic scripts. Retain all Unicode letters, marks and numbers.
+    # Hindi and other Indic scripts. Retain all Unicode letters, marks and numbers, and keep
+    # the decimal point inside numbers ("1.5 kg" must not become the two numbers "1" and "5").
+    last = len(value) - 1
     normalized = "".join(
         char
-        if char.isspace() or unicodedata.category(char)[0] in {"L", "M", "N"}
+        if char.isspace()
+        or unicodedata.category(char)[0] in {"L", "M", "N"}
+        or (char == "." and 0 < index < last and value[index - 1].isdigit() and value[index + 1].isdigit())
         else " "
-        for char in value
+        for index, char in enumerate(value)
     )
     return re.sub(r"\s+", " ", normalized).strip()
 
@@ -2847,6 +2855,122 @@ async def record_voice_billing_alias(
     }
 
 
+def _voice_billing_item_evidence_transcripts(
+    raw_item: dict,
+    product: Optional[Product],
+    parser_transcript: str,
+    english_transcript: str,
+    item_count: int,
+) -> tuple[str, ...]:
+    """Return the utterance segment that names this item.
+
+    Multi-item speech is grounded line by line. If the item's name cannot be
+    isolated in exactly one segment, no quantity, unit, or price evidence is
+    borrowed from another product line; the caller must request review.
+    """
+    transcripts = [str(parser_transcript or ""), str(english_transcript or "")]
+    if item_count <= 1:
+        return tuple(value for value in transcripts if value.strip())
+
+    anchors = []
+    for value in (
+        raw_item.get("product_name_en"),
+        raw_item.get("product_name_local"),
+        raw_item.get("product_name"),
+        product.product_name if product is not None else None,
+        product.sku if product is not None else None,
+    ):
+        normalized = _voice_billing_normalize(str(value or ""))
+        if len(normalized) >= 2 and normalized not in anchors:
+            anchors.append(normalized)
+    if not anchors:
+        return ()
+
+    splitter = re.compile(
+        r"[,;\n]+|\s+\b(?:and|then|plus|also|next)\b\s+|"
+        r"\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
+        flags=re.IGNORECASE,
+    )
+
+    def contains_phrase(segment: str, phrase: str) -> bool:
+        segment_words = _voice_billing_normalize(segment).split()
+        phrase_words = phrase.split()
+        width = len(phrase_words)
+        if width == 0 or width > len(segment_words):
+            return False
+        return any(
+            segment_words[index:index + width] == phrase_words
+            for index in range(len(segment_words) - width + 1)
+        )
+
+    evidence = []
+    for transcript in transcripts:
+        if not transcript.strip():
+            continue
+        segments = [part.strip() for part in splitter.split(transcript) if part.strip()]
+        matches = [
+            part for part in segments
+            if any(contains_phrase(part, phrase) for phrase in anchors)
+        ]
+        if len(matches) == 1 and matches[0] not in evidence:
+            evidence.append(matches[0])
+    return tuple(evidence)
+
+
+def _voice_billing_item_price_evidence_transcripts(
+    raw_item: dict,
+    product: Optional[Product],
+    item_transcripts: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return numeric text after the item name, or before it with a currency cue.
+
+    The quantity in "2 kg rice" must not also validate a model-invented price
+    of 2. A price after the item's name, or an explicitly currency-labelled
+    amount before the name, is required.
+    """
+    anchors = []
+    for value in (
+        raw_item.get("product_name_en"),
+        raw_item.get("product_name_local"),
+        raw_item.get("product_name"),
+        product.product_name if product is not None else None,
+    ):
+        normalized = _voice_billing_normalize(str(value or ""))
+        if normalized and normalized not in anchors:
+            anchors.append(normalized)
+        for token in normalized.split():
+            if len(token) >= 3 and token not in anchors:
+                anchors.append(token)
+    anchors.sort(key=lambda phrase: len(phrase.split()), reverse=True)
+    currency_cues = {
+        "rs", "inr", "rupee", "rupees", "price", "cost",
+        "రూపాయి", "రూపాయలు", "रुपया", "रुपये", "ரூபாய்", "ರೂಪಾಯಿ", "રૂપિયા",
+    }
+    evidence = []
+    for transcript in item_transcripts:
+        words = _voice_billing_normalize(transcript).split()
+        spans = []
+        for phrase in anchors:
+            phrase_words = phrase.split()
+            width = len(phrase_words)
+            if not width:
+                continue
+            for index in range(len(words) - width + 1):
+                if words[index:index + width] == phrase_words:
+                    spans.append((index, index + width))
+        if not spans:
+            continue
+        start, end = min(spans, key=lambda span: (-(span[1] - span[0]), span[0]))
+        suffix = " ".join(words[end:]).strip()
+        if suffix:
+            evidence.append(suffix)
+            continue
+        prefix_words = words[:start]
+        if any(token in currency_cues for token in prefix_words[-4:]):
+            evidence.append(" ".join(prefix_words))
+    return tuple(evidence)
+
+
 @router.post("/voice-billing/parse")
 async def parse_voice_billing(
     request: VoiceBillingParseRequest,
@@ -3101,20 +3225,42 @@ async def parse_voice_billing(
                 ]
                 match_reasons = list(resolution.reasons)
 
+        item_evidence_transcripts = _voice_billing_item_evidence_transcripts(
+            raw, product, parser_transcript, english_transcript, len(raw_items)
+        )
         spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
         spoken_quantity = quantity
         quantity_grounded = _vb_quantity_is_grounded(
             quantity,
-            (parser_transcript, english_transcript),
+            item_evidence_transcripts,
             _VOICE_BILLING_NUMBER_WORDS,
             _VOICE_BILLING_SCALE_WORDS,
         )
         unit_converted = False
         unit_mismatch = False
+        unit_grounded = True
         unit_note = None
         if product is not None:
             conversion = _vb_convert_quantity(quantity, spoken_unit, getattr(product, "unit", "pcs"))
-            if conversion.converted:
+            if (
+                spoken_unit
+                and (conversion.converted or conversion.incompatible)
+                and not _vb_unit_is_grounded(spoken_unit, item_evidence_transcripts)
+            ):
+                # The model reported a unit nobody said; converting with it could scale the
+                # quantity by 1000x. If exactly one unit was actually said next to a number,
+                # use that. Otherwise keep the spoken number unconverted and ask.
+                repaired_unit = _vb_repair_spoken_unit(item_evidence_transcripts)
+                if repaired_unit:
+                    spoken_unit = repaired_unit
+                    conversion = _vb_convert_quantity(quantity, spoken_unit, getattr(product, "unit", "pcs"))
+                else:
+                    unit_grounded = False
+                    unit_note = f"The unit '{spoken_unit}' was not clearly heard, so the quantity was not converted. Check it."
+                    conversion = None
+            if conversion is None:
+                pass
+            elif conversion.converted:
                 quantity = conversion.quantity
                 unit_converted = True
                 unit_note = f"Converted {spoken_quantity.normalize():f} {spoken_unit} to {quantity.normalize():f} {getattr(product, 'unit', 'pcs')}."
@@ -3151,12 +3297,38 @@ async def parse_voice_billing(
             unresolved.append(f"{product_name}: which one? {options}")
         if unit_mismatch:
             unresolved.append(f"{product_name}: unit mismatch")
+        if not unit_grounded:
+            unresolved.append(f"{product_name}: unit not clearly heard")
         if not quantity_grounded:
             unresolved.append(f"{product_name}: quantity {spoken_quantity.normalize():f} was not clearly heard")
 
         kind = str(raw.get("spoken_price_kind") or "none").strip().lower()
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
             kind = "ambiguous"
+        # A price the speaker never said (invented, or computed by the model) must not reach
+        # the bill as a "spoken" price: fall back to the catalog price and ask for review.
+        price_grounded = True
+        if kind in {"unit", "line_total"}:
+            try:
+                price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
+                    raw, product, item_evidence_transcripts
+                )
+                reported_price = Decimal(str(raw.get("spoken_price_amount")))
+                # The same numeric value cannot serve as both the line quantity
+                # and its price without a second, explicit occurrence/role.
+                price_grounded = (
+                    reported_price != spoken_quantity
+                    and _vb_quantity_is_grounded(
+                        reported_price,
+                        price_evidence_transcripts,
+                        _VOICE_BILLING_NUMBER_WORDS,
+                        _VOICE_BILLING_SCALE_WORDS,
+                    )
+                )
+            except (InvalidOperation, TypeError, ValueError):
+                price_grounded = True  # unreadable amounts are rejected by the existing parser below
+            if not price_grounded:
+                kind = "ambiguous"
 
         catalog_price = Decimal(str(product.unit_price or 0)) if product is not None else Decimal("0")
         unit_price = catalog_price if catalog_price > 0 else Decimal("0")
@@ -3164,6 +3336,8 @@ async def parse_voice_billing(
         price_warning = None
         spoken_amount = raw.get("spoken_price_amount")
 
+        if not price_grounded:
+            unresolved.append(f"{product_name}: price not clearly heard")
         if kind == "ambiguous":
             if catalog_price > 0:
                 price_warning = "The spoken amount was unclear; the catalog price was used. Please verify before saving."
@@ -3226,8 +3400,11 @@ async def parse_voice_billing(
             "unit_converted": unit_converted,
             "unit_mismatch": unit_mismatch,
             "quantity_grounded": quantity_grounded,
+            "unit_grounded": unit_grounded,
+            "price_grounded": price_grounded,
             "needs_confirmation": bool(
                 ambiguous_candidates or unit_mismatch or not quantity_grounded or price_missing
+                or not unit_grounded or not price_grounded
             ),
             "ambiguous_candidates": ambiguous_candidates,
             "match_reasons": match_reasons,

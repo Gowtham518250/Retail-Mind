@@ -265,6 +265,45 @@ def quantity_is_grounded(
     return False
 
 
+def spoken_unit_is_grounded(spoken_unit: Any, transcripts: Iterable[str]) -> bool:
+    """True when a unit of the same dimension and size was actually said.
+
+    The extraction model reports the unit it believes was spoken.  A hallucinated "g" for
+    "2 kg rice" would otherwise scale the quantity by 1000 with no warning.  Units the
+    catalogue does not know are left to ``convert_quantity`` (returns True here).
+    """
+    wanted = canonical_unit(spoken_unit)
+    if wanted is None:
+        return True
+    for transcript in transcripts:
+        text = unicodedata.normalize("NFKC", transcript or "")
+        text = re.sub(r"(?<=\d)(?=[^\W\d_])", " ", text)  # "500g" -> "500 g"
+        for token in _tokens(text):
+            info = canonical_unit(token)
+            if info and info.dimension == wanted.dimension and info.factor == wanted.factor:
+                return True
+    return False
+
+
+def repair_spoken_unit(transcripts: Iterable[str]) -> Optional[str]:
+    """The one unit actually said right after a number, or None if zero or several.
+
+    With several different units in the utterance the model's unit cannot be attributed to
+    a line safely, so the caller keeps the quantity unconverted and asks the cashier.
+    """
+    found: dict[tuple, str] = {}
+    for transcript in transcripts:
+        text = unicodedata.normalize("NFKC", transcript or "")
+        text = re.sub(r"(?<=\d)(?=[^\W\d_])", " ", text)
+        words = [w.strip(".,;:!?()[]\"'") for w in text.split()]
+        for current, following in zip(words, words[1:]):
+            if re.fullmatch(r"\d+(?:\.\d+)?", current):
+                info = canonical_unit(following)
+                if info:
+                    found[(info.dimension, info.factor)] = following
+    return next(iter(found.values())) if len(found) == 1 else None
+
+
 # --------------------------------------------------------------------------- #
 # Catalog resolution
 # --------------------------------------------------------------------------- #
