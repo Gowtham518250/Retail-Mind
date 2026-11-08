@@ -738,6 +738,37 @@ def _kpi_residual_words(normalized_query: str) -> list[str]:
     return residual
 
 
+_HANDLER_BASE_WORDS = _KPI_PLAN_ALLOWED_WORDS | frozenset(
+    "who whose which where when then that these those it its their them they there with by has have having still yet pay paying".split()
+)
+_LOW_STOCK_WORDS = frozenset(
+    """low stock running out reorder list below minimum min level levels alert alerts restock
+    restocking refill product products inventory short shortage need needs needed items item
+    than less under threshold""".split()
+)
+_PROFIT_WORDS = frozenset("net profit profits loss losses p l pl earnings".split())
+_SOLD_PRODUCTS_WORDS = frozenset(
+    "list show display name names product products item items sold sale sales".split()
+)
+_RECEIVABLES_WORDS = frozenset(
+    """unpaid not paid outstanding overdue pending payment payments dues due customer customers
+    user users owe owes owed owing receivable receivables khata udhar credit ledger balance
+    balances bill bills invoice invoices billing list show details detail each every highest
+    top biggest largest amount combined money cash name names""".split()
+)
+
+
+def _has_unmodeled_words(normalized_query: str, handler_words: frozenset) -> bool:
+    """True when a question carries a word the fixed handler cannot apply as a filter.
+
+    The deterministic handlers answer whole-shop questions. A leftover word such as a
+    product, category, customer or branch is a filter they would silently ignore, so the
+    question must take the schema-grounded SQL path instead (fail closed).
+    """
+    allowed = _HANDLER_BASE_WORDS | handler_words | set(_MONTH_LOOKUP)
+    return any(word not in allowed for word in re.findall(r"[a-z][a-z']*", normalized_query))
+
+
 def _make_deterministic_query_plan(query: str, date_scope: dict | None = None) -> dict:
     """Classify unambiguous aggregate KPIs before RAG/SQL generation.
 
@@ -1582,6 +1613,10 @@ def _fast_low_stock_query(query: str, db: Session, user_id: int):
     ))
     if not low_stock_intent:
         return None
+    # A category/product qualifier or a custom number ("low stock in dairy", "stock below 5")
+    # is not the configured min_stock list this handler returns.
+    if re.search(r"\d", normalized) or _has_unmodeled_words(normalized, _LOW_STOCK_WORDS):
+        return None
 
     sql = (
         "SELECT p.id AS product_id, p.product_name, p.sku, "
@@ -1653,6 +1688,8 @@ def _fast_sold_products_query(query: str, db: Session, user_id: int, date_scope:
         return None
     if re.search(r"\b(raw sales|sales table|raw sale|sale rows?)\b", normalized):
         return None
+    if _has_unmodeled_words(normalized, _SOLD_PRODUCTS_WORDS):
+        return None  # "products sold to ravi" needs a customer filter
 
     date_scope = date_scope or {"kind": "unspecified", "start_date": None, "end_date": None, "label": "not specified"}
     start_date = date_scope.get("start_date")
@@ -1874,8 +1911,8 @@ def _fast_receivables_query(
         or re.search(r"['\"][^'\"]{2,80}['\"]", query or "")
         or re.search(r"\b\d{10}\b", normalized)
     )
-    if named_customer:
-        return None
+    if named_customer or _has_unmodeled_words(normalized, _RECEIVABLES_WORDS):
+        return None  # a named customer/branch/product is a filter this shop-wide list ignores
 
     explicit_list_request = bool(re.search(
         r"\b(all|list|show|details|detail|which|who|each|every|highest|top)\b",
@@ -2107,6 +2144,9 @@ def _fast_profit_query(query: str, db: Session, user_id: int, date_scope: dict |
         normalized,
     ):
         return None
+
+    if _has_unmodeled_words(normalized, _PROFIT_WORDS):
+        return None  # "profit on rice" is not the shop's net profit
 
     date_scope = date_scope or {"kind": "unspecified", "start_date": None, "end_date": None, "label": "all recorded dates"}
     params = {"user_id": int(user_id)}
