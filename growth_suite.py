@@ -738,7 +738,7 @@ def save_marketing_campaign(
         campaign.goal = data.goal
         campaign.language = data.language
         campaign.ad_format = data.ad_format
-        campaign.template = data.template
+        campaign.template = poster_asset["template"]
         campaign.trigger_type = data.trigger_type
         campaign.generation_source = data.generation_source
         campaign.status = "PENDING_APPROVAL" if data.submit_for_approval else "DRAFT"
