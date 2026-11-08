@@ -280,6 +280,21 @@ def process_pending_marketing_triggers(db, limit: int = 50) -> dict:
             )
             snapshot = _shop_snapshot(profile)
             product_price = Decimal(str(product.unit_price)) if product is not None and product.unit_price is not None else None
+            from marketing_poster_renderer import render_retail_poster
+            poster_asset = render_retail_poster({
+                "shop_name": str(profile.shop_name or "My Shop"),
+                "shop_address": snapshot.get("shop_address"),
+                "shop_phone": snapshot.get("shop_phone"),
+                "shop_logo_url": snapshot.get("shop_logo_url"),
+                "product_name": product.product_name if product is not None else "",
+                "product_image_url": getattr(product, "image_url", None) if product is not None else None,
+                "original_price_inr": float(product_price) if product_price is not None else None,
+                "headline": headline,
+                "caption": caption,
+                "goal": "new_product" if trigger.trigger_type == "new_product" else "nearby",
+                "language": settings.language or "en",
+                "ad_format": "feed",
+            })
             db.add(GrowthMarketingCampaign(
                 shop_id=trigger.shop_id,
                 campaign_key=campaign_key,
@@ -300,6 +315,7 @@ def process_pending_marketing_triggers(db, limit: int = 50) -> dict:
                 trigger_type=trigger.trigger_type,
                 status="PENDING_APPROVAL",
                 content_version=1,
+                poster_svg=poster_asset["poster_svg"],
                 **snapshot,
                 created_at=now,
                 updated_at=now,
