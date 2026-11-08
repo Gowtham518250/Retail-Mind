@@ -3319,10 +3319,10 @@ async def parse_voice_billing(
                 price_grounded = (
                     reported_price != spoken_quantity
                     and _vb_quantity_is_grounded(
-                    reported_price,
-                    price_evidence_transcripts,
-                    _VOICE_BILLING_NUMBER_WORDS,
-                    _VOICE_BILLING_SCALE_WORDS,
+                        reported_price,
+                        price_evidence_transcripts,
+                        _VOICE_BILLING_NUMBER_WORDS,
+                        _VOICE_BILLING_SCALE_WORDS,
                     )
                 )
             except (InvalidOperation, TypeError, ValueError):
