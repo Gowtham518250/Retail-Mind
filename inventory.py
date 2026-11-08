@@ -2855,8 +2855,6 @@ async def record_voice_billing_alias(
     }
 
 
-@router.post("/voice-billing/parse")
-
 def _voice_billing_item_evidence_transcripts(
     raw_item: dict,
     product: Optional[Product],
@@ -2919,6 +2917,7 @@ def _voice_billing_item_evidence_transcripts(
     return tuple(evidence)
 
 
+@router.post("/voice-billing/parse")
 async def parse_voice_billing(
     request: VoiceBillingParseRequest,
     user_id: int = Depends(check_current_user),

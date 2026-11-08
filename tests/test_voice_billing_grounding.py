@@ -163,17 +163,23 @@ def test_unit_from_another_product_line_does_not_scale_quantity(monkeypatch):
         id=42, product_name="Rice", sku="RICE", category="", unit="kg",
         unit_price=45, current_stock=20, user_id=7, is_active=True,
     )
+    spice = SimpleNamespace(
+        id=43, product_name="Spice", sku="SPICE", category="", unit="pcs",
+        unit_price=10, current_stock=20, user_id=7, is_active=True,
+    )
     result, *_ = _run_voice_billing_endpoint(
         monkeypatch,
-        [{
-            "product_id": 42, "product_name_en": "Rice", "quantity": 2,
-            "spoken_unit": "g", "spoken_price_kind": "none", "confidence": 0.95,
-        }],
+        [
+            {"product_id": 42, "product_name_en": "Rice", "quantity": 2,
+             "spoken_unit": "g", "spoken_price_kind": "none", "confidence": 0.95},
+            {"product_id": 43, "product_name_en": "Spice", "quantity": 1,
+             "spoken_unit": "g", "spoken_price_kind": "none", "confidence": 0.95},
+        ],
         transcript="2 kg rice and 1 g spice",
-        catalog_products=[rice],
+        catalog_products=[rice, spice],
     )
-    (item,) = result["items"]
-    assert item["quantity"] == 2.0
-    assert item["unit_converted"] is False
-    assert item["unit_grounded"] is True
-    assert item["needs_confirmation"] is False
+    rice_line = result["items"][0]
+    assert rice_line["quantity"] == 2.0
+    assert rice_line["unit_converted"] is False
+    assert rice_line["unit_grounded"] is True
+    assert rice_line["needs_confirmation"] is False
