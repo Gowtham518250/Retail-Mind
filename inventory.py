@@ -925,12 +925,11 @@ def bulk_import_products(items: list[dict], user_id: int = Depends(check_current
             existing = db.query(Product).filter(
                 Product.user_id == user_id,
                 Product.sku == normalized_sku,
+                Product.is_active.is_(True),
             ).with_for_update().first()
             if existing is not None:
-                # A repeated import must not reset quantities already changed by
-                # sales, stock receipts or manual adjustments. Reactivate an
-                # archived SKU, but leave its authoritative balance untouched.
-                existing.is_active = True
+                # Active catalog rows are not overwritten by a repeated import.
+                # Archived rows remain historical; a re-import creates a new row.
                 skipped += 1
                 continue
 
@@ -942,6 +941,8 @@ def bulk_import_products(items: list[dict], user_id: int = Depends(check_current
             )
             db.add(product)
             db.flush()
+            # Keep the same event-driven marketing behavior for bulk imports.
+            enqueue_product_created_trigger(db, user_id, product.id)
 
             if initial_stock > 0:
                 db.add(StockMovement(
@@ -1315,9 +1316,12 @@ def create_product(
                 prior_product = db.query(Product).filter(
                     Product.id == prior_request.product_id,
                     Product.user_id == user_id,
+                    Product.is_active.is_(True),
                 ).first()
                 if prior_product:
                     return prior_product
+                # A deleted/archived product must never be returned as the
+                # result of a later create attempt reusing an old operation ID.
                 db.delete(prior_request)
                 db.flush()
 
@@ -1376,6 +1380,7 @@ def create_product(
                 prior_product = db.query(Product).filter(
                     Product.id == prior_request.product_id,
                     Product.user_id == user_id,
+                    Product.is_active.is_(True),
                 ).first()
                 if prior_product:
                     return prior_product
