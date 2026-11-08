@@ -231,6 +231,37 @@ def _has_join_relationship(
     return False
 
 
+def _condition_guarantees_active_product(node: Any, table_alias: str, table_name: str) -> bool:
+    """Require every logical path to restrict product rows to active catalog items."""
+    if node is None:
+        return False
+    if isinstance(node, exp.Paren):
+        return _condition_guarantees_active_product(node.this, table_alias, table_name)
+    if isinstance(node, exp.And):
+        return (
+            _condition_guarantees_active_product(node.this, table_alias, table_name)
+            or _condition_guarantees_active_product(node.expression, table_alias, table_name)
+        )
+    if isinstance(node, exp.Or):
+        return (
+            _condition_guarantees_active_product(node.this, table_alias, table_name)
+            and _condition_guarantees_active_product(node.expression, table_alias, table_name)
+        )
+    if not isinstance(node, exp.EQ):
+        return False
+    left, right = node.this, node.expression
+    def is_active_column(value):
+        return (
+            isinstance(value, exp.Column)
+            and value.name.casefold() == "is_active"
+            and ((value.table or "").casefold() in {table_alias.casefold(), table_name.casefold()}
+                 or not value.table)
+        )
+    def is_true(value):
+        return isinstance(value, exp.Boolean) and bool(value.this)
+    return (is_active_column(left) and is_true(right)) or (is_active_column(right) and is_true(left))
+
+
 def validate_read_only_tenant_sql(
     sql: str,
     catalog: dict[str, Any] | None,
@@ -306,6 +337,10 @@ def validate_read_only_tenant_sql(
                 allow_unqualified=allow_unqualified,
             ):
                 return False, "tenant_scope_missing_or_bypassable"
+            if name == "products" and not _condition_guarantees_active_product(
+                where.this, table_alias, name
+            ):
+                return False, "inactive_products_not_excluded"
         elif name in _INDIRECT_TENANT_RELATIONS:
             linked_to_scoped_parent = any(
                 _has_join_relationship(select, table, parent_name, child_fk, parent_pk)

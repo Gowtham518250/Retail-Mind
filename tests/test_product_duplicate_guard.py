@@ -55,3 +55,46 @@ def test_duplicate_preflight_endpoint_is_shop_scoped_and_supports_edit_exclusion
 def test_update_schema_accepts_barcode_sku_edits():
     update = inventory_module.ProductUpdate(sku="8901234567890")
     assert update.sku == "8901234567890"
+
+
+
+def test_archived_product_name_and_barcode_can_be_reused():
+    archived = SimpleNamespace(
+        id=41,
+        product_name="Biscuit",
+        sku="biscuit",
+        unit_price=30,
+        purchase_price=20,
+        current_stock=10,
+        min_stock=10,
+        unit="pcs",
+        category="General",
+        is_active=False,
+    )
+    matches = inventory_module._product_identity_conflicts_from_rows(
+        [archived],
+        product_name="Biscuit",
+        sku="biscuit",
+    )
+    assert matches == []
+
+
+def test_active_product_still_blocks_duplicate_name_and_barcode():
+    active = SimpleNamespace(
+        id=42,
+        product_name="Biscuit",
+        sku="biscuit",
+        unit_price=30,
+        purchase_price=20,
+        current_stock=10,
+        min_stock=10,
+        unit="pcs",
+        category="General",
+        is_active=True,
+    )
+    matches = inventory_module._product_identity_conflicts_from_rows(
+        [active],
+        product_name="Biscuit",
+        sku="biscuit",
+    )
+    assert matches[0]["match_types"] == ["PRODUCT_NAME", "BARCODE"]

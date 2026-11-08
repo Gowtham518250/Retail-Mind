@@ -350,7 +350,16 @@ class Product(Base):
     branch_id = Column(Integer, ForeignKey("retail_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     
     __table_args__ = (
-        UniqueConstraint('user_id', 'sku', name='uix_user_sku'),
+        # Reuse a barcode after a product is archived; only active catalog rows
+        # must have a unique shop-scoped SKU.
+        Index(
+            "uq_products_active_shop_sku",
+            "user_id",
+            "sku",
+            unique=True,
+            postgresql_where=text("is_active IS TRUE"),
+            sqlite_where=text("is_active = 1"),
+        ),
         Index('idx_product_name', 'product_name'),
         Index('idx_product_sku', 'sku'),
         Index('idx_product_category', 'category'),
@@ -1604,7 +1613,8 @@ class GrowthMarketingCampaign(Base):
     shop_phone = Column(String(20), nullable=True)
     shop_website = Column(String(200), nullable=True)
     shop_logo_url = Column(String(500), nullable=True)
-    trigger_type = Column(String(32), nullable=False, default="manual", server_default="manual")
+    poster_svg = Column(Text, nullable=True)
+    trigger_type =(String(32), nullable=False, default="manual", server_default="manual")
     content_version = Column(Integer, nullable=False, default=1, server_default="1")
     approved_version = Column(Integer, nullable=True)
     approved_by = Column(Integer, nullable=True)

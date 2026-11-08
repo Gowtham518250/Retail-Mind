@@ -4454,6 +4454,7 @@ async def ask_query(
     - Generate PostgreSQL-compatible SQL.
     - JOINs are allowed only when the retrieved catalog explicitly documents the relationship.
     - For tables with user_id, scope using user_id = :user_id.
+    - CRITICAL ACTIVE CATALOG RULE: whenever products is queried for current inventory/catalog results, include products.is_active = TRUE (or the active table alias). Archived products must never appear as current catalog items.
     - For the sales table, shopkeeper_id is the authenticated shop owner scope, so use shopkeeper_id = :user_id.
     - The catalog may contain example placeholders such as :shop_id or :business_date. Treat them as documented parameter semantics. Runtime parameters are :user_id, :business_date, and :previous_business_date.
     - CRITICAL DATE RULE: for "today" / "today's", use the documented date column with = :business_date. NEVER subtract one day for "today". NEVER use CURRENT_DATE, CURRENT_TIMESTAMP, AT TIME ZONE, or INTERVAL arithmetic to decide today's date.
