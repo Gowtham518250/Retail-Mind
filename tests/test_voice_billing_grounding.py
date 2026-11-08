@@ -194,3 +194,14 @@ def test_quantity_number_alone_cannot_be_used_as_spoken_price(monkeypatch):
     assert item["price_source"] == "catalog"
     assert item["price_grounded"] is False
     assert item["needs_confirmation"] is True
+
+
+def test_quantity_after_product_name_alone_cannot_be_used_as_spoken_price(monkeypatch):
+    _, item = _item(monkeypatch, {
+        "product_id": 42, "quantity": 2, "spoken_unit": "kg",
+        "spoken_price_amount": 2, "spoken_price_kind": "unit", "confidence": 0.95,
+    }, "rice 2 kg")
+    assert item["unit_price"] == 50.0
+    assert item["price_source"] == "catalog"
+    assert item["price_grounded"] is False
+    assert item["needs_confirmation"] is True

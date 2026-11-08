@@ -3313,11 +3313,17 @@ async def parse_voice_billing(
                 price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
                     raw, product, item_evidence_transcripts
                 )
-                price_grounded = _vb_quantity_is_grounded(
-                    Decimal(str(raw.get("spoken_price_amount"))),
+                reported_price = Decimal(str(raw.get("spoken_price_amount")))
+                # The same numeric value cannot serve as both the line quantity
+                # and its price without a second, explicit occurrence/role.
+                price_grounded = (
+                    reported_price != spoken_quantity
+                    and _vb_quantity_is_grounded(
+                    reported_price,
                     price_evidence_transcripts,
                     _VOICE_BILLING_NUMBER_WORDS,
                     _VOICE_BILLING_SCALE_WORDS,
+                    )
                 )
             except (InvalidOperation, TypeError, ValueError):
                 price_grounded = True  # unreadable amounts are rejected by the existing parser below
