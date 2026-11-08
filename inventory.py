@@ -3098,7 +3098,11 @@ async def parse_voice_billing(
             "\"quantity\":2,\"spoken_unit\":\"kg\",\"spoken_price_amount\":50,\"spoken_price_kind\":\"unit\",\"confidence\":0.95}],"
             "\"needs_clarification\":false,\"clarification_question\":\"\"}. "
             "product_id must be an ID from the supplied catalog only, or null when no catalog product is a confident match. "
-            "Never invent an ID. Always preserve each product that is CLEARLY named in the transcript as a line, even if it is not in the catalog. "
+            "Never invent an ID. Preserve the speaker's utterance as separate bill lines in the exact spoken order. "
+            "Each product mention must become one line; never merge adjacent product names, quantities, or prices into a single number or product. "
+            "Match product identity against the supplied active shop catalog using the complete spoken product phrase and its translation/transliteration. "
+            "When a catalog item is confidently matched, return its exact catalog product_name and product_id; do not substitute a similar item. "
+            "Always preserve each product that is CLEARLY named in the transcript as a line, even if it is not in the catalog. "
             "If the transcript is not a request to buy/sell specific products (noise, greeting, filler, a sentence about nothing), return an empty items list and set needs_clarification true; never infer products that are not literally present. "
             "For no catalog match, set product_id to null and product_name_en to its common English name; for uncommon names, "
             "use a clear English transliteration. Do not omit an item just because the catalog is empty. "
@@ -3560,11 +3564,10 @@ def _voice_billing_rank_prompt_names(
 
 
 def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code: str = "auto") -> list[str]:
-    """Build a tenant-scoped ASR vocabulary from best-selling items, then fill from the catalog.
+    """Build ASR hints only from this shop's active catalog and confirmed pronunciations.
 
-    Whisper accepts a short spelling prompt. An alphabetical slice of the catalog
-    systematically omits products that happen to sort later. Recent finalized
-    invoice lines provide a better shop-specific prior without changing any sale data.
+    Sales/invoice history is deliberately excluded: historical sales frequency must
+    not bias recognition, and historical line prices never determine current prices.
     """
     shop_id = int(user_id)
     language = _voice_billing_base_language_code(language_code)
@@ -3574,59 +3577,17 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code
     if cached and now - cached[0] < _VOICE_BILLING_PROMPT_VOCAB_CACHE_TTL_SECONDS:
         return list(cached[1])
 
-    popular_names: list[str] = []
-    cutoff = datetime.now().date() - timedelta(days=_VOICE_BILLING_PROMPT_VOCAB_LOOKBACK_DAYS)
-    try:
-        popular_rows = (
-            db.query(Product.product_name)
-            .join(InvoiceLineItem, InvoiceLineItem.product_id == Product.id)
-            .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
-            .filter(
-                Product.user_id == shop_id,
-                Product.is_active.is_(True),
-                Invoice.user_id == shop_id,
-                Invoice.invoice_date >= cutoff,
-                Invoice.status.in_([
-                    InvoiceStatus.SENT,
-                    InvoiceStatus.PAID,
-                    InvoiceStatus.OVERDUE,
-                    InvoiceStatus.PARTIAL,
-                ]),
-            )
-            .group_by(Product.id, Product.product_name)
-            .order_by(
-                func.count(InvoiceLineItem.id).desc(),
-                func.sum(InvoiceLineItem.quantity).desc(),
-                Product.product_name.asc(),
-            )
-            .limit(80)
-            .all()
-        )
-        popular_names = [str(row[0] or "").strip() for row in popular_rows]
-    except Exception as exc:
-        # The ASR hint is an optimization, not a billing dependency. If historical
-        # sales cannot be queried, keep voice billing available using the live catalog.
-        logging.warning(
-            "voice-billing popular vocabulary lookup unavailable: %s",
-            type(exc).__name__,
-        )
-        rollback = getattr(db, "rollback", None)
-        if callable(rollback):
-            try:
-                rollback()
-            except Exception:
-                pass
-
     catalog_rows = (
         db.query(Product.product_name)
         .filter(Product.user_id == shop_id, Product.is_active == True)
         .order_by(Product.product_name.asc())
-        .limit(120)
+        .limit(500)
         .all()
     )
     catalog_names = [str(row[0] or "").strip() for row in catalog_rows]
-    # Activated pronunciations are included as ASR hints only; product identity
-    # is still resolved later from the authenticated catalog and spoken evidence.
+
+    # Cashier-confirmed pronunciations help ASR, but canonical catalog names stay
+    # first so the provider's keyterm cap is not consumed by unrelated history.
     alias_languages = {"auto"} if language == "auto" else {language, "auto"}
     try:
         alias_rows = (
@@ -3651,11 +3612,8 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code
         except Exception:
             pass
         alias_names = []
-    ranked_names = _voice_billing_rank_prompt_names(
-        popular_names + alias_names,
-        catalog_names,
-        limit=120,
-    )
+
+    ranked_names = _voice_billing_rank_prompt_names(catalog_names, alias_names, limit=500)
     if ranked_names:
         _VOICE_BILLING_PROMPT_VOCAB_CACHE[cache_key] = (now, tuple(ranked_names))
     return ranked_names
