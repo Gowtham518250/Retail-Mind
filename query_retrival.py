@@ -3462,6 +3462,8 @@ def _transcribe_audio_with_sarvam(
             raise HTTPException(status_code=504, detail="Speech recognition timed out. Try a shorter recording.") from exc
         if exc.status_code == 429:
             raise HTTPException(status_code=429, detail="Sarvam speech recognition is busy. Please retry.") from exc
+        if exc.status_code == 403:
+            raise HTTPException(status_code=503, detail="Sarvam rejected the API key. Check SARVAM_API_KEY on the backend.") from exc
         if exc.status_code == 422:
             raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE) from exc
         raise HTTPException(status_code=502, detail="Sarvam could not transcribe this recording. Try a shorter, clearer recording.") from exc
