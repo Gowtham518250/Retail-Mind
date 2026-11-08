@@ -3106,8 +3106,11 @@ async def parse_voice_billing(
             "quantity is the number exactly as spoken and spoken_unit is the unit the speaker attached to it "
             "(kg, g, l, ml, pcs, packet, box, bottle, dozen) or an empty string when none was spoken; never convert units yourself. "
             "If quantity is not spoken, use 1.0. spoken_price_kind must be unit, line_total, none, or ambiguous. "
-            "Use unit for a spoken per-unit price; use line_total only when the speaker clearly gives a total for that line; "
-            "use none when no price is spoken; use ambiguous when unsure. For '2 rice 50', interpret 50 as unit price. "
+            "Use unit for a spoken per-unit price, especially when the speaker says per kg/per litre/per piece or gives a rate; "
+            "use line_total when the speaker gives one amount for the complete requested quantity. For weight/volume quantities "
+            "such as 2 kg chicken 200, a bare amount after the quantity is the line total (₹200 total, ₹100 per kg), "
+            "unless the speaker explicitly says per kg/per gram/per litre or otherwise states a unit rate. "
+            "For count-based shorthand such as '2 rice 50', interpret 50 as unit price. "
             "For a catalog product with no spoken price, the server uses its catalog price. For a custom product with no price, "
             "preserve it with a missing price and never invent one. confidence is 0 to 1 for item/name/quantity extraction "
             "for custom products and product-match confidence for catalog products. A non-null product_id requires meaningful "
@@ -3326,6 +3329,28 @@ async def parse_voice_billing(
         kind = str(raw.get("spoken_price_kind") or "none").strip().lower()
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
             kind = "ambiguous"
+
+        # For an explicitly spoken weight/volume quantity, a bare amount after the
+        # item is the total for that requested line. Only an explicit rate marker
+        # ("per kg", "/kg", "per litre", etc.) makes it a unit price. This server-side
+        # rule protects billing even when the extraction model labels the amount wrongly.
+        normalized_spoken_unit = re.sub(r"[^a-z]", "", spoken_unit.lower())
+        weighted_units = {
+            "kg", "kgs", "kilo", "kilos", "kilogram", "kilograms",
+            "g", "gm", "gms", "gram", "grams",
+            "l", "ltr", "litre", "litres", "liter", "liters",
+            "ml", "millilitre", "millilitres", "milliliter", "milliliters",
+        }
+        price_context = " ".join(str(value or "") for value in item_evidence_transcripts).lower()
+        explicit_rate = bool(re.search(
+            r"(?:\bper\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
+            r"/\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
+            r"\b(?:rate|each)\s+(?:per\s+)?(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b)",
+            price_context,
+        ))
+        if normalized_spoken_unit in weighted_units and kind in {"unit", "line_total"}:
+            kind = "unit" if explicit_rate else "line_total"
+
         # A price the speaker never said (invented, or computed by the model) must not reach
         # the bill as a "spoken" price: fall back to the catalog price and ask for review.
         price_grounded = True
