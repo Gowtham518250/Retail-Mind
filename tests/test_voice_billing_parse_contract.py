@@ -337,6 +337,7 @@ def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
             "spoken_price_kind": "unit",
             "confidence": 0.98,
         }],
+        transcript="2 kg rice 75",
     )
 
     assert result["success"] is True
