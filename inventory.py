@@ -1203,11 +1203,11 @@ def _product_identity_conflicts_from_rows(
         existing_name = _normalize_product_identity(getattr(existing, "product_name", ""))
         existing_sku = _normalize_product_identity(getattr(existing, "sku", ""))
 
-        # Archived names can be reused, but their SKU remains reserved by the
-        # products(user_id, sku) unique constraint.
+        # Archived products are historical records, not active catalog entries.
+        # Both names and barcodes can be reused after archival.
         if is_active and requested_name and existing_name == requested_name:
             match_types.append("PRODUCT_NAME")
-        if requested_sku and existing_sku == requested_sku:
+        if is_active and requested_sku and existing_sku == requested_sku:
             match_types.append("BARCODE")
 
         if match_types:
@@ -1237,7 +1237,10 @@ def _find_product_identity_conflicts(
     sku: Optional[str],
     exclude_product_id: Optional[int] = None,
 ):
-    rows = db.query(Product).filter(Product.user_id == user_id).all()
+    rows = db.query(Product).filter(
+        Product.user_id == user_id,
+        Product.is_active.is_(True),
+    ).all()
     return _product_identity_conflicts_from_rows(
         rows,
         product_name=product_name,
