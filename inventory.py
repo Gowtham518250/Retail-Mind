@@ -3695,8 +3695,12 @@ async def parse_voice_billing_audio(
             detail="Voice billing speech recognition is not configured. Set SARVAM_API_KEY on the backend.",
         )
 
+    audio_started = time.perf_counter()
     # Bias Saaras v4 toward this shop's real product vocabulary.
+    catalog_started = time.perf_counter()
     catalog_names = _voice_billing_prompt_catalog_names(db, user_id, language_code)
+    catalog_ms = (time.perf_counter() - catalog_started) * 1000.0
+    asr_started = time.perf_counter()
     try:
         transcription = await run_in_threadpool(
             transcribe_with_sarvam,
@@ -3719,6 +3723,7 @@ async def parse_voice_billing_audio(
             raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
         raise HTTPException(status_code=502, detail="Sarvam could not transcribe this recording. Please try again.")
 
+    asr_ms = (time.perf_counter() - asr_started) * 1000.0
     verdict = _assess_transcription({"text": transcription["transcript"]}, catalog_names=catalog_names)
     if not verdict.accepted:
         # Never log the transcript itself (customer speech); the reason code is enough to tune thresholds.
@@ -3744,6 +3749,17 @@ async def parse_voice_billing_audio(
         db=db,
     )
     parsed["transcript"] = transcript
+    parse_timing = parsed.get("timing_ms") if isinstance(parsed.get("timing_ms"), dict) else {}
+    parse_timing.update({
+        "catalog_vocabulary": round(catalog_ms, 1),
+        "speech_recognition": round(asr_ms, 1),
+        "audio_endpoint_total": round((time.perf_counter() - audio_started) * 1000.0, 1),
+    })
+    parsed["timing_ms"] = parse_timing
+    logging.info(
+        "VOICE_BILLING_AUDIO timing_ms=%s provider=%s model=%s",
+        parse_timing, transcription.get("provider"), transcription.get("model"),
+    )
     parsed["transcription_provider"] = transcription["provider"]
     parsed["transcription_model"] = transcription["model"]
     parsed["detected_language"] = detected_language or None
