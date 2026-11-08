@@ -15,7 +15,7 @@ from typing import Literal
 
 from datetime_utils import is_after_utc, is_before_utc
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func, text
 from sqlalchemy.orm import Session
@@ -749,6 +749,32 @@ def save_marketing_campaign(
 
     db.refresh(campaign)
     return _marketing_campaign_to_dict(campaign)
+
+
+@router.get("/marketing/campaigns/{campaign_id}/poster.svg")
+def get_marketing_campaign_poster(
+    campaign_id: str,
+    user_id: int = Depends(check_current_user),
+    db: Session = Depends(get_db),
+):
+    """Serve the saved server-rendered poster as an image response.
+
+    This endpoint lets a client display/download the finished template without
+    generating or editing poster artwork in the APK.
+    """
+    campaign = db.query(GrowthMarketingCampaign).filter(
+        GrowthMarketingCampaign.shop_id == user_id,
+        GrowthMarketingCampaign.campaign_key == campaign_id,
+    ).first()
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    if not campaign.poster_svg:
+        raise HTTPException(status_code=404, detail="Poster has not been generated for this campaign.")
+    return Response(
+        content=campaign.poster_svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/marketing/campaigns")
