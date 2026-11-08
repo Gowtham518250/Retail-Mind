@@ -338,6 +338,8 @@ def generate_marketing_copy(
         "offer_valid_until": data.offer_valid_until.isoformat() if data.offer_valid_until else None,
         "offer_provided_by_owner": offer,
         "offer_code_provided_by_owner": offer_code if offer else "",
+        "product_image_url": getattr(product, "image_url", None) if product else None,
+        "shop_logo_url": shop_details["shop_logo_url"],
     }
 
     generated = _generate_growth_copy_with_groq(context, data.language)
@@ -376,6 +378,23 @@ def generate_marketing_copy(
         verified_lines.append(f"Contact: {shop_details['shop_phone']}")
     verified_caption = "\n".join(verified_lines)[:1200]
 
+    from marketing_poster_renderer import render_retail_poster
+    poster_context = {
+        **context,
+        **generated,
+        "headline": generated["headline"],
+        "caption": verified_caption,
+        "original_price_inr": float(original_price) if original_price is not None else None,
+        "discount_price_inr": float(discount_price) if discount_price is not None else None,
+        "discount_percent": float(discount_percent) if discount_percent is not None else None,
+        "offer_provided_by_owner": offer,
+        "shop_address": shop_details["shop_address"],
+        "shop_phone": shop_details["shop_phone"],
+        "shop_logo_url": shop_details["shop_logo_url"],
+        "product_image_url": getattr(product, "image_url", None) if product else None,
+    }
+    poster_asset = render_retail_poster(poster_context)
+
     return {
         "shop_id": user_id,
         "shop_name": shop_name,
@@ -394,6 +413,7 @@ def generate_marketing_copy(
         "ad_format": data.ad_format,
         "headline": generated["headline"],
         "caption": verified_caption,
+        "poster": poster_asset,
         "generation_source": source,
         "trigger_type": "owner_offer" if discount_price is not None or offer else "manual",
         "requires_owner_review": True,
