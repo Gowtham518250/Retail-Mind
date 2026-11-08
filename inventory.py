@@ -5,6 +5,7 @@ Low stock alerts, inventory analytics
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Form, File, UploadFile
+from fastapi.concurrency import run_in_threadpool
 import base64
 import difflib
 import hashlib
@@ -48,11 +49,11 @@ from voice_billing_core import (
     stem_token as _vb_stem_token,
 )
 from voice_asr_guard import (
-from sarvam_speech import transcribe_with_sarvam, SarvamSpeechError, app_language_code
     NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE,
     assess_transcription as _assess_transcription,
     normalize_voice_transcript as _normalize_voice_transcript,
 )
+from sarvam_speech import transcribe_with_sarvam, SarvamSpeechError, app_language_code
 from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
@@ -3640,7 +3641,7 @@ async def parse_voice_billing_audio(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
-    """Transcribe a short billing recording with Groq Whisper, then extract a catalog-grounded draft."""
+    """Transcribe with Sarvam Saaras v4, then extract a catalog-grounded draft."""
     language_code = (language_code or "auto").strip().lower()
     content_type = (audio.content_type or "").lower()
     suffix = Path(audio.filename or "").suffix.lower()
