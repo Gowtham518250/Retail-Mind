@@ -84,6 +84,7 @@ except Exception as e:
 # Core Auth & Session
 from auth_routes import router as authentication_router
 from subscription_billing import router as subscription_billing_router
+from admin_subscription_finance import router as admin_subscription_finance_router
 from subscription_entitlements import router as subscription_entitlements_router
 from subscription_quota_middleware import SubscriptionAIQuotaMiddleware
 from auth_hardening_service import router as auth_hardening_router
@@ -548,6 +549,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Auth
 api.include_router(authentication_router, prefix="/auth", tags=["Authentication"])
 api.include_router(subscription_billing_router, tags=["Subscription Billing"])
+api.include_router(admin_subscription_finance_router)
 api.include_router(subscription_entitlements_router, tags=["Subscription Entitlements"])
 api.include_router(auth_hardening_router, tags=["Authentication Hardened"])
 api.include_router(session_router, tags=["Session Management"])
