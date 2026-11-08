@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 
-def __money(value):
+def money(value):
     return round(int(value or 0) / 100, 2)
 
 
