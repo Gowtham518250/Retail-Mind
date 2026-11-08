@@ -198,8 +198,9 @@ def _run_audio(monkeypatch, whisper_json):
     return result, calls
 
 
-def test_silent_recording_returns_422_and_never_reaches_the_llm(monkeypatch):
-    silent = payload(seg("ఇదాం ఎద్దారు మాస్ట్ నిత్రం.", nsp=0.8, lp=-1.2), duration=4.0)
+def test_known_silence_hallucination_returns_422_and_never_reaches_the_llm(monkeypatch):
+    # Saaras REST does not expose Whisper-style no-speech probabilities; guard known silence hallucinations textually.
+    silent = payload(seg("Thank you.", nsp=0.8, lp=-1.2), duration=4.0)
     with pytest.raises(HTTPException) as exc:
         _run_audio(monkeypatch, silent)
     assert exc.value.status_code == 422
