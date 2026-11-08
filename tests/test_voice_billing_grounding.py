@@ -183,3 +183,14 @@ def test_unit_from_another_product_line_does_not_scale_quantity(monkeypatch):
     assert rice_line["unit_converted"] is False
     assert rice_line["unit_grounded"] is True
     assert rice_line["needs_confirmation"] is False
+
+
+def test_quantity_number_alone_cannot_be_used_as_spoken_price(monkeypatch):
+    _, item = _item(monkeypatch, {
+        "product_id": 42, "quantity": 2, "spoken_unit": "kg",
+        "spoken_price_amount": 2, "spoken_price_kind": "unit", "confidence": 0.95,
+    }, "2 kg rice")
+    assert item["unit_price"] == 50.0
+    assert item["price_source"] == "catalog"
+    assert item["price_grounded"] is False
+    assert item["needs_confirmation"] is True

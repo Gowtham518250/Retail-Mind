@@ -2887,8 +2887,8 @@ def _voice_billing_item_evidence_transcripts(
         return ()
 
     splitter = re.compile(
-        r"[,;\\n]+|\\s+\\b(?:and|then|plus|also|next)\\b\\s+|"
-        r"\\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\\s+",
+        r"[,;\n]+|\s+\b(?:and|then|plus|also|next)\b\s+|"
+        r"\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
         flags=re.IGNORECASE,
     )
 
@@ -2914,6 +2914,60 @@ def _voice_billing_item_evidence_transcripts(
         ]
         if len(matches) == 1 and matches[0] not in evidence:
             evidence.append(matches[0])
+    return tuple(evidence)
+
+
+def _voice_billing_item_price_evidence_transcripts(
+    raw_item: dict,
+    product: Optional[Product],
+    item_transcripts: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return numeric text after the item name, or before it with a currency cue.
+
+    The quantity in "2 kg rice" must not also validate a model-invented price
+    of 2. A price after the item's name, or an explicitly currency-labelled
+    amount before the name, is required.
+    """
+    anchors = []
+    for value in (
+        raw_item.get("product_name_en"),
+        raw_item.get("product_name_local"),
+        raw_item.get("product_name"),
+        product.product_name if product is not None else None,
+    ):
+        normalized = _voice_billing_normalize(str(value or ""))
+        if normalized and normalized not in anchors:
+            anchors.append(normalized)
+        for token in normalized.split():
+            if len(token) >= 3 and token not in anchors:
+                anchors.append(token)
+    anchors.sort(key=lambda phrase: len(phrase.split()), reverse=True)
+    currency_cues = {
+        "rs", "inr", "rupee", "rupees", "price", "cost",
+        "రూపాయి", "రూపాయలు", "रुपया", "रुपये", "ரூபாய்", "ರೂಪಾಯಿ", "રૂપિયા",
+    }
+    evidence = []
+    for transcript in item_transcripts:
+        words = _voice_billing_normalize(transcript).split()
+        spans = []
+        for phrase in anchors:
+            phrase_words = phrase.split()
+            width = len(phrase_words)
+            if not width:
+                continue
+            for index in range(len(words) - width + 1):
+                if words[index:index + width] == phrase_words:
+                    spans.append((index, index + width))
+        if not spans:
+            continue
+        start, end = min(spans, key=lambda span: (-(span[1] - span[0]), span[0]))
+        suffix = " ".join(words[end:]).strip()
+        if suffix:
+            evidence.append(suffix)
+            continue
+        prefix_words = words[:start]
+        if any(token in currency_cues for token in prefix_words[-4:]):
+            evidence.append(" ".join(prefix_words))
     return tuple(evidence)
 
 
@@ -3256,9 +3310,12 @@ async def parse_voice_billing(
         price_grounded = True
         if kind in {"unit", "line_total"}:
             try:
+                price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
+                    raw, product, item_evidence_transcripts
+                )
                 price_grounded = _vb_quantity_is_grounded(
                     Decimal(str(raw.get("spoken_price_amount"))),
-                    item_evidence_transcripts,
+                    price_evidence_transcripts,
                     _VOICE_BILLING_NUMBER_WORDS,
                     _VOICE_BILLING_SCALE_WORDS,
                 )
