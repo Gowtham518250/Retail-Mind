@@ -21,18 +21,18 @@ def _product(product_id: int, name: str, sku: str = ""):
     return SimpleNamespace(id=product_id, product_name=name, sku=sku)
 
 
-def test_voice_billing_prompt_vocabulary_prioritizes_shop_bestsellers():
+def test_voice_billing_prompt_vocabulary_prioritizes_catalog_before_aliases():
     names = _voice_billing_rank_prompt_names(
-        ["Sona Masoori Rice", "Sunflower Oil", "Sugar", "Sona Masoori Rice"],
         ["Soap", "Sugar", "Tea", "Toothpaste"],
+        ["Bubt", "Boost"],
         limit=5,
     )
     assert names == [
-        "Sona Masoori Rice",
-        "Sunflower Oil",
-        "Sugar",
         "Soap",
+        "Sugar",
         "Tea",
+        "Toothpaste",
+        "Bubt",
     ]
 
 
@@ -333,7 +333,7 @@ def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
         [{
             "product_id": 42,
             "quantity": 2,
-            "spoken_price_amount": 50,
+            "spoken_price_amount": 75,
             "spoken_price_kind": "unit",
             "confidence": 0.98,
         }],
@@ -344,13 +344,46 @@ def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
     assert result["items"][0]["product_id"] == 42
     assert result["items"][0]["product_name"] == "Sona Masoori Rice"
     assert result["items"][0]["quantity"] == 2.0
-    assert result["items"][0]["unit_price"] == 50.0
+    assert result["items"][0]["unit_price"] == 75.0
     assert result["items"][0]["price_source"] == "spoken_unit"
     assert api_capture["request"]["response_format"] == {"type": "json_object"}
     assert api_capture["headers"]["Authorization"] == "Bearer unit-test-key"
     # The endpoint's SQLAlchemy query must scope inventory to the authenticated account.
     assert db.query_obj.filters
     assert any("user_id" in str(clause) for clause in db.query_obj.filters)
+
+
+def test_catalog_current_price_is_used_when_cashier_speaks_no_price(monkeypatch):
+    rice = SimpleNamespace(
+        id=42,
+        product_name="Sona Masoori Rice",
+        sku="RICE-01",
+        category="Grains",
+        unit_price=62,
+        current_stock=20,
+        user_id=7,
+        is_active=True,
+        unit="kg",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 42,
+            "product_name_en": "Sona Masoori Rice",
+            "quantity": 2,
+            "spoken_unit": "kg",
+            "spoken_price_kind": "none",
+            "confidence": 0.98,
+        }],
+        transcript="2 kg sona masoori rice",
+        catalog_products=[rice],
+    )
+
+    item = result["items"][0]
+    assert item["product_id"] == 42
+    assert item["quantity"] == 2.0
+    assert item["unit_price"] == 62.0
+    assert item["price_source"] == "catalog"
 
 
 def test_weighted_quantity_bare_amount_is_line_total(monkeypatch):
