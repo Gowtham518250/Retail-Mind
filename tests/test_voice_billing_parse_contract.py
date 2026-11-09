@@ -596,8 +596,11 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
 
     assert capture["call_order"] == ["translation", "extraction"]
     extraction_prompt = capture["request"]["messages"][1]["content"]
-    assert "English-normalized transcript: 2 kg Dragon Fruit 30" in extraction_prompt
-    assert "రెండు కిలోల" not in extraction_prompt
+    assert "English-normalized transcript" not in extraction_prompt
+    assert "English-normalized transcript (product matching aid only" in extraction_prompt
+    assert "Original ASR transcript (authoritative evidence" in extraction_prompt
+    assert "రెండు కిలోల డ్రాగన్ ఫ్రూట్ ముప్పై" in extraction_prompt
+    assert "2 kg Dragon Fruit 30" in extraction_prompt
     assert result["interpreted_text_en"] == "2 kg Dragon Fruit 30"
     assert result["items"][0]["product_id"] is None
     assert result["items"][0]["product_name"] == "Dragon Fruit"
