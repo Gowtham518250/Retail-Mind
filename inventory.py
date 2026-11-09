@@ -2085,6 +2085,27 @@ _VOICE_BILLING_ALIASES = {
     "tomato": {"tomato", "tamata", "thakkali", "tamatar", "టమాటా", "టమాటో", "టమోటా", "टमाटर", "தக்காளி", "ಟೊಮೇಟೊ", "തക്കാളി", "টমেটো"},
     "potato": {"potato", "aloo", "batata", "bangaladumpa", "బంగాళదుంప", "ఆలు", "आलू", "உருளைக்கிழங்கு", "ಆಲೂಗಡ್ಡೆ", "ഉരുളക്കിഴങ്ങ്", "আলু"},
     "atta": {"atta", "wheat", "godhuma", "pindi", "flour", "గోధుమ", "గోధుమపిండి", "आटा", "கோதுமை", "ಗೋಧಿ", "ഗോതമ്പ്"},
+    # Fresh produce: keep Telugu vegetable names distinct. In particular,
+    # బెండకాయ(లు) is okra/lady finger; సొరకాయ is bottle gourd.
+    "okra": {
+        "okra", "lady", "finger", "lady finger", "ladies", "bhindi", "bhendi",
+        "bendakaya", "bendakాయ", "బెండకాయ", "బెండకాయలు", "బెండకాయల",
+        "వెండకాయ", "వెండకాయలు",
+    },
+    "brinjal": {
+        "brinjal", "eggplant", "aubergine", "vankaya", "వంకాయ", "వంకాయలు",
+        "వంకాయల", "బెంగుళూరు వంకాయ",
+    },
+    "bottle_gourd": {
+        "bottle", "gourd", "bottle gourd", "sorakaya", "sorakayi",
+        "సొరకాయ", "సొరకాయలు", "సొరకాయల", "ఆనపకాయ", "అనపకాయ",
+        "లౌకీ", "lauki",
+    },
+    "tomato": {
+        "tomato", "tomatoes", "tamata", "thakkali", "tamatar",
+        "టమాటా", "టమాటాలు", "టమాటో", "టమాటోలు", "టమోటా", "టమోటాలు",
+        "టమోటోలు", "టమాట", "टमाटर", "தக்காளி", "ಟೊಮೇಟೊ", "തക്കാളി", "টমেটো",
+    },
     "biscuit": {"biscuit", "biscuits", "biskut", "బిస్కెట్", "బిస్కెట్లు", "बिस्कुट", "பிஸ்கட்", "ಬಿಸ್ಕತ್ತು", "ബിസ്കറ്റ്"},
 }
 _VOICE_BILLING_ALIASES["biryani"].update({"బిరియాని", "బిరియానీ", "బిర్యానీ"})
