@@ -3401,12 +3401,21 @@ async def parse_voice_billing(
                 unit_prefixes, _VOICE_BILLING_NUMBER_WORDS
             ) or ""
         spoken_quantity = quantity
+        # Ground quantity only against the number phrase before this product name.
+        # A later price (for example "2 kg rice 60") must never validate a model
+        # that mistakenly reports 60 as the quantity. If no quantity phrase was
+        # spoken, the documented default quantity of one remains valid.
+        quantity_evidence_transcripts = _voice_billing_unit_prefix_transcripts(
+            raw, product, item_evidence_transcripts
+        )
         quantity_grounded = _vb_quantity_is_grounded(
             quantity,
-            item_evidence_transcripts,
+            quantity_evidence_transcripts,
             _VOICE_BILLING_NUMBER_WORDS,
             _VOICE_BILLING_SCALE_WORDS,
         )
+        if not quantity_evidence_transcripts and quantity == Decimal("1"):
+            quantity_grounded = True
         unit_converted = False
         unit_mismatch = False
         unit_grounded = True
