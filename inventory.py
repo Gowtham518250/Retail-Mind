@@ -3060,7 +3060,7 @@ def _voice_billing_unit_prefix_transcripts(
         normalized = _voice_billing_normalize(transcript)
         positions = []
         for phrase in anchors:
-            match = re.search(r"(?<!\\w)" + re.escape(phrase) + r"(?!\\w)", normalized)
+            match = re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", normalized)
             if match:
                 positions.append(match.start())
         if positions:
