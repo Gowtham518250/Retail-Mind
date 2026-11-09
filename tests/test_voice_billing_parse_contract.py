@@ -765,3 +765,31 @@ def test_telugu_catalog_product_local_name_falls_back_when_extractor_returns_eng
 
     assert result["items"][0]["product_name"] == "Brinjals"
     assert result["items"][0]["product_name_local"] == "వంకాయలు"
+
+
+def test_spoken_weight_unit_does_not_silently_become_catalog_pieces(monkeypatch):
+    brinjals = SimpleNamespace(
+        id=104, product_name="Brinjals", sku="BRI-PCS", category="Vegetables",
+        unit_price=20, current_stock=30, user_id=7, is_active=True, unit="pcs",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 104, "product_name_en": "Brinjals",
+            "product_name_local": "వంకాయలు", "quantity": 2,
+            "spoken_price_amount": 40, "spoken_price_kind": "line_total",
+            "confidence": 0.99,
+        }],
+        transcript="రెండు కేజీలు వంకాయలు నలభై రూపాయలు",
+        language_code="te-IN",
+        catalog_products=[brinjals],
+        translated_text="2 kg Brinjals 40 rupees",
+    )
+
+    item = result["items"][0]
+    assert item["product_id"] is None
+    assert item["catalog_matched"] is False
+    assert item["unit"] == "kg"
+    assert item["spoken_unit"] == "kg"
+    assert item["unit_mismatch"] is True
+    assert item["needs_confirmation"] is True
