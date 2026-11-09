@@ -525,8 +525,10 @@ def test_unknown_product_is_added_as_custom_sale_line_without_stock_id(monkeypat
     assert item["catalog_matched"] is False
     assert item["product_name"] == "Dragon Fruit"
     assert item["quantity"] == 2.0
-    assert item["unit_price"] == 30.0
-    assert item["price_source"] == "spoken_unit"
+    # For a weight-based line, an unqualified trailing amount is the
+    # complete line total; 30 / 2 kg = 15 per kg.
+    assert item["unit_price"] == 15.0
+    assert item["price_source"] == "spoken_line_total"
     assert item["stock_warning"] is False
     # Parsing only prefills a draft; it never deducts inventory.
     assert products[0].current_stock == 20
@@ -594,8 +596,11 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
 
     assert capture["call_order"] == ["translation", "extraction"]
     extraction_prompt = capture["request"]["messages"][1]["content"]
-    assert "English-normalized transcript: 2 kg Dragon Fruit 30" in extraction_prompt
-    assert "రెండు కిలోల" not in extraction_prompt
+    assert "English-normalized transcript" not in extraction_prompt
+    assert "English-normalized transcript (product matching aid only" in extraction_prompt
+    assert "Original ASR transcript (authoritative evidence" in extraction_prompt
+    assert "రెండు కిలోల డ్రాగన్ ఫ్రూట్ ముప్పై" in extraction_prompt
+    assert "2 kg Dragon Fruit 30" in extraction_prompt
     assert result["interpreted_text_en"] == "2 kg Dragon Fruit 30"
     assert result["items"][0]["product_id"] is None
     assert result["items"][0]["product_name"] == "Dragon Fruit"
