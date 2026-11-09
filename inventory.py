@@ -3026,6 +3026,44 @@ def _voice_billing_item_evidence_transcripts(
 
     return tuple(dict.fromkeys(value for value in evidence if value.strip()))
 
+def _voice_billing_unit_prefix_transcripts(
+    raw_item: dict,
+    product: Optional[Product],
+    item_transcripts: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Keep unit-repair evidence before the product anchor, excluding pack sizes.
+
+    "2 Lux Soap 150g" names a 150g catalog variant; the 150g suffix is not the
+    requested sale quantity. In ordinary POS order, the spoken quantity/unit
+    precedes the product name, so only that prefix may repair an omitted unit.
+    """
+    anchors = []
+    for value in (
+        raw_item.get("product_name_en"),
+        raw_item.get("product_name_local"),
+        raw_item.get("product_name"),
+        product.product_name if product is not None else None,
+        product.sku if product is not None else None,
+    ):
+        phrase = _voice_billing_normalize(str(value or ""))
+        if len(phrase) >= 2 and phrase not in anchors:
+            anchors.append(phrase)
+    anchors.sort(key=len, reverse=True)
+    prefixes = []
+    for transcript in item_transcripts:
+        normalized = _voice_billing_normalize(transcript)
+        positions = []
+        for phrase in anchors:
+            match = re.search(r"(?<!\\w)" + re.escape(phrase) + r"(?!\\w)", normalized)
+            if match:
+                positions.append(match.start())
+        if positions:
+            prefix = normalized[:min(positions)].strip()
+            if prefix:
+                prefixes.append(prefix)
+    return tuple(dict.fromkeys(prefixes))
+
+
 def _voice_billing_item_price_evidence_transcripts(
     raw_item: dict,
     product: Optional[Product],
@@ -3356,8 +3394,11 @@ async def parse_voice_billing(
         # Recover an omitted unit only from this product's isolated transcript
         # segment; never borrow a unit from another item in a multi-product utterance.
         if not spoken_unit and item_evidence_transcripts:
+            unit_prefixes = _voice_billing_unit_prefix_transcripts(
+                raw, product, item_evidence_transcripts
+            )
             spoken_unit = _vb_repair_spoken_unit(
-                item_evidence_transcripts, _VOICE_BILLING_NUMBER_WORDS
+                unit_prefixes, _VOICE_BILLING_NUMBER_WORDS
             ) or ""
         spoken_quantity = quantity
         quantity_grounded = _vb_quantity_is_grounded(
