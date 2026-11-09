@@ -3048,6 +3048,12 @@ def _voice_billing_unit_prefix_transcripts(
         phrase = _voice_billing_normalize(str(value or ""))
         if len(phrase) >= 2 and phrase not in anchors:
             anchors.append(phrase)
+        # Speech may use a short catalog alias ("rice") rather than the full
+        # catalog name ("Sona Masoori Rice"). Token anchors still let us locate
+        # the product boundary without treating a later price as its quantity.
+        for token in phrase.split():
+            if len(token) >= 3 and token not in anchors:
+                anchors.append(token)
     anchors.sort(key=len, reverse=True)
     prefixes = []
     for transcript in item_transcripts:
