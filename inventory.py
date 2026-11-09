@@ -3005,18 +3005,20 @@ def _voice_billing_item_evidence_transcripts(
             prefix = normalized_text[previous_end:current_start]
             offset = quantity_start(prefix)
             if offset is None:
-                # No explicit quantity+unit before this item: do not borrow the
-                # previous item's trailing amount as this line's quantity.
-                line_start = current_start
-            else:
-                line_start = previous_end + offset
+                # Without a line-local quantity+unit boundary, this item's evidence
+                # cannot be separated from the previous line's trailing price.
+                continue
+            line_start = previous_end + offset
 
         if next_start is None:
             line_end = len(normalized_text)
         else:
             between = normalized_text[current_end:next_start]
             next_quantity_offset = quantity_start(between)
-            line_end = current_end + next_quantity_offset if next_quantity_offset is not None else next_start
+            if next_quantity_offset is None:
+                # Do not let the next item's quantity/price validate this line.
+                continue
+            line_end = current_end + next_quantity_offset
 
         segment = normalized_text[line_start:line_end].strip()
         if segment:
