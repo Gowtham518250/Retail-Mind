@@ -3429,6 +3429,14 @@ async def parse_voice_billing(
         )
         if not quantity_evidence_transcripts and quantity == Decimal("1"):
             quantity_grounded = True
+        if not quantity_grounded:
+            # Fail closed: do not return a guessed quantity as a billable draft line.
+            # Older Flutter clients may ignore needs_confirmation, so merely flagging
+            # an implausible LLM quantity (for example 203 instead of 2) is unsafe.
+            unresolved.append(
+                f"{proposed_name or 'Item'}: quantity {spoken_quantity.normalize():f} was not clearly heard"
+            )
+            continue
         unit_converted = False
         unit_mismatch = False
         unit_grounded = True
