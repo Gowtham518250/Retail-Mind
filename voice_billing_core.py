@@ -285,22 +285,29 @@ def spoken_unit_is_grounded(spoken_unit: Any, transcripts: Iterable[str]) -> boo
     return False
 
 
-def repair_spoken_unit(transcripts: Iterable[str]) -> Optional[str]:
-    """The one unit actually said right after a number, or None if zero or several.
+def repair_spoken_unit(
+    transcripts: Iterable[str],
+    number_words: Optional[Mapping[str, int]] = None,
+) -> Optional[str]:
+    """Return the single unit spoken immediately after a numeric or number-word quantity.
 
-    With several different units in the utterance the model's unit cannot be attributed to
-    a line safely, so the caller keeps the quantity unconverted and asks the cashier.
+    Supports native-script speech such as Telugu "మూడు కేజీలు" as well as "3 kg".
+    If an utterance contains different units, return None rather than borrowing one
+    item's unit for another line.
     """
     found: dict[tuple, str] = {}
+    recognized_number_words = set(number_words or {}) | set(_EXTRA_NUMBER_WORDS) | set(_FRACTION_WORDS)
     for transcript in transcripts:
         text = unicodedata.normalize("NFKC", transcript or "")
         text = re.sub(r"(?<=\d)(?=[^\W\d_])", " ", text)
-        words = [w.strip(".,;:!?()[]\"'") for w in text.split()]
+        words = [w.strip(".,;:!?()[]\"'").casefold() for w in text.split()]
         for current, following in zip(words, words[1:]):
-            if re.fullmatch(r"\d+(?:\.\d+)?", current):
-                info = canonical_unit(following)
-                if info:
-                    found[(info.dimension, info.factor)] = following
+            is_number = bool(re.fullmatch(r"\d+(?:\.\d+)?", current)) or current in recognized_number_words
+            if not is_number:
+                continue
+            info = canonical_unit(following)
+            if info:
+                found[(info.dimension, info.factor)] = following
     return next(iter(found.values())) if len(found) == 1 else None
 
 
