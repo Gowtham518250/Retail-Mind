@@ -525,8 +525,10 @@ def test_unknown_product_is_added_as_custom_sale_line_without_stock_id(monkeypat
     assert item["catalog_matched"] is False
     assert item["product_name"] == "Dragon Fruit"
     assert item["quantity"] == 2.0
-    assert item["unit_price"] == 30.0
-    assert item["price_source"] == "spoken_unit"
+    # For a weight-based line, an unqualified trailing amount is the
+    # complete line total; 30 / 2 kg = 15 per kg.
+    assert item["unit_price"] == 15.0
+    assert item["price_source"] == "spoken_line_total"
     assert item["stock_warning"] is False
     # Parsing only prefills a draft; it never deducts inventory.
     assert products[0].current_stock == 20
