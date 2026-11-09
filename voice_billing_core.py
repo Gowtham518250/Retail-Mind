@@ -249,12 +249,15 @@ def quantity_is_grounded(
     default when no count is spoken ("add rice").  A spoken dozen counts as 12.
     """
     quantity = Decimal(quantity)
-    if quantity == 1:
-        return True
     transcript_values = [str(text or "") for text in transcripts]
     heard: set[Decimal] = set()
     for transcript in transcript_values:
         heard |= spoken_numbers(transcript, number_words, scale_words)
+    if quantity == 1:
+        # One is the default only when no quantity was spoken before the product.
+        # If the cashier clearly said "2 kg rice", an extractor's fallback quantity
+        # of 1 must not pass merely because 1 is the default.
+        return not heard or quantity in heard
     if quantity in heard:
         return True
     # A multiple of twelve is accepted only when "dozen" was actually spoken.
