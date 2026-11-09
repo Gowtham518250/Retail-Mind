@@ -205,3 +205,31 @@ def test_quantity_after_product_name_alone_cannot_be_used_as_spoken_price(monkey
     assert item["price_source"] == "catalog"
     assert item["price_grounded"] is False
     assert item["needs_confirmation"] is True
+
+
+@pytest.mark.parametrize("wrong_quantity", [1, 60])
+def test_quantity_cannot_be_defaulted_or_borrowed_from_line_price(monkeypatch, wrong_quantity):
+    result, item = _item(monkeypatch, {
+        "product_id": 42, "quantity": wrong_quantity, "spoken_unit": "kg",
+        "spoken_price_amount": 60, "spoken_price_kind": "line_total",
+        "confidence": 0.99,
+    }, "2 kg rice 60")
+
+    assert item["quantity_grounded"] is False
+    assert item["needs_confirmation"] is True
+    assert item["product_id"] is None
+    # The spoken price is a line total, but it must not be used to validate quantity.
+    assert item["price_grounded"] is True
+
+
+def test_line_total_is_divided_by_the_verified_quantity_only(monkeypatch):
+    _, item = _item(monkeypatch, {
+        "product_id": 42, "quantity": 2, "spoken_unit": "kg",
+        "spoken_price_amount": 120, "spoken_price_kind": "line_total",
+        "confidence": 0.99,
+    }, "2 kg rice 120")
+
+    assert item["quantity_grounded"] is True
+    assert item["price_grounded"] is True
+    assert item["price_source"] == "spoken_line_total"
+    assert item["unit_price"] == 60.0
