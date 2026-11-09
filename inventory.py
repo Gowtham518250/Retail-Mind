@@ -3564,8 +3564,20 @@ async def parse_voice_billing(
         price_grounded = True
         if kind in {"unit", "line_total"}:
             try:
+                # Financial values must be grounded in the original/source-language
+                # transcript, never in English translation text. Translation can
+                # accidentally concatenate adjacent values (e.g. "200, 3 kg" -> "203").
+                # Re-isolate this line using source-language product anchors only.
+                source_line_evidence = _voice_billing_item_evidence_transcripts(
+                    raw,
+                    product,
+                    parser_transcript,
+                    "",
+                    len(raw_items),
+                    raw_items,
+                )
                 price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
-                    raw, product, item_evidence_transcripts
+                    raw, product, source_line_evidence
                 )
                 reported_price = Decimal(str(raw.get("spoken_price_amount")))
                 # The same numeric value cannot serve as both the line quantity
