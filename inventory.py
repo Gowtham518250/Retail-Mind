@@ -2675,7 +2675,10 @@ async def _voice_billing_translate_search_query(
         "Translate product words to common English product names where known. For uncommon product names, "
         "use a clear English transliteration rather than omitting the item. Preserve every item, brand, quantity, "
         "measurement unit, spoken price, and whether an amount appears to be a per-unit price or a line total. "
-        "Do not invent or delete any product, quantity, unit, or price. Some Indian spoken scale phrases are "
+        "Keep each item as a separate phrase in the original spoken order. Insert a semicolon between adjacent bill items "
+        "when the speaker pauses or starts naming the next product. Never concatenate one item's price with the next item's "
+        "quantity (for example, never turn '200, 3 kg brinjals' into '203 kg brinjals'). "
+        "Do not invent, combine, round, or delete any product, quantity, unit, or price. Some Indian spoken scale phrases are "
         "deterministically normalized before translation, e.g. '3 vandalu' or 'moodu vandalu' becomes 300. "
         "Preserve normalized numeric values exactly and do not multiply them again. If the utterance is "
         "unintelligible, noise, a greeting, or not a request to buy/sell products, return an EMPTY string: never guess "
@@ -3257,6 +3260,10 @@ async def parse_voice_billing(
             raw, product, parser_transcript, english_transcript, len(raw_items)
         )
         spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
+        # Recover an omitted unit only from this product's isolated transcript
+        # segment; never borrow a unit from another item in a multi-product utterance.
+        if not spoken_unit and item_evidence_transcripts:
+            spoken_unit = _vb_repair_spoken_unit(item_evidence_transcripts) or ""
         spoken_quantity = quantity
         quantity_grounded = _vb_quantity_is_grounded(
             quantity,
