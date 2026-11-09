@@ -687,3 +687,81 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
     assert result["transcription_provider"] == "Sarvam AI"
     assert result["transcription_model"] == "saaras:v4"
     assert result["detected_language"] == "en"
+
+
+def test_spoken_unit_repair_recognizes_telugu_number_words():
+    import inventory as inventory_module
+
+    assert inventory_module._vb_repair_spoken_unit(
+        ["మూడు కేజీలు వంకాయలు"], inventory_module._VOICE_BILLING_NUMBER_WORDS
+    ) == "కేజీలు"
+
+
+def test_multiline_telugu_billing_keeps_each_quantity_unit_and_line_total(monkeypatch):
+    tomatoes = SimpleNamespace(
+        id=101, product_name="Tomatoes", sku="TOM-01", category="Vegetables",
+        unit_price=20, current_stock=30, user_id=7, is_active=True, unit="kg",
+    )
+    brinjals = SimpleNamespace(
+        id=102, product_name="Brinjals", sku="BRI-01", category="Vegetables",
+        unit_price=20, current_stock=30, user_id=7, is_active=True, unit="kg",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [
+            {
+                "product_id": 101, "product_name_en": "Tomatoes",
+                "product_name_local": "టమాటాలు", "quantity": 1,
+                "spoken_price_amount": 20, "spoken_price_kind": "unit",
+                "confidence": 0.99,
+            },
+            {
+                "product_id": 102, "product_name_en": "Brinjals",
+                "product_name_local": "వంకాయలు", "quantity": 3,
+                "spoken_price_amount": 60, "spoken_price_kind": "unit",
+                "confidence": 0.99,
+            },
+        ],
+        transcript="ఒక కేజీ టమాటాలు ఇరవై రూపాయలు మూడు కేజీలు వంకాయలు అరవై రూపాయలు",
+        language_code="te-IN",
+        catalog_products=[tomatoes, brinjals],
+        translated_text="1 kg Tomatoes 20 rupees 3 kg Brinjals 60 rupees",
+    )
+
+    assert len(result["items"]) == 2
+    first, second = result["items"]
+    assert first["quantity"] == 1.0
+    assert first["spoken_unit"] == "kg"
+    assert first["unit"] == "kg"
+    assert first["unit_price"] == 20.0
+    assert first["price_source"] == "spoken_line_total"
+    assert second["quantity"] == 3.0
+    assert second["spoken_unit"] == "kg"
+    assert second["unit"] == "kg"
+    assert second["unit_price"] == 20.0
+    assert second["price_source"] == "spoken_line_total"
+    assert first["quantity_grounded"] is True
+    assert second["quantity_grounded"] is True
+
+
+def test_telugu_catalog_product_local_name_falls_back_when_extractor_returns_english(monkeypatch):
+    brinjals = SimpleNamespace(
+        id=103, product_name="Brinjals", sku="BRI-02", category="Vegetables",
+        unit_price=20, current_stock=30, user_id=7, is_active=True, unit="kg",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 103, "product_name_en": "Brinjals",
+            "product_name_local": "Brinjals", "quantity": 2,
+            "spoken_unit": "kg", "spoken_price_amount": 40,
+            "spoken_price_kind": "line_total", "confidence": 0.99,
+        }],
+        transcript="రెండు కేజీలు వంకాయలు నలభై రూపాయలు",
+        language_code="te-IN",
+        catalog_products=[brinjals],
+        translated_text="2 kg Brinjals 40 rupees",
+    )
+
+    assert result["items"][0]["product_name"] == "Brinjals"
+    assert result["items"][0]["product_name_local"] == "వంకాయలు"
