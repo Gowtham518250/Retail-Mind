@@ -2878,61 +2878,151 @@ def _voice_billing_item_evidence_transcripts(
     parser_transcript: str,
     english_transcript: str,
     item_count: int,
+    all_raw_items: Optional[list[dict]] = None,
 ) -> tuple[str, ...]:
-    """Return the utterance segment that names this item.
+    """Isolate one bill line's quantity/unit/price evidence from a continuous utterance.
 
-    Multi-item speech is grounded line by line. If the item's name cannot be
-    isolated in exactly one segment, no quantity, unit, or price evidence is
-    borrowed from another product line; the caller must request review.
+    Translators and ASR providers do not always preserve punctuation. When they return
+    "1 kg tomatoes 20 3 kg brinjals 60", splitting only on commas leaves the entire
+    utterance attached to every line. We instead locate each extracted product anchor
+    and cut line evidence at the next line's quantity+unit boundary. If the anchors
+    cannot be isolated unambiguously, return no evidence (fail closed).
     """
-    transcripts = [str(parser_transcript or ""), str(english_transcript or "")]
+    transcripts = [
+        str(parser_transcript or ""),
+        str(english_transcript or ""),
+    ]
     if item_count <= 1:
         return tuple(value for value in transcripts if value.strip())
 
-    anchors = []
-    for value in (
-        raw_item.get("product_name_en"),
-        raw_item.get("product_name_local"),
-        raw_item.get("product_name"),
-        product.product_name if product is not None else None,
-        product.sku if product is not None else None,
-    ):
-        normalized = _voice_billing_normalize(str(value or ""))
-        if len(normalized) >= 2 and normalized not in anchors:
-            anchors.append(normalized)
-    if not anchors:
+    rows = all_raw_items if isinstance(all_raw_items, list) else [raw_item]
+    current_index = next(
+        (index for index, row in enumerate(rows) if row is raw_item),
+        None,
+    )
+    if current_index is None:
+        current_index = 0
+
+    def anchors_for(row: dict, index: int) -> list[str]:
+        values = [
+            row.get("product_name_en"),
+            row.get("product_name_local"),
+            row.get("product_name"),
+        ]
+        if index == current_index and product is not None:
+            values.extend([product.product_name, product.sku])
+        normalized = []
+        for value in values:
+            phrase = _voice_billing_normalize(str(value or ""))
+            if len(phrase) >= 2 and phrase not in normalized:
+                normalized.append(phrase)
+        return sorted(normalized, key=len, reverse=True)
+
+    row_anchors = [anchors_for(row if isinstance(row, dict) else {}, index) for index, row in enumerate(rows)]
+    if not row_anchors[current_index]:
         return ()
 
-    splitter = re.compile(
-        r"[,;\n]+|\s+\b(?:and|then|plus|also|next)\b\s+|"
-        r"\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
-        flags=re.IGNORECASE,
-    )
+    def quantity_start(prefix: str) -> Optional[int]:
+        """Find the last explicit number+unit pair before a product anchor."""
+        repaired = _vb_repair_spoken_unit([prefix], _VOICE_BILLING_NUMBER_WORDS)
+        if not repaired:
+            return None
+        words = list(re.finditer(r"\S+", prefix))
+        unit_word = repaired.casefold()
+        for index in range(len(words) - 1, 0, -1):
+            candidate = words[index].group(0).strip(".,;:!?()[]\"'").casefold()
+            previous = words[index - 1].group(0).strip(".,;:!?()[]\"'").casefold()
+            if candidate == unit_word and (
+                re.fullmatch(r"\d+(?:\.\d+)?", previous)
+                or previous in _VOICE_BILLING_NUMBER_WORDS
+            ):
+                return words[index - 1].start()
+        return None
 
-    def contains_phrase(segment: str, phrase: str) -> bool:
-        segment_words = _voice_billing_normalize(segment).split()
-        phrase_words = phrase.split()
-        width = len(phrase_words)
-        if width == 0 or width > len(segment_words):
-            return False
-        return any(
-            segment_words[index:index + width] == phrase_words
-            for index in range(len(segment_words) - width + 1)
-        )
-
-    evidence = []
+    evidence: list[str] = []
     for transcript in transcripts:
-        if not transcript.strip():
+        normalized_text = _voice_billing_normalize(transcript)
+        if not normalized_text:
             continue
-        segments = [part.strip() for part in splitter.split(transcript) if part.strip()]
-        matches = [
-            part for part in segments
-            if any(contains_phrase(part, phrase) for phrase in anchors)
-        ]
-        if len(matches) == 1 and matches[0] not in evidence:
-            evidence.append(matches[0])
-    return tuple(evidence)
 
+        spans: list[tuple[int, int, int]] = []
+        ambiguous = False
+        for index, phrases in enumerate(row_anchors):
+            matches: list[tuple[int, int]] = []
+            for phrase in phrases:
+                pattern = re.compile(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)")
+                matches.extend((match.start(), match.end()) for match in pattern.finditer(normalized_text))
+            # Deduplicate same-position variants, preferring the longest phrase.
+            unique_matches = sorted(set(matches))
+            if len(unique_matches) != 1:
+                ambiguous = True
+                break
+            spans.append((unique_matches[0][0], unique_matches[0][1], index))
+
+        if ambiguous or len(spans) != item_count:
+            # Delimited transcripts can still be handled safely if each segment
+            # contains exactly one line's anchor. Never return the whole utterance
+            # merely because it contains several product names.
+            splitter = re.compile(
+                r"[,;\n]+|\s+\b(?:and|then|plus|also|next)\b\s+|"
+                r"\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
+                flags=re.IGNORECASE,
+            )
+            matches = []
+            for segment in splitter.split(transcript):
+                segment = segment.strip()
+                normalized_segment = _voice_billing_normalize(segment)
+                if any(
+                    re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", normalized_segment)
+                    for phrase in row_anchors[current_index]
+                ):
+                    matches.append(segment)
+            if len(matches) == 1 and not any(
+                any(
+                    re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", _voice_billing_normalize(matches[0]))
+                    for phrase in phrases
+                )
+                for index, phrases in enumerate(row_anchors)
+                if index != current_index
+            ):
+                evidence.append(matches[0])
+            continue
+
+        spans.sort(key=lambda span: span[0])
+        current_position = next(
+            (position for position, span in enumerate(spans) if span[2] == current_index),
+            None,
+        )
+        if current_position is None:
+            continue
+        current_start, current_end, _ = spans[current_position]
+        previous_end = spans[current_position - 1][1] if current_position > 0 else None
+        next_start = spans[current_position + 1][0] if current_position + 1 < len(spans) else None
+
+        if previous_end is None:
+            line_start = 0
+        else:
+            prefix = normalized_text[previous_end:current_start]
+            offset = quantity_start(prefix)
+            if offset is None:
+                # No explicit quantity+unit before this item: do not borrow the
+                # previous item's trailing amount as this line's quantity.
+                line_start = current_start
+            else:
+                line_start = previous_end + offset
+
+        if next_start is None:
+            line_end = len(normalized_text)
+        else:
+            between = normalized_text[current_end:next_start]
+            next_quantity_offset = quantity_start(between)
+            line_end = current_end + next_quantity_offset if next_quantity_offset is not None else next_start
+
+        segment = normalized_text[line_start:line_end].strip()
+        if segment:
+            evidence.append(segment)
+
+    return tuple(dict.fromkeys(value for value in evidence if value.strip()))
 
 def _voice_billing_item_price_evidence_transcripts(
     raw_item: dict,
@@ -3257,13 +3347,16 @@ async def parse_voice_billing(
                 match_reasons = list(resolution.reasons)
 
         item_evidence_transcripts = _voice_billing_item_evidence_transcripts(
-            raw, product, parser_transcript, english_transcript, len(raw_items)
+            raw, product, parser_transcript, english_transcript,
+            min(len(raw_items), 30), raw_items[:30],
         )
         spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
         # Recover an omitted unit only from this product's isolated transcript
         # segment; never borrow a unit from another item in a multi-product utterance.
         if not spoken_unit and item_evidence_transcripts:
-            spoken_unit = _vb_repair_spoken_unit(item_evidence_transcripts) or ""
+            spoken_unit = _vb_repair_spoken_unit(
+                item_evidence_transcripts, _VOICE_BILLING_NUMBER_WORDS
+            ) or ""
         spoken_quantity = quantity
         quantity_grounded = _vb_quantity_is_grounded(
             quantity,
@@ -3314,6 +3407,16 @@ async def parse_voice_billing(
         catalog_matched = product is not None
         local_name = re.sub(r"[\r\n\t]+", " ", str(raw.get("product_name_local") or "")).strip()[:120]
         product_name = str(product.product_name or "").strip() if product is not None else proposed_name
+        if request.language_code and str(request.language_code).lower().split("-", 1)[0] == "te":
+            if not local_name or _voice_billing_is_english_text(local_name):
+                telugu_names = {
+                    "tomato": "టమాటా", "tomatoes": "టమాటాలు",
+                    "brinjal": "వంకాయ", "brinjals": "వంకాయలు",
+                    "eggplant": "వంకాయ", "eggplants": "వంకాయలు",
+                    "chicken": "చికెన్", "mutton": "మటన్",
+                    "biryani": "బిర్యానీ",
+                }
+                local_name = telugu_names.get(_voice_billing_normalize(product_name), local_name)
         if not product_name or product_name.casefold() in {"unknown", "unknown item", "unmatched product", "item"}:
             unresolved.append("unrecognized product name")
             continue
@@ -3441,7 +3544,10 @@ async def parse_voice_billing(
             "product_name_en": product_name,
             "product_name_local": local_name,
             "sku": str(product.sku or "") if product is not None else "",
-            "unit": str(getattr(product, "unit", "pcs") or "pcs") if product is not None else None,
+            "unit": (
+                str(getattr(product, "unit", "pcs") or "pcs")
+                if product is not None else (spoken_unit or None)
+            ),
             "quantity": float(quantity),
             "unit_price": float(unit_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
             "price_source": price_source,
