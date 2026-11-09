@@ -3225,11 +3225,19 @@ async def parse_voice_billing(
         english_transcript = parser_transcript
 
     # Empty inventory and zero candidates are valid; they produce custom sale lines.
-    candidates = (
-        fast_candidates
-        if fast_parsed is not None
-        else _voice_billing_catalog_candidates(english_transcript, products, limit=80)
-    )
+    if fast_parsed is not None:
+        candidates = fast_candidates or []
+    else:
+        # Search both the original Telugu/Romanized transcript and its English
+        # translation. Translation is useful for recall, but must not erase a
+        # correct source-language catalog match or replace it with a wrong one.
+        source_candidates = _voice_billing_catalog_candidates(parser_transcript, products, limit=80)
+        translated_candidates = _voice_billing_catalog_candidates(english_transcript, products, limit=80)
+        candidates_by_id = {
+            int(product.id): product
+            for product in [*source_candidates, *translated_candidates]
+        }
+        candidates = list(candidates_by_id.values())[:80]
     catalog = [
         {
             "product_id": int(product.id),
@@ -3420,8 +3428,11 @@ async def parse_voice_billing(
                 ]
                 match_reasons = list(resolution.reasons)
 
+        # Numeric evidence must come from the original/source-language
+        # transcript only. The English translation is allowed to help identify
+        # products, never to validate quantities or prices.
         item_evidence_transcripts = _voice_billing_item_evidence_transcripts(
-            raw, product, parser_transcript, english_transcript,
+            raw, product, parser_transcript, "",
             min(len(raw_items), 30), raw_items[:30],
         )
         spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
