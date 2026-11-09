@@ -2096,6 +2096,11 @@ _VOICE_BILLING_ALIASES = {
         "brinjal", "eggplant", "aubergine", "vankaya", "వంకాయ", "వంకాయలు",
         "వంకాయల", "బెంగుళూరు వంకాయ",
     },
+    "bitter_gourd": {
+        "bitter gourd", "bittergourd", "karela", "kakarakaya", "kakara kaya",
+        "కాకరకాయ", "కాకరకాయలు", "కాకరకాయల", "కాకర",
+        "பாகற்காய்", "ಹಾಗಲಕಾಯಿ", "പാവയ്ക്ക", "করলা",
+    },
     "bottle_gourd": {
         "bottle", "gourd", "bottle gourd", "sorakaya", "sorakayi",
         "సొరకాయ", "సొరకాయలు", "సొరకాయల", "ఆనపకాయ", "అనపకాయ",
