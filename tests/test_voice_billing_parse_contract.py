@@ -798,3 +798,31 @@ def test_spoken_weight_unit_does_not_silently_become_catalog_pieces(monkeypatch)
     assert item["spoken_unit"] == "kg"
     assert item["unit_mismatch"] is True
     assert item["needs_confirmation"] is True
+
+
+@pytest.mark.parametrize(
+    ("spoken_name", "catalog_names", "expected_name", "wrong_name"),
+    [
+        ("బెండకాయలు", ["Lady Finger", "Bottle Gourd"], "Lady Finger", "Bottle Gourd"),
+        ("సొరకాయ", ["Bottle Gourd", "Lady Finger"], "Bottle Gourd", "Lady Finger"),
+        ("వంకాయలు", ["Brinjal", "Bottle Gourd"], "Brinjal", "Bottle Gourd"),
+        ("టమాటాలు", ["Tomatoes", "Brinjal"], "Tomatoes", "Brinjal"),
+    ],
+)
+def test_telugu_vegetable_aliases_match_the_correct_catalog_product(
+    spoken_name, catalog_names, expected_name, wrong_name
+):
+    products = [
+        _product(index + 1, name, f"SKU-{index + 1}")
+        for index, name in enumerate(catalog_names)
+    ]
+
+    candidates = _voice_billing_catalog_candidates(
+        f"రెండు కిలోల {spoken_name} 200",
+        products,
+        limit=80,
+    )
+
+    assert candidates
+    assert candidates[0].product_name == expected_name
+    assert all(product.product_name != wrong_name for product in candidates)

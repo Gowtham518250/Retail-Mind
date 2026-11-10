@@ -2085,6 +2085,32 @@ _VOICE_BILLING_ALIASES = {
     "tomato": {"tomato", "tamata", "thakkali", "tamatar", "టమాటా", "టమాటో", "టమోటా", "टमाटर", "தக்காளி", "ಟೊಮೇಟೊ", "തക്കാളി", "টমেটো"},
     "potato": {"potato", "aloo", "batata", "bangaladumpa", "బంగాళదుంప", "ఆలు", "आलू", "உருளைக்கிழங்கு", "ಆಲೂಗಡ್ಡೆ", "ഉരുളക്കിഴങ്ങ്", "আলু"},
     "atta": {"atta", "wheat", "godhuma", "pindi", "flour", "గోధుమ", "గోధుమపిండి", "आटा", "கோதுமை", "ಗೋಧಿ", "ഗോതമ്പ്"},
+    # Fresh produce: keep Telugu vegetable names distinct. In particular,
+    # బెండకాయ(లు) is okra/lady finger; సొరకాయ is bottle gourd.
+    "okra": {
+        "okra", "lady", "finger", "lady finger", "ladies", "bhindi", "bhendi",
+        "bendakaya", "bendakాయ", "బెండకాయ", "బెండకాయలు", "బెండకాయల",
+        "వెండకాయ", "వెండకాయలు",
+    },
+    "brinjal": {
+        "brinjal", "eggplant", "aubergine", "vankaya", "వంకాయ", "వంకాయలు",
+        "వంకాయల", "బెంగుళూరు వంకాయ",
+    },
+    "bitter_gourd": {
+        "bitter gourd", "bittergourd", "karela", "kakarakaya", "kakara kaya",
+        "కాకరకాయ", "కాకరకాయలు", "కాకరకాయల", "కాకర",
+        "பாகற்காய்", "ಹಾಗಲಕಾಯಿ", "പാവയ്ക്ക", "করলা",
+    },
+    "bottle_gourd": {
+        "bottle", "gourd", "bottle gourd", "sorakaya", "sorakayi",
+        "సొరకాయ", "సొరకాయలు", "సొరకాయల", "ఆనపకాయ", "అనపకాయ",
+        "లౌకీ", "lauki",
+    },
+    "tomato": {
+        "tomato", "tomatoes", "tamata", "thakkali", "tamatar",
+        "టమాటా", "టమాటాలు", "టమాటో", "టమాటోలు", "టమోటా", "టమోటాలు",
+        "టమోటోలు", "టమాట", "टमाटर", "தக்காளி", "ಟೊಮೇಟೊ", "തക്കാളി", "টমেটো",
+    },
     "biscuit": {"biscuit", "biscuits", "biskut", "బిస్కెట్", "బిస్కెట్లు", "बिस्कुट", "பிஸ்கட்", "ಬಿಸ್ಕತ್ತು", "ബിസ്കറ്റ്"},
 }
 _VOICE_BILLING_ALIASES["biryani"].update({"బిరియాని", "బిరియానీ", "బిర్యానీ"})
@@ -3204,11 +3230,19 @@ async def parse_voice_billing(
         english_transcript = parser_transcript
 
     # Empty inventory and zero candidates are valid; they produce custom sale lines.
-    candidates = (
-        fast_candidates
-        if fast_parsed is not None
-        else _voice_billing_catalog_candidates(english_transcript, products, limit=80)
-    )
+    if fast_parsed is not None:
+        candidates = fast_candidates or []
+    else:
+        # Search both the original Telugu/Romanized transcript and its English
+        # translation. Translation is useful for recall, but must not erase a
+        # correct source-language catalog match or replace it with a wrong one.
+        source_candidates = _voice_billing_catalog_candidates(parser_transcript, products, limit=80)
+        translated_candidates = _voice_billing_catalog_candidates(english_transcript, products, limit=80)
+        candidates_by_id = {
+            int(product.id): product
+            for product in [*source_candidates, *translated_candidates]
+        }
+        candidates = list(candidates_by_id.values())[:80]
     catalog = [
         {
             "product_id": int(product.id),
@@ -3399,8 +3433,11 @@ async def parse_voice_billing(
                 ]
                 match_reasons = list(resolution.reasons)
 
+        # Numeric evidence must come from the original/source-language
+        # transcript only. The English translation is allowed to help identify
+        # products, never to validate quantities or prices.
         item_evidence_transcripts = _voice_billing_item_evidence_transcripts(
-            raw, product, parser_transcript, english_transcript,
+            raw, product, parser_transcript, "",
             min(len(raw_items), 30), raw_items[:30],
         )
         spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
@@ -3543,8 +3580,20 @@ async def parse_voice_billing(
         price_grounded = True
         if kind in {"unit", "line_total"}:
             try:
+                # Financial values must be grounded in the original/source-language
+                # transcript, never in English translation text. Translation can
+                # accidentally concatenate adjacent values (e.g. "200, 3 kg" -> "203").
+                # Re-isolate this line using source-language product anchors only.
+                source_line_evidence = _voice_billing_item_evidence_transcripts(
+                    raw,
+                    product,
+                    parser_transcript,
+                    "",
+                    len(raw_items),
+                    raw_items,
+                )
                 price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
-                    raw, product, item_evidence_transcripts
+                    raw, product, source_line_evidence
                 )
                 reported_price = Decimal(str(raw.get("spoken_price_amount")))
                 # The same numeric value cannot serve as both the line quantity
