@@ -352,3 +352,42 @@ def test_telugu_inflected_units_keep_quantities_on_their_own_product_lines(monke
         "spoken_line_total",
     ]
     assert all(item["needs_confirmation"] is False for item in result["items"])
+
+
+def test_delimited_count_based_products_keep_quantities_separate_without_units(monkeypatch):
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [
+            {
+                "product_id": None,
+                "product_name_en": "Soap",
+                "product_name_local": "సబ్బు",
+                "quantity": 3,
+                "spoken_unit": "",
+                "spoken_price_amount": 30,
+                "spoken_price_kind": "unit",
+                "confidence": 0.96,
+            },
+            {
+                "product_id": None,
+                "product_name_en": "Tea",
+                "product_name_local": "టీ",
+                "quantity": 5,
+                "spoken_unit": "",
+                "spoken_price_amount": 20,
+                "spoken_price_kind": "unit",
+                "confidence": 0.96,
+            },
+        ],
+        transcript="3 సబ్బు 30, 5 టీ 20",
+        language_code="te-IN",
+        catalog_products=[],
+        translated_text="3 soap 30; 5 tea 20",
+    )
+
+    assert result["needs_clarification"] is False
+    assert [item["product_name"] for item in result["items"]] == ["Soap", "Tea"]
+    assert [item["quantity"] for item in result["items"]] == [3.0, 5.0]
+    assert [item["quantity_grounded"] for item in result["items"]] == [True, True]
+    assert [item["unit_price"] for item in result["items"]] == [30.0, 20.0]
+    assert all(item["needs_confirmation"] is False for item in result["items"])
