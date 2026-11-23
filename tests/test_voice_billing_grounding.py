@@ -308,3 +308,47 @@ def test_line_total_with_exact_per_unit_value_does_not_need_rounding_confirmatio
     assert item["unit_price"] == 55.0
     assert item["price_needs_confirmation"] is False
     assert item["needs_confirmation"] is False
+
+
+def test_telugu_inflected_units_keep_quantities_on_their_own_product_lines(monkeypatch):
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [
+            {
+                "product_id": None,
+                "product_name_en": "Chicken",
+                "product_name_local": "చికెన్",
+                "quantity": 2,
+                "spoken_unit": "kg",
+                "spoken_price_amount": 300,
+                "spoken_price_kind": "line_total",
+                "confidence": 0.96,
+            },
+            {
+                "product_id": None,
+                "product_name_en": "Mutton",
+                "product_name_local": "మటన్",
+                "quantity": 5,
+                "spoken_unit": "kg",
+                "spoken_price_amount": 600,
+                "spoken_price_kind": "line_total",
+                "confidence": 0.96,
+            },
+        ],
+        transcript="2 కేజీల చికెన్ 300, 5 కేజీల మటన్ 600",
+        language_code="te-IN",
+        catalog_products=[],
+        translated_text="2 kg chicken 300; 5 kg mutton 600",
+    )
+
+    assert result["needs_clarification"] is False
+    assert [item["product_name"] for item in result["items"]] == ["Chicken", "Mutton"]
+    assert [item["quantity"] for item in result["items"]] == [2.0, 5.0]
+    assert [item["quantity_grounded"] for item in result["items"]] == [True, True]
+    assert [item["price_grounded"] for item in result["items"]] == [True, True]
+    assert [item["unit_price"] for item in result["items"]] == [150.0, 120.0]
+    assert [item["price_source"] for item in result["items"]] == [
+        "spoken_line_total",
+        "spoken_line_total",
+    ]
+    assert all(item["needs_confirmation"] is False for item in result["items"])
