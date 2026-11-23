@@ -3,7 +3,13 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from test_voice_billing_parse_contract import _run_voice_billing_endpoint
-from voice_billing_core import convert_quantity, quantity_is_grounded
+from voice_billing_core import (
+    canonical_unit,
+    convert_quantity,
+    quantity_is_grounded,
+    repair_spoken_unit,
+    spoken_unit_is_grounded,
+)
 from inventory import _VOICE_BILLING_NUMBER_WORDS, _VOICE_BILLING_SCALE_WORDS
 
 
@@ -145,3 +151,24 @@ def test_spoken_sku_still_identifies_its_own_line():
         normalize=inv._voice_billing_normalize, expand_tokens=inv._voice_billing_expanded_tokens,
     )
     assert result.status == "matched" and result.product.id == 2
+
+
+@pytest.mark.parametrize(("spoken_unit", "factor"), [
+    ("కేజీ", 1000),
+    ("కేజీలు", 1000),
+    ("కేజీల", 1000),
+    ("కేజీలను", 1000),
+    ("కిలోలు", 1000),
+    ("కిలోల", 1000),
+    ("కిలోగ్రాముల", 1000),
+    ("గ్రాముల", 1),
+])
+def test_telugu_inflected_mass_units_are_recognized(spoken_unit, factor):
+    info = canonical_unit(spoken_unit)
+    assert info is not None
+    assert info.dimension == "mass"
+    assert info.factor == factor
+    assert repair_spoken_unit(
+        [f"5 {spoken_unit} మటన్"], _VOICE_BILLING_NUMBER_WORDS
+    ) == spoken_unit
+    assert spoken_unit_is_grounded("kg" if factor == 1000 else "g", [f"5 {spoken_unit} మటన్"])
