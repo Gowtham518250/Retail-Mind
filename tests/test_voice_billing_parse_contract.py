@@ -112,9 +112,10 @@ def test_voice_billing_parse_endpoints_are_registered():
     assert ("/api/inventory/voice-billing/aliases", frozenset({"POST"})) in paths
 
 
-def test_voice_billing_normalization_preserves_indian_script_and_numbers():
+def test_voice_billing_normalization_preserves_indian_script_numbers_and_rupee_symbol():
     assert _voice_billing_normalize("రెండు kg rice 50") == "రెండు kg rice 50"
     assert _voice_billing_normalize("  RICE,   50 ") == "rice 50"
+    assert _voice_billing_normalize("₹50 rice") == "₹50 rice"
 
 
 def test_spoken_scale_phrases_normalize_roman_telugu_and_telugu_script():
