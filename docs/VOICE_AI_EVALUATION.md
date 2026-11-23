@@ -2,15 +2,26 @@
 
 ## Speech-to-text guard
 
-The backend requests Groq Whisper `verbose_json` and evaluates segment-level
-`no_speech_prob`, `avg_logprob`, and `compression_ratio` before using a
-transcript. It also rejects known silence phrases, repetition loops, and
-transcription that appears to echo the supplied prompt or shop vocabulary.
+The customer/owner voice-billing audio endpoint currently transcribes with
+Sarvam Saaras v4. The adapter returns transcript text and the provider's
+detected language, but does not expose per-segment
+`no_speech_prob`, `avg_logprob`, or `compression_ratio` values. Therefore
+the voice-billing audio endpoint currently runs the text-level ASR guard in
+unscored mode; it rejects empty/known hallucinated phrases, repetition loops,
+and suspicious vocabulary or prompt echoes when those signals are present.
+The segment-level thresholds in `voice_asr_guard.py` are available when an
+ASR provider supplies those segment fields, but must not be described as
+measured confidence for Saaras transcripts.
 
 This is a conservative heuristic, not an accuracy guarantee. Its defaults
 must be calibrated against labelled recordings from actual shops. No real-audio
 false-accept, false-reject, or word-error-rate results are claimed. The mobile
 app's voice-activity gate is not included in this backend change.
+
+The Saaras keyterm list is capped at 50 entries by the adapter. Cashier-confirmed
+shop pronunciation aliases are therefore prioritized ahead of the alphabetical
+catalog fallback so approved pronunciations are not silently omitted from larger
+shop catalogs.
 
 ## Voice billing post-processing
 
@@ -42,3 +53,23 @@ Redis/database-backed idempotency record and client-generated request IDs.
 The parse endpoint only creates a draft, not an invoice or stock movement,
 so idempotency should be designed around the actual invoice/stock commit path
 if retry protection is required.
+
+
+## Multi-item translation and price validation
+
+The translation and structured-extraction output budgets scale with transcript
+length, while remaining capped. This avoids using a short single-item output
+budget for a long spoken bill. The complete translated search text is retained
+for catalog candidate retrieval rather than being clipped to a short UI-summary
+length.
+
+Leading INR symbols are preserved through normalization so a phrase such as
+`₹50 rice` retains its currency cue for price grounding. A model-declared
+ambiguous price falls back to the current catalog price only as a draft value
+and now raises an explicit confirmation requirement. When a spoken line total
+cannot be represented exactly as a two-decimal per-unit price, the server marks
+the line for confirmation instead of silently changing the spoken total.
+
+These are deterministic contract improvements. They do not measure live ASR
+word error rate or prove end-to-end cashier accuracy; those require reviewed
+recordings and checkout outcome labels.
