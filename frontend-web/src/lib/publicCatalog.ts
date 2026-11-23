@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { API_BASE } from './api';
+import { getBackendBaseUrl } from './serverApi';
 import type { ShopResponse } from './types';
 
 export interface PublicShop {
@@ -29,11 +29,8 @@ export interface PublicProductPreview {
   stock_available?: number;
 }
 
-const backendBase = (
-  process.env.RETAIL_MIND_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  API_BASE
-).replace(/\/+$/, '');
+// Use the same normalized backend URL as the customer API route handlers.
+const backendBase = getBackendBaseUrl();
 
 export async function getPublicShops(): Promise<PublicShop[]> {
   try {
