@@ -17,7 +17,7 @@ import {
   Sparkles,
   Truck,
 } from 'lucide-react';
-import { API_BASE } from '../../lib/api';
+import { API_BASE, readApiResponse } from '../../lib/api';
 import { safeNextPath } from '../../lib/navigation';
 import styles from './auth.module.css';
 
@@ -117,7 +117,7 @@ export default function AuthPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.detail || data.message || 'Login failed. Check your credentials.');
 
       localStorage.setItem('customerToken', data.access_token);
@@ -158,7 +158,7 @@ export default function AuthPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), email: email.trim(), phone: phone.trim(), password }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.detail || data.message || 'Registration failed. Please try again.');
 
       localStorage.setItem('customerToken', data.access_token);
@@ -182,7 +182,7 @@ export default function AuthPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim() }),
     });
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.detail || data.message || 'Unable to send the code.');
     setResetStep('verify');
     setResendCooldown(30);
@@ -208,7 +208,7 @@ export default function AuthPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: email.trim(), otp: resetOtp.trim() }),
         });
-        const data = await res.json();
+        const data = await readApiResponse(res);
         if (!res.ok) throw new Error(data.detail || data.message || 'Code verification failed.');
         setResetToken(data.reset_token || '');
         setResetStep('password');
@@ -229,7 +229,7 @@ export default function AuthPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset_token: resetToken, new_password: resetPassword }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.detail || data.message || 'Password reset failed.');
       setSuccess('Password reset successfully. You can now sign in.');
       setView('login');
