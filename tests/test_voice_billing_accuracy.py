@@ -81,13 +81,14 @@ def test_boost_asr_alias_does_not_turn_unrelated_words_into_catalog_matches():
     assert _voice_billing_product_has_evidence("300 soap", boost) is False
     assert _voice_billing_product_has_evidence("300 bubt", soap) is False
 
-def test_bubt_alias_is_withheld_when_multiple_boost_pack_sizes_exist():
+def test_asr_alias_returns_all_matching_pack_candidates_for_generic_disambiguation():
     boost_bottle = SimpleNamespace(product_name="Boost", sku="")
     boost_jar = SimpleNamespace(product_name="Boost 500g", sku="")
 
-    assert _voice_billing_catalog_candidates(
+    candidates = _voice_billing_catalog_candidates(
         "300 bubt", [boost_bottle, boost_jar]
-    ) == []
+    )
+    assert set(candidates) == {boost_bottle, boost_jar}
 
 
 
