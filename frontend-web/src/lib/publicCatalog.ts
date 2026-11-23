@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { getBackendBaseUrl } from './serverApi';
+import { getBackendBaseUrl } from './backendConfig';
 import type { ShopResponse } from './types';
 
 export interface PublicShop {
