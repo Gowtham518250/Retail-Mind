@@ -15,5 +15,8 @@ export async function GET(
     );
   }
 
-  return proxyBackendGet(`/store/shops/${shopId}/products`);
+  return proxyBackendGet(
+    `/store/shops/${shopId}/products`,
+    new URLSearchParams({ limit: '200' }),
+  );
 }
