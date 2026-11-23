@@ -3259,7 +3259,11 @@ async def parse_voice_billing(
     fast_parsed = None
     fast_candidates = None
     if _voice_billing_fast_path_allowed(parser_transcript, request.language_code or "auto"):
-        fast_candidates = _voice_billing_catalog_candidates(parser_transcript, products, limit=80)
+        # The deterministic parser is cheap and must be able to see every active
+        # shop product, not only the AI prompt shortlist.
+        fast_candidates = _voice_billing_catalog_candidates(
+            parser_transcript, products, limit=max(80, len(products))
+        )
         fast_parsed = _vb_try_fast_parse(
             parser_transcript,
             fast_candidates,
@@ -3316,7 +3320,10 @@ async def parse_voice_billing(
         }
         for product in candidates
     ]
-    catalog_by_id = {int(product.id): product for product in candidates}
+    # The prompt receives a relevance-ranked shortlist for speed, but IDs and
+    # final catalog resolution are checked against the complete active shop catalog.
+    # This keeps products beyond the prompt shortlist billable and stock-linked.
+    catalog_by_id = {int(product.id): product for product in products}
 
     if fast_parsed is not None:
         # Deterministic parse: no translation or extraction LLM call. Every line still
@@ -3331,8 +3338,10 @@ async def parse_voice_billing(
             "\"items\":[{\"product_id\":123,\"product_name_en\":\"English product name\",\"product_name_local\":\"speaker language product name\","
             "\"quantity\":2,\"spoken_unit\":\"kg\",\"spoken_price_amount\":50,\"spoken_price_kind\":\"unit\",\"confidence\":0.95}],"
             "\"needs_clarification\":false,\"clarification_question\":\"\"}. "
-            "product_id must be an ID from the supplied catalog only, or null when no catalog product is a confident match. "
-            "Never invent an ID. Preserve the speaker's utterance as separate bill lines in the exact spoken order. "
+            "product_id must be an ID from the supplied candidate catalog only, or null when the exact product is not listed there. "
+            "Never invent an ID. Always preserve the complete spoken/translated product name even when its product_id is null; "
+            "the server resolves that name against the full active shop catalog after extraction. "
+            "Preserve the speaker's utterance as separate bill lines in the exact spoken order. "
             "Each product mention must become one line; never merge adjacent product names, quantities, or prices into a single number or product. "
             "Match product identity against the supplied active shop catalog using the complete spoken product phrase and its translation/transliteration. "
             "When a catalog item is confidently matched, return its exact catalog product_name and product_id; do not substitute a similar item. "
@@ -3469,7 +3478,7 @@ async def parse_voice_billing(
                 proposed_name,
             ],
             f"{english_transcript} {parser_transcript}",
-            candidates,
+            products,
             normalize=_voice_billing_normalize,
             expand_tokens=_voice_billing_expanded_tokens,
             hint_product=product,
