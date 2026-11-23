@@ -88,7 +88,7 @@ def test_asr_alias_returns_all_matching_pack_candidates_for_generic_disambiguati
     candidates = _voice_billing_catalog_candidates(
         "300 bubt", [boost_bottle, boost_jar]
     )
-    assert set(candidates) == {boost_bottle, boost_jar}
+    assert {product.product_name for product in candidates} == {"Boost", "Boost 500g"}
 
 
 
