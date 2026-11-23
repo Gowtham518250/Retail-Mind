@@ -1,4 +1,5 @@
 """Endpoint-level regression tests for ambiguity, unit conversion and quantity grounding."""
+import pytest
 from decimal import Decimal
 from types import SimpleNamespace
 
