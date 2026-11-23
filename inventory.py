@@ -2132,6 +2132,9 @@ def _voice_billing_normalize(value: str) -> str:
         char
         if char.isspace()
         or unicodedata.category(char)[0] in {"L", "M", "N"}
+        # Retain the INR symbol so a leading spoken/ASR amount such as "₹50 rice"
+        # remains identifiable as a price rather than an unexplained quantity.
+        or char == "₹"
         or (char == "." and 0 < index < last and value[index - 1].isdigit() and value[index + 1].isdigit())
         else " "
         for index, char in enumerate(value)
@@ -2679,6 +2682,18 @@ def _voice_billing_product_has_evidence(transcript: str, product: Product) -> bo
         and difflib.SequenceMatcher(None, compact_query, normalized_name).ratio() >= 0.84
     )
 
+def _voice_billing_translation_token_budget(transcript: str) -> int:
+    """Scale translation output allowance with bill length without over-allocating."""
+    word_count = len(_voice_billing_normalize(transcript).split())
+    return min(1024, max(220, 160 + word_count * 14))
+
+
+def _voice_billing_extraction_token_budget(transcript: str) -> int:
+    """Allow enough structured output for multi-item bills; short utterances stay cheap."""
+    word_count = len(_voice_billing_normalize(transcript).split())
+    return min(3072, max(1100, 700 + word_count * 45))
+
+
 async def _voice_billing_translate_search_query(
     transcript: str,
     language_code: str,
@@ -2732,7 +2747,7 @@ async def _voice_billing_translate_search_query(
                         {"role": "user", "content": prompt},
                     ],
                     "temperature": 0,
-                    "max_tokens": 220,
+                    "max_tokens": _voice_billing_translation_token_budget(transcript),
                     "response_format": {"type": "json_object"},
                     "stream": False,
                 },
@@ -2747,7 +2762,10 @@ async def _voice_billing_translate_search_query(
         match = re.search(r"\{.*\}", content, flags=re.DOTALL)
         parsed = json.loads(match.group(0) if match else content)
         translated = str(parsed.get("english_search_text") or "").strip()
-        return translated[:320]
+        # The source transcript can contain up to 1,200 characters. Keep the
+        # complete translated bill for candidate retrieval; only the UI summary is
+        # shortened later in the response payload.
+        return translated[:1800]
     except HTTPException:
         raise
     except httpx.TimeoutException as exc:
@@ -3123,7 +3141,9 @@ def _voice_billing_item_price_evidence_transcripts(
     anchors.sort(key=lambda phrase: len(phrase.split()), reverse=True)
     currency_cues = {
         "rs", "inr", "rupee", "rupees", "price", "cost",
-        "రూపాయి", "రూపాయలు", "रुपया", "रुपये", "ரூபாய்", "ರೂಪಾಯಿ", "રૂપિયા",
+        "₹", "ரூ", "రూ", "ರೂ", "રૂપ", "रु",
+        "ரூபாய்", "ரூபாய்கள்", "రూపాయి", "రూపాయలు", "रुपया", "रुपये",
+        "ರೂಪಾಯಿ", "ರೂಪಾಯಿಗಳು", "રૂપિયા",
     }
     evidence = []
     for transcript in item_transcripts:
@@ -3325,7 +3345,7 @@ async def parse_voice_billing(
                             {"role": "user", "content": prompt},
                         ],
                         "temperature": 0,
-                        "max_tokens": 1100,
+                        "max_tokens": _voice_billing_extraction_token_budget(parser_transcript),
                         "response_format": {"type": "json_object"},
                         "stream": False,
                     },
@@ -3578,6 +3598,7 @@ async def parse_voice_billing(
         # A price the speaker never said (invented, or computed by the model) must not reach
         # the bill as a "spoken" price: fall back to the catalog price and ask for review.
         price_grounded = True
+        price_needs_confirmation = False
         if kind in {"unit", "line_total"}:
             try:
                 # Financial values must be grounded in the original/source-language
@@ -3619,10 +3640,16 @@ async def parse_voice_billing(
         spoken_amount = raw.get("spoken_price_amount")
 
         if not price_grounded:
+            price_needs_confirmation = True
             unresolved.append(f"{product_name}: price not clearly heard")
         if kind == "ambiguous":
+            # A catalog fallback is useful for the draft, but an explicitly
+            # ambiguous spoken amount must never look like a confirmed price.
+            price_needs_confirmation = True
             if catalog_price > 0:
-                price_warning = "The spoken amount was unclear; the catalog price was used. Please verify before saving."
+                price_warning = "The spoken amount was unclear; the catalog price was used. Please confirm it before saving."
+                if price_grounded:
+                    unresolved.append(f"{product_name}: confirm the catalog price")
             else:
                 unit_price = Decimal("0")
                 price_source = "missing"
@@ -3639,7 +3666,20 @@ async def parse_voice_billing(
                 else:
                     unit_price = (amount / quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     price_source = "spoken_line_total"
-                    price_warning = "Spoken line total converted to per-unit price; review rounding before saving."
+                    reconstructed_total = (unit_price * quantity).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                    spoken_total = amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    if reconstructed_total != spoken_total:
+                        # Do not silently change the amount the customer was quoted.
+                        price_warning = (
+                            f"Per-unit rounding changes the spoken line total from "
+                            f"{spoken_total} to {reconstructed_total}. Confirm the price before saving."
+                        )
+                        price_needs_confirmation = True
+                        unresolved.append(f"{product_name}: line-total rounding needs confirmation")
+                    else:
+                        price_warning = None
                 if catalog_price > 0:
                     relative_change = abs(unit_price - catalog_price) / catalog_price
                     if relative_change > Decimal("0.25"):
@@ -3656,6 +3696,7 @@ async def parse_voice_billing(
         if price_missing:
             unit_price = Decimal("0")
             price_source = "missing"
+            price_needs_confirmation = True
             price_warning = price_warning or "Enter the selling price before saving."
             unresolved.append(f"{product_name}: price missing")
 
@@ -3687,9 +3728,10 @@ async def parse_voice_billing(
             "quantity_grounded": quantity_grounded,
             "unit_grounded": unit_grounded,
             "price_grounded": price_grounded,
+            "price_needs_confirmation": price_needs_confirmation,
             "needs_confirmation": bool(
                 ambiguous_candidates or unit_mismatch or not quantity_grounded or price_missing
-                or not unit_grounded or not price_grounded
+                or not unit_grounded or not price_grounded or price_needs_confirmation
             ),
             "ambiguous_candidates": ambiguous_candidates,
             "match_reasons": match_reasons,
@@ -3848,7 +3890,9 @@ def _voice_billing_prompt_catalog_names(db: Session, user_id: int, language_code
             pass
         alias_names = []
 
-    ranked_names = _voice_billing_rank_prompt_names(catalog_names, alias_names, limit=500)
+    # Saaras accepts at most 50 keyterms. Put cashier-confirmed pronunciations
+    # first so they are not silently truncated behind a large alphabetic catalog.
+    ranked_names = _voice_billing_rank_prompt_names(alias_names, catalog_names, limit=50)
     if ranked_names:
         _VOICE_BILLING_PROMPT_VOCAB_CACHE[cache_key] = (now, tuple(ranked_names))
     return ranked_names
