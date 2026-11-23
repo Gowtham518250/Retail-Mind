@@ -234,3 +234,77 @@ def test_line_total_is_divided_by_the_verified_quantity_only(monkeypatch):
     assert item["price_grounded"] is True
     assert item["price_source"] == "spoken_line_total"
     assert item["unit_price"] == 60.0
+
+
+def test_rupee_symbol_before_product_is_preserved_and_price_is_grounded(monkeypatch):
+    _, item = _item(monkeypatch, {
+        "product_id": 42,
+        "product_name_en": "Rice",
+        "quantity": 1,
+        "spoken_price_amount": 50,
+        "spoken_price_kind": "unit",
+        "confidence": 0.95,
+    }, "₹50 rice")
+
+    assert item is not None
+    assert item["unit_price"] == 50.0
+    assert item["price_source"] == "spoken_unit"
+    assert item["price_grounded"] is True
+    assert item["needs_confirmation"] is False
+
+
+def test_ambiguous_spoken_price_requires_confirmation_even_with_catalog_price(monkeypatch):
+    result, item = _item(monkeypatch, {
+        "product_id": 42,
+        "product_name_en": "Rice",
+        "quantity": 2,
+        "spoken_unit": "kg",
+        "spoken_price_amount": 50,
+        "spoken_price_kind": "ambiguous",
+        "confidence": 0.95,
+    }, "2 kg rice 50")
+
+    assert item is not None
+    assert item["unit_price"] == 50.0
+    assert item["price_source"] == "catalog"
+    assert item["price_needs_confirmation"] is True
+    assert item["needs_confirmation"] is True
+    assert result["needs_clarification"] is True
+    assert "confirm the catalog price" in result["clarification_question"].lower()
+
+
+def test_line_total_rounding_that_changes_total_requires_confirmation(monkeypatch):
+    result, item = _item(monkeypatch, {
+        "product_id": 42,
+        "product_name_en": "Rice",
+        "quantity": 3,
+        "spoken_unit": "kg",
+        "spoken_price_amount": 100,
+        "spoken_price_kind": "line_total",
+        "confidence": 0.95,
+    }, "3 kg rice 100")
+
+    assert item is not None
+    assert item["price_source"] == "spoken_line_total"
+    assert item["unit_price"] == 33.33
+    assert item["price_needs_confirmation"] is True
+    assert item["needs_confirmation"] is True
+    assert "rounding" in item["price_warning"].lower()
+    assert result["needs_clarification"] is True
+
+
+def test_line_total_with_exact_per_unit_value_does_not_need_rounding_confirmation(monkeypatch):
+    _, item = _item(monkeypatch, {
+        "product_id": 42,
+        "product_name_en": "Rice",
+        "quantity": 2,
+        "spoken_unit": "kg",
+        "spoken_price_amount": 110,
+        "spoken_price_kind": "line_total",
+        "confidence": 0.95,
+    }, "2 kg rice 110")
+
+    assert item is not None
+    assert item["unit_price"] == 55.0
+    assert item["price_needs_confirmation"] is False
+    assert item["needs_confirmation"] is False
