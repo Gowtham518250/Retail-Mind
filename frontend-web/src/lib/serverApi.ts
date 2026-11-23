@@ -1,36 +1,5 @@
 import { NextResponse } from 'next/server';
-import { API_BASE } from './api';
-
-/**
- * Render environment values are sometimes pasted with surrounding quotes.
- * Normalize both server-only and public values in one place so SSR and route
- * handlers never point at different backends.
- */
-function cleanBackendUrl(value: string | undefined): string {
-  const cleaned = String(value || '')
-    .trim()
-    .replace(/^["']+|["']+$/g, '')
-    .replace(/\/+$/, '');
-
-  if (!cleaned) return '';
-
-  try {
-    const parsed = new URL(cleaned);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
-    return cleaned;
-  } catch {
-    return '';
-  }
-}
-
-export function getBackendBaseUrl(): string {
-  return (
-    cleanBackendUrl(process.env.RETAIL_MIND_BACKEND_URL) ||
-    cleanBackendUrl(process.env.NEXT_PUBLIC_API_URL) ||
-    cleanBackendUrl(API_BASE) ||
-    'https://retail-mind-vkbp.onrender.com'
-  );
-}
+import { getBackendBaseUrl } from './backendConfig';
 
 function jsonError(detail: string, status: number) {
   return NextResponse.json(
