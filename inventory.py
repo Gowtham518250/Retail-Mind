@@ -3683,7 +3683,11 @@ async def parse_voice_billing(
                 if catalog_price > 0:
                     relative_change = abs(unit_price - catalog_price) / catalog_price
                     if relative_change > Decimal("0.25"):
-                        price_warning = "Spoken price differs from the catalog price; verify it before saving."
+                        catalog_warning = "Spoken price differs from the catalog price; verify it before saving."
+                        price_warning = (
+                            f"{price_warning} {catalog_warning}".strip()
+                            if price_warning else catalog_warning
+                        )
             except (TypeError, ValueError, ArithmeticError):
                 unit_price = Decimal("0")
                 price_source = "missing"
