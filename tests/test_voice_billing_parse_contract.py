@@ -21,18 +21,18 @@ def _product(product_id: int, name: str, sku: str = ""):
     return SimpleNamespace(id=product_id, product_name=name, sku=sku)
 
 
-def test_voice_billing_prompt_vocabulary_prioritizes_catalog_before_aliases():
+def test_voice_billing_prompt_vocabulary_prioritizes_confirmed_aliases_before_catalog():
     names = _voice_billing_rank_prompt_names(
-        ["Soap", "Sugar", "Tea", "Toothpaste"],
         ["Bubt", "Boost"],
+        ["Soap", "Sugar", "Tea", "Toothpaste"],
         limit=5,
     )
     assert names == [
+        "Bubt",
+        "Boost",
         "Soap",
         "Sugar",
         "Tea",
-        "Toothpaste",
-        "Bubt",
     ]
 
 
