@@ -2983,6 +2983,51 @@ def _voice_billing_item_evidence_transcripts(
                 or previous in _VOICE_BILLING_NUMBER_WORDS
             ):
                 return words[index - 1].start()
+        return None    def quantity_start(prefix: str) -> Optional[int]:
+        """Find the last explicit number+unit pair before a product anchor."""
+        repaired = _vb_repair_spoken_unit([prefix], _VOICE_BILLING_NUMBER_WORDS)
+        if not repaired:
+            return None
+        words = list(re.finditer(r"\S+", prefix))
+        unit_word = repaired.casefold()
+        for index in range(len(words) - 1, 0, -1):
+            candidate = words[index].group(0).strip(".,;:!?()[]\"'").casefold()
+            previous = words[index - 1].group(0).strip(".,;:!?()[]\"'").casefold()
+            if candidate == unit_word and (
+                re.fullmatch(r"\d+(?:\.\d+)?", previous)
+                or previous in _VOICE_BILLING_NUMBER_WORDS
+            ):
+                return words[index - 1].start()
+        return None
+
+    def separated_quantity_start(prefix: str) -> Optional[int]:
+        """Find a quantity after an explicit line separator, even without a unit.
+
+        This covers count-based shorthand such as "3 soap 30, 5 tea 20".
+        The separator must be between item lines, and the token after it must be
+        a recognized number; arbitrary prices/numbers are never used as boundaries.
+        """
+        separators = list(re.finditer(
+            r"[,;\n]+|\s+\b(?:and|then|plus|also|next)\b\s+|"
+            r"\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
+            prefix,
+            flags=re.IGNORECASE,
+        ))
+        for separator in reversed(separators):
+            suffix = prefix[separator.end():]
+            number = re.match(
+                r"\s*(?:₹\s*)?(\d+(?:\.\d+)?|[^\W\d_]+)",
+                suffix,
+                flags=re.UNICODE,
+            )
+            if not number:
+                continue
+            token = number.group(1).casefold()
+            if (
+                re.fullmatch(r"\d+(?:\.\d+)?", token)
+                or token in _VOICE_BILLING_NUMBER_WORDS
+            ):
+                return separator.end() + number.start(1)
         return None
 
     evidence: list[str] = []
@@ -3051,7 +3096,11 @@ def _voice_billing_item_evidence_transcripts(
             prefix = normalized_text[previous_end:current_start]
             offset = quantity_start(prefix)
             if offset is None:
-                # Without a line-local quantity+unit boundary, this item's evidence
+                # A delimiter plus an explicit quantity is also a safe boundary
+                # for count-based sales that do not speak kg/pcs/litre.
+                offset = separated_quantity_start(prefix)
+            if offset is None:
+                # Without a line-local quantity boundary, this item's evidence
                 # cannot be separated from the previous line's trailing price.
                 continue
             line_start = previous_end + offset
@@ -3061,6 +3110,8 @@ def _voice_billing_item_evidence_transcripts(
         else:
             between = normalized_text[current_end:next_start]
             next_quantity_offset = quantity_start(between)
+            if next_quantity_offset is None:
+                next_quantity_offset = separated_quantity_start(between)
             if next_quantity_offset is None:
                 # Do not let the next item's quantity/price validate this line.
                 continue
