@@ -73,3 +73,11 @@ the line for confirmation instead of silently changing the spoken total.
 These are deterministic contract improvements. They do not measure live ASR
 word error rate or prove end-to-end cashier accuracy; those require reviewed
 recordings and checkout outcome labels.
+
+### Telugu inflected measurement forms
+
+Telugu speech can attach grammatical endings to spoken units. The same kilogram
+unit may appear as `కేజీ`, `కేజీలు`, or `కేజీల`; gram and kilogram forms
+also occur with inflected endings. These forms must be canonicalized before
+per-line quantity evidence is segmented. Regression coverage includes a
+multi-item utterance with a quantity and line total on each product line.
