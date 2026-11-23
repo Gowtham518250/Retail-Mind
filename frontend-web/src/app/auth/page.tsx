@@ -119,6 +119,9 @@ export default function AuthPage() {
       });
       const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.detail || data.message || 'Login failed. Check your credentials.');
+      if (typeof data.access_token !== 'string' || !data.access_token) {
+        throw new Error('The backend login response did not include an access token. Please contact support.');
+      }
 
       localStorage.setItem('customerToken', data.access_token);
       localStorage.setItem('customerName', data.customer?.name || data.name || email);
@@ -160,6 +163,9 @@ export default function AuthPage() {
       });
       const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.detail || data.message || 'Registration failed. Please try again.');
+      if (typeof data.access_token !== 'string' || !data.access_token) {
+        throw new Error('The backend registration response did not include an access token. Please try again.');
+      }
 
       localStorage.setItem('customerToken', data.access_token);
       localStorage.setItem('customerName', data.name || name.trim());
