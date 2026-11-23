@@ -89,3 +89,71 @@ def test_bubt_alias_is_withheld_when_multiple_boost_pack_sizes_exist():
         "300 bubt", [boost_bottle, boost_jar]
     ) == []
 
+
+
+def test_translation_and_extraction_token_budgets_scale_for_long_bills():
+    from inventory import (
+        _voice_billing_translation_token_budget,
+        _voice_billing_extraction_token_budget,
+    )
+
+    short_text = "2 kg rice 50"
+    long_text = " ".join([f"item{i} quantity 2 price 50" for i in range(25)])
+
+    assert _voice_billing_translation_token_budget(short_text) == 220
+    assert _voice_billing_translation_token_budget(long_text) > 220
+    assert _voice_billing_extraction_token_budget(short_text) == 1100
+    assert _voice_billing_extraction_token_budget(long_text) > 1100
+
+
+def test_long_translated_bill_is_not_truncated_to_a_short_search_snippet(monkeypatch):
+    import asyncio
+    import json
+    import inventory as inventory_module
+
+    translated = " ; ".join(
+        f"product {index} quantity 2 unit kg line total 100"
+        for index in range(1, 26)
+    )
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [{
+                    "message": {
+                        "content": json.dumps({"english_search_text": translated})
+                    }
+                }]
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, headers, json):
+            captured["max_tokens"] = json["max_tokens"]
+            return FakeResponse()
+
+    monkeypatch.setattr(inventory_module.httpx, "AsyncClient", FakeAsyncClient)
+    result = asyncio.run(
+        inventory_module._voice_billing_translate_search_query(
+            " ".join(["two kg rice one hundred rupees"] * 25),
+            "te-IN",
+            "unit-test-key",
+            "test-model",
+        )
+    )
+
+    assert len(result) > 320
+    assert result == translated
+    assert captured["max_tokens"] > 220
