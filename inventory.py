@@ -3165,7 +3165,10 @@ def _voice_billing_item_price_evidence_transcripts(
             evidence.append(suffix)
             continue
         prefix_words = words[:start]
-        if any(token in currency_cues for token in prefix_words[-4:]):
+        if any(
+            token in currency_cues or token.startswith("₹")
+            for token in prefix_words[-4:]
+        ):
             evidence.append(" ".join(prefix_words))
     return tuple(evidence)
 
