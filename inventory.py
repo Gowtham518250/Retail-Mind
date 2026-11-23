@@ -2983,21 +2983,6 @@ def _voice_billing_item_evidence_transcripts(
                 or previous in _VOICE_BILLING_NUMBER_WORDS
             ):
                 return words[index - 1].start()
-        return None    def quantity_start(prefix: str) -> Optional[int]:
-        """Find the last explicit number+unit pair before a product anchor."""
-        repaired = _vb_repair_spoken_unit([prefix], _VOICE_BILLING_NUMBER_WORDS)
-        if not repaired:
-            return None
-        words = list(re.finditer(r"\S+", prefix))
-        unit_word = repaired.casefold()
-        for index in range(len(words) - 1, 0, -1):
-            candidate = words[index].group(0).strip(".,;:!?()[]\"'").casefold()
-            previous = words[index - 1].group(0).strip(".,;:!?()[]\"'").casefold()
-            if candidate == unit_word and (
-                re.fullmatch(r"\d+(?:\.\d+)?", previous)
-                or previous in _VOICE_BILLING_NUMBER_WORDS
-            ):
-                return words[index - 1].start()
         return None
 
     def separated_quantity_start(prefix: str) -> Optional[int]:
