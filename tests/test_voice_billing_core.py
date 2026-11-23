@@ -54,13 +54,16 @@ def test_incompatible_unit_is_flagged_not_guessed(monkeypatch):
     assert item["product_id"] is None  # old clients must not deduct stock on unit mismatch
 
 
-def test_quantity_the_speaker_never_said_is_flagged(monkeypatch):
+def test_quantity_the_speaker_never_said_is_rejected_from_the_draft(monkeypatch):
     catalog = [_p(7, "Dettol Soap")]
     result, *_ = _run_voice_billing_endpoint(
         monkeypatch, [_item("Dettol Soap", 8, pid=7)], transcript="3 dettol soap", catalog_products=catalog)
-    item = result["items"][0]
-    assert item["quantity_grounded"] is False and item["needs_confirmation"] is True
-    assert item["product_id"] is None  # legacy clients must not deduct stock on an unverified quantity
+
+    # An ungrounded quantity must not be returned as a billable line. Older
+    # clients may ignore needs_confirmation and otherwise save/deduct stock.
+    assert result["items"] == []
+    assert result["needs_clarification"] is True
+    assert "quantity" in result["clarification_question"].lower()
 
 
 def test_multi_item_bill_matches_each_line_to_its_own_product(monkeypatch):
