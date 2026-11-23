@@ -827,3 +827,49 @@ def test_telugu_vegetable_aliases_match_the_correct_catalog_product(
     assert candidates
     assert candidates[0].product_name == expected_name
     assert all(product.product_name != wrong_name for product in candidates)
+
+
+def test_product_outside_ai_shortlist_resolves_against_full_active_catalog(monkeypatch):
+    import inventory as inventory_module
+
+    product = SimpleNamespace(
+        id=9876,
+        product_name="Nandini GoodLife Milk",
+        sku="ND-GOODLIFE-1L",
+        category="Dairy",
+        unit="l",
+        unit_price=75,
+        current_stock=25,
+        user_id=7,
+        is_active=True,
+    )
+    # Simulate a long-tail product that did not enter the compact LLM prompt.
+    monkeypatch.setattr(
+        inventory_module,
+        "_voice_billing_catalog_candidates",
+        lambda transcript, products, limit=80: [],
+    )
+
+    result, capture, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": None,
+            "product_name_en": "Nandini GoodLife Milk",
+            "product_name_local": "",
+            "quantity": 2,
+            "spoken_unit": "litre",
+            "spoken_price_amount": 80,
+            "spoken_price_kind": "unit",
+            "confidence": 0.98,
+        }],
+        transcript="2 litre Nandini GoodLife Milk 80",
+        language_code="en-IN",
+        catalog_products=[product],
+    )
+
+    assert result["items"][0]["product_id"] == 9876
+    assert result["items"][0]["catalog_matched"] is True
+    assert result["items"][0]["product_name"] == "Nandini GoodLife Milk"
+    assert result["items"][0]["quantity"] == 2.0
+    assert result["items"][0]["unit_price"] == 80.0
+    assert capture["request"]["messages"]
