@@ -29,6 +29,25 @@ function StarRating({ value }: { value: number }) {
   );
 }
 
+async function readJsonObject(response: Response): Promise<Record<string, unknown>> {
+  const body = await response.text();
+  if (!body.trim()) {
+    throw new Error(`The shop service returned an empty response (HTTP ${response.status}).`);
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    throw new Error(`The shop service returned an invalid response (HTTP ${response.status}).`);
+  }
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error(`The shop service returned an unexpected response (HTTP ${response.status}).`);
+  }
+  return payload as Record<string, unknown>;
+}
+
 function Words({ text }: { text: string }) {
   return <>{text}</>;
 }
@@ -53,9 +72,13 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
   useEffect(() => {
     if (tab !== 'reviews' || reviewsLoaded) return;
     const controller = new AbortController();
-    fetch(API_BASE + '/store/shops/' + shopId + '/reviews?limit=20', { cache: 'no-store', signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : { reviews: [] }))
-      .then((data) => setReviews(Array.isArray(data.reviews) ? data.reviews : []))
+    fetch(`/api/marketplace/shops/${shopId}/reviews?limit=20`, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    })
+      .then(async (res) => (res.ok ? readJsonObject(res) : { reviews: [] }))
+      .then((data) => setReviews(Array.isArray(data.reviews) ? data.reviews as typeof reviews : []))
       .catch(() => setReviews([]))
       .finally(() => setReviewsLoaded(true));
     return () => controller.abort();
@@ -88,7 +111,7 @@ export default function StorefrontShell({ shopId, initialData = null }: Storefro
           cache: 'no-store',
           headers: { Accept: 'application/json' },
         });
-        const data = await res.json() as Partial<ShopResponse> & { detail?: string };
+        const data = await readJsonObject(res) as Partial<ShopResponse> & { detail?: string };
         if (!res.ok) {
           throw new Error(data.detail || 'Unable to load this shop right now.');
         }
