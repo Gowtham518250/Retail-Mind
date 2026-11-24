@@ -850,9 +850,16 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     idempotency_key = hashlib.sha256(
         f"{shop_id}:{conversation_id}:{_json_dump(idempotency_facts)}".encode("utf-8")
     ).hexdigest()
+    # Preserve retry/recovery behavior for previews created before the richer
+    # item-fact idempotency key was introduced.
+    legacy_idempotency_key = hashlib.sha256(
+        f"{shop_id}:{conversation_id}:{user_text}".encode("utf-8")
+    ).hexdigest()
     prior = db.query(AgentPendingAction).filter(
         AgentPendingAction.user_id == shop_id,
-        AgentPendingAction.idempotency_key == idempotency_key,
+        AgentPendingAction.idempotency_key.in_(
+            {idempotency_key, legacy_idempotency_key}
+        ),
     ).first()
     if prior:
         if prior.status in {"PENDING", "EXECUTING", "COMPLETED"}:
