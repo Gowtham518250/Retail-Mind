@@ -1,4 +1,5 @@
 """Agent voice recognition must not be biased by the shop product catalogue."""
+import asyncio
 import os
 from types import SimpleNamespace
 
@@ -18,8 +19,7 @@ class _Upload:
         return b"fake-audio-bytes"
 
 
-@pytest.mark.asyncio
-async def test_agent_voice_uses_catalog_blind_asr_and_preserves_detected_language(monkeypatch):
+def test_agent_voice_uses_catalog_blind_asr_and_preserves_detected_language(monkeypatch):
     monkeypatch.setenv("RETAIL_MIND_AGENT_ENABLED", "true")
     monkeypatch.setattr(routes_module, "resolve_shop_id", lambda _user: 42)
 
@@ -51,13 +51,13 @@ async def test_agent_voice_uses_catalog_blind_asr_and_preserves_detected_languag
     monkeypatch.setattr(voice_asr_guard, "assess_transcription", fake_assess)
     monkeypatch.setattr(routes_module, "run_chat_turn", fake_chat_turn)
 
-    result = await routes_module.agent_voice(
+    result = asyncio.run(routes_module.agent_voice(
         _Upload(),
         conversation_id=None,
         language_code="auto",
         current_user={"id": 42},
         db=object(),
-    )
+    ))
 
     assert captured["transcriber"] is routes_module.transcribe_with_sarvam
     assert captured["transcribe_kwargs"]["keyterms"] == []
