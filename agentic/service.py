@@ -19,6 +19,8 @@ from models import (
     AgentPendingAction,
     Invoice,
     InvoiceLineItem,
+    OnlineOrder,
+    Payment,
     StockMovement,
     StockMovementType,
 )
@@ -341,6 +343,351 @@ def _complete_action(db: Session, action: AgentPendingAction, result: dict) -> d
     return result
 
 
+def _agent_action_matches_preview(
+    action: AgentPendingAction,
+    shop_id: int,
+    supplied_preview_hash: str,
+) -> bool:
+    calculated_hash = _action_hash(action.id, shop_id, action.preview, action.payload)
+    return bool(
+        supplied_preview_hash
+        and hmac.compare_digest(action.preview_hash, supplied_preview_hash)
+        and hmac.compare_digest(action.preview_hash, calculated_hash)
+    )
+
+
+def _find_agent_payment(db: Session, shop_id: int, action: AgentPendingAction):
+    return (
+        db.query(Payment, Invoice)
+        .join(Invoice, Invoice.id == Payment.invoice_id)
+        .filter(
+            Payment.idempotency_key == action.payload.get("idempotency_key"),
+            Invoice.user_id == shop_id,
+            Invoice.id == int(action.payload["invoice_id"]),
+        )
+        .first()
+    )
+
+
+def confirm_khata_payment_action(
+    db: Session,
+    *,
+    shop_id: int,
+    action_id: str,
+    supplied_preview_hash: str,
+) -> dict:
+    from khata_router import PaymentRecordRequest, record_khata_payment
+
+    action = db.query(AgentPendingAction).filter(
+        AgentPendingAction.id == action_id,
+        AgentPendingAction.user_id == shop_id,
+        AgentPendingAction.action_type == "KHATA_PAYMENT",
+    ).with_for_update().first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Payment preview not found.")
+    if not _agent_action_matches_preview(action, shop_id, supplied_preview_hash):
+        raise HTTPException(status_code=409, detail="The payment preview changed. Prepare and review it again.")
+
+    existing = _find_agent_payment(db, shop_id, action)
+    if action.status == "COMPLETED":
+        if existing:
+            return {**(action.result or {}), "duplicate_confirmation": True}
+        raise HTTPException(status_code=503, detail="The previous payment entry needs manual verification.")
+    now = _utcnow()
+    if action.status == "EXECUTING":
+        if existing:
+            payment, invoice = existing
+            result = {
+                "success": True,
+                "verified": True,
+                "payment_id": int(payment.id),
+                "invoice_id": int(invoice.id),
+                "invoice_number": str(invoice.invoice_number),
+                "payment_amount": float(payment.amount),
+                "outstanding_after": float(
+                    max(Decimal("0"), Decimal(str(invoice.total_amount or 0)) - Decimal(str(invoice.paid_amount or 0)))
+                ),
+                "message": "The owner-confirmed payment entry is present in the database.",
+            }
+            return _complete_action(db, action, result)
+        if action.started_at and action.started_at > now - timedelta(minutes=2):
+            raise HTTPException(status_code=409, detail="This payment is already being processed. Check the invoice before retrying.")
+        action.status = "PENDING"
+        action.started_at = None
+        action.updated_at = now
+        db.commit()
+        action = db.query(AgentPendingAction).filter(
+            AgentPendingAction.id == action_id,
+            AgentPendingAction.user_id == shop_id,
+        ).with_for_update().first()
+
+    if action.status != "PENDING":
+        raise HTTPException(status_code=409, detail=f"This payment preview cannot be confirmed in state {action.status}.")
+    if action.expires_at <= now:
+        action.status = "EXPIRED"
+        action.updated_at = now
+        db.commit()
+        raise HTTPException(status_code=410, detail="The payment preview expired. Prepare it again.")
+
+    payload = action.payload
+    invoice = db.query(Invoice).filter(
+        Invoice.id == int(payload["invoice_id"]),
+        Invoice.user_id == shop_id,
+        Invoice.status.notin_([InvoiceStatus.CANCELLED, InvoiceStatus.DRAFT]),
+    ).with_for_update().first()
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice is no longer available in this shop.")
+    outstanding = max(Decimal("0.00"), Decimal(str(invoice.total_amount or 0)) - Decimal(str(invoice.paid_amount or 0)))
+    payment_amount = Decimal(str(payload["amount"]))
+    if payment_amount <= 0 or payment_amount > outstanding:
+        raise HTTPException(status_code=409, detail="The invoice balance changed. Prepare a new payment preview.")
+
+    action.status = "EXECUTING"
+    action.started_at = now
+    action.updated_at = now
+    db.commit()
+    try:
+        data = PaymentRecordRequest(
+            invoice_id=int(payload["invoice_id"]),
+            amount=float(payment_amount),
+            payment_method=str(payload["payment_method"]),
+            notes=str(payload["notes"]),
+            idempotency_key=str(payload["idempotency_key"]),
+        )
+        record_khata_payment(data, user_id=shop_id, db=db)
+    except HTTPException:
+        db.rollback()
+        fresh = db.query(AgentPendingAction).filter(
+            AgentPendingAction.id == action_id,
+            AgentPendingAction.user_id == shop_id,
+        ).first()
+        if fresh:
+            prior_payment = _find_agent_payment(db, shop_id, fresh)
+            if prior_payment:
+                payment, refreshed_invoice = prior_payment
+                result = {
+                    "success": True,
+                    "verified": True,
+                    "payment_id": int(payment.id),
+                    "invoice_id": int(refreshed_invoice.id),
+                    "invoice_number": str(refreshed_invoice.invoice_number),
+                    "payment_amount": float(payment.amount),
+                    "message": "The payment entry is present in the database.",
+                }
+                return _complete_action(db, fresh, result)
+            fresh.status = "FAILED"
+            fresh.error_code = "KHATA_PAYMENT_REJECTED"
+            fresh.updated_at = _utcnow()
+            db.commit()
+        raise
+    except Exception as exc:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).exception("Agent Khata payment failed for action %s", action_id)
+        fresh = db.query(AgentPendingAction).filter(
+            AgentPendingAction.id == action_id,
+            AgentPendingAction.user_id == shop_id,
+        ).first()
+        if fresh:
+            prior_payment = _find_agent_payment(db, shop_id, fresh)
+            if prior_payment:
+                payment, refreshed_invoice = prior_payment
+                result = {
+                    "success": True,
+                    "verified": True,
+                    "payment_id": int(payment.id),
+                    "invoice_id": int(refreshed_invoice.id),
+                    "invoice_number": str(refreshed_invoice.invoice_number),
+                    "payment_amount": float(payment.amount),
+                    "message": "The payment entry is present in the database.",
+                }
+                return _complete_action(db, fresh, result)
+            fresh.status = "FAILED"
+            fresh.error_code = "KHATA_PAYMENT_FAILED"
+            fresh.updated_at = _utcnow()
+            db.commit()
+        raise HTTPException(status_code=503, detail="The payment entry could not be verified. Check the invoice before retrying.") from exc
+
+    db.expire_all()
+    fresh = db.query(AgentPendingAction).filter(
+        AgentPendingAction.id == action_id,
+        AgentPendingAction.user_id == shop_id,
+    ).with_for_update().first()
+    saved = _find_agent_payment(db, shop_id, fresh) if fresh else None
+    if not saved:
+        if fresh:
+            fresh.status = "NEEDS_REVIEW"
+            fresh.error_code = "PAYMENT_POST_WRITE_VERIFICATION_FAILED"
+            fresh.updated_at = _utcnow()
+            db.commit()
+        raise HTTPException(status_code=503, detail="The payment was submitted but its database record could not be verified.")
+    payment, refreshed_invoice = saved
+    if Decimal(str(payment.amount)).quantize(Decimal("0.01")) != payment_amount.quantize(Decimal("0.01")):
+        raise HTTPException(status_code=503, detail="The saved payment amount differs from the confirmed preview.")
+    result = {
+        "success": True,
+        "verified": True,
+        "payment_id": int(payment.id),
+        "invoice_id": int(refreshed_invoice.id),
+        "invoice_number": str(refreshed_invoice.invoice_number),
+        "payment_amount": float(payment.amount),
+        "outstanding_after": float(
+            max(Decimal("0"), Decimal(str(refreshed_invoice.total_amount or 0)) - Decimal(str(refreshed_invoice.paid_amount or 0)))
+        ),
+        "payment_status": str(getattr(refreshed_invoice.payment_status, "value", refreshed_invoice.payment_status)),
+        "message": "The owner-confirmed payment was recorded and verified.",
+    }
+    return _complete_action(db, fresh, result)
+
+
+def _order_transition_result(db: Session, shop_id: int, action: AgentPendingAction) -> dict | None:
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == int(action.payload["order_id"]),
+        OnlineOrder.shop_id == shop_id,
+    ).first()
+    if not order:
+        return None
+    current = str(getattr(order.order_status, "value", order.order_status) or "").upper()
+    target = str(action.payload["expected_status"]).upper()
+    later_states = {
+        "ACCEPTED": {"ACCEPTED", "DISPATCHED", "DELIVERED"},
+        "DISPATCHED": {"DISPATCHED", "DELIVERED"},
+        "REJECTED": {"REJECTED"},
+    }
+    if current not in later_states.get(target, {target}):
+        return None
+    return {
+        "success": True,
+        "verified": True,
+        "order_id": int(order.id),
+        "action": str(action.payload["action"]),
+        "order_status": current,
+        "total_amount": float(order.total_amount or 0),
+        "message": f"Order #{order.id} transition was persisted. Current state: {current}.",
+    }
+
+
+def confirm_order_transition_action(
+    db: Session,
+    *,
+    shop_id: int,
+    current_user: dict,
+    action_id: str,
+    supplied_preview_hash: str,
+) -> dict:
+    from online_store import update_order_status
+
+    action = db.query(AgentPendingAction).filter(
+        AgentPendingAction.id == action_id,
+        AgentPendingAction.user_id == shop_id,
+        AgentPendingAction.action_type == "ORDER_TRANSITION",
+    ).with_for_update().first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Order transition preview not found.")
+    if not _agent_action_matches_preview(action, shop_id, supplied_preview_hash):
+        raise HTTPException(status_code=409, detail="The order preview changed. Prepare and review it again.")
+
+    if action.status == "COMPLETED":
+        verified = _order_transition_result(db, shop_id, action)
+        if verified:
+            return {**(action.result or verified), "duplicate_confirmation": True}
+        raise HTTPException(status_code=503, detail="The previous order transition needs manual verification.")
+
+    now = _utcnow()
+    if action.status == "EXECUTING":
+        verified = _order_transition_result(db, shop_id, action)
+        if verified:
+            return _complete_action(db, action, verified)
+        if action.started_at and action.started_at > now - timedelta(minutes=2):
+            raise HTTPException(status_code=409, detail="This order is already being processed. Refresh the order screen before retrying.")
+        action.status = "PENDING"
+        action.started_at = None
+        action.updated_at = now
+        db.commit()
+        action = db.query(AgentPendingAction).filter(
+            AgentPendingAction.id == action_id,
+            AgentPendingAction.user_id == shop_id,
+        ).with_for_update().first()
+
+    if action.status != "PENDING":
+        raise HTTPException(status_code=409, detail=f"This order preview cannot be confirmed in state {action.status}.")
+    if action.expires_at <= now:
+        action.status = "EXPIRED"
+        action.updated_at = now
+        db.commit()
+        raise HTTPException(status_code=410, detail="The order preview expired. Prepare it again.")
+
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == int(action.payload["order_id"]),
+        OnlineOrder.shop_id == shop_id,
+    ).with_for_update().first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    current = str(getattr(order.order_status, "value", order.order_status) or "").upper()
+    if current != action.payload["expected_current_status"]:
+        raise HTTPException(status_code=409, detail="The order status changed since the preview. Refresh and prepare a new action.")
+
+    action.status = "EXECUTING"
+    action.started_at = now
+    action.updated_at = now
+    db.commit()
+    try:
+        update_order_status(
+            order_id=int(action.payload["order_id"]),
+            action=str(action.payload["action"]),
+            data=None,
+            db=db,
+            current_user=current_user,
+        )
+    except HTTPException:
+        db.rollback()
+        fresh = db.query(AgentPendingAction).filter(
+            AgentPendingAction.id == action_id,
+            AgentPendingAction.user_id == shop_id,
+        ).first()
+        verified = _order_transition_result(db, shop_id, fresh) if fresh else None
+        if fresh and verified:
+            return _complete_action(db, fresh, verified)
+        if fresh:
+            fresh.status = "FAILED"
+            fresh.error_code = "ORDER_TRANSITION_REJECTED"
+            fresh.updated_at = _utcnow()
+            db.commit()
+        raise
+    except Exception as exc:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).exception("Agent order transition failed for action %s", action_id)
+        fresh = db.query(AgentPendingAction).filter(
+            AgentPendingAction.id == action_id,
+            AgentPendingAction.user_id == shop_id,
+        ).first()
+        verified = _order_transition_result(db, shop_id, fresh) if fresh else None
+        if fresh and verified:
+            return _complete_action(db, fresh, verified)
+        if fresh:
+            fresh.status = "FAILED"
+            fresh.error_code = "ORDER_TRANSITION_FAILED"
+            fresh.updated_at = _utcnow()
+            db.commit()
+        raise HTTPException(status_code=503, detail="The order transition could not be verified. Refresh the order screen before retrying.") from exc
+
+    db.expire_all()
+    fresh = db.query(AgentPendingAction).filter(
+        AgentPendingAction.id == action_id,
+        AgentPendingAction.user_id == shop_id,
+    ).with_for_update().first()
+    verified = _order_transition_result(db, shop_id, fresh) if fresh else None
+    if not fresh or not verified:
+        if fresh:
+            fresh.status = "NEEDS_REVIEW"
+            fresh.error_code = "ORDER_POST_WRITE_VERIFICATION_FAILED"
+            fresh.updated_at = _utcnow()
+            db.commit()
+        raise HTTPException(status_code=503, detail="Order status was submitted but could not be verified.")
+    return _complete_action(db, fresh, verified)
+
+
 def confirm_invoice_action(
     db: Session,
     *,
@@ -498,3 +845,35 @@ def confirm_invoice_action(
             db.commit()
         raise HTTPException(status_code=503, detail="The invoice was submitted but its records could not be fully verified. Contact support before retrying.")
     return _complete_action(db, fresh, verified)
+
+
+def confirm_agent_action(
+    db: Session,
+    *,
+    shop_id: int,
+    current_user: dict,
+    action_id: str,
+    supplied_preview_hash: str,
+) -> dict:
+    action_type = db.query(AgentPendingAction.action_type).filter(
+        AgentPendingAction.id == action_id,
+        AgentPendingAction.user_id == shop_id,
+    ).scalar()
+    if action_type == "CREATE_INVOICE":
+        return confirm_invoice_action(
+            db, shop_id=shop_id, current_user=current_user,
+            action_id=action_id, supplied_preview_hash=supplied_preview_hash,
+        )
+    if action_type == "KHATA_PAYMENT":
+        return confirm_khata_payment_action(
+            db, shop_id=shop_id, action_id=action_id,
+            supplied_preview_hash=supplied_preview_hash,
+        )
+    if action_type == "ORDER_TRANSITION":
+        return confirm_order_transition_action(
+            db, shop_id=shop_id, current_user=current_user,
+            action_id=action_id, supplied_preview_hash=supplied_preview_hash,
+        )
+    raise HTTPException(status_code=409, detail="This action type is not available for confirmation.")
+
+
