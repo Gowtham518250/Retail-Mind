@@ -13,7 +13,7 @@ import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -69,12 +69,12 @@ class OrderSummaryArgs(ToolArgs):
 class KhataPaymentPreviewArgs(ToolArgs):
     invoice_id: int = Field(..., gt=0)
     amount: Decimal = Field(..., gt=0, le=Decimal("100000000"))
-    payment_method: str = Field(default="CASH", max_length=16)
+    payment_method: Literal["CASH", "UPI", "CARD", "TRANSFER"] = "CASH"
 
 
 class OrderTransitionPreviewArgs(ToolArgs):
     order_id: int = Field(..., gt=0)
-    action: str = Field(..., max_length=16)
+    action: Literal["ACCEPT", "DISPATCH", "REJECT"]
 
 
 TOOL_DEFINITIONS = [
