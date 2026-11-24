@@ -1,0 +1,26 @@
+name: Customer Android App CI
+
+on:
+  push:
+    paths:
+      - "customer-android/**"
+  pull_request:
+    paths:
+      - "customer-android/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: customer-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - run: gradle :app:assembleDebug
