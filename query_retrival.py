@@ -1709,8 +1709,8 @@ def _fast_product_sales_history_query(
                     "product_unit": str(row.get("product_unit") or "units"),
                 }
             results.append({
-                "source_row_id": int(row["source_row_id"]) if row.get("source_row_id") is not None else None,
-                "invoice_id": int(row["invoice_id"]) if row.get("invoice_id") is not None else None,
+                # Keep the visible transaction table compact for mobile. Aggregate
+                # KPIs remain in the answer/summary above, not repeated on every row.
                 "invoice_number": row.get("invoice_number"),
                 "customer_name": row.get("customer_name"),
                 "product_name": product_name,
@@ -1723,9 +1723,6 @@ def _fast_product_sales_history_query(
                     if row.get("current_selling_price") is not None else None
                 ),
                 "product_unit": str(row.get("product_unit") or "units"),
-                "sales_count": int(row.get("sales_count") or 0),
-                "total_quantity_sold": float(row.get("total_quantity_sold") or 0),
-                "total_sales_revenue": float(row.get("total_sales_revenue") or 0),
                 "sale_source": str(row.get("sale_source") or ""),
             })
 
