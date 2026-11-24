@@ -3497,12 +3497,14 @@ async def parse_voice_billing(
             match_reasons = list(resolution.reasons)
         elif (
             product is not None
+            and resolution.status == "none"
             and _voice_billing_product_has_evidence(
                 f"{english_transcript} {parser_transcript}", product
             )
         ):
-            # The model-provided ID is checked against this shop's full active
-            # catalog and is retained only when the utterance supports the item.
+            # The model-provided ID may recover a long-tail catalog item only
+            # when the resolver found no competing candidates. An explicit
+            # ambiguous result (for example same-name pack sizes) must fail closed.
             match_reasons = ["validated_catalog_id_with_spoken_product_evidence"]
         else:
             # Never assign stock unless the spoken words uniquely identify a catalog item.
