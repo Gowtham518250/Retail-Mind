@@ -832,6 +832,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     invoice_number = f"AIM-{datetime.now(IST):%Y%m%d}-{action_id.replace('-', '')[:10].upper()}"
     customer_name = customer.customer_name if customer else ("Cash Customer" if not customer_phone else "Customer")
     preview = {
+        "operation": "CREATE_INVOICE",
         "invoice_number": invoice_number,
         "customer_name": customer_name,
         "customer_phone": customer_phone,
