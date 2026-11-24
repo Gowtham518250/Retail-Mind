@@ -9,6 +9,7 @@ on:
       - production-fix-2026-08-18-playstore
     paths:
       - "agentic/**"
+      - "attendance.py"
       - "requirements.txt"
       - "render.yaml"
       - "sarvam_tts.py"
