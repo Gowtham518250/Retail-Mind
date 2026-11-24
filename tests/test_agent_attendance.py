@@ -5,7 +5,11 @@ from zoneinfo import ZoneInfo
 import pytest
 from pydantic import ValidationError
 
-from agentic.attendance_actions import prepare_attendance_record
+from agentic.attendance_actions import (
+    _existing_attendance_note,
+    _merge_attendance_note,
+    prepare_attendance_record,
+)
 from agentic.registry import list_capabilities
 from agentic.tools import AttendanceRecordPreviewArgs, TOOL_DEFINITIONS
 from models import AgentPendingAction, Attendance, Worker
@@ -188,3 +192,44 @@ def test_attendance_manage_remains_off_when_agent_flag_is_off(monkeypatch):
     attendance = capabilities["attendance.manage"]
     assert attendance["implemented"] is True
     assert attendance["enabled"] is False
+
+def test_attendance_note_merge_preserves_shift_session_metadata():
+    import json
+
+    original = {
+        "_retail_mind_sessions": {
+            "morning": {
+                "label": "Morning",
+                "window": "9:00 AM–2:00 PM",
+                "check_in_time": "2026-11-24T09:00:00+05:30",
+                "check_out_time": "2026-11-24T13:00:00+05:30",
+                "working_hours": 4.0,
+            },
+            "active_session": "afternoon",
+        },
+        "other_existing_key": "keep-me",
+    }
+    merged = _merge_attendance_note(json.dumps(original), "Owner correction")
+    parsed = json.loads(merged)
+
+    assert parsed["_retail_mind_sessions"] == original["_retail_mind_sessions"]
+    assert parsed["other_existing_key"] == "keep-me"
+    assert parsed["_retail_mind_agent_note"] == "Owner correction"
+    assert _existing_attendance_note(merged) == "Owner correction"
+
+
+def test_blank_attendance_note_does_not_rewrite_session_metadata():
+    import json
+
+    original = json.dumps({
+        "_retail_mind_sessions": {"morning": {"working_hours": 3.5}},
+        "_retail_mind_agent_note": "Previous correction",
+    }, separators=(",", ":"))
+    assert _merge_attendance_note(original, "   ") == original
+    assert _existing_attendance_note(original) == "Previous correction"
+
+
+def test_attendance_note_merge_keeps_legacy_plain_text():
+    assert _merge_attendance_note("Existing note", "New note") == "Existing note\nNew note"
+    assert _merge_attendance_note(None, "New note") == "New note"
+
