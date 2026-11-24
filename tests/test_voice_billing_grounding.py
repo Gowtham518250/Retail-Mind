@@ -406,6 +406,7 @@ def test_telugu_multi_item_extraction_ignores_wrong_catalog_prices(monkeypatch):
     assert '"product_id"' not in prompt
     assert "Authenticated shop catalog candidates" not in prompt
     assert '"product_id":11' not in prompt
+    print("TELUGU_MULTI_ITEM_DEBUG", result)
     assert result["needs_clarification"] is True  # unnamed 'one 20' is never invented
     assert [item["product_name"] for item in result["items"]] == [
         "Mutton", "Coffee", "Idli", "Chutney", "Potato"
@@ -449,6 +450,7 @@ def test_delimited_count_based_products_keep_quantities_separate_without_units(m
         translated_text="3 soap 30; 5 tea 20",
     )
 
+    print("COUNT_BASED_DEBUG", result)
     assert result["needs_clarification"] is False, result
     assert [item["product_name"] for item in result["items"]] == ["Soap", "Tea"]
     assert [item["quantity"] for item in result["items"]] == [3.0, 5.0]
