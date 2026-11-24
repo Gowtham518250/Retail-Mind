@@ -198,7 +198,9 @@ def test_registry_keeps_delivery_and_legacy_financial_writes_disabled(monkeypatc
     assert capabilities["khata.record"]["enabled"] is True
     assert capabilities["khata.record"]["requires_confirmation"] is True
     assert capabilities["orders.manage"]["enabled"] is False
-    assert capabilities["attendance.manage"]["enabled"] is False
+    assert capabilities["attendance.manage"]["implemented"] is True
+    assert capabilities["attendance.manage"]["enabled"] is True
+    assert capabilities["attendance.manage"]["requires_confirmation"] is True
 
 
 def test_agent_routes_are_registered():
