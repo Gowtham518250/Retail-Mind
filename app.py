@@ -128,6 +128,7 @@ from realtime import router as realtime_router
 from durable_sync import router as durable_sync_router
 from health_routes import router as health_router
 from agentic.routes import router as agent_router
+from agentic.mcp_server import mount_mcp_server
 
 # DB initialization
 from db import engine, get_db
@@ -597,6 +598,8 @@ api.include_router(realtime_router)
 api.include_router(durable_sync_router)
 api.include_router(health_router)
 api.include_router(agent_router)
+# Optional Streamable HTTP MCP endpoint; default-off in Render.
+mount_mcp_server(api)
 
 # 🚀 PERFORMANCE: Setup performance monitoring middleware
 setup_performance_middleware(api)
