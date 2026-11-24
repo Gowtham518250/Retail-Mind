@@ -12,6 +12,7 @@ _IMPLEMENTED = {
     "attendance.lookup",
     "analytics.read",
     "khata.payment",
+    "khata.record",
     "orders.transition",
     "voice.transcription",
     "voice.synthesis",
@@ -29,7 +30,7 @@ _CAPABILITIES: tuple[dict[str, Any], ...] = (
     {"name": "orders.transition", "description": "Accept, dispatch or reject an online order via the existing owner route; requires confirmation. Delivery, cancellation and refunds remain disabled.", "risk": "business_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "voice.transcription", "description": "Transcribe owner voice input using Sarvam Saaras and process it through the Groq assistant.", "risk": "external_provider", "requires_confirmation": False, "provider": "groq_sarvam"},
     {"name": "voice.synthesis", "description": "Synthesize an assistant response using Sarvam Bulbul for supported Indian languages.", "risk": "external_provider", "requires_confirmation": False, "provider": "sarvam"},
-    {"name": "khata.record", "description": "Record credit or repayment. Disabled until a single canonical ledger write path and replay protection are verified.", "risk": "financial_write", "requires_confirmation": True, "provider": "disabled"},
+    {"name": "khata.record", "description": "Add legacy Khata credit or record a repayment using an atomic, idempotent history and journal write after owner confirmation.", "risk": "financial_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "orders.manage", "description": "Accept, reject, cancel or refund an order. Disabled until every transition is wrapped and tested.", "risk": "business_write", "requires_confirmation": True, "provider": "disabled"},
     {"name": "attendance.manage", "description": "Change attendance or payroll records. Disabled until approved correction workflow is defined.", "risk": "employee_data_write", "requires_confirmation": True, "provider": "disabled"},
 )
