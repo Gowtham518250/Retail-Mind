@@ -3414,12 +3414,6 @@ async def parse_voice_billing(
 
     # Normalize non-English/native-script and common Romanized Indian speech BEFORE matching.
     model = (os.getenv("GROQ_VOICE_BILLING_MODEL") or "qwen/qwen3.8-27b").strip()
-    products = (
-        db.query(Product)
-        .filter(Product.user_id == int(user_id), Product.is_active == True)
-        .order_by(Product.product_name.asc())
-        .all()
-    )
     translated_search_text = ""
     # Always run the multilingual AI extractor. The deterministic catalogue fast
     # path is intentionally bypassed: it can only identify known catalogue items
@@ -3454,7 +3448,6 @@ async def parse_voice_billing(
     # quantities, or prices.
     candidates = []
     catalog = []
-    catalog_by_id = {int(product.id): product for product in products}
 
     if fast_parsed is not None:
         # Deterministic parse: no translation or extraction LLM call. Every line still
@@ -3553,6 +3546,16 @@ async def parse_voice_billing(
         except Exception:
             logging.warning("Groq voice billing returned invalid JSON")
             raise HTTPException(status_code=502, detail="Voice billing AI returned an unreadable result. Please try again.")
+
+    # Only after the AI has produced source-grounded item lines do we load the
+    # authenticated shop catalog for optional stock linkage. Product lookup can
+    # neither influence ASR/translation/extraction nor silently rename a spoken item.
+    products = (
+        db.query(Product)
+        .filter(Product.user_id == int(user_id), Product.is_active == True)
+        .order_by(Product.product_name.asc())
+        .all()
+    )
 
     output_items = []
     unresolved = []
