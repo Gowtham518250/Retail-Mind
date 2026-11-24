@@ -212,7 +212,7 @@ def _record_tool_execution(
     db: Session,
     *,
     shop_id: int,
-    conversation_id: str,
+    conversation_id: Optional[str],
     request_id: str,
     tool_name: str,
     started_at: float,
@@ -915,7 +915,7 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
     shop_id = int(context["shop_id"])
     started = time.perf_counter()
     request_id = str(context["request_id"])
-    conversation_id = str(context["conversation_id"])
+    conversation_id = context.get("conversation_id")
     result: dict[str, Any]
     error_code = None
 
