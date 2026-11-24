@@ -235,7 +235,7 @@ def agent_conversation_messages(
     current_user: dict = Depends(owner_only),
     db: Session = Depends(get_db),
 ):
-    conversation_id = _validate_conversation_id(conversation_id)
+    conversation_id = _parse_conversation_id(conversation_id)
     return get_conversation_messages(
         db,
         shop_id=resolve_shop_id(current_user),
@@ -250,7 +250,7 @@ def agent_delete_conversation(
     current_user: dict = Depends(owner_only),
     db: Session = Depends(get_db),
 ):
-    conversation_id = _validate_conversation_id(conversation_id)
+    conversation_id = _parse_conversation_id(conversation_id)
     return delete_conversation(
         db,
         shop_id=resolve_shop_id(current_user),
