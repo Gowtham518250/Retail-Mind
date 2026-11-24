@@ -191,8 +191,18 @@ def _forced_action_tool(state: AgentState) -> str | None:
     )
     khata_action = re.search(
         r"\b(?:add|create|open|put|record|credit|lend|give|enter|repay|paid|payment|"
-        r"return|received|collect)\b",
+        r"return|received|collect|jama|jamaa|daalo|dalo|jodo|likho|rakho)\b",
         message,
+    ) or any(
+        term in message
+        for term in (
+            "జమ", "చేర్చు", "వేయి", "రాయు", "డిపాజిట్",
+            "जमा", "डालो", "जोड़ो", "लिखो", "रखो",
+            "சேர்", "பதிவு", "எழுது", "சேர்க்க",
+            "ಸೇರಿಸು", "ಬರೆಯು", "ನಮೂದಿಸು",
+            "ചേർക്കു", "എഴുതു", "രേഖപ്പെടുത്തു",
+            "ਜਮ੍ਹਾਂ", "ਜੋੜੋ", "ਲਿਖੋ", "ਪਾਓ", "ଦିଅ", "ଯୋଡ଼",
+        )
     )
     has_khata = any(term in message for term in khata_terms)
     if (
