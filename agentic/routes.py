@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -42,7 +43,7 @@ _ALLOWED_AUDIO_TYPES = {
 _MAX_AUDIO_BYTES = 8 * 1024 * 1024
 
 
-def _validate_conversation_id(value: Optional[str]) -> Optional[str]:
+def _parse_conversation_id(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
     try:
@@ -136,8 +137,13 @@ async def agent_voice(
     db: Session = Depends(get_db),
 ):
     """Transcribe a short owner voice request using the existing Sarvam adapter."""
+    if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        raise HTTPException(status_code=503, detail="The Retail Mind AI assistant is not enabled on this deployment.")
     shop_id = resolve_shop_id(current_user)
-    conversation_id = _validate_conversation_id(conversation_id)
+    try:
+        conversation_id = _parse_conversation_id(conversation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     content_type = (audio.content_type or "").split(";", 1)[0].strip().lower()
     if content_type not in _ALLOWED_AUDIO_TYPES:
         raise HTTPException(status_code=415, detail="Unsupported audio format.")
@@ -263,7 +269,7 @@ def agent_pending_actions(
         .filter(
             AgentPendingAction.user_id == shop_id,
             AgentPendingAction.status == "PENDING",
-            AgentPendingAction.expires_at > __import__("datetime").datetime.utcnow(),
+            AgentPendingAction.expires_at > datetime.utcnow(),
         )
         .order_by(AgentPendingAction.created_at.desc())
         .limit(30)
@@ -327,6 +333,6 @@ def cancel_agent_action(
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"Action cannot be cancelled in state {action.status}.")
     action.status = "CANCELLED"
-    action.updated_at = __import__("datetime").datetime.utcnow()
+    action.updated_at = datetime.utcnow()
     db.flush()
     return {"success": True, "action_id": action_id, "status": "CANCELLED"}
