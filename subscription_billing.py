@@ -118,6 +118,103 @@ async def _fetch_cashfree_subscription_status(
     return provider_status, payload
 
 
+def _cashfree_authorization_status(payload: dict) -> str:
+    """Read Cashfree auth status across the API and webhook payload spellings."""
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    details = (
+        data.get("subscription_details")
+        or data.get("subscription")
+        or payload.get("subscription_details")
+        or payload.get("subscription")
+        or {}
+    )
+    sources = (payload, data, details)
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        auth = (
+            source.get("authorization_details")
+            or source.get("authorisation_details")
+            or source.get("authorization")
+            or source.get("authorisation")
+            or {}
+        )
+        if isinstance(auth, dict):
+            value = (
+                auth.get("authorization_status")
+                or auth.get("authorisation_status")
+                or auth.get("status")
+            )
+            if value:
+                return str(value).strip().upper()
+        value = source.get("authorization_status") or source.get("authorisation_status")
+        if value:
+            return str(value).strip().upper()
+    return ""
+
+
+def _cashfree_auth_succeeded(auth_status: str, subscription_status: str = "") -> bool:
+    normalized_auth = str(auth_status or "").strip().upper()
+    successful_auth = {
+        "SUCCESS", "SUCCEEDED", "AUTHORIZED", "AUTHORISED", "ACTIVE", "APPROVED",
+    }
+    # An explicit failure must never be overridden by a conflicting or stale
+    # provider subscription status.
+    if normalized_auth and _cashfree_auth_failed(normalized_auth):
+        return False
+    return (
+        normalized_auth in successful_auth
+        or str(subscription_status or "").strip().upper() == "ACTIVE"
+    )
+
+
+def _cashfree_auth_failed(auth_status: str) -> bool:
+    return str(auth_status or "").strip().upper() in {
+        "FAILED", "FAILURE", "REJECTED", "DECLINED", "CANCELLED",
+        "CANCELED", "EXPIRED", "AUTHORIZATION_FAILED", "AUTHENTICATION_FAILED",
+    }
+
+
+def _subscription_period_end(start: datetime, billing_interval: str) -> datetime:
+    if str(billing_interval or "").upper() == "YEARLY":
+        next_year = start.year + 1
+        return start.replace(
+            year=next_year,
+            day=min(start.day, calendar.monthrange(next_year, start.month)[1]),
+        )
+    next_month = start.month + 1
+    next_year = start.year + (1 if next_month > 12 else 0)
+    next_month = 1 if next_month > 12 else next_month
+    return start.replace(
+        year=next_year,
+        month=next_month,
+        day=min(start.day, calendar.monthrange(next_year, next_month)[1]),
+    )
+
+
+def _activate_authorized_subscription(db: Session, row, now: datetime, mandate_status: str) -> None:
+    """Activate entitlements only after Cashfree confirms mandate authorization."""
+    start = row["current_period_start"] or now
+    end = row["current_period_end"] or _subscription_period_end(
+        start, row["billing_interval"]
+    )
+    db.execute(text("""
+        UPDATE rm_shop_subscriptions
+        SET status='ACTIVE',
+            mandate_status=:mandate_status,
+            current_period_start=COALESCE(current_period_start,:start),
+            current_period_end=COALESCE(current_period_end,:end),
+            grace_period_end=NULL,
+            updated_at=NOW()
+        WHERE id=:id AND status IN ('CREATING','PENDING_AUTH','ACTIVE')
+    """), {
+        "mandate_status": mandate_status or "AUTHORIZED",
+        "start": start,
+        "end": end,
+        "id": row["id"],
+    })
+
+
 def _cashfree_plan_id(plan_code: str, billing_interval: str, amount_paise: int) -> str:
     """Return a stable, price-versioned Cashfree plan identifier."""
     interval = "monthly" if billing_interval == "MONTHLY" else "yearly"
@@ -627,6 +724,7 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
                 WHERE id=:id AND status='PENDING_AUTH'
             """), {"id": pending["id"]})
             # Do not commit here: the advisory lock must cover all pending cleanup.
+            continue
 
         if pending_app_id is None:
             pending_app_id, pending_secret, pending_base = _cashfree_config()
@@ -766,6 +864,181 @@ async def create_subscription(body: CreateSubscriptionBody, db: Session = Depend
             },
         )
 
+class ReconcileSubscriptionBody(BaseModel):
+    subscription_id: Optional[str] = Field(default=None, max_length=250)
+
+
+@router.post("/api/billing/subscriptions/reconcile")
+async def reconcile_pending_subscription(
+    body: ReconcileSubscriptionBody,
+    db: Session = Depends(get_db),
+    owner: dict = Depends(owner_only),
+):
+    """Reconcile the owner's pending checkout against Cashfree's authoritative status."""
+    shop_id = _shop_id(owner)
+    requested_id = str(body.subscription_id or "").strip()
+    if requested_id:
+        row = db.execute(text("""
+            SELECT *
+            FROM rm_shop_subscriptions
+            WHERE shop_id=:shop AND cashfree_subscription_id=:cashfree_id
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        """), {"shop": shop_id, "cashfree_id": requested_id}).mappings().first()
+    else:
+        row = db.execute(text("""
+            SELECT *
+            FROM rm_shop_subscriptions
+            WHERE shop_id=:shop AND status='PENDING_AUTH'
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        """), {"shop": shop_id}).mappings().first()
+
+    if not row:
+        return {
+            "success": True,
+            "reconciled": False,
+            "status": "NO_PENDING_CHECKOUT",
+            "message": "There is no pending Cashfree checkout to reconcile.",
+        }
+
+    local_status = str(row["status"] or "").upper()
+    cashfree_id = str(row["cashfree_subscription_id"] or "").strip()
+    if local_status == "ACTIVE":
+        return {
+            "success": True,
+            "reconciled": False,
+            "status": "ACTIVE",
+            "plan_code": row["plan_code"],
+        }
+    if local_status != "PENDING_AUTH" or not cashfree_id:
+        return {
+            "success": True,
+            "reconciled": False,
+            "status": local_status or "UNKNOWN",
+            "message": "The checkout is not ready for Cashfree status reconciliation.",
+        }
+
+    app_id, secret, base = _cashfree_config()
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            provider_status, provider_payload = await _fetch_cashfree_subscription_status(
+                client,
+                base=base,
+                app_id=app_id,
+                secret=secret,
+                cashfree_subscription_id=cashfree_id,
+            )
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        logger.exception(
+            "Cashfree pending subscription reconciliation failed: shop_id=%s subscription_record_id=%s",
+            shop_id,
+            row["id"],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "CASHFREE_SUBSCRIPTION_STATUS_UNCONFIRMED",
+                "message": "Retail Mind could not verify the Cashfree authorization yet. Your plan was not changed. Please retry status refresh.",
+            },
+        ) from exc
+
+    auth_status = _cashfree_authorization_status(provider_payload)
+    now = datetime.utcnow()
+    if _cashfree_auth_succeeded(auth_status, provider_status):
+        _activate_authorized_subscription(
+            db,
+            row,
+            now,
+            auth_status or "AUTHORIZED",
+        )
+        db.commit()
+        logger.info(
+            "CASHFREE_SUBSCRIPTION_ACTIVATED shop_id=%s subscription_record_id=%s provider_status=%s auth_status=%s source=reconciliation",
+            shop_id,
+            row["id"],
+            provider_status,
+            auth_status or "UNKNOWN",
+        )
+        return {
+            "success": True,
+            "reconciled": True,
+            "status": "ACTIVE",
+            "plan_code": row["plan_code"],
+            "mandate_status": auth_status or "AUTHORIZED",
+            "message": "Cashfree confirmed the mandate authorization. Your plan is active.",
+        }
+
+    terminal_provider_statuses = {"CANCELLED", "CANCELED", "COMPLETED", "EXPIRED"}
+    if provider_status in terminal_provider_statuses:
+        db.execute(text("""
+            UPDATE rm_shop_subscriptions
+            SET status='CANCELLED',
+                mandate_status=:mandate_status,
+                cancelled_at=COALESCE(cancelled_at,:now),
+                updated_at=NOW()
+            WHERE id=:id AND shop_id=:shop AND status='PENDING_AUTH'
+        """), {
+            "mandate_status": auth_status or provider_status,
+            "now": now,
+            "id": row["id"],
+            "shop": shop_id,
+        })
+        db.commit()
+        return {
+            "success": True,
+            "reconciled": True,
+            "status": "CANCELLED",
+            "plan_code": row["plan_code"],
+            "mandate_status": auth_status or provider_status,
+            "message": "Cashfree reports that this checkout is no longer active. You can select a plan to start a new checkout.",
+        }
+
+    if _cashfree_auth_failed(auth_status):
+        db.execute(text("""
+            UPDATE rm_shop_subscriptions
+            SET status='PAYMENT_FAILED', mandate_status=:mandate_status,
+                grace_period_end=NULL, updated_at=NOW()
+            WHERE id=:id AND shop_id=:shop AND status='PENDING_AUTH'
+        """), {
+            "mandate_status": auth_status,
+            "id": row["id"],
+            "shop": shop_id,
+        })
+        db.commit()
+        return {
+            "success": True,
+            "reconciled": True,
+            "status": "PAYMENT_FAILED",
+            "plan_code": row["plan_code"],
+            "mandate_status": auth_status,
+            "message": "Cashfree did not authorize this mandate. You can retry checkout.",
+        }
+
+    if auth_status:
+        db.execute(text("""
+            UPDATE rm_shop_subscriptions
+            SET mandate_status=:mandate_status, updated_at=NOW()
+            WHERE id=:id AND shop_id=:shop AND status='PENDING_AUTH'
+        """), {
+            "mandate_status": auth_status,
+            "id": row["id"],
+            "shop": shop_id,
+        })
+        db.commit()
+    return {
+        "success": True,
+        "reconciled": False,
+        "status": "PENDING_AUTH",
+        "provider_status": provider_status,
+        "mandate_status": auth_status or "PENDING",
+        "plan_code": row["plan_code"],
+        "message": "Cashfree has not confirmed authorization yet. Complete the mandate approval or refresh again shortly.",
+    }
+
+
 @router.post("/api/billing/subscriptions/{subscription_id}/cancel")
 async def cancel_subscription(subscription_id: int, db: Session = Depends(get_db), owner: dict = Depends(owner_only)):
     shop_id = _shop_id(owner)
@@ -798,74 +1071,214 @@ async def cashfree_subscription_webhook(request: Request, db: Session = Depends(
     secret = (os.getenv("CASHFREE_WEBHOOK_SECRET") or os.getenv("CASHFREE_SECRET_KEY") or "").strip()
     if not secret or not signature or not timestamp:
         raise HTTPException(status_code=401, detail="Invalid webhook signature.")
-    expected = base64.b64encode(hmac.new(secret.encode(), (timestamp + raw.decode("utf-8")).encode(), hashlib.sha256).digest()).decode()
+    expected = base64.b64encode(
+        hmac.new(secret.encode(), (timestamp + raw.decode("utf-8")).encode(), hashlib.sha256).digest()
+    ).decode()
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=401, detail="Invalid webhook signature.")
     try:
         payload = json.loads(raw.decode("utf-8"))
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid webhook payload.")
-    event_type = str(payload.get("type") or payload.get("event_type") or "UNKNOWN")
+
+    event_type = str(payload.get("type") or payload.get("event_type") or "UNKNOWN").strip().upper()
     event_key = request.headers.get("x-idempotency-key") or hashlib.sha256(raw).hexdigest()
     inserted = db.execute(text("""
         INSERT INTO rm_subscription_webhook_events(event_key,event_type,payload)
         VALUES(:key,:type,CAST(:payload AS jsonb)) ON CONFLICT(event_key) DO NOTHING RETURNING id
-    """), {"key":event_key,"type":event_type,"payload":json.dumps(payload)}).first()
+    """), {"key": event_key, "type": event_type, "payload": json.dumps(payload)}).first()
     if not inserted:
         db.commit()
         return {"success": True, "duplicate": True}
+
     data = payload.get("data") or {}
-    details = data.get("subscription_details") or data.get("subscription") or {}
+    details = (
+        data.get("subscription_details")
+        or data.get("subscription")
+        or payload.get("subscription_details")
+        or {}
+    )
     payment = data.get("payment_details") or data.get("payment") or {}
-    cf_id = details.get("subscription_id") or data.get("subscription_id") or details.get("cf_subscription_id")
+    cf_id = (
+        details.get("subscription_id")
+        or data.get("subscription_id")
+        or details.get("cf_subscription_id")
+        or data.get("cf_subscription_id")
+    )
     if cf_id:
-        row = db.execute(text("SELECT * FROM rm_shop_subscriptions WHERE cashfree_subscription_id=:id"), {"id":str(cf_id)}).mappings().first()
+        row = db.execute(text("""
+            SELECT * FROM rm_shop_subscriptions
+            WHERE cashfree_subscription_id=:id
+            FOR UPDATE
+        """), {"id": str(cf_id)}).mappings().first()
     else:
         row = None
-    if row:
+
+    if not row:
+        logger.warning(
+            "CASHFREE_SUBSCRIPTION_WEBHOOK_UNMATCHED event_type=%s event_key=%s subscription_id=%s",
+            event_type,
+            event_key,
+            str(cf_id or "")[:120],
+        )
+    else:
         now = datetime.utcnow()
+        auth_status = _cashfree_authorization_status({
+            "data": data,
+            "subscription_details": details,
+        })
+        provider_subscription_status = str(
+            details.get("subscription_status")
+            or data.get("subscription_status")
+            or ""
+        ).strip().upper()
+
         if event_type == "SUBSCRIPTION_AUTH_STATUS":
-            auth = data.get("authorization_details") or details.get("authorization_details") or {}
-            auth_status = str(auth.get("authorization_status") or data.get("authorization_status") or "PENDING").upper()
-            db.execute(text("UPDATE rm_shop_subscriptions SET mandate_status=:status,updated_at=NOW() WHERE id=:id"), {"status":auth_status,"id":row["id"]})
+            normalized_auth = auth_status or "PENDING"
+            if _cashfree_auth_succeeded(normalized_auth, provider_subscription_status):
+                _activate_authorized_subscription(
+                    db,
+                    row,
+                    now,
+                    normalized_auth if normalized_auth != "ACTIVE" else "AUTHORIZED",
+                )
+                logger.info(
+                    "CASHFREE_SUBSCRIPTION_ACTIVATED shop_id=%s subscription_record_id=%s event_type=%s auth_status=%s",
+                    row["shop_id"],
+                    row["id"],
+                    event_type,
+                    normalized_auth,
+                )
+            elif _cashfree_auth_failed(normalized_auth):
+                db.execute(text("""
+                    UPDATE rm_shop_subscriptions
+                    SET status='PAYMENT_FAILED', mandate_status=:mandate_status,
+                        grace_period_end=NULL, updated_at=NOW()
+                    WHERE id=:id AND status IN ('CREATING','PENDING_AUTH')
+                """), {"mandate_status": normalized_auth, "id": row["id"]})
+            else:
+                db.execute(text("""
+                    UPDATE rm_shop_subscriptions
+                    SET mandate_status=:status, updated_at=NOW()
+                    WHERE id=:id
+                """), {"status": normalized_auth, "id": row["id"]})
+
         elif event_type == "SUBSCRIPTION_PAYMENT_SUCCESS":
-            payment_id = payment.get("cf_payment_id") or payment.get("payment_id") or data.get("cf_payment_id")
-            amount_raw = payment.get("payment_amount") or payment.get("amount") or row["amount_paise"] / 100
+            payment_id = (
+                payment.get("cf_payment_id")
+                or payment.get("payment_id")
+                or data.get("cf_payment_id")
+            )
+            amount_raw = (
+                payment.get("payment_amount")
+                or payment.get("amount")
+                or row["amount_paise"] / 100
+            )
             amount_paise = int(round(float(amount_raw) * 100))
+            prior_success = db.execute(text("""
+                SELECT 1
+                FROM rm_subscription_payments
+                WHERE subscription_id=:sub AND status='SUCCESS'
+                LIMIT 1
+            """), {"sub": row["id"]}).first()
+            payment_type = "RENEWAL" if prior_success else "INITIAL"
             inserted_payment = db.execute(text("""
-                INSERT INTO rm_subscription_payments(subscription_id,shop_id,cashfree_payment_id,amount_paise,status,payment_type,paid_at)
+                INSERT INTO rm_subscription_payments(
+                    subscription_id,shop_id,cashfree_payment_id,amount_paise,
+                    status,payment_type,paid_at
+                )
                 VALUES(:sub,:shop,:pid,:amount,'SUCCESS',:payment_type,:paid)
                 ON CONFLICT(cashfree_payment_id) DO NOTHING
                 RETURNING id
-            """), {"sub":row["id"],"shop":row["shop_id"],"pid":str(payment_id) if payment_id else None,"amount":amount_paise,"payment_type":"INITIAL" if row["current_period_start"] is None else "RENEWAL","paid":now}).first()
+            """), {
+                "sub": row["id"],
+                "shop": row["shop_id"],
+                "pid": str(payment_id) if payment_id else None,
+                "amount": amount_paise,
+                "payment_type": payment_type,
+                "paid": now,
+            }).first()
             if inserted_payment:
-                period_start = row["current_period_end"] if row["current_period_end"] and row["current_period_end"] > now else now
-                if row["billing_interval"] == "YEARLY":
-                    next_year = period_start.year + 1
-                    period_end = period_start.replace(year=next_year, day=min(period_start.day, calendar.monthrange(next_year, period_start.month)[1]))
+                if payment_type == "INITIAL" and row["current_period_start"] and row["current_period_end"]:
+                    # Mandate authorization already started the first billing period.
+                    period_start = row["current_period_start"]
+                    period_end = row["current_period_end"]
                 else:
-                    next_month = period_start.month + 1
-                    next_year = period_start.year + (1 if next_month > 12 else 0)
-                    next_month = 1 if next_month > 12 else next_month
-                    period_end = period_start.replace(year=next_year, month=next_month, day=min(period_start.day, calendar.monthrange(next_year, next_month)[1]))
+                    period_start = (
+                        row["current_period_end"]
+                        if payment_type == "RENEWAL"
+                        and row["current_period_end"]
+                        and row["current_period_end"] > now
+                        else now
+                    )
+                    period_end = _subscription_period_end(
+                        period_start,
+                        row["billing_interval"],
+                    )
                 db.execute(text("""
-                    UPDATE rm_shop_subscriptions SET status='ACTIVE',current_period_start=:start,
-                        current_period_end=:end,grace_period_end=NULL,mandate_status=COALESCE(mandate_status,'AUTHORIZED'),updated_at=NOW()
+                    UPDATE rm_shop_subscriptions
+                    SET status='ACTIVE',
+                        current_period_start=:start,
+                        current_period_end=:end,
+                        grace_period_end=NULL,
+                        mandate_status=CASE
+                            WHEN mandate_status IS NULL OR mandate_status='PENDING'
+                            THEN 'AUTHORIZED' ELSE mandate_status END,
+                        updated_at=NOW()
                     WHERE id=:id
-                """), {"start":period_start,"end":period_end,"id":row["id"]})
+                """), {
+                    "start": period_start,
+                    "end": period_end,
+                    "id": row["id"],
+                })
+
         elif event_type == "SUBSCRIPTION_PAYMENT_FAILED":
-            if row["current_period_end"] is not None:
-                db.execute(text("UPDATE rm_shop_subscriptions SET status='GRACE_PERIOD',grace_period_end=:end,updated_at=NOW() WHERE id=:id"), {"end":now+timedelta(days=3),"id":row["id"]})
+            if row["current_period_end"] is not None and row["current_period_end"] >= now:
+                db.execute(text("""
+                    UPDATE rm_shop_subscriptions
+                    SET status='GRACE_PERIOD', grace_period_end=:end, updated_at=NOW()
+                    WHERE id=:id
+                """), {"end": now + timedelta(days=3), "id": row["id"]})
             else:
-                db.execute(text("UPDATE rm_shop_subscriptions SET status='PAYMENT_FAILED',grace_period_end=NULL,updated_at=NOW() WHERE id=:id"), {"id":row["id"]})
-        elif event_type in {"SUBSCRIPTION_PAYMENT_CANCELLED","SUBSCRIPTION_STATUS_CHANGED"}:
-            status_value = str(details.get("subscription_status") or data.get("subscription_status") or "").upper()
-            if status_value in {"CANCELLED","CANCELED","COMPLETED","EXPIRED"}:
+                db.execute(text("""
+                    UPDATE rm_shop_subscriptions
+                    SET status='PAYMENT_FAILED', grace_period_end=NULL, updated_at=NOW()
+                    WHERE id=:id
+                """), {"id": row["id"]})
+
+        elif event_type in {"SUBSCRIPTION_PAYMENT_CANCELLED", "SUBSCRIPTION_STATUS_CHANGED"}:
+            if _cashfree_auth_succeeded(auth_status, provider_subscription_status):
+                _activate_authorized_subscription(
+                    db,
+                    row,
+                    now,
+                    auth_status or "AUTHORIZED",
+                )
+            elif _cashfree_auth_failed(auth_status):
+                db.execute(text("""
+                    UPDATE rm_shop_subscriptions
+                    SET status='PAYMENT_FAILED', mandate_status=:mandate_status,
+                        grace_period_end=NULL, updated_at=NOW()
+                    WHERE id=:id AND status IN ('CREATING','PENDING_AUTH')
+                """), {"mandate_status": auth_status, "id": row["id"]})
+            elif provider_subscription_status in {"CANCELLED", "CANCELED", "COMPLETED", "EXPIRED"}:
                 if row["current_period_end"] and row["current_period_end"] >= now:
-                    db.execute(text("UPDATE rm_shop_subscriptions SET cancel_at_period_end=TRUE,updated_at=NOW() WHERE id=:id"), {"id":row["id"]})
+                    db.execute(text("""
+                        UPDATE rm_shop_subscriptions
+                        SET cancel_at_period_end=TRUE, updated_at=NOW()
+                        WHERE id=:id
+                    """), {"id": row["id"]})
                 else:
-                    db.execute(text("UPDATE rm_shop_subscriptions SET status='CANCELLED',cancelled_at=:now,updated_at=NOW() WHERE id=:id"), {"now":now,"id":row["id"]})
-    db.execute(text("UPDATE rm_subscription_webhook_events SET processed_at=NOW() WHERE event_key=:key"), {"key":event_key})
+                    db.execute(text("""
+                        UPDATE rm_shop_subscriptions
+                        SET status='CANCELLED', cancelled_at=:now, updated_at=NOW()
+                        WHERE id=:id
+                    """), {"now": now, "id": row["id"]})
+
+    db.execute(text("""
+        UPDATE rm_subscription_webhook_events
+        SET processed_at=NOW()
+        WHERE event_key=:key
+    """), {"key": event_key})
     db.commit()
     return {"success": True}
-
