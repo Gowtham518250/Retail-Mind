@@ -381,6 +381,33 @@ def test_ai_extracts_names_before_server_side_catalog_resolution(monkeypatch):
     assert any("user_id" in str(clause) for clause in db.query_obj.filters)
 
 
+
+def test_non_catalog_product_is_not_stock_linked_from_model_product_id(monkeypatch):
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 42,
+            "product_name_en": "Black Rice",
+            "product_name_local": "black rice",
+            "quantity": 2,
+            "spoken_unit": "pcs",
+            "spoken_price_amount": 75,
+            "spoken_price_kind": "unit",
+            "confidence": 0.99,
+        }],
+        transcript="2 pcs black rice 75",
+        catalog_products=None,
+    )
+    assert result["success"] is True
+    assert len(result["items"]) == 1
+    item = result["items"][0]
+    assert item["product_name"] == "Black Rice"
+    assert item["product_id"] is None
+    assert item["catalog_matched"] is False
+    assert item["quantity"] == 2.0
+    assert item["unit_price"] == 75.0
+    assert item["price_grounded"] is True
+
 def test_catalog_current_price_is_used_when_cashier_speaks_no_price(monkeypatch):
     rice = SimpleNamespace(
         id=42,
