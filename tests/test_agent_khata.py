@@ -10,7 +10,7 @@ os.environ.setdefault("SECRET_KEY", "retail-mind-agent-ci-only-not-for-productio
 from agentic.registry import list_capabilities
 from agentic.tools import KhataLedgerMovementArgs, TOOL_DEFINITIONS
 from agentic.khata_actions import prepare_khata_ledger_movement
-from models import AgentPendingAction, KhataBalance, KhataHistory
+from models import AgentPendingAction, Customer, KhataBalance, KhataHistory
 
 
 class _Query:
@@ -24,19 +24,32 @@ class _Query:
         return self
 
     def first(self):
-        return self.result
+        return self.result[0] if isinstance(self.result, list) and self.result else (
+            None if isinstance(self.result, list) else self.result
+        )
+
+    def all(self):
+        if self.result is None:
+            return []
+        return self.result if isinstance(self.result, list) else [self.result]
 
 
 class _Db:
-    def __init__(self, account=None):
+    def __init__(self, account=None, *, khata_matches=None, customer_matches=None):
         self.account = account
+        self.khata_matches = khata_matches
+        self.customer_matches = customer_matches or []
         self.added = []
 
     def query(self, model):
         if model is AgentPendingAction:
             return _Query(None)
         if model is KhataBalance:
+            if self.khata_matches is not None:
+                return _Query(self.khata_matches)
             return _Query(self.account)
+        if model is Customer:
+            return _Query(self.customer_matches)
         raise AssertionError(f"Unexpected query model: {model}")
 
     def add(self, item):
@@ -69,6 +82,80 @@ def test_khata_tool_requires_valid_indian_mobile_and_positive_amount():
             "customer_phone": "9876543210",
             "amount": 0,
         })
+
+
+def test_khata_credit_accepts_name_without_phone():
+    parsed = KhataLedgerMovementArgs.model_validate({
+        "operation": "CREDIT",
+        "customer_name": "Ganesh",
+        "amount": 5000,
+    })
+    assert parsed.customer_phone is None
+    assert parsed.customer_name == "Ganesh"
+
+
+def test_khata_tool_requires_either_name_or_phone():
+    with pytest.raises(ValidationError):
+        KhataLedgerMovementArgs.model_validate({
+            "operation": "CREDIT",
+            "amount": 5000,
+        })
+
+
+def test_name_only_khata_credit_prepares_preview_without_mutating_ledger():
+    db = _Db(khata_matches=[], customer_matches=[])
+    result = prepare_khata_ledger_movement(
+        db,
+        shop_id=42,
+        conversation_id="conversation-ganesh",
+        request_text="add 5000 khata for Ganesh",
+        operation="CREDIT",
+        customer_phone=None,
+        amount=Decimal("5000"),
+        customer_name="Ganesh",
+    )
+    assert result["success"] is True
+    assert result["preview"]["customer_name"] == "Ganesh"
+    assert result["preview"]["amount"] == 5000.0
+    assert result["preview"]["balance_before"] == 0.0
+    assert result["preview"]["balance_after"] == 5000.0
+    assert result["preview"]["customer_phone_last4"] is None
+    assert db.added[0].payload["customer_phone"] is None
+    assert db.added[0].status == "PENDING"
+
+
+def test_name_only_khata_lookup_rejects_duplicate_names():
+    matches = [
+        SimpleNamespace(customer_name="Ganesh", customer_phone="9876543210", khata_balance=Decimal("0")),
+        SimpleNamespace(customer_name="Ganesh", customer_phone="9876543211", khata_balance=Decimal("0")),
+    ]
+    db = _Db(khata_matches=matches)
+    with pytest.raises(ValueError, match="More than one Khata customer"):
+        prepare_khata_ledger_movement(
+            db,
+            shop_id=42,
+            conversation_id="conversation-ambiguous",
+            request_text="add 5000 khata for Ganesh",
+            operation="CREDIT",
+            customer_phone=None,
+            amount=Decimal("5000"),
+            customer_name="Ganesh",
+        )
+
+
+def test_name_only_repayment_requires_an_existing_shop_scoped_khata_account():
+    db = _Db(khata_matches=[], customer_matches=[])
+    with pytest.raises(ValueError, match="No existing Khata account"):
+        prepare_khata_ledger_movement(
+            db,
+            shop_id=42,
+            conversation_id="conversation-repay",
+            request_text="Ganesh paid 500",
+            operation="REPAYMENT",
+            customer_phone=None,
+            amount=Decimal("500"),
+            customer_name="Ganesh",
+        )
 
 
 def test_khata_tool_has_allowlisted_preview_function():
