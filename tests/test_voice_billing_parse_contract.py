@@ -555,7 +555,8 @@ def test_groq_cannot_inject_product_id_not_in_shop_catalog(monkeypatch):
     assert result["items"] == []
     assert result["success"] is False
     assert result["needs_clarification"] is True
-    assert "unmatched catalog product id" in result["clarification_question"].lower()
+    assert "unrecognized product name" in result["clarification_question"].lower()
+    assert "product id" not in result["clarification_question"].lower()
 
 
 def test_unknown_product_is_added_as_custom_sale_line_without_stock_id(monkeypatch):
