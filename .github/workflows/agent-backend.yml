@@ -16,7 +16,7 @@ on:
       - "inventory.py"
       - "requirements.txt"
       - "subscription_quota_middleware.py"
-      - "alembic/versions/051_agentic_assistant.py"
+      - "alembic/versions/053_agentic_assistant.py"
       - "tests/test_agent_registry.py"
       - "tests/test_agent_runtime.py"
       - ".github/workflows/agent-backend.yml"
