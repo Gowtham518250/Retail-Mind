@@ -28,6 +28,8 @@ The current implementation uses:
 | Online-order lookup | Shop-scoped order status counts and recent order summaries | Read-only |
 | Bill preparation | Existing voice-billing parser creates an expiring preview; no invoice or stock mutation | Draft only |
 | Bill confirmation | Explicit owner confirmation of a preview hash; uses existing invoice creation service; checks persisted invoice and stock movements | Confirmed financial write |
+| Invoice payment | Records one payment against a selected invoice through the existing idempotent Khata payment route; separate five-minute preview and owner confirmation | Confirmed financial write |
+| Online-order transition | ACCEPT, DISPATCH and REJECT use the existing order-status service; expected prior status is rechecked at confirmation and the persisted status is verified | Confirmed business write |
 | Voice | Sarvam transcription, existing ASR quality guard, shop catalog keyterms | External provider call |
 | Speech | Bounded Sarvam Bulbul text-to-speech response | External provider call |
 
@@ -44,14 +46,14 @@ The current implementation uses:
 - `POST /api/agent/actions/{action_id}/confirm`
 - `POST /api/agent/actions/{action_id}/cancel`
 
-The bill preview is short-lived and bound to the action, owner/shop, preview and payload by a hash. Confirmation is a separate authenticated request. Repeated confirmation reconciles against the deterministic invoice number and persisted invoice/stock records before reporting success.
+Bill, payment and order previews are short-lived, bound to the action, owner/shop, preview and payload by a hash, and require a separate authenticated owner confirmation. Bill confirmation reconciles the deterministic invoice and stock movements; payment confirmation verifies the idempotency-keyed payment row; order confirmation verifies the resulting order status. An order payment entry records the owner-reported receipt; it does not independently verify a bank transfer.
 
 ## Deliberately disabled capabilities
 
-These actions are advertised as not implemented and cannot be invoked by the model:
-- Khata credit / repayment writes. Two existing ledger implementations remain; a canonical mutation contract and replay protection are required first.
-- Online-order accept/reject/cancel/refund transitions. Each state transition and payment/refund side effect needs a canonical service contract and verified idempotency.
-- Attendance corrections, worker edits and payroll actions. Authorization, approval and audit semantics need to be specified first.
+These actions remain unavailable to the model:
+- Legacy Khata credit / repayment ledger writes. The repository still contains separate legacy and invoice-derived Khata models; the agent only records payments against a specific invoice through the invoice-derived payment engine.
+- Online-order delivery, cancellation and refund actions. Delivery requires the customer's delivery OTP and payment prerequisites; cancellation/refund require their own verified payment and stock-reversal contracts. Only ACCEPT, DISPATCH and REJECT are implemented through the confirmed workflow.
+- Attendance corrections, worker edits and payroll actions. Authorization, approval, correction history and retry/idempotency semantics need to be specified first.
 - Any arbitrary database, shell, filesystem or network access.
 
 An MCP server and owner Flutter-client integration are not included in this backend PR. They must call the same authenticated API and confirmation flow; they must not create an alternate path to financial writes.
@@ -73,6 +75,8 @@ It follows `052_repair_active_product_sku_index` in the Alembic graph. CI valida
 - Tool schemas reject unknown fields; call counts, outputs, input sizes and date ranges are bounded.
 - Customer phone numbers are masked in tool responses; audit rows store tool metadata rather than raw message or customer payloads.
 - Invoice writes require a separate owner confirmation, use the existing invoice path and verify the persisted invoice and stock movements.
+- Invoice payments require a one-invoice preview, owner confirmation, revalidation of the current outstanding balance and an idempotency key; the preview explicitly warns that it does not verify a bank/cash receipt.
+- Order transitions require an owner-confirmed status change, verify the expected prior state at commit time and read the resulting order status back before reporting success.
 - The feature flag `RETAIL_MIND_AGENT_ENABLED` defaults to `false` in Render configuration.
 - Provider keys are deployment secrets, not source-controlled credentials.
 - Provider-backed staging evaluation, load testing, production migration, rollback rehearsal and Flutter integration remain outstanding.
