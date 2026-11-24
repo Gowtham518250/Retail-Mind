@@ -110,6 +110,25 @@ def test_screenshot_ghee_question_routes_to_product_sales_history_and_uses_invoi
     assert params["product_term_0"] == "%ghee%"
 
 
+def test_product_sales_history_sql_parses_as_one_postgres_select():
+    import sqlglot
+    from sqlglot import exp
+    from query_retrival import _fast_product_sales_history_query
+
+    db = _FakeDb([[_ghee_history_row()]])
+    _fast_product_sales_history_query(
+        "Show all ghee sales history",
+        db,
+        user_id=7,
+        date_scope=_scope(),
+    )
+
+    statements = sqlglot.parse(db.calls[0][0], read="postgres")
+    assert len(statements) == 1
+    assert isinstance(statements[0], exp.Select)
+    assert statements[0].args.get("with") is not None
+
+
 def test_product_sales_history_preserves_resolved_date_range():
     from query_retrival import _fast_product_sales_history_query
 
