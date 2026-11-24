@@ -3427,7 +3427,7 @@ def _voice_billing_item_price_evidence_transcripts(
             if first_value == expected_quantity:
                 suffix_words = suffix_words[1:]
                 if suffix_words and _vb_canonical_unit(
-                    suffix_words[0].strip(".,;:!?()[]\\"'")
+                    suffix_words[0].strip(".,;:!?()[]")
                 ) is not None:
                     suffix_words = suffix_words[1:]
         suffix = " ".join(suffix_words).strip()
