@@ -11,6 +11,8 @@ _IMPLEMENTED = {
     "orders.lookup",
     "attendance.lookup",
     "analytics.read",
+    "khata.payment",
+    "orders.transition",
     "voice.transcription",
     "voice.synthesis",
 }
@@ -23,6 +25,8 @@ _CAPABILITIES: tuple[dict[str, Any], ...] = (
     {"name": "orders.lookup", "description": "Read shop-scoped online order counts and recent order statuses. Order changes remain disabled.", "risk": "read", "requires_confirmation": False, "provider": "groq"},
     {"name": "attendance.lookup", "description": "Read attendance summaries for a date in the authenticated shop.", "risk": "employee_data_read", "requires_confirmation": False, "provider": "groq"},
     {"name": "analytics.read", "description": "Read a bounded invoice-based billed/received summary.", "risk": "read", "requires_confirmation": False, "provider": "groq"},
+    {"name": "khata.payment", "description": "Record payment against one selected invoice using the existing idempotent invoice-payment engine; requires owner confirmation.", "risk": "financial_write", "requires_confirmation": True, "provider": "backend"},
+    {"name": "orders.transition", "description": "Accept, dispatch or reject an online order via the existing owner route; requires confirmation. Delivery, cancellation and refunds remain disabled.", "risk": "business_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "voice.transcription", "description": "Transcribe owner voice input using Sarvam Saaras and process it through the Groq assistant.", "risk": "external_provider", "requires_confirmation": False, "provider": "groq_sarvam"},
     {"name": "voice.synthesis", "description": "Synthesize an assistant response using Sarvam Bulbul for supported Indian languages.", "risk": "external_provider", "requires_confirmation": False, "provider": "sarvam"},
     {"name": "khata.record", "description": "Record credit or repayment. Disabled until a single canonical ledger write path and replay protection are verified.", "risk": "financial_write", "requires_confirmation": True, "provider": "disabled"},
