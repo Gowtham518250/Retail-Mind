@@ -67,6 +67,7 @@ async def _run_tool(name: str, arguments: dict[str, Any], *, user_text: str = ""
         "prepare_online_order_transition",
         "prepare_khata_ledger_movement",
         "prepare_attendance_record",
+        "prepare_inventory_stock_movement",
     }
     conversation_id = str(uuid.uuid4()) if needs_pending_action else None
     request_id = str(uuid.uuid4())
@@ -198,6 +199,26 @@ async def prepare_online_order_transition(order_id: int, action: str) -> dict:
 async def list_shop_workers() -> dict:
     """List shop-owned worker IDs, names, positions and statuses without salary/PIN/contact details."""
     return await _run_tool("list_shop_workers", {})
+
+
+@mcp_server.tool()
+async def prepare_inventory_stock_movement(
+    product_id: int,
+    movement_type: str,
+    quantity: float,
+    reason: str | None = None,
+) -> dict:
+    """Prepare a stock movement preview; only the owner app can confirm it."""
+    return await _run_tool(
+        "prepare_inventory_stock_movement",
+        {
+            "product_id": product_id,
+            "movement_type": movement_type,
+            "quantity": quantity,
+            "reason": reason,
+        },
+        user_text=f"Prepare {movement_type} stock movement for product {product_id}",
+    )
 
 
 @mcp_server.tool()
