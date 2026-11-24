@@ -3683,7 +3683,25 @@ async def parse_voice_billing(
             )
             if local_name_is_spoken else None
         )
-        if resolution is not None and resolution.status == "matched":
+        # Conservative fallback for native-script items: when the extractor's
+        # local phrase is literally present in the original transcript and its
+        # English name exactly equals one unique tenant catalog name, that is a
+        # defensible stock match even if phonetic token expansion missed it.
+        # Never use model IDs, substring matches or fuzzy nearest neighbours.
+        exact_name_matches = []
+        if local_name_is_spoken and proposed_name:
+            proposed_key = _voice_billing_normalize(proposed_name)
+            exact_name_matches = [
+                candidate for candidate in products
+                if _voice_billing_normalize(str(candidate.product_name or "")) == proposed_key
+            ]
+        if (
+            (resolution is None or resolution.status == "none")
+            and len(exact_name_matches) == 1
+        ):
+            product = exact_name_matches[0]
+            match_reasons = ["exact extracted English name and source-language phrase verified"]
+        elif resolution is not None and resolution.status == "matched":
             product = resolution.product
             match_reasons = list(resolution.reasons)
         elif (
