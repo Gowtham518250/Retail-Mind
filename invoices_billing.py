@@ -1444,6 +1444,12 @@ def create_invoice(
 ):
     shop_id = resolve_shop_id(current_user)
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
+    ai_assistant_invoice = bool(
+        re.fullmatch(
+            r"Created via Retail Mind AI assistant\. Action [0-9a-fA-F-]{36}",
+            (data.notes or "").strip(),
+        )
+    )
 
     requested_paid = Decimal(str(data.paid_amount or 0))
     requested_total = Decimal(str(data.total_amount or 0))
@@ -1528,7 +1534,7 @@ def create_invoice(
                     )
                     .first()
                 )
-            if product is None:
+            if product is None and not ai_assistant_invoice:
                 product = (
                     db.query(Product)
                     .filter(
@@ -1705,10 +1711,12 @@ def create_invoice(
                     )
                     db.add(mov)
             else:
-                product = db.query(Product).with_for_update().filter(
-                    func.lower(Product.product_name) == item.product_name.lower().strip(),
-                    Product.user_id == shop_id,
-                ).first()
+                product = None
+                if not ai_assistant_invoice:
+                    product = db.query(Product).with_for_update().filter(
+                        func.lower(Product.product_name) == item.product_name.lower().strip(),
+                        Product.user_id == shop_id,
+                    ).first()
                 if product:
                     current_stock = product.current_stock or Decimal("0")
                     if current_stock < item.quantity:
