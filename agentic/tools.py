@@ -77,6 +77,14 @@ class OrderTransitionPreviewArgs(ToolArgs):
     action: Literal["ACCEPT", "DISPATCH", "REJECT"]
 
 
+class KhataLedgerMovementArgs(ToolArgs):
+    operation: Literal["CREDIT", "REPAYMENT"]
+    customer_phone: str = Field(..., pattern=r"^[6-9]\d{9}$")
+    amount: Decimal = Field(..., gt=0, le=Decimal("100000000"))
+    customer_name: Optional[str] = Field(default=None, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=180)
+
+
 TOOL_DEFINITIONS = [
     {
         "type": "function",
@@ -190,6 +198,25 @@ TOOL_DEFINITIONS = [
                 "additionalProperties": False,
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prepare_khata_ledger_movement",
+            "description": "Prepare a preview to add customer Khata credit or record a repayment in the legacy Khata ledger. Requires exact 10-digit customer phone and amount. Never writes until owner confirms in Retail Mind.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "operation": {"type": "string", "enum": ["CREDIT", "REPAYMENT"]},
+                    "customer_phone": {"type": "string", "pattern": "^[6-9]\\d{9}$"},
+                    "amount": {"type": "number", "exclusiveMinimum": 0, "maximum": 100000000},
+                    "customer_name": {"type": "string", "maxLength": 100},
+                    "description": {"type": "string", "maxLength": 180}
+                },
+                "required": ["operation", "customer_phone", "amount"],
+                "additionalProperties": False
+            }
+        }
     },
 ]
 
@@ -951,6 +978,20 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
         elif tool_name == "prepare_online_order_transition":
             result = _prepare_order_transition(
                 db, shop_id, conversation_id, OrderTransitionPreviewArgs.model_validate(args)
+            )
+        elif tool_name == "prepare_khata_ledger_movement":
+            parsed = KhataLedgerMovementArgs.model_validate(args)
+            from .khata_actions import prepare_khata_ledger_movement
+            result = prepare_khata_ledger_movement(
+                db,
+                shop_id=shop_id,
+                conversation_id=conversation_id,
+                request_text=str(context.get("user_text") or ""),
+                operation=parsed.operation,
+                customer_phone=parsed.customer_phone,
+                amount=parsed.amount,
+                customer_name=parsed.customer_name,
+                description=parsed.description,
             )
         else:
             raise ValueError("Tool is not in the server allowlist")
