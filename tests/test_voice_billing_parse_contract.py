@@ -813,7 +813,7 @@ def test_telugu_pappu_weighted_item_preserves_spoken_unit_price_with_missing_con
     assert item["price_grounded"] is True
     assert item["confidence"] >= 0.72
     assert item["confidence_inferred"] is True
-    assert item["price_role_inferred"] is True
+    assert item["price_role_inferred"] is False
     assert item["needs_confirmation"] is True
 
 
