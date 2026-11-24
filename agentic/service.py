@@ -19,6 +19,7 @@ from models import (
     AgentPendingAction,
     Invoice,
     InvoiceLineItem,
+    InvoiceStatus,
     OnlineOrder,
     Payment,
     StockMovement,
