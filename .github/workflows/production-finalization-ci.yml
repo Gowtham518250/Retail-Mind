@@ -227,6 +227,7 @@ jobs:
           pytest -q tests/test_attendance_auto_checkout_contract.py
           pytest -q tests/test_query_retrieval_optimization.py
           pytest -q tests/test_query_safety.py
+          pytest -q tests/test_query_translation_grounding.py
           pytest -q tests/test_query_answering.py
           pytest -q tests/test_worker_payroll_query_contract.py
           pytest -q tests/test_customer_phone_normalization.py

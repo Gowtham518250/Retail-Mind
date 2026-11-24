@@ -52,15 +52,81 @@ def test_shop_names_reach_translation_as_data(monkeypatch):
     user_message = calls[0]["messages"][1]["content"]
     assert "Sona Masoori Rice" in user_message
     assert "Ganesh" in user_message
+    assert "preserve its exact canonical spelling" in user_message
 
 
 def test_no_vocabulary_keeps_user_message_free_of_shop_hint(monkeypatch):
     calls = _capture(monkeypatch)
     query_retrival._translate_query_and_classify("పంచదార ఎంత ఉంది", "te")
-    assert "Shop names" not in calls[0]["messages"][1]["content"]
+    assert "Authenticated shop entity names" not in calls[0]["messages"][1]["content"]
 
 
 def test_misheard_words_are_repaired_before_translation(monkeypatch):
     calls = _capture(monkeypatch)
     query_retrival._translate_query_and_classify("పంచేదారా ఎంత ఉంది", "te")
     assert "పంచదార ఎంత ఉంది" in calls[0]["messages"][1]["content"]
+
+
+def test_entity_grounding_matches_exact_typed_shop_names_and_prefers_longest_variant():
+    vocabulary = {
+        "product": ("Ghee", "Cow Ghee", "Cow Ghee 1L"),
+        "customer": ("Gowtham",),
+        "worker": ("Ganesh",),
+    }
+
+    entities = query_retrival._match_shop_entities(
+        "show all sales of Cow Ghee 1L",
+        vocabulary,
+    )
+
+    assert entities == [
+        {"type": "product", "name": "Cow Ghee 1L", "match": "exact"}
+    ]
+
+
+def test_entity_grounding_does_not_match_inside_unrelated_words():
+    vocabulary = {
+        "product": ("oil", "rice"),
+        "customer": (),
+        "worker": (),
+    }
+
+    assert query_retrival._match_shop_entities(
+        "show boiling and oily stock",
+        vocabulary,
+    ) == []
+
+
+def test_entity_grounding_keeps_same_spelling_for_distinct_entity_types():
+    vocabulary = {
+        "product": ("Ganesh Special Rice",),
+        "customer": ("Ganesh",),
+        "worker": ("Ganesh",),
+    }
+
+    entities = query_retrival._match_shop_entities("show Ganesh details", vocabulary)
+
+    assert {item["type"] for item in entities} == {"customer", "worker"}
+    assert all(item["name"] == "Ganesh" for item in entities)
+
+
+def test_entity_context_is_explicitly_data_only_and_never_fabricates_ids():
+    assert "Do not invent entity IDs" in query_retrival._format_shop_entity_context([])
+    context = query_retrival._format_shop_entity_context([
+        {"type": "product", "name": "Cow Ghee 1L", "match": "exact"}
+    ])
+    assert "Cow Ghee 1L" in context
+    assert '"match":"exact"' in context
+
+
+def test_entity_grounding_preserves_indic_combining_marks():
+    vocabulary = {
+        "product": ("నూనె", "పసుపు"),
+        "customer": (),
+        "worker": (),
+    }
+
+    assert query_retrival._match_shop_entities(
+        "నా నూనె అమ్మకాల వివరాలు",
+        vocabulary,
+    ) == [{"type": "product", "name": "నూనె", "match": "exact"}]
