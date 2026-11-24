@@ -273,4 +273,4 @@ def test_product_search_terms_remove_question_words_and_keep_multiword_product()
 
     assert _extract_product_sales_search_terms(
         "Can you tell me all sales of my Amul Cow Ghee 1L product selling price and sales history?"
-    ) == ["amul", "cow", "ghee", "1", "l"]
+    ) == ["amul", "cow", "ghee", "1l"]
