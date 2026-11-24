@@ -42,9 +42,13 @@ _mcp_exit_stack: contextlib.AsyncExitStack | None = None
 
 
 def _enabled() -> bool:
-    return os.getenv("RETAIL_MIND_MCP_ENABLED", "false").strip().lower() in {
-        "1", "true", "yes", "on"
-    }
+    enabled_values = {"1", "true", "yes", "on"}
+    # MCP is an additional transport for the agent, not a separate feature
+    # entitlement. Both switches must be enabled by an operator.
+    return (
+        os.getenv("RETAIL_MIND_MCP_ENABLED", "false").strip().lower() in enabled_values
+        and os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() in enabled_values
+    )
 
 
 def _current_shop() -> int:
