@@ -404,3 +404,138 @@ def test_owner_orders_403_logs_subscription_entitlement_reason():
     assert "SUBSCRIPTION_FEATURE_DENIED" in middleware
     assert 'detail.get("feature", "online_orders")' in middleware
     assert 'detail.get("current_plan", "unknown")' in middleware
+
+
+def test_cashfree_authorization_status_supports_both_provider_spellings():
+    from subscription_billing import _cashfree_authorization_status
+
+    american = {
+        "data": {
+            "authorization_details": {
+                "authorization_status": "SUCCESS",
+            },
+        },
+    }
+    british = {
+        "data": {
+            "subscription_details": {
+                "authorisation_details": {
+                    "authorization_status": "SUCCESS",
+                },
+            },
+        },
+    }
+
+    assert _cashfree_authorization_status(american) == "SUCCESS"
+    assert _cashfree_authorization_status(british) == "SUCCESS"
+
+
+def test_cashfree_authorization_is_required_before_activation():
+    from subscription_billing import (
+        _cashfree_auth_failed,
+        _cashfree_auth_succeeded,
+    )
+
+    assert _cashfree_auth_succeeded("SUCCESS") is True
+    assert _cashfree_auth_succeeded("AUTHORIZED") is True
+    assert _cashfree_auth_succeeded("", "ACTIVE") is True
+    assert _cashfree_auth_succeeded("PENDING", "BANK_APPROVAL_PENDING") is False
+    assert _cashfree_auth_failed("FAILED") is True
+    assert _cashfree_auth_failed("REJECTED") is True
+    assert _cashfree_auth_failed("PENDING") is False
+
+
+def test_authorized_mandate_initializes_subscription_period_and_entitlement():
+    from datetime import datetime
+    from subscription_billing import _activate_authorized_subscription
+
+    class DB:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+
+    db = DB()
+    now = datetime(2026, 11, 24, 12, 0, 0)
+    row = {
+        "id": 71,
+        "billing_interval": "MONTHLY",
+        "current_period_start": None,
+        "current_period_end": None,
+    }
+
+    _activate_authorized_subscription(db, row, now, "SUCCESS")
+
+    assert len(db.calls) == 1
+    sql, params = db.calls[0]
+    assert "status='ACTIVE'" in sql
+    assert "current_period_end=COALESCE(current_period_end,:end)" in sql
+    assert params["id"] == 71
+    assert params["mandate_status"] == "SUCCESS"
+    assert params["start"] == now
+    assert params["end"] == datetime(2026, 12, 24, 12, 0, 0)
+
+
+def test_authorized_yearly_mandate_handles_leap_day_period_end():
+    from datetime import datetime
+    from subscription_billing import _subscription_period_end
+
+    assert _subscription_period_end(
+        datetime(2028, 2, 29, 10, 0, 0),
+        "YEARLY",
+    ) == datetime(2029, 2, 28, 10, 0, 0)
+
+
+def test_subscription_reconciliation_route_is_registered():
+    from app import api
+    from fastapi.routing import iter_route_contexts
+
+    paths = {context.path for context in iter_route_contexts(api.routes)}
+    assert "/api/billing/subscriptions/reconcile" in paths
+
+
+def test_subscription_webhook_auth_success_activates_without_waiting_for_charge():
+    from pathlib import Path
+
+    source = Path("subscription_billing.py").read_text(encoding="utf-8")
+    webhook = source[source.index('@router.post("/api/billing/cashfree/webhook")'):]
+    auth_branch = webhook[
+        webhook.index('if event_type == "SUBSCRIPTION_AUTH_STATUS":'):
+        webhook.index('elif event_type == "SUBSCRIPTION_PAYMENT_SUCCESS":')
+    ]
+    assert "_cashfree_authorization_status" in auth_branch
+    assert "_cashfree_auth_succeeded" in auth_branch
+    assert "_activate_authorized_subscription" in auth_branch
+    assert "status='PAYMENT_FAILED'" in auth_branch
+    assert "status='ACTIVE'" not in auth_branch  # activation is kept in the shared helper
+
+
+def test_reconciliation_never_activates_a_pending_or_failed_mandate():
+    from pathlib import Path
+
+    source = Path("subscription_billing.py").read_text(encoding="utf-8")
+    start = source.index('@router.post("/api/billing/subscriptions/reconcile")')
+    end = source.index('@router.post("/api/billing/subscriptions/{subscription_id}/cancel")', start)
+    reconcile = source[start:end]
+
+    success_branch = reconcile[
+        reconcile.index("if _cashfree_auth_succeeded"):
+        reconcile.index("terminal_provider_statuses")
+    ]
+    pending_return = reconcile[reconcile.index('return {', reconcile.index("if auth_status:")):]
+    assert "_activate_authorized_subscription" in success_branch
+    assert '"status": "PENDING_AUTH"' in reconcile
+    assert "_cashfree_auth_failed" in reconcile
+    assert "status='ACTIVE'" not in pending_return
+
+
+def test_pending_checkout_without_cashfree_id_is_not_sent_to_provider():
+    from pathlib import Path
+
+    source = Path("subscription_billing.py").read_text(encoding="utf-8")
+    start = source.index("pending_rows = db.execute")
+    end = source.index("user = db.query(User)", start)
+    cleanup = source[start:end]
+    missing_id = cleanup.index('if not cashfree_id:')
+    assert cleanup.index("continue", missing_id) < cleanup.index("if pending_app_id is None", missing_id)
