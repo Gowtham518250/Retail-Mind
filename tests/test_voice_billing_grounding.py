@@ -53,11 +53,11 @@ def test_genuinely_spoken_units_still_convert(monkeypatch, transcript, model_qty
     assert item["unit_grounded"] is True and item["needs_confirmation"] is False
 
 
-def test_invented_price_falls_back_to_catalog_and_asks(monkeypatch):
+def test_ungrounded_spoken_price_never_falls_back_to_catalog(monkeypatch):
     result, item = _item(monkeypatch, {
         "product_id": 42, "quantity": 2, "spoken_unit": "kg",
         "spoken_price_amount": 5000, "spoken_price_kind": "unit", "confidence": 0.95}, "2 kg rice 50")
-    assert item["unit_price"] == 50.0 and item["price_source"] == "catalog"
+    assert item["unit_price"] == 0.0 and item["price_source"] == "missing"
     assert item["price_grounded"] is False and item["needs_confirmation"] is True
     assert "price not clearly heard" in result["clarification_question"]
 
@@ -66,7 +66,8 @@ def test_price_when_none_was_spoken_is_not_trusted(monkeypatch):
     _, item = _item(monkeypatch, {
         "product_id": 42, "quantity": 2, "spoken_unit": "kg",
         "spoken_price_amount": 75, "spoken_price_kind": "unit", "confidence": 0.95}, "2 kg rice")
-    assert item["unit_price"] == 50.0 and item["price_grounded"] is False
+    assert item["unit_price"] == 0.0 and item["price_source"] == "missing"
+    assert item["price_grounded"] is False
 
 
 @pytest.mark.parametrize("transcript,kind,amount,expected_unit_price", [
@@ -113,11 +114,14 @@ def test_normalizer_keeps_numbers_whole():
     assert inv._voice_billing_normalize("end.") == "end"
 
 
-def test_fast_path_handles_decimals(monkeypatch):
+def test_ai_extractor_handles_decimals_without_catalog_fastpath(monkeypatch):
     result, capture, _, _ = _run_voice_billing_endpoint(
-        monkeypatch, [], transcript="1.5 kg rice 60", language_code="auto",
+        monkeypatch,
+        [{"product_name_en": "Rice", "quantity": 1.5, "spoken_unit": "kg",
+          "spoken_price_amount": 60, "spoken_price_kind": "unit", "confidence": 0.99}],
+        transcript="1.5 kg rice 60", language_code="auto",
         catalog_products=[RICE], fast_path=True)
-    assert capture["requests"] == []
+    assert len(capture["requests"]) == 2  # translation + structured extraction
     (item,) = result["items"]
     assert item["quantity"] == 1.5 and item["unit_price"] == 60.0
 
@@ -146,12 +150,12 @@ def test_price_from_another_product_line_is_not_accepted(monkeypatch):
         catalog_products=[rice, oil],
     )
     rice_line, oil_line = result["items"]
-    assert rice_line["unit_price"] == 45.0
-    assert rice_line["price_source"] == "catalog"
+    assert rice_line["unit_price"] == 0.0
+    assert rice_line["price_source"] == "missing"
     assert rice_line["price_grounded"] is False
     assert rice_line["needs_confirmation"] is True
-    assert oil_line["unit_price"] == 110.0
-    assert oil_line["price_source"] == "catalog"
+    assert oil_line["unit_price"] == 0.0
+    assert oil_line["price_source"] == "missing"
     assert oil_line["price_grounded"] is False
     assert oil_line["needs_confirmation"] is True
 
@@ -265,12 +269,12 @@ def test_ambiguous_spoken_price_requires_confirmation_even_with_catalog_price(mo
     }, "2 kg rice 50")
 
     assert item is not None
-    assert item["unit_price"] == 50.0
-    assert item["price_source"] == "catalog"
+    assert item["unit_price"] == 0.0
+    assert item["price_source"] == "missing"
     assert item["price_needs_confirmation"] is True
     assert item["needs_confirmation"] is True
     assert result["needs_clarification"] is True
-    assert "confirm the catalog price" in result["clarification_question"].lower()
+    assert "spoken price needs confirmation" in result["clarification_question"].lower()
 
 
 def test_line_total_rounding_that_changes_total_requires_confirmation(monkeypatch):
@@ -354,6 +358,66 @@ def test_telugu_inflected_units_keep_quantities_on_their_own_product_lines(monke
     assert all(item["needs_confirmation"] is False for item in result["items"])
 
 
+
+def test_telugu_multi_item_extraction_ignores_wrong_catalog_prices(monkeypatch):
+    from types import SimpleNamespace
+
+    catalog = [
+        SimpleNamespace(id=11, product_name="Coffee", sku="COFFEE", category="",
+                        unit="pcs", unit_price=15, current_stock=20, user_id=7, is_active=True),
+        SimpleNamespace(id=12, product_name="Idli", sku="IDLI", category="",
+                        unit="pcs", unit_price=0, current_stock=20, user_id=7, is_active=True),
+        SimpleNamespace(id=13, product_name="Chutney", sku="CHUTNEY", category="",
+                        unit="pcs", unit_price=0, current_stock=20, user_id=7, is_active=True),
+        SimpleNamespace(id=14, product_name="Potato", sku="POTATO", category="",
+                        unit="pcs", unit_price=11, current_stock=20, user_id=7, is_active=True),
+    ]
+    transcript = (
+        "5 కేజీల మటన్ 60, ఒకటి 20, ఒక కాఫీ 30, ఒక ఇడ్లీ 5, "
+        "ఒక చట్నీ 10 మరియు ఒక బంగాళదుంప 70"
+    )
+    result, capture, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [
+            {"product_name_en": "Mutton", "product_name_local": "మటన్",
+             "quantity": 5, "spoken_unit": "kg", "spoken_price_amount": 60,
+             "spoken_price_kind": "line_total", "confidence": 0.99},
+            {"product_name_en": "Coffee", "product_name_local": "కాఫీ",
+             "quantity": 1, "spoken_unit": "", "spoken_price_amount": 30,
+             "spoken_price_kind": "unit", "confidence": 0.99},
+            {"product_name_en": "Idli", "product_name_local": "ఇడ్లీ",
+             "quantity": 1, "spoken_unit": "", "spoken_price_amount": 5,
+             "spoken_price_kind": "unit", "confidence": 0.99},
+            {"product_name_en": "Chutney", "product_name_local": "చట్నీ",
+             "quantity": 1, "spoken_unit": "", "spoken_price_amount": 10,
+             "spoken_price_kind": "unit", "confidence": 0.99},
+            {"product_name_en": "Potato", "product_name_local": "బంగాళదుంప",
+             "quantity": 1, "spoken_unit": "", "spoken_price_amount": 70,
+             "spoken_price_kind": "unit", "confidence": 0.99},
+        ],
+        transcript=transcript,
+        language_code="te-IN",
+        catalog_products=catalog,
+        translated_text="5 kg mutton 60; 1 item 20; 1 coffee 30; 1 idli 5; 1 chutney 10; 1 potato 70",
+        needs_clarification=True,
+        clarification_question="One amount had no product name. Please identify that item.",
+    )
+    prompt = capture["request"]["messages"][1]["content"]
+    assert '"product_id"' not in prompt
+    assert "Authenticated shop catalog candidates" not in prompt
+    assert '"product_id":11' not in prompt
+    assert result["needs_clarification"] is True  # unnamed 'one 20' is never invented
+    assert [item["product_name"] for item in result["items"]] == [
+        "Mutton", "Coffee", "Idli", "Chutney", "Potato"
+    ]
+    assert [item["quantity"] for item in result["items"]] == [5.0, 1.0, 1.0, 1.0, 1.0]
+    assert [item["unit_price"] for item in result["items"]] == [12.0, 30.0, 5.0, 10.0, 70.0]
+    assert [item["price_source"] for item in result["items"]] == [
+        "spoken_line_total", "spoken_unit", "spoken_unit", "spoken_unit", "spoken_unit"
+    ]
+    assert result["items"][0]["product_id"] is None
+    assert all(item["price_grounded"] is True for item in result["items"])
+
 def test_delimited_count_based_products_keep_quantities_separate_without_units(monkeypatch):
     result, *_ = _run_voice_billing_endpoint(
         monkeypatch,
@@ -385,7 +449,6 @@ def test_delimited_count_based_products_keep_quantities_separate_without_units(m
         translated_text="3 soap 30; 5 tea 20",
     )
 
-    print("VOICE_COUNT_DEBUG", __import__("json").dumps(result, ensure_ascii=False, default=str))
     assert result["needs_clarification"] is False, result
     assert [item["product_name"] for item in result["items"]] == ["Soap", "Tea"]
     assert [item["quantity"] for item in result["items"]] == [3.0, 5.0]
