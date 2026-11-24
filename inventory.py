@@ -2658,12 +2658,16 @@ def _voice_billing_normalize_spoken_scales(value: str) -> str:
 @lru_cache(maxsize=16384)
 def _voice_billing_expanded_tokens_cached(value: str) -> frozenset:
     tokens = set(_voice_billing_normalize(value).split())
+    # Fold plurals before alias lookup as well as after it. Otherwise a spoken
+    # Telugu alias such as "వంకాయలు" expands to "brinjal", but catalog name
+    # "Brinjals" does not expand to the same alias family until too late.
+    tokens.update(_vb_stem_token(token) for token in list(tokens))
     expanded = set(tokens)
     for canonical, aliases in _VOICE_BILLING_ALIASES.items():
         if tokens.intersection(aliases):
             expanded.add(canonical)
             expanded.update(aliases)
-    # fold simple plurals so "two soaps" shortlists "Lux Soap" (and "eggs" ~ "egg")
+    # Keep stems for aliases introduced by the canonical expansion too.
     expanded.update(_vb_stem_token(token) for token in list(expanded))
     return frozenset(expanded)
 
