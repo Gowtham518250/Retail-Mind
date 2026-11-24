@@ -19,7 +19,11 @@ from agentic.tools import (
     _customer_search,
     _inventory_search,
 )
-from models import AgentConversation, AgentMessage, AgentPendingAction, AgentToolExecution
+from models import (
+    AgentConversation, AgentMessage, AgentPendingAction, AgentToolExecution,
+    AgentShopSettings,
+)
+from agentic.access import resolve_agent_access
 from sarvam_tts import clean_speech_text, sarvam_tts_language_code
 from agentic.routes import router
 
@@ -144,6 +148,7 @@ def test_agent_tables_are_declared_for_migration():
     assert AgentMessage.__tablename__ == "agent_messages"
     assert AgentPendingAction.__tablename__ == "agent_pending_actions"
     assert AgentToolExecution.__tablename__ == "agent_tool_executions"
+    assert AgentShopSettings.__tablename__ == "rm_shop_agent_settings"
 
 
 def test_sarvam_tts_supports_selected_indian_languages():
@@ -216,3 +221,94 @@ def test_agent_routes_are_registered():
     assert ("/api/agent/speech", "POST") in route_map
     assert ("/api/agent/actions/{action_id}/confirm", "POST") in route_map
     assert ("/api/agent/conversations", "GET") in route_map
+
+
+def test_agent_access_requires_platform_plan_and_owner_opt_in():
+    entitlement = {
+        "plan_code": "PRO",
+        "features": {
+            "ai_agent": True,
+            "ai_agent_voice": True,
+            "ai_agent_actions": False,
+        },
+        "daily_ai_query_limit": 25,
+    }
+    preferences = {
+        "assistant_enabled": True,
+        "voice_enabled": True,
+        "actions_enabled": True,
+    }
+    access = resolve_agent_access(
+        platform_enabled=True,
+        groq_configured=True,
+        sarvam_configured=True,
+        entitlement=entitlement,
+        preferences=preferences,
+    )
+    assert access["assistant_enabled"] is True
+    assert access["voice_enabled"] is True
+    assert access["actions_enabled"] is False
+    assert access["plan_access"]["actions"] is False
+
+
+def test_agent_is_off_for_free_plan_even_when_owner_opts_in():
+    entitlement = {
+        "plan_code": "FREE",
+        "features": {
+            "ai_agent": False,
+            "ai_agent_voice": False,
+            "ai_agent_actions": False,
+        },
+        "daily_ai_query_limit": 0,
+    }
+    preferences = {
+        "assistant_enabled": True,
+        "voice_enabled": True,
+        "actions_enabled": True,
+    }
+    access = resolve_agent_access(
+        platform_enabled=True,
+        groq_configured=True,
+        sarvam_configured=True,
+        entitlement=entitlement,
+        preferences=preferences,
+    )
+    assert access["assistant_enabled"] is False
+    assert access["voice_enabled"] is False
+    assert access["actions_enabled"] is False
+    assert access["status"] == "plan_required"
+
+
+def test_agent_owner_preferences_are_disabled_by_default():
+    entitlement = {
+        "plan_code": "BASIC",
+        "features": {"ai_agent": True, "ai_agent_voice": False, "ai_agent_actions": False},
+        "daily_ai_query_limit": 7,
+    }
+    access = resolve_agent_access(
+        platform_enabled=True,
+        groq_configured=True,
+        sarvam_configured=False,
+        entitlement=entitlement,
+        preferences={},
+    )
+    assert access["assistant_enabled"] is False
+    assert access["voice_enabled"] is False
+    assert access["actions_enabled"] is False
+    assert access["status"] == "owner_disabled"
+
+
+def test_agent_voice_needs_sarvam_and_owner_consent():
+    entitlement = {
+        "plan_code": "PRO",
+        "features": {"ai_agent": True, "ai_agent_voice": True, "ai_agent_actions": False},
+        "daily_ai_query_limit": 25,
+    }
+    preferences = {"assistant_enabled": True, "voice_enabled": True, "actions_enabled": False}
+    missing_provider = resolve_agent_access(
+        platform_enabled=True, groq_configured=True, sarvam_configured=False,
+        entitlement=entitlement, preferences=preferences,
+    )
+    assert missing_provider["assistant_enabled"] is True
+    assert missing_provider["voice_enabled"] is False
+    assert missing_provider["status"] == "enabled"
