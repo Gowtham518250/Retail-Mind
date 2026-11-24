@@ -1,5 +1,7 @@
 """Contract and fast unit checks for the Retail Mind agent runtime."""
 import os
+import asyncio
+from types import SimpleNamespace
 
 # security.py intentionally refuses to start without a secret; CI uses a
 # disposable test-only value and never reads production credentials.
@@ -11,7 +13,7 @@ from pydantic import ValidationError
 from langgraph.graph import END
 from agentic.graph import (
     build_agent_graph, available_tool_definitions,
-    _format_pending_action_answer, _route_after_tools,
+    _format_pending_action_answer, _route_after_tools, _forced_action_tool,
 )
 from agentic.registry import list_capabilities
 from agentic.service import _action_hash
@@ -25,6 +27,7 @@ from agentic.tools import (
     _is_bill_follow_up_message,
     _recent_bill_context,
     _recent_bill_source_transcript,
+    _prepare_bill,
 )
 from models import (
     AgentConversation, AgentMessage, AgentPendingAction, AgentToolExecution,
@@ -205,6 +208,147 @@ def test_bill_follow_up_restores_item_source_for_numeric_price_grounding():
     # A complete new item request must not inherit an unrelated previous sale.
     fresh = _recent_bill_source_transcript(context, "add 2 milk at 60 rupees")
     assert fresh == "add 2 milk at 60 rupees"
+
+
+def test_explicit_bill_request_forces_bill_preview_without_inventory_search():
+    state = {
+        "context": {
+            "user_text": "Create a bill for rice, quantity 1, price ₹200",
+            "allow_actions": True,
+        },
+        "tool_definitions": available_tool_definitions(True),
+        "tool_rounds": 0,
+    }
+    assert _forced_action_tool(state) == "prepare_bill_from_current_message"
+
+
+def test_bill_price_follow_up_forces_bill_preview_but_tutorial_does_not():
+    tools = available_tool_definitions(True)
+    follow_up = {
+        "context": {
+            "user_text": "okay, use ₹10",
+            "allow_actions": True,
+            "recent_user_messages": ["create a bill for rice, quantity 1, price ₹200"],
+        },
+        "tool_definitions": tools,
+        "tool_rounds": 0,
+    }
+    tutorial = {
+        "context": {
+            "user_text": "How do I create a bill?",
+            "allow_actions": True,
+        },
+        "tool_definitions": tools,
+        "tool_rounds": 0,
+    }
+    assert _forced_action_tool(follow_up) == "prepare_bill_from_current_message"
+    assert _forced_action_tool(tutorial) is None
+
+
+def test_name_and_amount_khata_request_forces_scoped_khata_preview():
+    state = {
+        "context": {
+            "user_text": "Create Khata for Ganesh with amount ₹5,000",
+            "allow_actions": True,
+        },
+        "tool_definitions": available_tool_definitions(True),
+        "tool_rounds": 0,
+    }
+    assert _forced_action_tool(state) == "prepare_khata_ledger_movement"
+
+
+def test_bill_preview_keeps_spoken_price_and_never_tracks_stock(monkeypatch):
+    import inventory as inventory_module
+
+    captured = {}
+
+    async def fake_parse(request, *, user_id, db):
+        captured["request"] = request
+        captured["user_id"] = user_id
+        return {
+            "success": True,
+            "needs_clarification": False,
+            "items": [{
+                # A catalog link is deliberately ignored by the AI invoice path.
+                "product_id": 7,
+                "product_name": "rice",
+                "quantity": 1,
+                "unit_price": 200,
+                "needs_confirmation": False,
+                "price_missing": False,
+                "price_needs_confirmation": False,
+            }],
+        }
+
+    class Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return None
+
+    class Db:
+        def __init__(self):
+            self.added = []
+
+        def query(self, model):
+            assert model is AgentPendingAction
+            return Query()
+
+        def add(self, value):
+            self.added.append(value)
+
+        def flush(self):
+            return None
+
+    monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
+    db = Db()
+    result = asyncio.run(_prepare_bill(
+        db,
+        {
+            "shop_id": 42,
+            "conversation_id": "a4b47f00-94a6-40e6-8540-72c5db03f501",
+            "user_text": "Create a bill for rice, quantity 1, price ₹200",
+            "language_code": "te",
+            "recent_user_messages": [],
+        },
+    ))
+
+    assert result["success"] is True
+    assert captured["user_id"] == 42
+    line = result["preview"]["items"][0]
+    assert line["product_id"] is None
+    assert line["stock_tracked"] is False
+    assert line["unit_price"] == 200.0
+    assert line["line_total"] == 200.0
+    assert result["preview"]["total_amount"] == 200.0
+    assert db.added[0].payload["line_items"][0]["stock_tracked"] is False
+    assert "conversation_context" in captured["request"].model_fields_set or captured["request"].conversation_context is None
+
+
+def test_saved_bill_answer_uses_the_owner_selected_language():
+    action = {
+        "success": True,
+        "action_id": "action-language",
+        "status": "PENDING",
+        "preview_hash": "a" * 64,
+        "preview": {
+            "operation": "CREATE_INVOICE",
+            "invoice_number": "AIM-TE-100",
+            "customer_name": "Ganesh",
+            "total_amount": 200.0,
+            "items": [{
+                "product_name": "rice",
+                "quantity": 1.0,
+                "unit_price": 200.0,
+                "line_total": 200.0,
+            }],
+        },
+    }
+    answer = _format_pending_action_answer(action, "te-IN")
+    assert "బిల్ ప్రివ్యూ" in answer
+    assert "₹200.00" in answer
+    assert "స్టాక్" in answer
 
 
 def test_pending_action_preview_hash_binds_shop_and_payload():
