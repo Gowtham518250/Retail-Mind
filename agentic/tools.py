@@ -636,7 +636,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
 
     phone_match = re.search(r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)", user_text)
     customer_phone = phone_match.group(1) if phone_match else None
-    if not customer_phone:
+    if not customer_phone and conversation_context:
         for previous_message in reversed(prior_user_messages[-5:]):
             previous_match = re.search(
                 r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)",
