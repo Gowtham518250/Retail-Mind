@@ -63,6 +63,10 @@ async def run_chat_turn(
     conversation_id: str | None = None,
     language_code: str = "auto",
 ) -> dict:
+    if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        raise HTTPException(status_code=503, detail="The Retail Mind AI assistant is not enabled on this deployment.")
+    if not (os.getenv("GROQ_API_KEY") or "").strip():
+        raise HTTPException(status_code=503, detail="The AI provider is not configured.")
     clean_message = " ".join(str(message or "").split())
     if not clean_message:
         raise HTTPException(status_code=422, detail="Enter a message for the assistant.")
