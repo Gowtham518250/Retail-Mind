@@ -22,6 +22,7 @@ on:
       - "alembic/versions/053_agentic_assistant.py"
       - "alembic/versions/054_agentic_khata_ledger_idempotency.py"
       - "tests/test_agent_registry.py"
+      - "tests/test_agent_voice_route.py"
       - "tests/test_agent_runtime.py"
       - "tests/test_agent_mcp.py"
       - "tests/test_agent_khata.py"
@@ -70,6 +71,7 @@ jobs:
         run: |
           python -m pytest -q \
             tests/test_agent_registry.py \
+            tests/test_agent_voice_route.py \
             tests/test_agent_mcp.py \
             tests/test_agent_khata.py \
             tests/test_agent_attendance.py \
