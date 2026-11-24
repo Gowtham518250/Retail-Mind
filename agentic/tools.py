@@ -651,7 +651,7 @@ def _recent_bill_source_transcript(context: dict, user_text: str) -> str:
         has_item_and_number = bool(re.search(r"[A-Za-z\u0080-\uFFFF]", candidate)) and bool(re.search(r"\d", candidate))
         if has_bill_context and (has_item_and_number or len(candidate.split()) >= 2):
             approval_only = bool(re.fullmatch(
-                r"(?:yes|yeah|yep|sure|ok(?:ay)?|avunu|అవును|సరే|ஆம்|ಹೌದು|हाँ)(?:\\s+please)?[.!]?",
+                r"(?:yes|yeah|yep|sure|ok(?:ay)?|avunu|అవును|సరే|ஆம்|ಹೌದು|हाँ)(?:\s+please)?[.!]?",
                 user_text.strip(),
                 flags=re.IGNORECASE,
             ))
