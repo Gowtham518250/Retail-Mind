@@ -267,7 +267,7 @@ def _invoice_verification(db: Session, *, shop_id: int, action: AgentPendingActi
         discount = Decimal(str(line.get("discount_amount") or "0")).quantize(Decimal("0.01"))
         line_total = (quantity * unit_price - discount).quantize(Decimal("0.01"))
         return (
-            int(line["product_id"]) if line.get("product_id") is not None else None,
+            int(line["product_id"]) if line.get("product_id") is not None else -1,
             " ".join(str(line.get("product_name") or "").split()).casefold(),
             quantity,
             unit_price,
@@ -277,7 +277,7 @@ def _invoice_verification(db: Session, *, shop_id: int, action: AgentPendingActi
 
     def _stored_line_signature(line: InvoiceLineItem) -> tuple:
         return (
-            int(line.product_id) if line.product_id is not None else None,
+            int(line.product_id) if line.product_id is not None else -1,
             " ".join(str(line.description or "").split()).casefold(),
             Decimal(str(line.quantity)).quantize(Decimal("0.001")),
             Decimal(str(line.unit_price)).quantize(Decimal("0.01")),
