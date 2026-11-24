@@ -5000,6 +5000,7 @@ async def ask_query(
             'label': date_scope.get('label'),
         },
         'verified_shop_entities': resolved_shop_entities,
+        'shop_entity_resolution': _format_shop_entity_context(resolved_shop_entities),
         'authenticated_shop_entity_vocabulary': {
             key: list(values)[:100]
             for key, values in shop_entity_vocabulary.items()
