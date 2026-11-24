@@ -814,6 +814,7 @@ def confirm_invoice_action(
         InvoiceLineItemCreate(
             product_id=line.get("product_id"),
             product_name=str(line["product_name"]),
+            stock_tracked=bool(line.get("stock_tracked", True)),
             quantity=Decimal(str(line["quantity"])),
             unit_price=Decimal(str(line["unit_price"])),
             discount_amount=Decimal(str(line.get("discount_amount") or "0")),
