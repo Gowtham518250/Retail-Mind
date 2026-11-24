@@ -385,7 +385,7 @@ def test_delimited_count_based_products_keep_quantities_separate_without_units(m
         translated_text="3 soap 30; 5 tea 20",
     )
 
-    assert result["needs_clarification"] is False
+    assert result["needs_clarification"] is False, result
     assert [item["product_name"] for item in result["items"]] == ["Soap", "Tea"]
     assert [item["quantity"] for item in result["items"]] == [3.0, 5.0]
     assert [item["quantity_grounded"] for item in result["items"]] == [True, True]
