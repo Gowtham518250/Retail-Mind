@@ -621,14 +621,15 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
 
 
 async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> dict:
-    """Validate an LLM function call, execute only an allowlisted tool, and audit it."""
+    """Validate and execute an allowlisted tool; audit commit must succeed before success is returned."""
     db: Session = context["db"]
     shop_id = int(context["shop_id"])
     started = time.perf_counter()
     request_id = str(context["request_id"])
     conversation_id = str(context["conversation_id"])
-    success = False
+    result: dict[str, Any]
     error_code = None
+
     try:
         try:
             args = json.loads(raw_arguments or "{}")
@@ -639,60 +640,62 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
             raise ValueError("Tool arguments must be an object")
 
         if tool_name == "search_inventory":
-            data = _inventory_search(db, shop_id, InventorySearchArgs.model_validate(args))
+            result = _inventory_search(db, shop_id, InventorySearchArgs.model_validate(args))
         elif tool_name == "search_customers":
-            data = _customer_search(db, shop_id, CustomerSearchArgs.model_validate(args))
+            result = _customer_search(db, shop_id, CustomerSearchArgs.model_validate(args))
         elif tool_name == "get_sales_summary":
-            data = _sales_summary(db, shop_id, SalesSummaryArgs.model_validate(args))
+            result = _sales_summary(db, shop_id, SalesSummaryArgs.model_validate(args))
         elif tool_name == "get_attendance_summary":
-            data = _attendance_summary(db, shop_id, AttendanceSummaryArgs.model_validate(args))
+            result = _attendance_summary(db, shop_id, AttendanceSummaryArgs.model_validate(args))
         elif tool_name == "get_khata_summary":
             ToolArgs.model_validate(args)
-            data = _khata_summary(db, shop_id)
+            result = _khata_summary(db, shop_id)
         elif tool_name == "get_online_order_summary":
-            data = _order_summary(db, shop_id, OrderSummaryArgs.model_validate(args))
+            result = _order_summary(db, shop_id, OrderSummaryArgs.model_validate(args))
         elif tool_name == "prepare_bill_from_current_message":
             ToolArgs.model_validate(args)
-            data = await _prepare_bill(db, context)
+            result = await _prepare_bill(db, context)
         else:
             raise ValueError("Tool is not in the server allowlist")
-
-        success = True
-        return data
     except ValidationError:
         db.rollback()
         error_code = "INVALID_TOOL_ARGUMENTS"
-        return {"success": False, "error_code": error_code, "message": "The requested tool arguments were invalid."}
+        result = {"success": False, "error_code": error_code, "message": "The requested tool arguments were invalid."}
     except HTTPException as exc:
         db.rollback()
         error_code = f"BACKEND_{exc.status_code}"
-        return {"success": False, "error_code": error_code, "message": str(exc.detail)[:300]}
+        result = {"success": False, "error_code": error_code, "message": str(exc.detail)[:300]}
     except (ValueError, TypeError):
         db.rollback()
         error_code = "INVALID_REQUEST"
-        return {"success": False, "error_code": error_code, "message": "The requested tool input could not be processed safely."}
+        result = {"success": False, "error_code": error_code, "message": "The requested tool input could not be processed safely."}
     except Exception:
         db.rollback()
         error_code = "TOOL_EXECUTION_FAILED"
-        return {"success": False, "error_code": error_code, "message": "This information is temporarily unavailable. Please try again."}
-    finally:
-        try:
-            _record_tool_execution(
-                db,
-                shop_id=shop_id,
-                conversation_id=conversation_id,
-                request_id=request_id,
-                tool_name=tool_name,
-                started_at=started,
-                success=success,
-                error_code=error_code,
-            )
-            # Commit the read query/audit record and a pending bill preview
-            # before the graph performs its next external model request.
-            db.commit()
-        except Exception:
-            db.rollback()
-            import logging
-            logging.getLogger(__name__).exception(
-                "Could not persist Retail Mind agent tool audit metadata"
-            )
+        result = {"success": False, "error_code": error_code, "message": "This information is temporarily unavailable. Please try again."}
+
+    audit_success = bool(result.get("success", error_code is None))
+    try:
+        _record_tool_execution(
+            db,
+            shop_id=shop_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            tool_name=tool_name,
+            started_at=started,
+            success=audit_success,
+            error_code=error_code or result.get("error_code"),
+        )
+        # Commit the tool result (including a pending bill preview) and audit
+        # record together before the graph performs another network call.
+        db.commit()
+    except Exception:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).exception("Could not commit Retail Mind agent tool result and audit metadata")
+        return {
+            "success": False,
+            "error_code": "TOOL_COMMIT_FAILED",
+            "message": "The tool result could not be safely saved. Please retry after checking the relevant Retail Mind screen.",
+        }
+    return result
