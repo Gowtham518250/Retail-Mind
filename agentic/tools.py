@@ -236,7 +236,7 @@ TOOL_DEFINITIONS = [
                     "reason": {"type": "string", "maxLength": 180}
                 },
                 "required": ["product_id", "movement_type", "quantity"],
-                "additionalProperties": false
+                "additionalProperties": False
             }
         }
     },
