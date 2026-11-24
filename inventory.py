@@ -2530,17 +2530,34 @@ def _voice_billing_parse_model_decimal(value: Any, *, currency: bool = False) ->
     if len(tokens) == 1:
         return _voice_billing_number_value(tokens[0])
     if tokens:
-        # Compose spoken values such as "fifty five", "one hundred twenty five"
-        # and native-language number phrases. The largest composed value is
-        # the complete spoken amount (the helper also returns individual words).
-        heard_values = _vb_spoken_numbers(
-            " ".join(tokens),
-            _VOICE_BILLING_NUMBER_WORDS,
-            _VOICE_BILLING_SCALE_WORDS,
-        )
-        positive_values = [amount for amount in heard_values if amount > 0]
-        if positive_values:
-            return max(positive_values)
+        # Compose spoken values such as "fifty five", "one hundred twenty five",
+        # and native-language number phrases without losing the final units.
+        total = Decimal("0")
+        current = Decimal("0")
+        saw_number = False
+        for token in tokens:
+            value = _VOICE_BILLING_NUMBER_WORDS.get(token)
+            if value is not None:
+                current += Decimal(value)
+                saw_number = True
+                continue
+            scale = _VOICE_BILLING_SCALE_WORDS.get(token)
+            if scale is not None:
+                factor = Decimal(scale)
+                current = current if current > 0 else Decimal("1")
+                if factor >= 100:
+                    total += current * factor
+                    current = Decimal("0")
+                else:
+                    total += current * factor
+                    current = Decimal("0")
+                saw_number = True
+                continue
+            if token in _VOICE_BILLING_NUMBER_CONNECTORS:
+                continue
+            return None
+        if saw_number:
+            return total + current
     return None
 
 
@@ -4075,6 +4092,7 @@ async def parse_voice_billing(
             spoken_amount, currency=True
         )
 
+        price_role_inferred = False
         kind = str(raw.get("spoken_price_kind") or "none").strip().lower()
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
             kind = "ambiguous"
@@ -4145,9 +4163,7 @@ async def parse_voice_billing(
         # Ground any spoken price against this item's original-language phrase.
         # A catalog price is only a fallback when the speaker did not state a price.
         price_grounded = True
-        price_needs_confirmation = bool(
-            confidence_inferred or quantity_inferred
-        )
+        price_needs_confirmation = False
         # Reuse the exact item segment already isolated for quantity/unit
         # grounding. Recomputing it here can reintroduce another line's number
         # after the comma has been normalized away.
