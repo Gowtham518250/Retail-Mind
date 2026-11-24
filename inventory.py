@@ -3070,7 +3070,7 @@ def _voice_billing_item_evidence_transcripts(
         # Split only on delimiters followed by whitespace so numbers such as 1,200
         # remain intact. This preserves the exact product/quantity/price grouping.
         explicit_segments = re.split(
-            r",\\s*|;+\\s*|\\n+|\\s+(?:and|then|plus|also|next|మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\\s+",
+            r",\\s+|;+\\s*|\\n+|\\s+(?:and|then|plus|also|next|మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\\s+",
             transcript,
             flags=re.IGNORECASE,
         )
