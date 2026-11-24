@@ -169,12 +169,12 @@ def _format_pending_action_answer(action: dict[str, Any]) -> str:
                 line += f" = {line_total_text}"
             lines.append(line)
 
-        detail = "\\n".join(lines) if lines else "- Item details are available in the preview card."
+        detail = "\n".join(lines) if lines else "- Item details are available in the preview card."
         return (
-            f"Bill preview is ready for {customer_name}.\\n"
-            f"Invoice reference: {invoice_number}\\n"
-            f"{detail}\\n"
-            f"Total: {total_text}\\n\\n"
+            f"Bill preview is ready for {customer_name}.\n"
+            f"Invoice reference: {invoice_number}\n"
+            f"{detail}\n"
+            f"Total: {total_text}\n\n"
             "This is only a preview. Review the details and tap Confirm in Retail Mind to create the invoice. "
             "No invoice has been created and no stock or payment has changed yet."
         )
