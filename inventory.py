@@ -2994,6 +2994,17 @@ def _voice_billing_item_evidence_transcripts(
         None,
     )
     if current_index is None:
+        # The caller may copy validated model rows to plain dicts before
+        # grounding. Match the copied row by value so later lines retain their
+        # own quantity/price evidence rather than falling back to line zero.
+        current_index = next(
+            (
+                index for index, row in enumerate(rows)
+                if isinstance(row, dict) and row == raw_item
+            ),
+            None,
+        )
+    if current_index is None:
         current_index = 0
 
     def anchors_for(row: dict, index: int, context: str) -> list[str]:
@@ -3189,13 +3200,37 @@ def _voice_billing_unit_prefix_transcripts(
             # A currency-labelled amount before the product name is a price,
             # not a quantity. Keep it available to the price-grounding helper,
             # but do not let it disqualify the documented default quantity of 1.
-            prefix = re.sub(
-                r"(?:₹\\s*\\d+(?:\\.\\d+)?|\\b(?:rs\\.?|inr|rupees?|rupee)\\s*\\d+(?:\\.\\d+)?|"
-                r"\\b\\d+(?:\\.\\d+)?\\s*(?:rs\\.?|inr|rupees?|rupee)\\b)",
-                " ",
-                prefix,
-                flags=re.IGNORECASE,
-            ).strip()
+            # Filter only currency-labelled price tokens. This deliberately
+            # does not remove an unlabelled leading quantity such as "2 kg".
+            tokens = prefix.split()
+            kept_tokens = []
+            index = 0
+            currency_words = {"rs", "inr", "rupee", "rupees"}
+            while index < len(tokens):
+                token = tokens[index].strip(".,;:!?()[]\"'").casefold()
+                if token == "₹":
+                    index += 1
+                    if index < len(tokens) and re.fullmatch(r"\d+(?:\.\d+)?", tokens[index]):
+                        index += 1
+                    continue
+                if token.startswith("₹"):
+                    amount_token = token[1:]
+                    if re.fullmatch(r"\d+(?:\.\d+)?", amount_token):
+                        index += 1
+                        continue
+                if token in currency_words:
+                    index += 1
+                    if index < len(tokens) and re.fullmatch(r"\d+(?:\.\d+)?", tokens[index]):
+                        index += 1
+                    continue
+                if re.fullmatch(r"\d+(?:\.\d+)?", token) and index + 1 < len(tokens):
+                    next_token = tokens[index + 1].strip(".,;:!?()[]\"'").casefold()
+                    if next_token in currency_words:
+                        index += 2
+                        continue
+                kept_tokens.append(tokens[index])
+                index += 1
+            prefix = " ".join(kept_tokens).strip()
             if prefix:
                 prefixes.append(prefix)
             continue
