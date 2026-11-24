@@ -97,6 +97,7 @@ def prepare_attendance_record(
     ).first()
     before = _attendance_snapshot(existing)
     action_id = str(uuid.uuid4())
+    notes_after = clean_notes if clean_notes else before["notes"]
     preview = {
         "operation": "UPDATE_ATTENDANCE",
         "worker_id": int(worker.id),
@@ -108,7 +109,7 @@ def prepare_attendance_record(
         "check_in_time_preserved": before["check_in_time"],
         "check_out_time_preserved": before["check_out_time"],
         "working_hours_preserved": before["working_hours"],
-        "notes": clean_notes or None,
+        "notes": notes_after or None,
         "requires_owner_confirmation": True,
         "expires_in_seconds": 300,
         "warning": "This changes the daily attendance status only. Existing check-in/out timestamps and calculated working hours are preserved.",
@@ -117,7 +118,7 @@ def prepare_attendance_record(
         "worker_id": int(worker.id),
         "attendance_date": attendance_date.isoformat(),
         "status": normalized_status,
-        "notes": clean_notes or None,
+        "notes": notes_after or None,
         "expected": before,
     }
     key = hashlib.sha256(_canonical({
