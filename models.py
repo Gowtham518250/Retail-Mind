@@ -1127,13 +1127,28 @@ class KhataBalance(Base):
     
     id = Column(Integer, primary_key=True)
     shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
-    customer_phone = Column(String(20), nullable=False, index=True)
+    # Phone is optional for owner-entered name-only Khata customers. When
+    # present it remains unique within a shop; name-only accounts are uniquely
+    # indexed by normalized name within that same shop.
+    customer_phone = Column(String(20), nullable=True, index=True)
     customer_name = Column(String(100))
     khata_balance = Column(Numeric(12, 2), default=0)  # Outstanding amount
     last_transaction = Column(DateTime, server_default=func.now())
-    
+
     __table_args__ = (
         UniqueConstraint('shop_id', 'customer_phone', name='uix_shop_customer_khata'),
+        Index(
+            "uq_shop_name_only_khata",
+            "shop_id",
+            func.lower(customer_name),
+            unique=True,
+            postgresql_where=text(
+                "customer_phone IS NULL AND customer_name IS NOT NULL AND btrim(customer_name) <> ''"
+            ),
+            sqlite_where=text(
+                "customer_phone IS NULL AND customer_name IS NOT NULL AND trim(customer_name) <> ''"
+            ),
+        ),
     )
 
 

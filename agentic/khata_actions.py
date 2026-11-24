@@ -15,10 +15,12 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import (
     AgentPendingAction,
+    Customer,
     KhataBalance,
     KhataHistory,
     KhataTransactionType,
@@ -65,7 +67,7 @@ def prepare_khata_ledger_movement(
     conversation_id: str,
     request_text: str,
     operation: str,
-    customer_phone: str,
+    customer_phone: str | None,
     amount: Any,
     customer_name: str | None = None,
     description: str | None = None,
@@ -73,19 +75,94 @@ def prepare_khata_ledger_movement(
     operation = str(operation or "").strip().upper()
     if operation not in {"CREDIT", "REPAYMENT"}:
         raise ValueError("Choose CREDIT or REPAYMENT")
-    phone = str(customer_phone or "").strip()
-    if len(phone) != 10 or not phone.isdigit() or phone[0] not in "6789":
-        raise ValueError("Enter a valid 10-digit Indian mobile number")
     if not conversation_id:
         raise ValueError("A saved conversation is required to prepare a Khata action")
 
-    value = _money(amount)
+    phone = str(customer_phone or "").strip() or None
     name = " ".join(str(customer_name or "").split())[:100] or None
+    if not phone and not name:
+        raise ValueError("Provide the customer name or phone number")
+    if phone and (
+        len(phone) != 10 or not phone.isdigit() or phone[0] not in "6789"
+    ):
+        raise ValueError("Enter a valid 10-digit Indian mobile number")
+
+    # Resolve names only inside this authenticated shop. Prefer an existing
+    # Khata ledger identity, then a unique active CRM customer. A new name-only
+    # identity is allowed only for a CREDIT; repayments must match an account.
+    account = None
+    if phone:
+        account = db.query(KhataBalance).filter(
+            KhataBalance.shop_id == shop_id,
+            KhataBalance.customer_phone == phone,
+        ).with_for_update().first()
+        if not name:
+            if account and account.customer_name:
+                name = " ".join(str(account.customer_name).split())[:100]
+            else:
+                crm = db.query(Customer).filter(
+                    Customer.user_id == shop_id,
+                    Customer.phone == phone,
+                    Customer.is_active.is_(True),
+                ).first()
+                if crm:
+                    name = " ".join(str(crm.customer_name or "").split())[:100] or None
+        elif account and account.customer_name:
+            if str(account.customer_name).strip().casefold() != name.casefold():
+                raise ValueError("The supplied customer name does not match this Khata phone number")
+    else:
+        matches = db.query(KhataBalance).filter(
+            KhataBalance.shop_id == shop_id,
+            func.lower(func.trim(KhataBalance.customer_name)) == name.casefold(),
+        ).with_for_update().all()
+        if len(matches) > 1:
+            raise ValueError("More than one Khata customer has that name. Provide the customer's phone number")
+        if len(matches) == 1:
+            account = matches[0]
+            phone = str(account.customer_phone or "").strip() or None
+            name = " ".join(str(account.customer_name or name).split())[:100]
+        else:
+            customers = db.query(Customer).filter(
+                Customer.user_id == shop_id,
+                Customer.is_active.is_(True),
+                func.lower(func.trim(Customer.customer_name)) == name.casefold(),
+            ).all()
+            if len(customers) > 1:
+                raise ValueError("More than one customer has that name. Provide the customer's phone number")
+            if len(customers) == 1:
+                matched_customer = customers[0]
+                phone = str(matched_customer.phone or "").strip() or None
+                if not phone:
+                    raise ValueError("The matching CRM customer has no phone number. Use a different unique customer identity")
+                if (
+                    len(phone) != 10
+                    or not phone.isdigit()
+                    or phone[0] not in "6789"
+                ):
+                    raise ValueError("The matching CRM customer has an invalid phone number. Verify the customer record")
+                account = db.query(KhataBalance).filter(
+                    KhataBalance.shop_id == shop_id,
+                    KhataBalance.customer_phone == phone,
+                ).with_for_update().first()
+            elif operation == "REPAYMENT":
+                raise ValueError("No existing Khata account matches that customer name")
+
+    if operation == "REPAYMENT" and account is None:
+        raise ValueError("No existing Khata account matches this customer")
+
+    value = _money(amount)
     note = " ".join(str(description or "").split())[:180]
-    note = note or ("Owner-confirmed Khata credit" if operation == "CREDIT" else "Owner-confirmed Khata repayment")
+    note = note or (
+        "Owner-confirmed Khata credit"
+        if operation == "CREDIT"
+        else "Owner-confirmed Khata repayment"
+    )
 
     normalized_request = " ".join(str(request_text or "").split()).casefold()[:1000]
-    key_material = f"{shop_id}:{conversation_id}:{operation}:{phone}:{value}:{note}:{normalized_request}"
+    identity = phone or f"name:{(name or '').casefold()}"
+    key_material = (
+        f"{shop_id}:{conversation_id}:{operation}:{identity}:{value}:{note}:{normalized_request}"
+    )
     idempotency_key = hashlib.sha256(key_material.encode("utf-8")).hexdigest()
     prior = db.query(AgentPendingAction).filter(
         AgentPendingAction.user_id == shop_id,
@@ -108,24 +185,27 @@ def prepare_khata_ledger_movement(
             "message": "This Khata request already expired or failed. Start a new request.",
         }
 
-    account = db.query(KhataBalance).filter(
-        KhataBalance.shop_id == shop_id,
-        KhataBalance.customer_phone == phone,
-    ).with_for_update().first()
-    if account is None and operation == "REPAYMENT":
-        raise ValueError("No Khata account exists for this customer")
     current_balance = Decimal(str((account.khata_balance if account else 0) or 0)).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
     if operation == "REPAYMENT" and value > current_balance:
-        raise ValueError(f"Repayment cannot exceed the current Khata balance of ₹{current_balance:.2f}")
+        raise ValueError(
+            f"Repayment cannot exceed the current Khata balance of ₹{current_balance:.2f}"
+        )
 
-    resulting_balance = current_balance + value if operation == "CREDIT" else current_balance - value
+    resulting_balance = (
+        current_balance + value
+        if operation == "CREDIT"
+        else current_balance - value
+    )
     action_id = str(uuid.uuid4())
+    resolved_name = name or (
+        str(account.customer_name or "Customer") if account else "New Khata customer"
+    )
     preview = {
         "operation": "ADD_KHATA_CREDIT" if operation == "CREDIT" else "RECORD_KHATA_REPAYMENT",
-        "customer_name": name or (str(account.customer_name or "Customer") if account else "New Khata customer"),
-        "customer_phone_last4": phone[-4:],
+        "customer_name": resolved_name,
+        "customer_phone_last4": phone[-4:] if phone else None,
         "amount": float(value),
         "balance_before": float(current_balance),
         "balance_after": float(resulting_balance),
@@ -141,7 +221,7 @@ def prepare_khata_ledger_movement(
     payload = {
         "operation": operation,
         "customer_phone": phone,
-        "customer_name": name,
+        "customer_name": resolved_name,
         "amount": str(value),
         "expected_balance": str(current_balance),
         "description": note,
@@ -169,7 +249,6 @@ def prepare_khata_ledger_movement(
         "preview": preview,
         "message": "Khata preview prepared. No ledger balance has changed. Review and confirm this exact action in Retail Mind.",
     }
-
 
 def confirm_khata_ledger_movement(
     db: Session,
@@ -229,11 +308,19 @@ def confirm_khata_ledger_movement(
     if owner is None:
         raise HTTPException(status_code=404, detail="Shop owner not found.")
 
-    phone = str(payload["customer_phone"])
-    account = db.query(KhataBalance).filter(
-        KhataBalance.shop_id == shop_id,
-        KhataBalance.customer_phone == phone,
-    ).with_for_update().first()
+    phone = str(payload.get("customer_phone") or "").strip() or None
+    customer_name = str(payload.get("customer_name") or "Customer").strip()[:100]
+    if phone:
+        account = db.query(KhataBalance).filter(
+            KhataBalance.shop_id == shop_id,
+            KhataBalance.customer_phone == phone,
+        ).with_for_update().first()
+    else:
+        account = db.query(KhataBalance).filter(
+            KhataBalance.shop_id == shop_id,
+            KhataBalance.customer_phone.is_(None),
+            func.lower(func.trim(KhataBalance.customer_name)) == customer_name.casefold(),
+        ).with_for_update().first()
     current_balance = Decimal(str((account.khata_balance if account else 0) or 0)).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
@@ -254,10 +341,16 @@ def confirm_khata_ledger_movement(
         raise HTTPException(status_code=409, detail="The customer's outstanding Khata balance is no longer sufficient. Prepare a new action.")
 
     if account is None:
+        if operation == "REPAYMENT":
+            action.status = "FAILED"
+            action.error_code = "KHATA_ACCOUNT_NOT_FOUND"
+            action.updated_at = now
+            db.commit()
+            raise HTTPException(status_code=409, detail="The customer's Khata account no longer exists. Prepare a new action.")
         account = KhataBalance(
             shop_id=shop_id,
             customer_phone=phone,
-            customer_name=payload.get("customer_name") or "Customer",
+            customer_name=customer_name or "Customer",
             khata_balance=Decimal("0.00"),
         )
         db.add(account)
@@ -287,7 +380,10 @@ def confirm_khata_ledger_movement(
         category="KHATA_CREDIT" if operation == "CREDIT" else "KHATA_REPAY",
         amount=amount,
         reference_id=reference_id,
-        description=f"{'Khata credit' if operation == 'CREDIT' else 'Khata repayment'} for customer ending {phone[-4:]}",
+        description=(
+            f"{'Khata credit' if operation == 'CREDIT' else 'Khata repayment'} for "
+            + (f"customer ending {phone[-4:]}" if phone else customer_name)
+        ),
         tx_date=now,
     ))
 
@@ -298,7 +394,7 @@ def confirm_khata_ledger_movement(
         "operation": operation,
         "khata_id": int(account.id),
         "customer_name": str(account.customer_name or "Customer"),
-        "customer_phone_last4": phone[-4:],
+        "customer_phone_last4": phone[-4:] if phone else None,
         "amount": float(amount),
         "balance_before": float(current_balance),
         "balance_after": float(new_balance),

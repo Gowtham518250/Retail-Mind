@@ -126,7 +126,27 @@ async def run_chat_turn(
     # End the read transaction before calling Groq. Tool executions open their
     # own short transactions and commit their audit/action records individually.
     db.rollback()
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history]
+    language_code_normalized = str(language_code or "en").strip().lower().split("-", 1)[0]
+    language_names = {
+        "en": "English", "te": "Telugu", "hi": "Hindi", "ta": "Tamil",
+        "kn": "Kannada", "ml": "Malayalam", "bn": "Bengali",
+        "mr": "Marathi", "gu": "Gujarati", "pa": "Punjabi", "od": "Odia",
+    }
+    response_language = language_names.get(language_code_normalized, "English")
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": (
+                f"RESPONSE LANGUAGE: {response_language}. Reply to this owner in "
+                f"{response_language} in every conversational answer, question, "
+                "confirmation and business explanation. Keep customer and product "
+                "names, invoice identifiers, amounts and currency values exact. "
+                "Do not switch to English unless the owner asks for English."
+            ),
+        },
+        *history,
+    ]
     messages.append({"role": "user", "content": clean_message})
 
     request_id = str(uuid.uuid4())
@@ -137,6 +157,7 @@ async def run_chat_turn(
         "request_id": request_id,
         "user_text": clean_message,
         "language_code": str(language_code or "auto")[:16],
+        "allow_actions": bool(allow_actions),
         "recent_user_messages": recent_user_messages[-5:],
     }
 
@@ -793,6 +814,7 @@ def confirm_invoice_action(
         InvoiceLineItemCreate(
             product_id=line.get("product_id"),
             product_name=str(line["product_name"]),
+            stock_tracked=bool(line.get("stock_tracked", True)),
             quantity=Decimal(str(line["quantity"])),
             unit_price=Decimal(str(line["unit_price"])),
             discount_amount=Decimal(str(line.get("discount_amount") or "0")),
