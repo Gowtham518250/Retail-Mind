@@ -42,7 +42,7 @@ def _action_hash(action_id: str, shop_id: int, preview: dict, payload: dict) -> 
     return hashlib.sha256(_canonical_json(material).encode("utf-8")).hexdigest()
 
 
-def _message_history(db: Session, conversation_id: str, shop_id: int) -> list[dict[str, str]]:
+def _message_history(db: Session, conversation_id: str, shop_id: int) -> list[dict[str, Any]]:
     rows = (
         db.query(AgentMessage)
         .filter(
@@ -55,7 +55,14 @@ def _message_history(db: Session, conversation_id: str, shop_id: int) -> list[di
         .all()
     )
     rows.reverse()
-    return [{"role": row.role, "content": row.content[:6000]} for row in rows]
+    return [
+        {
+            "role": row.role,
+            "content": row.content[:6000],
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]
 
 
 async def run_chat_turn(
@@ -100,7 +107,22 @@ async def run_chat_turn(
         # hold a PostgreSQL transaction open while waiting on an LLM network call.
         db.commit()
 
-    history = _message_history(db, conversation_id, shop_id)
+    history_rows = _message_history(db, conversation_id, shop_id)
+    # Keep only recent owner-authored turns as optional bill context. Assistant
+    # messages are deliberately excluded so an earlier model suggestion can
+    # never become a user-confirmed product, quantity or price.
+    cutoff = datetime.utcnow() - timedelta(minutes=10)
+    recent_user_messages = []
+    history = []
+    for row in history_rows:
+        history.append({"role": row["role"], "content": row["content"]})
+        created_at = row.get("created_at")
+        if isinstance(created_at, datetime):
+            if created_at.tzinfo is not None:
+                created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+            if row["role"] == "user" and created_at >= cutoff:
+                recent_user_messages.append(row["content"][:1200])
+
     # End the read transaction before calling Groq. Tool executions open their
     # own short transactions and commit their audit/action records individually.
     db.rollback()
@@ -115,6 +137,7 @@ async def run_chat_turn(
         "request_id": request_id,
         "user_text": clean_message,
         "language_code": str(language_code or "auto")[:16],
+        "recent_user_messages": recent_user_messages[-5:],
     }
 
     result = await invoke_agent(messages, context, allow_actions=allow_actions)
@@ -145,6 +168,7 @@ async def run_chat_turn(
             and tool_result.get("action_id")
             and tool_result.get("preview_hash")
             and tool_result.get("preview")
+            and str(tool_result.get("status") or "PENDING").upper() == "PENDING"
         ):
             pending_actions.append({
                 "action_id": tool_result["action_id"],

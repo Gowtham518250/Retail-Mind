@@ -8,7 +8,11 @@ os.environ.setdefault("SECRET_KEY", "retail-mind-agent-ci-only-not-for-productio
 import pytest
 from pydantic import ValidationError
 
-from agentic.graph import build_agent_graph, available_tool_definitions
+from langgraph.graph import END
+from agentic.graph import (
+    build_agent_graph, available_tool_definitions,
+    _format_pending_action_answer, _route_after_tools,
+)
 from agentic.registry import list_capabilities
 from agentic.service import _action_hash
 from agentic.tools import (
@@ -18,6 +22,9 @@ from agentic.tools import (
     OrderTransitionPreviewArgs,
     _customer_search,
     _inventory_search,
+    _is_bill_follow_up_message,
+    _recent_bill_context,
+    _recent_bill_source_transcript,
 )
 from models import (
     AgentConversation, AgentMessage, AgentPendingAction, AgentToolExecution,
@@ -132,6 +139,72 @@ def test_customer_query_always_filters_by_authenticated_shop():
 def test_graph_compiles_without_provider_credentials():
     graph = build_agent_graph()
     assert graph is not None
+
+
+def test_successful_action_preview_skips_second_provider_call_and_uses_saved_values():
+    action = {
+        "success": True,
+        "action_id": "action-123",
+        "status": "PENDING",
+        "preview_hash": "a" * 64,
+        "preview": {
+            "operation": "CREATE_INVOICE",
+            "invoice_number": "AIM-TEST-123",
+            "customer_name": "Cash Customer",
+            "total_amount": 200.0,
+            "items": [{
+                "product_name": "rice",
+                "quantity": 1.0,
+                "unit_price": 200.0,
+                "line_total": 200.0,
+            }],
+        },
+    }
+    state = {"tool_outputs": [{"name": "prepare_bill_from_current_message", "result": action}]}
+
+    assert _route_after_tools(state) == END
+    answer = _format_pending_action_answer(action)
+    assert "rice: 1 × ₹200.00 = ₹200.00" in answer
+    assert "Total: ₹200.00" in answer
+    assert "No invoice has been created" in answer
+
+
+def test_failed_tool_result_still_routes_to_model_for_clarification():
+    state = {"tool_outputs": [{"result": {"success": False, "message": "Need more details"}}]}
+    assert _route_after_tools(state) == "call_model"
+
+
+def test_bill_follow_up_uses_only_recent_owner_authored_context():
+    assert _is_bill_follow_up_message("ok create the bill with 10 rupees") is True
+    assert _is_bill_follow_up_message("rice with price 200 with quantity 1") is False
+
+    context = {
+        "recent_user_messages": [
+            "rice with price 200 with quantity 1",
+            "my customer number is 9876543210",
+        ]
+    }
+    result = _recent_bill_context(context, "ok create the bill with 10 rupees")
+    assert result is not None
+    assert "rice with price 200 with quantity 1" in result
+    assert "9876543210" not in result
+    assert _recent_bill_context(context, "add 2 milk at ₹60") is None
+
+
+def test_bill_follow_up_restores_item_source_for_numeric_price_grounding():
+    context = {
+        "recent_user_messages": [
+            "rice with price 200 with quantity 1",
+            "just create the bill with 200",
+        ]
+    }
+    merged = _recent_bill_source_transcript(context, "ok create the bill with 10 rupees")
+    assert "rice with price 200 with quantity 1" in merged
+    assert "Latest owner instruction: ok create the bill with 10 rupees" in merged
+
+    # A complete new item request must not inherit an unrelated previous sale.
+    fresh = _recent_bill_source_transcript(context, "add 2 milk at 60 rupees")
+    assert fresh == "add 2 milk at 60 rupees"
 
 
 def test_pending_action_preview_hash_binds_shop_and_payload():

@@ -185,7 +185,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "prepare_bill_from_current_message",
-            "description": "Prepare a draft bill from the user's exact current message using Retail Mind's existing voice-billing parser and the authenticated shop catalog. It never creates an invoice or deducts stock. It takes no arguments.",
+            "description": "Prepare a draft bill from the latest owner message, using recent owner-authored conversation context only to resolve follow-up references. The existing voice-billing parser remains authoritative for spoken names, quantities and prices. It never creates an invoice or deducts stock. It takes no arguments.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },
     },
@@ -585,17 +585,108 @@ def _order_summary(db: Session, shop_id: int, args: OrderSummaryArgs) -> dict:
     }
 
 
+def _is_bill_follow_up_message(user_text: str) -> bool:
+    """Recognize short confirmations/corrections that refer to an earlier bill request."""
+    text = " ".join(str(user_text or "").strip().lower().split())
+    if not text:
+        return False
+    prefixes = (
+        r"^(?:ok(?:ay)?|yes|yeah|yep|sure|just|please|then|go ahead|proceed|confirm|"
+        r"same|use|make it|create it|change it|set it|instead|with|at|price|quantity|qty|"
+        r"sare|avunu)\b"
+    )
+    if re.search(prefixes, text):
+        return True
+    return bool(re.fullmatch(r"(?:₹\s*)?\d+(?:\.\d+)?\s*(?:rupees?|rs\.?)", text))
+
+
+def _recent_bill_source_transcript(context: dict, user_text: str) -> str:
+    """Restore the last owner-authored item utterance for parser evidence on a short follow-up."""
+    if not _is_bill_follow_up_message(user_text):
+        return user_text
+
+    messages = context.get("recent_user_messages")
+    if not isinstance(messages, list):
+        return user_text
+
+    for message in reversed(messages[-5:]):
+        previous = str(message or "").strip()
+        if not previous or _is_bill_follow_up_message(previous):
+            continue
+        # Customer identifiers are not item/price evidence. Remove them before
+        # checking whether this earlier turn looks like a sale description.
+        candidate = re.sub(
+            r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{9}(?!\d)",
+            " ",
+            previous,
+        )
+        candidate = " ".join(candidate.split())
+        if not candidate:
+            continue
+        # Only carry forward a likely bill/item utterance, not an unrelated
+        # recent question such as "show today's sales".
+        has_bill_context = bool(re.search(
+            r"\b(?:bill|billing|invoice|sale|sell|selling|add|quantity|qty|price|"
+            r"rupees?|rs\.?|kg|g|litre|liter|packet|packets|piece|pieces|pcs)\b",
+            candidate,
+            flags=re.IGNORECASE,
+        ))
+        has_item_and_number = bool(re.search(r"[A-Za-z\u0080-\uFFFF]", candidate)) and bool(re.search(r"\d", candidate))
+        if has_bill_context and (has_item_and_number or len(candidate.split()) >= 2):
+            return f"{candidate}. Latest owner instruction: {user_text}"[:1200]
+
+    return user_text
+
+
+def _recent_bill_context(context: dict, user_text: str) -> str | None:
+    if not _is_bill_follow_up_message(user_text):
+        return None
+    messages = context.get("recent_user_messages")
+    if not isinstance(messages, list):
+        return None
+
+    # Only prior owner-authored messages are passed here by run_chat_turn.
+    # Remove phone numbers because the parser should not mistake them for prices.
+    cleaned = []
+    for message in messages[-5:]:
+        value = str(message or "").strip()
+        value = re.sub(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{9}(?!\d)", " ", value)
+        value = " ".join(value.split())
+        if value:
+            cleaned.append(value[:700])
+    if not cleaned:
+        return None
+    return "\n".join(
+        f"Earlier owner message {index + 1}: {value}"
+        for index, value in enumerate(cleaned)
+    )[:2400]
+
+
 async def _prepare_bill(db: Session, context: dict) -> dict:
     """Use the existing parser; produce only a persisted, expiring preview."""
     user_text = str(context.get("user_text") or "").strip()
     if not user_text:
         return {"success": False, "needs_clarification": True, "message": "Please describe the items for the bill."}
 
+    prior_user_messages = context.get("recent_user_messages")
+    prior_user_messages = prior_user_messages if isinstance(prior_user_messages, list) else []
+    conversation_context = _recent_bill_context(context, user_text)
+
     phone_match = re.search(r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)", user_text)
     customer_phone = phone_match.group(1) if phone_match else None
-    parser_text = user_text
+    if not customer_phone and conversation_context:
+        for previous_message in reversed(prior_user_messages[-5:]):
+            previous_match = re.search(
+                r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)",
+                str(previous_message or ""),
+            )
+            if previous_match:
+                customer_phone = previous_match.group(1)
+                break
+
+    parser_text = _recent_bill_source_transcript(context, user_text)
     if phone_match:
-        parser_text = user_text[: phone_match.start()] + " " + user_text[phone_match.end() :]
+        parser_text = parser_text.replace(phone_match.group(0), " ", 1)
 
     from inventory import VoiceBillingParseRequest, parse_voice_billing
 
@@ -603,6 +694,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         VoiceBillingParseRequest(
             transcript=parser_text[:1200],
             language_code=str(context.get("language_code") or "auto")[:16],
+            conversation_context=conversation_context,
         ),
         user_id=int(context["shop_id"]),
         db=db,
@@ -739,12 +831,27 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
 
     action_id = str(uuid.uuid4())
     conversation_id = str(context["conversation_id"])
+    # The same short confirmation text may be reused for a different bill in
+    # one conversation. Hash the exact owner-authored source context, not LLM
+    # output, so retries stay stable even if extraction is nondeterministic.
+    idempotency_facts = {
+        "latest_message": user_text,
+        "source_transcript": parser_text[:1200],
+        "customer_phone": customer_phone,
+    }
     idempotency_key = hashlib.sha256(
+        f"{shop_id}:{conversation_id}:{_json_dump(idempotency_facts)}".encode("utf-8")
+    ).hexdigest()
+    # Preserve retry/recovery behavior for previews created before the richer
+    # item-fact idempotency key was introduced.
+    legacy_idempotency_key = hashlib.sha256(
         f"{shop_id}:{conversation_id}:{user_text}".encode("utf-8")
     ).hexdigest()
     prior = db.query(AgentPendingAction).filter(
         AgentPendingAction.user_id == shop_id,
-        AgentPendingAction.idempotency_key == idempotency_key,
+        AgentPendingAction.idempotency_key.in_(
+            {idempotency_key, legacy_idempotency_key}
+        ),
     ).first()
     if prior:
         if prior.status in {"PENDING", "EXECUTING", "COMPLETED"}:
@@ -762,6 +869,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     invoice_number = f"AIM-{datetime.now(IST):%Y%m%d}-{action_id.replace('-', '')[:10].upper()}"
     customer_name = customer.customer_name if customer else ("Cash Customer" if not customer_phone else "Customer")
     preview = {
+        "operation": "CREATE_INVOICE",
         "invoice_number": invoice_number,
         "customer_name": customer_name,
         "customer_phone": customer_phone,
