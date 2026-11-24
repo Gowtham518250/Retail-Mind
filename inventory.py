@@ -3039,7 +3039,7 @@ def _voice_billing_item_evidence_transcripts(
         for separator in reversed(separators):
             suffix = prefix[separator.end():]
             number = re.match(
-                r"\s*(?:₹\s*)?(\d+(?:\.\d+)?|[^\W\d_]+)",
+                r"\s*(?:LINESEPARATOR\s*)?(?:₹\s*)?(\d+(?:\.\d+)?|[^\W\d_]+)",
                 suffix,
                 flags=re.UNICODE,
             )
@@ -3055,7 +3055,12 @@ def _voice_billing_item_evidence_transcripts(
 
     evidence: list[str] = []
     for transcript in transcripts:
-        normalized_text = _voice_billing_normalize(transcript)
+        # Preserve punctuation that explicitly separates count-based bill
+        # lines. The ordinary transcript normalizer removes commas/semicolons,
+        # which made "3 soap 30, 5 tea 20" impossible to split safely. Keep
+        # commas inside digit groups (e.g. 1,200) intact.
+        boundary_text = re.sub(r",(?!\d)|;+", " LINESEPARATOR ", transcript)
+        normalized_text = _voice_billing_normalize(boundary_text)
         if not normalized_text:
             continue
 
@@ -3084,7 +3089,7 @@ def _voice_billing_item_evidence_transcripts(
             # contains exactly one line's anchor. Never return the whole utterance
             # merely because it contains several product names.
             splitter = re.compile(
-                r"[,;\n]+|\s+\b(?:and|then|plus|also|next)\b\s+|"
+                r"[,;\n]+|\bLINESEPARATOR\b|\s+\b(?:and|then|plus|also|next)\b\s+|"
                 r"\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
                 flags=re.IGNORECASE,
             )
@@ -3205,6 +3210,55 @@ def _voice_billing_unit_prefix_transcripts(
                     prefixes.append(normalized[:tokens[index].end()].strip())
                     break
     return tuple(dict.fromkeys(prefixes))
+
+
+def _voice_billing_quantity_evidence_transcripts(
+    raw_item: dict,
+    product: Optional[Product],
+    item_transcripts: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return quantity evidence before the item, or an immediate number+unit after it.
+
+    Most cashiers say "2 kg rice", but some naturally say "rice 2 kg". A
+    post-name number is accepted only when it is immediately followed by a
+    recognized physical/count unit. A trailing bare number remains price
+    evidence and can never validate quantity.
+    """
+    evidence = list(_voice_billing_unit_prefix_transcripts(
+        raw_item, product, item_transcripts
+    ))
+    anchor_values = [
+        raw_item.get("product_name_en"),
+        raw_item.get("product_name_local"),
+        raw_item.get("product_name"),
+        product.product_name if product is not None else None,
+        product.sku if product is not None else None,
+    ]
+    for transcript in item_transcripts:
+        normalized = _voice_billing_normalize(transcript)
+        anchors = _voice_billing_product_anchor_phrases(anchor_values, normalized)
+        spans = []
+        for phrase in anchors:
+            match = re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", normalized)
+            if match:
+                spans.append((match.start(), match.end()))
+        if len(set(spans)) != 1:
+            continue
+        suffix = normalized[max(end for _, end in spans):].strip()
+        tokens = list(re.finditer(r"\S+", suffix))
+        for index in range(1, len(tokens)):
+            current = tokens[index].group(0).strip(".,;:!?()[]\"'").casefold()
+            previous = tokens[index - 1].group(0).strip(".,;:!?()[]\"'").casefold()
+            is_number = (
+                bool(re.fullmatch(r"\d+(?:\.\d+)?", previous))
+                or previous in _VOICE_BILLING_NUMBER_WORDS
+            )
+            if is_number and _vb_canonical_unit(current) is not None:
+                # Keep only the number+unit pair. The remainder may contain a
+                # price, and must not be allowed to validate the quantity.
+                evidence.append(f"{previous} {current}")
+                break
+    return tuple(dict.fromkeys(value for value in evidence if value.strip()))
 
 
 def _voice_billing_item_price_evidence_transcripts(
@@ -3594,12 +3648,12 @@ async def parse_voice_billing(
         spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
         # Recover an omitted unit only from this product's isolated transcript
         # segment; never borrow a unit from another item in a multi-product utterance.
-        if not spoken_unit and item_evidence_transcripts:
-            unit_prefixes = _voice_billing_unit_prefix_transcripts(
-                raw, product, item_evidence_transcripts
-            )
+        quantity_evidence_transcripts = _voice_billing_quantity_evidence_transcripts(
+            raw, product, item_evidence_transcripts
+        )
+        if not spoken_unit and quantity_evidence_transcripts:
             spoken_unit = _vb_repair_spoken_unit(
-                unit_prefixes, _VOICE_BILLING_NUMBER_WORDS
+                quantity_evidence_transcripts, _VOICE_BILLING_NUMBER_WORDS
             ) or ""
         spoken_unit = _voice_billing_canonical_unit_label(spoken_unit)
         spoken_quantity = quantity
@@ -3607,7 +3661,7 @@ async def parse_voice_billing(
         # A later price (for example "2 kg rice 60") must never validate a model
         # that mistakenly reports 60 as the quantity. If no quantity phrase was
         # spoken, the documented default quantity of one remains valid.
-        quantity_evidence_transcripts = _voice_billing_unit_prefix_transcripts(
+        quantity_evidence_transcripts = _voice_billing_quantity_evidence_transcripts(
             raw, product, item_evidence_transcripts
         )
         quantity_grounded = _vb_quantity_is_grounded(
