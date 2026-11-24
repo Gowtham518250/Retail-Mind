@@ -37,6 +37,8 @@ def test_registry_reports_real_capabilities_but_keeps_writes_gated(monkeypatch):
     assert all(item["enabled"] is False for item in capabilities.values())
 
     monkeypatch.setenv("RETAIL_MIND_AGENT_ENABLED", "true")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    monkeypatch.setenv("SARVAM_API_KEY", "test-sarvam-key")
     enabled = {item["name"]: item for item in list_capabilities()}
     assert enabled["inventory.lookup"]["enabled"] is True
     assert enabled["billing.confirm"]["enabled"] is True
