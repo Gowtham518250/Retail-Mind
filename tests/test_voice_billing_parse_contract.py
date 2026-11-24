@@ -356,12 +356,16 @@ def test_ai_extracts_names_before_server_side_catalog_resolution(monkeypatch):
         monkeypatch,
         [{
             "product_id": 42,
+            "product_name_en": "Sona Masoori Rice",
+            "product_name_local": "rice",
             "quantity": 2,
+            "spoken_unit": "kg",
             "spoken_price_amount": 75,
             "spoken_price_kind": "unit",
             "confidence": 0.98,
         }],
         transcript="2 kg rice 75",
+        translated_text="2 kg rice 75",
     )
 
     assert result["success"] is True
