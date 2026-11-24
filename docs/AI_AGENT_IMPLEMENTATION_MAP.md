@@ -24,6 +24,7 @@ The current implementation uses:
 | Customer lookup | Active customers in the authenticated shop; phone masked to last four digits in tool output | Read-only |
 | Sales analytics | Billed, received and outstanding invoice summary over a bounded date range | Read-only |
 | Attendance lookup | Daily shop-scoped attendance summary | Read-only |
+| Attendance correction | Five-minute preview scoped to one owned worker and date; rechecks the daily row and preserves check-in/out timestamps and working hours; emits the existing durable sync/realtime event after owner confirmation | Confirmed employee-data write |
 | Khata lookup | Invoice-derived pending-payment / receivables view; separate from the legacy `KhataBalance` ledger | Read-only |
 | Legacy Khata credit/repayment | Five-minute preview against one phone-number-keyed customer balance; owner confirmation rechecks the balance and writes `KhataBalance`, `KhataHistory` and `UniversalTransaction` atomically with replay protection | Confirmed financial write |
 | Online-order lookup | Shop-scoped order status counts and recent order summaries | Read-only |
@@ -54,10 +55,10 @@ Bill, payment and order previews are short-lived, bound to the action, owner/sho
 These actions remain unavailable to the model:
 - Legacy Khata adjustments other than the explicit owner-confirmed CREDIT and REPAYMENT workflow. The repository still contains separate legacy and invoice-derived Khata models, and the assistant does not merge those balances.
 - Online-order delivery, cancellation and refund actions. Delivery requires the customer's delivery OTP and payment prerequisites; cancellation/refund require their own verified payment and stock-reversal contracts. Only ACCEPT, DISPATCH and REJECT are implemented through the confirmed workflow.
-- Attendance corrections, worker edits and payroll actions. Authorization, approval, correction history and retry/idempotency semantics need to be specified first.
+- Worker profile/salary edits and payroll payouts. The repository stores a worker salary field but does not provide a canonical payroll ledger, payable lifecycle, payment verification or payroll approval history. The agent does not infer or execute salary calculations or payouts.
 - Any arbitrary database, shell, filesystem or network access.
 
-MCP Streamable HTTP is implemented as an optional adapter over the same allowlisted backend tools. It only mounts when both `RETAIL_MIND_AGENT_ENABLED` and `RETAIL_MIND_MCP_ENABLED` are true, and requires explicit host and origin allowlists. It authenticates the existing Retail Mind OWNER access JWT. MCP protocol POST requests are charged against the same per-shop daily AI quota as the native agent routes. MCP tools can read data or prepare bill, invoice-payment, legacy Khata credit/repayment and order-transition previews; no MCP tool can confirm financial writes or delivery. Confirmation remains in the owner-authenticated app API. This endpoint uses manual Retail Mind bearer JWT authentication; it does not implement an OAuth authorization server or interactive OAuth discovery/login. It remains disabled by default.
+MCP Streamable HTTP is implemented as an optional adapter over the same allowlisted backend tools. It only mounts when both `RETAIL_MIND_AGENT_ENABLED` and `RETAIL_MIND_MCP_ENABLED` are true, and requires explicit host and origin allowlists. It authenticates the existing Retail Mind OWNER access JWT. MCP protocol POST requests are charged against the same per-shop daily AI quota as the native agent routes. MCP tools can read data or prepare bill, invoice-payment, legacy Khata credit/repayment, attendance-correction and order-transition previews; no MCP tool can confirm financial writes, attendance writes or delivery. Confirmation remains in the owner-authenticated app API. This endpoint uses manual Retail Mind bearer JWT authentication; it does not implement an OAuth authorization server or interactive OAuth discovery/login. It remains disabled by default.
 
 ## Persistence and migration
 
@@ -77,11 +78,12 @@ Migration `054_agentic_khata_ledger_idempotency` adds the nullable unique `khata
 - Customer phone numbers are masked in tool responses; audit rows store tool metadata rather than raw message or customer payloads.
 - Invoice writes require a separate owner confirmation, use the existing invoice path and verify the persisted invoice and stock movements.
 - Legacy Khata CREDIT/REPAYMENT previews require owner confirmation, lock and recheck the current balance, and commit the balance, history, universal transaction and completed action in one transaction. A unique history idempotency key prevents duplicate ledger entries.
+- Attendance corrections require owner confirmation, recheck the worker tenant and full expected daily attendance snapshot, preserve check-in/out times and calculated hours, and commit the attendance row, durable sync event and completed action in one transaction.
 - Invoice payments require a one-invoice preview, owner confirmation, revalidation of the current outstanding balance and an idempotency key; the preview explicitly warns that it does not verify a bank/cash receipt.
 - Order transitions require an owner-confirmed status change, verify the expected prior state at commit time and read the resulting order status back before reporting success.
 - The feature flag `RETAIL_MIND_AGENT_ENABLED` defaults to `false` in Render configuration.
 - Provider keys are deployment secrets, not source-controlled credentials.
-- Provider-backed staging evaluation, load testing, production migration, rollback rehearsal and Flutter integration remain outstanding.
+- Provider-backed staging evaluation, load testing, production migration and rollback rehearsal remain outstanding. Flutter integration is in a separate draft PR and still requires Android/web CI and end-to-end verification.
 
 ## Validation / rollout status
 
@@ -89,7 +91,7 @@ Latest verified CI on the current PR head:
 - Agent backend test job passed.
 - Alembic migration graph validation passed.
 - Migration upgrade against a clean PostgreSQL CI database passed.
-- Production-focused test step was still running at the last status check.
+- Production-focused tests were running against the voice-billing grounding changes at the last status check.
 - Staging AI evaluation was skipped because dedicated staging configuration was not present.
 
 Do not enable the feature flag in production until the complete CI run is green, provider credentials and provider terms are reviewed, staging end-to-end tests pass, tenant-isolation and concurrent-confirmation tests pass, and the owner app is integrated and verified. Keep the feature flag off during the initial merge.
