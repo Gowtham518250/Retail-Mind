@@ -261,6 +261,35 @@ def _invoice_verification(db: Session, *, shop_id: int, action: AgentPendingActi
     if len(line_rows) != len(expected_lines):
         return None
 
+    def _line_signature(line: dict) -> tuple:
+        quantity = Decimal(str(line["quantity"])).quantize(Decimal("0.001"))
+        unit_price = Decimal(str(line["unit_price"])).quantize(Decimal("0.01"))
+        discount = Decimal(str(line.get("discount_amount") or "0")).quantize(Decimal("0.01"))
+        line_total = (quantity * unit_price - discount).quantize(Decimal("0.01"))
+        return (
+            int(line["product_id"]) if line.get("product_id") is not None else None,
+            " ".join(str(line.get("product_name") or "").split()).casefold(),
+            quantity,
+            unit_price,
+            discount,
+            line_total,
+        )
+
+    def _stored_line_signature(line: InvoiceLineItem) -> tuple:
+        return (
+            int(line.product_id) if line.product_id is not None else None,
+            " ".join(str(line.description or "").split()).casefold(),
+            Decimal(str(line.quantity)).quantize(Decimal("0.001")),
+            Decimal(str(line.unit_price)).quantize(Decimal("0.01")),
+            Decimal(str(line.discount_amount or 0)).quantize(Decimal("0.01")),
+            Decimal(str(line.line_total)).quantize(Decimal("0.01")),
+        )
+
+    if sorted(_line_signature(line) for line in expected_lines) != sorted(
+        _stored_line_signature(line) for line in line_rows
+    ):
+        return None
+
     expected_stock: dict[int, Decimal] = {}
     for line in expected_lines:
         if line.get("product_id") is not None:
@@ -274,12 +303,18 @@ def _invoice_verification(db: Session, *, shop_id: int, action: AgentPendingActi
             StockMovement.movement_type == StockMovementType.OUT,
         ).all()
         recorded_quantity = sum(Decimal(str(row.quantity or 0)) for row in movements)
-        if recorded_quantity < expected_quantity:
+        if recorded_quantity != expected_quantity:
             return None
 
     expected_total = Decimal(str(action.payload["total_amount"])).quantize(Decimal("0.01"))
     actual_total = Decimal(str(invoice.total_amount or 0)).quantize(Decimal("0.01"))
     if actual_total != expected_total:
+        return None
+    if Decimal(str(invoice.paid_amount or 0)).quantize(Decimal("0.01")) != Decimal("0.00"):
+        return None
+    if Decimal(str(invoice.tax or 0)).quantize(Decimal("0.01")) != Decimal(
+        str(action.payload.get("tax") or "0")
+    ).quantize(Decimal("0.01")):
         return None
 
     return {
