@@ -10,6 +10,7 @@ _IMPLEMENTED = {
     "khata.lookup",
     "orders.lookup",
     "attendance.lookup",
+    "attendance.manage",
     "analytics.read",
     "khata.payment",
     "khata.record",
@@ -32,7 +33,7 @@ _CAPABILITIES: tuple[dict[str, Any], ...] = (
     {"name": "voice.synthesis", "description": "Synthesize an assistant response using Sarvam Bulbul for supported Indian languages.", "risk": "external_provider", "requires_confirmation": False, "provider": "sarvam"},
     {"name": "khata.record", "description": "Add legacy Khata credit or record a repayment using an atomic, idempotent history and journal write after owner confirmation.", "risk": "financial_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "orders.manage", "description": "Accept, reject, cancel or refund an order. Disabled until every transition is wrapped and tested.", "risk": "business_write", "requires_confirmation": True, "provider": "disabled"},
-    {"name": "attendance.manage", "description": "Change attendance or payroll records. Disabled until approved correction workflow is defined.", "risk": "employee_data_write", "requires_confirmation": True, "provider": "disabled"},
+    {"name": "attendance.manage", "description": "Record a daily worker attendance correction through a five-minute owner-confirmed preview. Check-in/out timestamps and calculated working hours are preserved; payroll payouts remain disabled.", "risk": "employee_data_write", "requires_confirmation": True, "provider": "backend"},
 )
 
 
