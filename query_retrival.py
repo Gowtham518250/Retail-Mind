@@ -6,6 +6,7 @@ import difflib
 import asyncio
 import math
 import time
+import unicodedata
 from urllib.parse import urlencode
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -3200,34 +3201,91 @@ _QUERY_LANGUAGE_EXAMPLES = (
 )
 
 
-def _load_shop_vocabulary(db: Session, user_id: int) -> tuple[str, ...]:
-    """Load bounded product, customer and worker names for this shop."""
-    names: list[str] = []
+def _load_shop_entity_vocabulary(db: Session, user_id: int) -> dict[str, tuple[str, ...]]:
+    """Load bounded, typed entity names from the authenticated shop only."""
     try:
         from models import Product, Customer
-        names += [
-            row[0] for row in db.query(Product.product_name)
-            .filter(Product.user_id == int(user_id), Product.is_active == True)
-            .order_by(Product.product_name.asc()).limit(80).all()
-        ]
-        names += [
-            row[0] for row in db.query(Customer.customer_name)
-            .filter(Customer.user_id == int(user_id), Customer.is_active == True)
-            .order_by(Customer.customer_name.asc()).limit(50).all()
-        ]
-        names += [
-            row[0] for row in db.query(Worker.name)
-            .filter(Worker.shopkeeper_id == int(user_id), Worker.status == "active")
-            .order_by(Worker.name.asc()).limit(20).all()
-        ]
+        rows = {
+            "product": [
+                row[0] for row in db.query(Product.product_name)
+                .filter(Product.user_id == int(user_id), Product.is_active == True)
+                .order_by(Product.product_name.asc()).limit(100).all()
+            ],
+            "customer": [
+                row[0] for row in db.query(Customer.customer_name)
+                .filter(Customer.user_id == int(user_id), Customer.is_active == True)
+                .order_by(Customer.customer_name.asc()).limit(75).all()
+            ],
+            "worker": [
+                row[0] for row in db.query(Worker.name)
+                .filter(Worker.shopkeeper_id == int(user_id), Worker.status == "active")
+                .order_by(Worker.name.asc()).limit(30).all()
+            ],
+        }
     except Exception:
         try:
             db.rollback()
         except Exception:
             pass
-        return ()
-    cleaned = [re.sub(r"\s+", " ", str(name or "")).strip()[:60] for name in names]
-    return tuple(dict.fromkeys(name for name in cleaned if name))
+        return {"product": (), "customer": (), "worker": ()}
+
+    cleaned: dict[str, tuple[str, ...]] = {}
+    for entity_type, values in rows.items():
+        names = [
+            re.sub(r"\\s+", " ", str(name or "")).strip()[:80]
+            for name in values
+        ]
+        cleaned[entity_type] = tuple(dict.fromkeys(name for name in names if name))
+    return cleaned
+
+
+def _load_shop_vocabulary(db: Session, user_id: int) -> tuple[str, ...]:
+    """Compatibility wrapper returning names from the authenticated shop."""
+    typed = _load_shop_entity_vocabulary(db, user_id)
+    return tuple(name for values in typed.values() for name in values)
+
+
+def _normalise_entity_name(value: str) -> str:
+    return re.sub(
+        r"\\s+", " ",
+        unicodedata.normalize("NFKC", str(value or "")).casefold()
+    ).strip()
+
+
+def _match_shop_entities(query: str, vocabulary: dict[str, tuple[str, ...]]) -> list[dict]:
+    """Resolve only exact catalogue/customer/worker phrases; never invent a match.
+
+    Longest-first matching prevents a generic short name from shadowing a more
+    specific product variant. Unicode-aware boundaries avoid matching 'oil'
+    inside unrelated words such as 'boiling'.
+    """
+    normalised_query = _normalise_entity_name(query)
+    matches: list[dict] = []
+    for entity_type, values in vocabulary.items():
+        candidates = sorted(
+            (str(value).strip() for value in values if str(value).strip()),
+            key=lambda value: (-len(value), value.casefold()),
+        )
+        selected: list[str] = []
+        for name in candidates:
+            normalised_name = _normalise_entity_name(name)
+            if len(normalised_name) < 2:
+                continue
+            pattern = r"(?<![\\w])" + re.escape(normalised_name) + r"(?![\\w])"
+            if not re.search(pattern, normalised_query, flags=re.IGNORECASE | re.UNICODE):
+                continue
+            if any(normalised_name in _normalise_entity_name(existing) for existing in selected):
+                continue
+            selected.append(name)
+            matches.append({"type": entity_type, "name": name, "match": "exact"})
+    return matches
+
+
+def _format_shop_entity_context(entities: list[dict]) -> str:
+    """Render verified shop entities as untrusted data for the SQL planner."""
+    if not entities:
+        return "No exact shop-entity phrase was resolved; do not invent entity IDs or names."
+    return json.dumps(entities[:20], ensure_ascii=False, separators=(",", ":"))
 
 
 def _repair_query_asr(text_value: str) -> str:
