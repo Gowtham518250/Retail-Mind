@@ -3788,7 +3788,8 @@ async def parse_voice_billing(
         if quantity is None:
             quantity = Decimal("0")
         model_confidence = _voice_billing_parse_confidence(raw.get("confidence"))
-        confidence_inferred = model_confidence is None or model_confidence < 0.72
+        confidence_inferred = model_confidence is None
+        confidence_too_low = model_confidence is not None and model_confidence < 0.72
         confidence = model_confidence if model_confidence is not None else 0.0
         quantity_inferred = False
         if not quantity.is_finite() or quantity < 0 or quantity > Decimal("100000"):
@@ -3808,6 +3809,11 @@ async def parse_voice_billing(
             phrase and f" {phrase} " in f" {source_text} "
             for phrase in extracted_phrases
         )
+        if confidence_too_low:
+            unresolved.append(
+                f"{proposed_name or 'Item'}: the AI marked the product match as low confidence"
+            )
+            continue
         if confidence_inferred:
             if local_name_is_spoken:
                 # Explicit source-language wording is stronger evidence than an
@@ -4057,18 +4063,28 @@ async def parse_voice_billing(
         spoken_amount = raw.get("spoken_price_amount")
         spoken_amount_value = _voice_billing_parse_model_decimal(spoken_amount, currency=True)
 
+        explicit_currency_price = bool(re.search(
+            r"(?:₹|\\brs\\.?\\b|\\binr\\b|\\brupees?\\b|"
+            r"రూపాయి|రూపాయలు|రూ|ரூபாய்|ரூபாய்கள்|ரூ|"
+            r"रुपया|रुपये|रु|ರೂಪಾಯಿ|ರೂಪಾಯಿಗಳು|ರೂ|રૂપિયા)",
+            price_context,
+            flags=re.IGNORECASE,
+        ))
         price_role_inferred = False
-        if (
-            kind == "none"
-            and spoken_price_evidence
+        can_infer_spoken_price = (
+            spoken_price_evidence
             and spoken_amount_value is not None
             and spoken_amount_value > 0
-        ):
+        )
+        if kind == "none" and can_infer_spoken_price:
             # Preserve the established POS shorthand: a bare trailing amount
-            # after a weighted item is treated as its unit rate unless the
-            # extractor explicitly identifies a line total. Missing price-role
-            # classification is recoverable, but an explicit "ambiguous" label
-            # must remain a manual correction rather than a guessed price.
+            # without a total marker is treated as a unit rate.
+            kind = "unit"
+            price_role_inferred = True
+        elif kind == "ambiguous" and explicit_currency_price and can_infer_spoken_price:
+            # An explicit rupee marker resolves the amount as a price rather than
+            # a quantity. Preserve the POS per-unit default, but flag the inferred
+            # role so the cashier must review it before billing.
             kind = "unit"
             price_role_inferred = True
 
