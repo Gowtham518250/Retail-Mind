@@ -468,3 +468,26 @@ def test_delimited_count_based_products_keep_quantities_separate_without_units(m
     assert [item["quantity_grounded"] for item in result["items"]] == [True, True]
     assert [item["unit_price"] for item in result["items"]] == [30.0, 20.0]
     assert all(item["needs_confirmation"] is False for item in result["items"])
+
+
+def test_quantity_recovered_from_exact_spoken_number_does_not_require_repeat_confirmation(monkeypatch):
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_name_en": "Sona Masoori Rice",
+            "product_name_local": "rice",
+            # Simulate extraction omitting quantity; server recovers it from source speech.
+            "spoken_unit": "kg",
+            "spoken_price_amount": 50,
+            "spoken_price_kind": "unit",
+            "confidence": 0.98,
+        }],
+        transcript="2 kg rice 50",
+        language_code="en-IN",
+        catalog_products=[RICE],
+    )
+    (item,) = result["items"]
+    assert item["quantity"] == 2.0
+    assert item["quantity_grounded"] is True
+    assert item["quantity_inferred"] is True
+    assert item["needs_confirmation"] is False

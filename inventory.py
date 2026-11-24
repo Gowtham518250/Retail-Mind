@@ -4323,14 +4323,8 @@ async def parse_voice_billing(
                 f"{price_warning} {confidence_warning}".strip()
                 if price_warning else confidence_warning
             )
-        if quantity_inferred:
-            quantity_warning = (
-                "Quantity was recovered from the spoken number and unit. Verify it before billing."
-            )
-            price_warning = (
-                f"{price_warning} {quantity_warning}".strip()
-                if price_warning else quantity_warning
-            )
+        # Recovered quantities are retained only after source-transcript grounding.
+        # They are not a separate confirmation requirement.
         if unit_note and not price_warning:
             price_warning = unit_note
         price_missing = not unit_price.is_finite() or unit_price <= 0
@@ -4377,7 +4371,10 @@ async def parse_voice_billing(
             "needs_confirmation": bool(
                 ambiguous_candidates or unit_mismatch or not quantity_grounded or price_missing
                 or not unit_grounded or not price_grounded or price_needs_confirmation
-                or confidence_inferred or quantity_inferred or price_role_inferred
+                # A quantity recovered deterministically from the original
+                # transcript is already source-grounded; do not ask the owner
+                # to repeat/approve the same number a second time.
+                or confidence_inferred or price_role_inferred
             ),
             "ambiguous_candidates": ambiguous_candidates,
             "match_reasons": match_reasons,
