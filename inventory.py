@@ -3692,6 +3692,28 @@ async def parse_voice_billing(
             raw, product, parser_transcript, "",
             min(len(raw_items), 30), raw_items[:30],
         )
+        # Prefer a direct source-language segment match when the cashier used
+        # explicit separators. This avoids relying on token-stemming for short
+        # Indic names (e.g. Telugu "టీ") and keeps each price with its own line.
+        if len(raw_items) > 1:
+            source_segments = re.split(
+                r",\\s+|;+\\s*|\\n+|\\s+(?:and|then|plus|also|next|మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\\s+",
+                parser_transcript,
+                flags=re.IGNORECASE,
+            )
+            local_anchors = [
+                _voice_billing_normalize(str(raw.get(field) or ""))
+                for field in ("product_name_local", "product_name_en", "product_name")
+            ]
+            local_anchors = [anchor for anchor in local_anchors if anchor]
+            for anchor in local_anchors:
+                matches = [
+                    segment.strip() for segment in source_segments
+                    if f" {anchor} " in f" {_voice_billing_normalize(segment)} "
+                ]
+                if len(matches) == 1:
+                    item_evidence_transcripts = (matches[0],)
+                    break
         spoken_unit = re.sub(r"\s+", " ", str(raw.get("spoken_unit") or "")).strip()[:20]
         # Recover an omitted unit only from this product's isolated transcript
         # segment; never borrow a unit from another item in a multi-product utterance.
