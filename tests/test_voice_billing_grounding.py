@@ -122,9 +122,10 @@ def test_normalizer_keeps_numbers_whole():
 def test_ai_extractor_handles_decimals_without_catalog_fastpath(monkeypatch):
     result, capture, _, _ = _run_voice_billing_endpoint(
         monkeypatch,
-        [{"product_name_en": "Rice", "quantity": 1.5, "spoken_unit": "kg",
-          "spoken_price_amount": 60, "spoken_price_kind": "unit", "confidence": 0.99}],
-        transcript="1.5 kg rice 60", language_code="auto",
+        [{"product_name_en": "Rice", "product_name_local": "rice",
+          "quantity": 1.5, "spoken_unit": "kg", "spoken_price_amount": 60,
+          "spoken_price_kind": "unit", "confidence": 0.99}],
+        transcript="1.5 kg rice 60 per kg", language_code="auto",
         catalog_products=[RICE], fast_path=True)
     assert len(capture["requests"]) == 2  # translation + structured extraction
     (item,) = result["items"]
