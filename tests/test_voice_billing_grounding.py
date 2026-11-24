@@ -419,6 +419,7 @@ def test_telugu_multi_item_extraction_ignores_wrong_catalog_prices(monkeypatch):
     ], result
     assert [item["quantity"] for item in result["items"]] == [5.0, 1.0, 1.0, 1.0, 1.0]
     assert [item["unit_price"] for item in result["items"]] == [12.0, 30.0, 5.0, 10.0, 70.0]
+    print("TELUGU_MULTI_ITEM_PRICE_DEBUG", result["items"])
     assert [item["price_source"] for item in result["items"]] == [
         "spoken_line_total", "spoken_unit", "spoken_unit", "spoken_unit", "spoken_unit"
     ]
