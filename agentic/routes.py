@@ -60,7 +60,7 @@ class AgentChatRequest(BaseModel):
     @field_validator("conversation_id")
     @classmethod
     def validate_conversation_id(cls, value):
-        return _validate_conversation_id(value)
+        return _parse_conversation_id(value)
 
     @field_validator("message")
     @classmethod
