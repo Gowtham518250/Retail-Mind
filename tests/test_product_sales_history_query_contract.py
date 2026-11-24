@@ -97,6 +97,12 @@ def test_screenshot_ghee_question_routes_to_product_sales_history_and_uses_invoi
     assert "ili.unit_price::numeric AS unit_price" in sql
     assert "ili.line_total::numeric AS line_total" in sql
     assert "i.invoice_date AS sale_date" in sql
+    assert "cp.is_active IS TRUE" in sql
+    assert "cp.user_id = i.user_id" in sql
+    assert "cp.branch_id = i.branch_id" in sql
+    assert "active_product.unit_price::numeric AS current_selling_price" in sql
+    assert "COALESCE(active_product.unit_price, p.unit_price)" not in sql
+    assert "COALESCE(active_product.unit_price, s.price)" not in sql
     assert "s.shopkeeper_id = :user_id" in sql
     assert "NOT EXISTS (SELECT 1 FROM invoice_sales)" in sql
     assert "SELECT DISTINCT product_name, price" not in sql
