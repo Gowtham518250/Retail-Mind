@@ -2925,7 +2925,7 @@ def _voice_billing_product_anchor_phrases(values, transcript: str) -> list[str]:
             phrase = _voice_billing_normalize(alias)
             if (
                 len(phrase) >= 2
-                and re.search(r"(?<!\\w)" + re.escape(phrase) + r"(?!\\w)", context)
+                and re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", context)
                 and phrase not in phrases
             ):
                 phrases.append(phrase)
@@ -2936,7 +2936,7 @@ def _voice_billing_canonical_unit_label(value: str) -> str:
     """Convert native-script unit aliases to stable POS unit labels."""
     info = _vb_canonical_unit(value)
     if info is None:
-        return re.sub(r"\\s+", " ", str(value or "")).strip()[:20]
+        return re.sub(r"\s+", " ", str(value or "")).strip()[:20]
     if info.dimension == "mass":
         return "kg" if info.factor == 1000 else "g"
     if info.dimension == "volume":
@@ -3164,6 +3164,27 @@ def _voice_billing_unit_prefix_transcripts(
             prefix = normalized[:min(positions)].strip()
             if prefix:
                 prefixes.append(prefix)
+            continue
+
+        # Translation may identify a custom product whose native-script name is
+        # absent from the extractor output. In an already isolated line, the
+        # first spoken number+unit pair still safely grounds its quantity.
+        repaired_unit = _vb_repair_spoken_unit(
+            [normalized], _VOICE_BILLING_NUMBER_WORDS
+        )
+        if repaired_unit:
+            tokens = list(re.finditer(r"\S+", normalized))
+            unit_word = repaired_unit.casefold()
+            for index in range(1, len(tokens)):
+                current = tokens[index].group(0).strip(".,;:!?()[]\"'").casefold()
+                previous = tokens[index - 1].group(0).strip(".,;:!?()[]\"'").casefold()
+                is_number = (
+                    re.fullmatch(r"\d+(?:\.\d+)?", previous)
+                    or previous in _VOICE_BILLING_NUMBER_WORDS
+                )
+                if current == unit_word and is_number:
+                    prefixes.append(normalized[:tokens[index].end()].strip())
+                    break
     return tuple(dict.fromkeys(prefixes))
 
 
@@ -3205,6 +3226,27 @@ def _voice_billing_item_price_evidence_transcripts(
                 if words[index:index + width] == phrase_words:
                     spans.append((index, index + width))
         if not spans:
+            # If translation did not supply a native-script product name, use
+            # the suffix after the spoken quantity+unit in this isolated line.
+            # This still validates the amount from the original ASR transcript.
+            repaired_unit = _vb_repair_spoken_unit(
+                [normalized_transcript], _VOICE_BILLING_NUMBER_WORDS
+            )
+            if repaired_unit:
+                tokens = list(re.finditer(r"\S+", normalized_transcript))
+                unit_word = repaired_unit.casefold()
+                for index in range(1, len(tokens)):
+                    current = tokens[index].group(0).strip(".,;:!?()[]\"'").casefold()
+                    previous = tokens[index - 1].group(0).strip(".,;:!?()[]\"'").casefold()
+                    is_number = (
+                        re.fullmatch(r"\d+(?:\.\d+)?", previous)
+                        or previous in _VOICE_BILLING_NUMBER_WORDS
+                    )
+                    if current == unit_word and is_number:
+                        suffix = normalized_transcript[tokens[index].end():].strip()
+                        if suffix:
+                            evidence.append(suffix)
+                        break
             continue
         start, end = min(spans, key=lambda span: (-(span[1] - span[0]), span[0]))
         suffix = " ".join(words[end:]).strip()
@@ -3664,24 +3706,13 @@ async def parse_voice_billing(
             price_context,
         ))
         if normalized_spoken_unit in weighted_units and kind in {"unit", "line_total"}:
+            # A bare amount after a weight/volume quantity is the line total.
+            # It is a per-unit rate only when the utterance explicitly says per
+            # kg/g/litre (or uses /kg), per the extraction contract.
             if explicit_rate:
                 kind = "unit"
-            elif kind == "unit" and product is not None:
-                # Promote a bare amount to line-total only when exact catalog
-                # arithmetic confirms it (e.g. 3 kg at ₹20/kg spoken as ₹60).
-                # Otherwise retain the extractor's unit-price interpretation.
-                try:
-                    reported_amount = Decimal(str(raw.get("spoken_price_amount")))
-                    expected_total = (
-                        Decimal(str(product.unit_price or 0)) * quantity
-                    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                    if (
-                        expected_total > 0
-                        and reported_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == expected_total
-                    ):
-                        kind = "line_total"
-                except (InvalidOperation, TypeError, ValueError, ArithmeticError):
-                    pass
+            else:
+                kind = "line_total"
 
         # A price the speaker never said (invented, or computed by the model) must not reach
         # the bill as a "spoken" price: fall back to the catalog price and ask for review.
