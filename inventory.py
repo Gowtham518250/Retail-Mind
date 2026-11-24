@@ -3406,15 +3406,11 @@ async def parse_voice_billing(
             detail="Voice billing AI is not configured. Set GROQ_API_KEY on the backend.",
         )
 
-    # Only repeated cashier-approved aliases from this authenticated shop are used.
-    # The visible transcript remains untouched for review and audit.
-    alias_rows = _voice_billing_active_alias_rows(db, int(user_id), request.language_code or "auto")
-    alias_expanded_transcript, aliases_applied = _voice_billing_expand_shop_aliases(
-        transcript,
-        [{"alias_text": row[0], "product_name": row[1]} for row in alias_rows],
-    )
-    # Normalize spoken scale expressions after safe alias expansion.
-    parser_transcript = _voice_billing_normalize_spoken_scales(alias_expanded_transcript)
+    # Preserve the ASR transcript as the extraction source of truth. Do not
+    # expand shop aliases or catalog phrases before the AI sees the utterance;
+    # those substitutions can turn a different spoken product into a catalog item.
+    aliases_applied = False
+    parser_transcript = _voice_billing_normalize_spoken_scales(transcript)
 
     # Normalize non-English/native-script and common Romanized Indian speech BEFORE matching.
     model = (os.getenv("GROQ_VOICE_BILLING_MODEL") or "qwen/qwen3.8-27b").strip()
