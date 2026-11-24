@@ -33,7 +33,7 @@ def test_registry_reports_real_capabilities_but_keeps_writes_gated(monkeypatch):
     capabilities = {item["name"]: item for item in list_capabilities()}
     assert capabilities["inventory.lookup"]["implemented"] is True
     assert capabilities["inventory.manage"]["implemented"] is True
-    assert capabilities["inventory.manage"]["enabled"] is True
+    assert capabilities["inventory.manage"]["enabled"] is False
     assert capabilities["inventory.manage"]["requires_confirmation"] is True
     assert capabilities["billing.prepare"]["implemented"] is True
     assert capabilities["billing.confirm"]["requires_confirmation"] is True
