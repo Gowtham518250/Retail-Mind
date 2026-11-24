@@ -660,25 +660,39 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
         success = True
         return data
     except ValidationError:
+        db.rollback()
         error_code = "INVALID_TOOL_ARGUMENTS"
         return {"success": False, "error_code": error_code, "message": "The requested tool arguments were invalid."}
     except HTTPException as exc:
+        db.rollback()
         error_code = f"BACKEND_{exc.status_code}"
         return {"success": False, "error_code": error_code, "message": str(exc.detail)[:300]}
     except (ValueError, TypeError):
+        db.rollback()
         error_code = "INVALID_REQUEST"
         return {"success": False, "error_code": error_code, "message": "The requested tool input could not be processed safely."}
     except Exception:
+        db.rollback()
         error_code = "TOOL_EXECUTION_FAILED"
         return {"success": False, "error_code": error_code, "message": "This information is temporarily unavailable. Please try again."}
     finally:
-        _record_tool_execution(
-            db,
-            shop_id=shop_id,
-            conversation_id=conversation_id,
-            request_id=request_id,
-            tool_name=tool_name,
-            started_at=started,
-            success=success,
-            error_code=error_code,
-        )
+        try:
+            _record_tool_execution(
+                db,
+                shop_id=shop_id,
+                conversation_id=conversation_id,
+                request_id=request_id,
+                tool_name=tool_name,
+                started_at=started,
+                success=success,
+                error_code=error_code,
+            )
+            # Commit the read query/audit record and a pending bill preview
+            # before the graph performs its next external model request.
+            db.commit()
+        except Exception:
+            db.rollback()
+            import logging
+            logging.getLogger(__name__).exception(
+                "Could not persist Retail Mind agent tool audit metadata"
+            )
