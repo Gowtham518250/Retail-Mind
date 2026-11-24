@@ -4323,14 +4323,8 @@ async def parse_voice_billing(
                 f"{price_warning} {confidence_warning}".strip()
                 if price_warning else confidence_warning
             )
-        if quantity_inferred:
-            quantity_warning = (
-                "Quantity was recovered from the spoken number and unit. Verify it before billing."
-            )
-            price_warning = (
-                f"{price_warning} {quantity_warning}".strip()
-                if price_warning else quantity_warning
-            )
+        # Recovered quantities are retained only after source-transcript grounding.
+        # They are not a separate confirmation requirement.
         if unit_note and not price_warning:
             price_warning = unit_note
         price_missing = not unit_price.is_finite() or unit_price <= 0
