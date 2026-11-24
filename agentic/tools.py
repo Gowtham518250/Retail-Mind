@@ -591,6 +591,19 @@ def _order_summary(db: Session, shop_id: int, args: OrderSummaryArgs) -> dict:
     }
 
 
+def _clean_bill_instruction_filler(value: str) -> str:
+    """Remove trailing bill-command wording without changing spoken item facts."""
+    text = " ".join(str(value or "").split())
+    patterns = (
+        r"\s+(?:and\s+)?i\s*am\s+(?:approved|ready)\s+to\s+(?:create|make|prepare|generate)\s+(?:a\s+)?bill\b.*$",
+        r"\s+(?:and\s+)?i\s*(?:want|need)\s+to\s+(?:create|make|prepare|generate)\s+(?:a\s+)?bill\b.*$",
+        r"\s+(?:and\s+)?(?:please\s+)?(?:create|make|prepare|generate)\s+(?:a\s+)?bill\b.*$",
+    )
+    for pattern in patterns:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip(" ,.;")
+    return text or str(value or "").strip()
+
+
 def _is_bill_follow_up_message(user_text: str) -> bool:
     """Recognize short confirmations/corrections that refer to an earlier bill request."""
     text = " ".join(str(user_text or "").strip().lower().split())
@@ -607,9 +620,9 @@ def _is_bill_follow_up_message(user_text: str) -> bool:
 
 
 def _recent_bill_source_transcript(context: dict, user_text: str) -> str:
-    """Restore the last owner-authored item utterance for parser evidence on a short follow-up."""
+    """Use only the original item utterance as numeric evidence on short follow-ups."""
     if not _is_bill_follow_up_message(user_text):
-        return user_text
+        return _clean_bill_instruction_filler(user_text)[:1200]
 
     messages = context.get("recent_user_messages")
     if not isinstance(messages, list):
@@ -626,20 +639,20 @@ def _recent_bill_source_transcript(context: dict, user_text: str) -> str:
             " ",
             previous,
         )
-        candidate = " ".join(candidate.split())
+        candidate = _clean_bill_instruction_filler(" ".join(candidate.split()))
         if not candidate:
             continue
-        # Only carry forward a likely bill/item utterance, not an unrelated
-        # recent question such as "show today's sales".
         has_bill_context = bool(re.search(
             r"\b(?:bill|billing|invoice|sale|sell|selling|add|quantity|qty|price|"
             r"rupees?|rs\.?|kg|g|litre|liter|packet|packets|piece|pieces|pcs)\b",
-            candidate,
+            previous,
             flags=re.IGNORECASE,
         ))
         has_item_and_number = bool(re.search(r"[A-Za-z\u0080-\uFFFF]", candidate)) and bool(re.search(r"\d", candidate))
         if has_bill_context and (has_item_and_number or len(candidate.split()) >= 2):
-            return f"{candidate}. Latest owner instruction: {user_text}"[:1200]
+            # Do not append "Yes"/"Okay" to the source transcript. It is a
+            # confirmation, not a new product or numeric fact.
+            return candidate[:1200]
 
     return user_text
 
@@ -651,21 +664,20 @@ def _recent_bill_context(context: dict, user_text: str) -> str | None:
     if not isinstance(messages, list):
         return None
 
-    # Only prior owner-authored messages are passed here by run_chat_turn.
-    # Remove phone numbers because the parser should not mistake them for prices.
     cleaned = []
     for message in messages[-5:]:
         value = str(message or "").strip()
         value = re.sub(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{9}(?!\d)", " ", value)
-        value = " ".join(value.split())
+        value = _clean_bill_instruction_filler(" ".join(value.split()))
         if value:
             cleaned.append(value[:700])
     if not cleaned:
-        return None
-    return "\n".join(
+        return f"Latest owner reply: {str(user_text or '').strip()[:180]}"
+    earlier = "\n".join(
         f"Earlier owner message {index + 1}: {value}"
         for index, value in enumerate(cleaned)
-    )[:2400]
+    )
+    return earlier + f"\nLatest owner reply: {str(user_text or '').strip()[:180]}\nThe latest reply is a confirmation or correction; do not ask again for fields already stated and confirmed."
 
 
 async def _prepare_bill(db: Session, context: dict) -> dict:
@@ -714,12 +726,30 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         }
 
     if parsed.get("needs_clarification"):
-        return {
-            "success": False,
-            "needs_clarification": True,
-            "message": parsed.get("clarification_question") or "Please clarify the highlighted bill details before I prepare a preview.",
-            "parser": parsed,
-        }
+        # The extractor may set a broad clarification flag when it recovered a
+        # quantity from the source speech. If product, quantity and unit are
+        # independently grounded, keep those facts and let field-level checks
+        # ask only for what is genuinely missing (usually the selling price).
+        parsed_items = parsed.get("items") or []
+        structured_facts_grounded = bool(parsed_items) and all(
+            isinstance(item, dict)
+            and str(item.get("product_name") or item.get("product_name_en") or "").strip()
+            and Decimal(str(item.get("quantity") or 0)) > 0
+            and item.get("quantity_grounded") is True
+            and item.get("unit_grounded", True) is True
+            and not item.get("unit_mismatch")
+            and not item.get("ambiguous_candidates")
+            and not item.get("confidence_inferred")
+            and not item.get("price_role_inferred")
+            for item in parsed_items
+        )
+        if not structured_facts_grounded:
+            return {
+                "success": False,
+                "needs_clarification": True,
+                "message": parsed.get("clarification_question") or "Please clarify only the missing bill details before I prepare a preview.",
+                "parser": parsed,
+            }
 
     shop_id = int(context["shop_id"])
     # AI-created invoices are bill-only by default. The spoken item and price
