@@ -3862,11 +3862,14 @@ async def parse_voice_billing(
         resolution = (
             _vb_resolve_catalog_product(
                 [
-                    proposed_name,
                     str(raw.get("product_name_local") or ""),
+                    proposed_name,
                     str(raw.get("product_name_en") or ""),
                 ],
-                f"{english_transcript} {parser_transcript}",
+                # Only the original spoken transcript may establish stock identity.
+                # The translated English transcript is a language aid for extraction,
+                # not proof that a particular catalog product was actually spoken.
+                parser_transcript,
                 products,
                 normalize=_voice_billing_normalize,
                 expand_tokens=_voice_billing_expanded_tokens,
@@ -3880,8 +3883,11 @@ async def parse_voice_billing(
         # defensible stock match even if phonetic token expansion missed it.
         # Never use model IDs, substring matches or fuzzy nearest neighbours.
         exact_name_matches = []
-        if local_name_is_spoken and proposed_name:
-            proposed_key = _voice_billing_normalize(proposed_name)
+        proposed_key = _voice_billing_normalize(proposed_name)
+        proposed_name_is_spoken = bool(
+            proposed_key and f" {proposed_key} " in f" {source_text} "
+        )
+        if local_name_is_spoken and proposed_name_is_spoken:
             exact_name_matches = [
                 candidate for candidate in products
                 if _voice_billing_normalize(str(candidate.product_name or "")) == proposed_key
@@ -3899,9 +3905,7 @@ async def parse_voice_billing(
             product is not None
             and resolution is not None
             and resolution.status == "none"
-            and _voice_billing_product_has_evidence(
-                f"{english_transcript} {parser_transcript}", product
-            )
+            and _voice_billing_product_has_evidence(parser_transcript, product)
         ):
             # The model-provided ID may recover a long-tail catalog item only
             # when the resolver found no competing candidates. An explicit
@@ -4044,7 +4048,12 @@ async def parse_voice_billing(
 
         catalog_matched = product is not None
         local_name = re.sub(r"[\r\n\t]+", " ", str(raw.get("product_name_local") or "")).strip()[:120]
-        product_name = str(product.product_name or "").strip() if product is not None else proposed_name
+        catalog_product_name = (
+            str(product.product_name or "").strip() if product is not None else None
+        )
+        # Keep the AI-extracted, speech-grounded item label on the bill. Catalog
+        # identity is separate metadata and must not silently rename the spoken item.
+        product_name = proposed_name or catalog_product_name or local_name
         if request.language_code and str(request.language_code).lower().split("-", 1)[0] == "te":
             if not local_name or _voice_billing_is_english_text(local_name):
                 telugu_names = {
@@ -4334,6 +4343,7 @@ async def parse_voice_billing(
             "product_name": product_name,
             "product_name_en": product_name,
             "product_name_local": local_name,
+            "catalog_product_name": catalog_product_name,
             "sku": str(product.sku or "") if product is not None else "",
             "unit": (
                 str(getattr(product, "unit", "pcs") or "pcs")
