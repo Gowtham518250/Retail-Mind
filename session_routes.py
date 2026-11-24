@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+import hmac
 
 from db import get_db
 from session_service import SessionService
@@ -108,9 +109,37 @@ class LogoutRequest(BaseModel):
 
 
 @router.post("/logout")
-def logout(req: LogoutRequest, db: Session = Depends(get_db)):
-    """Logs the user out of the current device."""
-    success = SessionService.logout(db, req.access_token)
+def logout(
+    req: LogoutRequest,
+    request: Request,
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Logs out only the access token authenticated on this request.
+
+    The body token is retained for compatibility with existing clients, but
+    cannot be used to invalidate another account's session.
+    """
+    authorization = request.headers.get("authorization", "")
+    scheme, separator, bearer_token = authorization.partition(" ")
+    submitted_token = (req.access_token or "").strip()
+    bearer_token = bearer_token.strip()
+    if (
+        not separator
+        or scheme.lower() != "bearer"
+        or not bearer_token
+        or not submitted_token
+        or not hmac.compare_digest(bearer_token, submitted_token)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="The logout token must match the authenticated session.",
+        )
+
+    # get_current_user validates the bearer token and derives this identity.
+    # Keep the explicit use of current_user in the route contract for auditability.
+    _ = current_user
+    success = SessionService.logout(db, bearer_token)
     if not success:
         return {"status": "Already logged out or invalid token"}
     return {"status": "Logged out successfully"}
