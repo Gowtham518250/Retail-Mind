@@ -4,6 +4,7 @@ from typing import Any
 
 _IMPLEMENTED = {
     "inventory.lookup",
+    "inventory.manage",
     "customer.lookup",
     "billing.prepare",
     "billing.confirm",
@@ -21,6 +22,7 @@ _IMPLEMENTED = {
 }
 _CAPABILITIES: tuple[dict[str, Any], ...] = (
     {"name": "inventory.lookup", "description": "Read active catalog products and stock for the authenticated shop.", "risk": "read", "requires_confirmation": False, "provider": "groq"},
+    {"name": "inventory.manage", "description": "Restock, record stock-out or correct on-hand quantities using the canonical idempotent inventory stock-movement service after owner confirmation.", "risk": "inventory_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "customer.lookup", "description": "Find active customers belonging to the authenticated shop.", "risk": "personal_data_read", "requires_confirmation": False, "provider": "groq"},
     {"name": "billing.prepare", "description": "Use the existing voice-billing parser to prepare a five-minute invoice preview; no invoice or stock mutation occurs.", "risk": "draft", "requires_confirmation": False, "provider": "groq"},
     {"name": "billing.confirm", "description": "Confirm a specific owner-reviewed preview through the existing invoice creation path, then verify invoice and stock movements.", "risk": "financial_write", "requires_confirmation": True, "provider": "backend"},
