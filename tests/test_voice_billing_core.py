@@ -121,6 +121,61 @@ def test_null_model_product_id_can_still_resolve_a_unique_catalog_item(monkeypat
     assert result["items"][0]["catalog_matched"] is True
 
 
+def test_translated_name_cannot_attach_a_different_catalog_product(monkeypatch):
+    tomato = _p(91, "Tomato", unit="kg", price=40)
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [
+            _item(
+                "Tomato",
+                2,
+                "kg",
+                product_name_local="వంకాయ",
+                spoken_price_amount=80,
+                spoken_price_kind="unit",
+            )
+        ],
+        transcript="2 kg వంకాయ 80",
+        language_code="te-IN",
+        translated_text="2 kg tomato 80",
+        catalog_products=[tomato],
+    )
+
+    item = result["items"][0]
+    # The machine translation says Tomato, but the original speech says brinjal.
+    # A wrong translation must never attach Tomato's product ID or deduct its stock.
+    assert item["product_id"] is None
+    assert item["catalog_matched"] is False
+    assert item["product_name"] == "Tomato"
+    assert item["product_name_local"] == "వంకాయ"
+    assert item["catalog_product_name"] is None
+
+
+def test_catalog_link_does_not_overwrite_ai_extracted_bill_name(monkeypatch):
+    catalog = [_p(92, "Sona Masoori Rice", unit="kg", price=50)]
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [
+            _item(
+                "Rice",
+                2,
+                "kg",
+                product_name_local="rice",
+            )
+        ],
+        transcript="2 kg rice",
+        language_code="en-IN",
+        translated_text="2 kg rice",
+        catalog_products=catalog,
+    )
+
+    item = result["items"][0]
+    assert item["product_id"] == 92
+    assert item["catalog_matched"] is True
+    assert item["product_name"] == "Rice"
+    assert item["catalog_product_name"] == "Sona Masoori Rice"
+
+
 def test_another_lines_sku_does_not_hijack_this_line():
     """SKU "MILK" spoken in a different line must not turn the soap line into Milk."""
     from types import SimpleNamespace
