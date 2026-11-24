@@ -302,3 +302,19 @@ def test_product_search_terms_remove_question_words_and_keep_multiword_product()
     assert _extract_product_sales_search_terms(
         "Can you tell me all sales of my Amul Cow Ghee 1L product selling price and sales history?"
     ) == ["amul", "cow", "ghee", "1l"]
+
+
+def test_screenshot_voice_translation_does_not_turn_ghee_into_ghee_based():
+    from query_retrival import _extract_product_sales_search_terms
+
+    translated = (
+        "can you tell me all sales my product name ghee product "
+        "selling price from sales history"
+    )
+    assert _extract_product_sales_search_terms(translated) == ["ghee"]
+
+    # Some translation/ASR variants insert "based" as a connective after the
+    # product entity. It must not become an additional mandatory SQL filter.
+    assert _extract_product_sales_search_terms(
+        "show all sales of my ghee based product selling price"
+    ) == ["ghee"]
