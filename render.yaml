@@ -38,3 +38,15 @@ services:
         value: retail-mind:realtime:events
       - key: REALTIME_TICKET_TTL_SECONDS
         value: "120"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: RETAIL_MIND_AGENT_ENABLED
+        value: "false"
+      - key: RETAIL_MIND_AGENT_MODEL
+        value: openai/gpt-oss-120b
+      - key: SARVAM_TTS_MODEL
+        value: bulbul:v3
+      - key: SARVAM_TTS_SPEAKER
+        value: shubh
