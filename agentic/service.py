@@ -88,9 +88,14 @@ async def run_chat_turn(
             title=clean_message[:160],
         )
         db.add(conversation)
-        db.flush()
+        # Persist the conversation shell before making a provider call. Never
+        # hold a PostgreSQL transaction open while waiting on an LLM network call.
+        db.commit()
 
     history = _message_history(db, conversation_id, shop_id)
+    # End the read transaction before calling Groq. Tool executions open their
+    # own short transactions and commit their audit/action records individually.
+    db.rollback()
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history]
     messages.append({"role": "user", "content": clean_message})
 
