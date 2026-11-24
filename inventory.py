@@ -3592,23 +3592,32 @@ async def parse_voice_billing(
         # and never pick silently between equally plausible products (Lux 100g vs 150g).
         ambiguous_candidates: list[dict] = []
         match_reasons: list[str] = []
-        resolution = _vb_resolve_catalog_product(
-            [
-                str(raw.get("product_name_local") or ""),
-                str(raw.get("product_name_en") or ""),
-                proposed_name,
-            ],
-            f"{english_transcript} {parser_transcript}",
-            products,
-            normalize=_voice_billing_normalize,
-            expand_tokens=_voice_billing_expanded_tokens,
-            hint_product=None,
+        local_phrase = _voice_billing_normalize(str(raw.get("product_name_local") or ""))
+        source_text = _voice_billing_normalize(parser_transcript)
+        local_name_is_spoken = bool(
+            local_phrase and f" {local_phrase} " in f" {source_text} "
         )
-        if resolution.status == "matched":
+        resolution = (
+            _vb_resolve_catalog_product(
+                [
+                    proposed_name,
+                    str(raw.get("product_name_local") or ""),
+                    str(raw.get("product_name_en") or ""),
+                ],
+                f"{proposed_name} {english_transcript} {parser_transcript}",
+                products,
+                normalize=_voice_billing_normalize,
+                expand_tokens=_voice_billing_expanded_tokens,
+                hint_product=None,
+            )
+            if local_name_is_spoken else None
+        )
+        if resolution is not None and resolution.status == "matched":
             product = resolution.product
             match_reasons = list(resolution.reasons)
         elif (
             product is not None
+            and resolution is not None
             and resolution.status == "none"
             and _voice_billing_product_has_evidence(
                 f"{english_transcript} {parser_transcript}", product
@@ -3621,7 +3630,7 @@ async def parse_voice_billing(
         else:
             # Never assign stock unless the spoken words uniquely identify a catalog item.
             product = None
-            if resolution.status == "ambiguous":
+            if resolution is not None and resolution.status == "ambiguous":
                 ambiguous_candidates = [
                     {
                         "product_id": int(c.product.id),
@@ -3839,13 +3848,22 @@ async def parse_voice_billing(
             except (InvalidOperation, TypeError, ValueError):
                 price_grounded = False
             if not price_grounded:
-                if spoken_price_evidence:
+                try:
+                    reported_price_for_role = Decimal(str(raw.get("spoken_price_amount")))
+                except (InvalidOperation, TypeError, ValueError):
+                    reported_price_for_role = None
+                if spoken_price_evidence or (
+                    reported_price_for_role is not None
+                    and reported_price_for_role != spoken_quantity
+                ):
+                    # There was a separate spoken amount, or the model invented
+                    # one that cannot be grounded. Require correction instead of
+                    # substituting a catalogue price.
                     kind = "ambiguous"
                 else:
-                    # The model reused a quantity as a price, but no separate
-                    # price was spoken for this line. Keep the verified catalogue
-                    # fallback rather than showing an invented price or blocking
-                    # an otherwise valid draft.
+                    # The model reused the quantity as the price (e.g. "2 kg rice").
+                    # No separate selling price was spoken, so the known catalogue
+                    # price may be used as the default draft price.
                     kind = "none"
 
         catalog_price = Decimal(str(product.unit_price or 0)) if product is not None else Decimal("0")
@@ -3855,8 +3873,8 @@ async def parse_voice_billing(
         spoken_amount = raw.get("spoken_price_amount")
 
         if not price_grounded:
-            unresolved.append(f"{product_name}: model price was not independently grounded")
-            if spoken_price_evidence:
+            unresolved.append(f"{product_name}: price not clearly heard")
+            if spoken_price_evidence or kind == "ambiguous":
                 price_needs_confirmation = True
         if kind == "ambiguous":
             # Never replace a price the cashier spoke with a different catalog
