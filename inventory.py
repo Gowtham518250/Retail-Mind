@@ -3701,7 +3701,7 @@ async def parse_voice_billing(
         # Indic names (e.g. Telugu "టీ") and keeps each price with its own line.
         if len(raw_items) > 1:
             source_segments = re.split(
-                r",\\s+|;+\\s*|\\n+|\\s+(?:and|then|plus|also|next|మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\\s+",
+                r",\s+|;+\s*|\n+|\s+(?:and|then|plus|also|next|మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
                 parser_transcript,
                 flags=re.IGNORECASE,
             )
