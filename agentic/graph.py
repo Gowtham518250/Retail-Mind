@@ -158,8 +158,8 @@ def _forced_action_tool(state: AgentState) -> str | None:
         return None
     # Do not convert information/tutorial questions into write operations.
     if re.match(
-        r"^(?:how\\b|what\\b|where\\b|when\\b|why\\b|explain\\b|steps\\b|"
-        r"how to\\b|how do i\\b|how can i\\b|what is\\b)",
+        r"^(?:how\b|what\b|where\b|when\b|why\b|explain\b|steps\b|"
+        r"how to\b|how do i\b|how can i\b|what is\b)",
         message,
     ):
         return None
@@ -171,14 +171,14 @@ def _forced_action_tool(state: AgentState) -> str | None:
         "ಬಿಲ್", "ബിൽ", "বিল", "બિલ", "ਬਿੱਲ", "ବିଲ୍",
     )
     bill_action = re.search(
-        r"\\b(?:create|make|prepare|generate|raise|new|add|just create|please create)\\b",
+        r"\b(?:create|make|prepare|generate|raise|new|add|just create|please create)\b",
         message,
     )
     bill_follow_up = any(term in prior_text for term in bill_terms) and bool(
-        re.search(r"\\b(?:ok|okay|yes|use|make it|set it|with|at|price|rupees?|rs)\\b", message)
+        re.search(r"\b(?:ok|okay|yes|use|make it|set it|with|at|price|rupees?|rs)\b", message)
     )
     has_bill = any(term in message for term in bill_terms)
-    has_bill_amount = bool(re.search(r"(?:₹\\s*)?\\d+(?:\\.\\d+)?", message))
+    has_bill_amount = bool(re.search(r"(?:₹\s*)?\d+(?:\\.\d+)?", message))
     if (
         "prepare_bill_from_current_message" in available
         and ((has_bill and (bill_action or has_bill_amount)) or bill_follow_up)
@@ -190,8 +190,8 @@ def _forced_action_tool(state: AgentState) -> str | None:
         "கணக்கு", "খাতা", "ખાતું", "ਖਾਤਾ", "ഖാത",
     )
     khata_action = re.search(
-        r"\\b(?:add|create|open|put|record|credit|lend|give|enter|repay|paid|payment|"
-        r"return|received|collect)\\b",
+        r"\b(?:add|create|open|put|record|credit|lend|give|enter|repay|paid|payment|"
+        r"return|received|collect)\b",
         message,
     )
     has_khata = any(term in message for term in khata_terms)
