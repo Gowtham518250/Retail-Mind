@@ -1,86 +1,89 @@
-# Retail Mind Agent Automation — Implementation Map
+# Retail Mind AI Agent Automation — Implementation Map
 
 **Base branch:** `production-fix-2026-08-18-playstore`  
-**Working branch:** `agentic-retailmind-foundation`
+**Working branch:** `agentic-retailmind-foundation`  
+**Pull request:** [#231](https://github.com/Gowtham518250/Retail-Mind/pull/231)
 
-## Design rule
+## Architecture and execution boundaries
 
-The assistant is an orchestration layer, not a second ERP. It must call existing
-Retail Mind business services/routes and preserve their validation, stock
-movement, ledger, transaction, and audit behavior. The LLM must never write SQL,
-choose a shop ID, invent prices/quantities, or claim a write succeeded without
-reading the canonical persisted result.
+The assistant is an orchestration layer over existing Retail Mind services. It does not own a parallel inventory, invoice, customer, order, attendance, or ledger implementation. The authenticated API layer resolves the shop ID; the model cannot provide or override tenant identity.
 
-## Existing backend foundations verified in this branch
+The current implementation uses:
+- LangGraph orchestration with Groq tool calling and a bounded tool loop.
+- Explicit Pydantic-validated tool allowlists. There is no arbitrary SQL, shell, filesystem, or unrestricted HTTP tool.
+- Owner-authenticated FastAPI endpoints under `/api/agent`.
+- PostgreSQL persistence for conversations, pending actions, and metadata-only tool execution audit rows.
+- Existing Sarvam Saaras ASR for voice input and Sarvam Bulbul TTS for speech output.
+- Existing Retail Mind invoice creation logic for confirmed invoice writes.
 
-- `app.py` registers inventory, inventory sync/reconciliation, invoices,
-  customers, attendance, Khata, online store, retail intelligence, realtime,
-  durable sync, and health routers.
-- `security.py` provides `owner_only`, `get_current_user_dict`, and
-  `resolve_shop_id`. Owner identity must be derived from the access token.
-- `inventory.py` owns inventory and voice-billing routes. Voice parsing is a
-  draft/prefill operation; it must not create an invoice or deduct stock.
-- `invoices_billing.py` owns invoice creation and payment handling. Reuse its
-  canonical creation path; do not implement invoice or stock writes separately.
-- `customers.py` owns customer CRUD and search.
-- `khata_ledger.py` and `khata_router.py` contain legacy and newer ledger
-  routes. Select one canonical write path only after reviewing both contracts.
-- `online_store.py` owns customer/store and owner-order workflows.
-- `attendance.py` owns attendance operations.
-- `retail_intelligence.py` owns expenses, workers, bank reconciliation,
-  enterprise summaries, and stock analysis.
+## Implemented capabilities
 
-## Capability-to-module map
+| Capability | Current behavior | Write scope |
+| --- | --- | --- |
+| Inventory lookup | Active shop catalog, low-stock and product search | Read-only |
+| Customer lookup | Active customers in the authenticated shop; phone masked to last four digits in tool output | Read-only |
+| Sales analytics | Billed, received and outstanding invoice summary over a bounded date range | Read-only |
+| Attendance lookup | Daily shop-scoped attendance summary | Read-only |
+| Khata lookup | Invoice-derived pending-payment / receivables view; does not blend the legacy `KhataBalance` ledger | Read-only |
+| Online-order lookup | Shop-scoped order status counts and recent order summaries | Read-only |
+| Bill preparation | Existing voice-billing parser creates an expiring preview; no invoice or stock mutation | Draft only |
+| Bill confirmation | Explicit owner confirmation of a preview hash; uses existing invoice creation service; checks persisted invoice and stock movements | Confirmed financial write |
+| Voice | Sarvam transcription, existing ASR quality guard, shop catalog keyterms | External provider call |
+| Speech | Bounded Sarvam Bulbul text-to-speech response | External provider call |
 
-| Agent capability | Existing source of truth | Risk | Gate before enabling |
-| --- | --- | --- | --- |
-| Inventory lookup | `inventory.py` | Read | Owner auth; shop-scoped query; no cross-shop product IDs |
-| Customer lookup | `customers.py` | Read / personal data | Owner auth; shop scope; return minimum fields; mask phone in logs |
-| Prepare bill | `inventory.py` voice parser + invoice schemas | Draft | Ground every product in shop catalog; quantity/price validation; no write |
-| Create invoice | `invoices_billing.py` | Financial write | Explicit owner confirmation; existing invoice path; idempotency key; verify invoice and stock movement |
-| Record Khata credit/repayment | `khata_ledger.py` / `khata_router.py` | Financial write | Choose canonical ledger; explicit confirmation; replay protection; verify ledger entry |
-| Manage online orders | `online_store.py` | Business write | Owner auth and entitlement checks; confirmation for accept/cancel/refund; verify order state |
-| Attendance lookup/action | `attendance.py` | Employee data / write | Owner or permitted role; shop scope; confirmation for corrections |
-| Analytics | `retail_intelligence.py`, invoice and inventory services | Read | Parameterized fixed queries only; shop scope; bounded date range |
+### API surface
 
-## Delivery sequence
+- `GET /api/agent/capabilities`
+- `POST /api/agent/chat`
+- `POST /api/agent/voice`
+- `POST /api/agent/speech`
+- `GET /api/agent/conversations`
+- `GET /api/agent/conversations/{conversation_id}/messages`
+- `DELETE /api/agent/conversations/{conversation_id}`
+- `GET /api/agent/actions/pending`
+- `POST /api/agent/actions/{action_id}/confirm`
+- `POST /api/agent/actions/{action_id}/cancel`
 
-1. **Foundation (this commit):** owner-only capability discovery, central registry,
-   implementation map. No business tool is executable yet.
-2. **Read-only tools:** inventory lookup, customer lookup, attendance lookup,
-   and bounded analytics. Add unit and cross-shop isolation tests.
-3. **Billing vertical slice:** parse voice/text into a draft, resolve catalog
-   products, ask for missing details, show a human-readable bill, require a
-   separate confirmation call, create through the canonical invoice service,
-   and verify invoice + stock movement.
-4. **Khata and orders:** select canonical route/service contracts, add
-   idempotency and explicit confirmations, then integration tests.
-5. **Voice:** connect existing Sarvam ASR; add TTS only after provider,
-   language, timeout, and fallback decisions are verified.
-6. **LangGraph/MCP:** introduce orchestration after deterministic tools are
-   tested. MCP should expose the same allowlisted tools, not create a second
-   business-logic implementation.
+The bill preview is short-lived and bound to the action, owner/shop, preview and payload by a hash. Confirmation is a separate authenticated request. Repeated confirmation reconciles against the deterministic invoice number and persisted invoice/stock records before reporting success.
 
-## Non-negotiable safety controls
+## Deliberately disabled capabilities
 
-- Derive `shop_id` from authenticated owner context; ignore shop IDs supplied
-  by model output or untrusted request text.
-- No arbitrary SQL, Python execution, shell access, or unrestricted HTTP tool.
-- Separate read, draft, and write capabilities.
-- Financial and destructive actions require explicit confirmation bound to
-  the exact preview (amount, customer, items, quantities, and operation).
-- Use idempotency keys for retries; never infer success from an LLM response.
-- Audit tool name, authenticated user/shop, confirmation, outcome, and
-  correlation ID. Do not log OTPs, tokens, full payment details, or raw voice
-  recordings/transcripts unnecessarily.
-- Enforce timeouts, bounded inputs/results, rate limits, and per-user limits.
-- On ambiguity, ask the owner; never invent missing product, price, quantity,
-  customer, payment, or order data.
+These actions are advertised as not implemented and cannot be invoked by the model:
+- Khata credit / repayment writes. Two existing ledger implementations remain; a canonical mutation contract and replay protection are required first.
+- Online-order accept/reject/cancel/refund transitions. Each state transition and payment/refund side effect needs a canonical service contract and verified idempotency.
+- Attendance corrections, worker edits and payroll actions. Authorization, approval and audit semantics need to be specified first.
+- Any arbitrary database, shell, filesystem or network access.
 
-## Current status
+An MCP server and owner Flutter-client integration are not included in this backend PR. They must call the same authenticated API and confirmation flow; they must not create an alternate path to financial writes.
 
-The first foundation commit adds a central capability registry and an
-owner-authenticated discovery endpoint. All capabilities are intentionally
-`enabled: false`; no agent business action is exposed until its contract and
-tests are implemented. This is deliberate fail-closed behavior, not a claim
-that the whole automation system is complete.
+## Persistence and migration
+
+Migration `053_agentic_assistant` creates:
+- `agent_conversations`
+- `agent_messages`
+- `agent_pending_actions`
+- `agent_tool_executions`
+
+It follows `052_repair_active_product_sku_index` in the Alembic graph. CI validates the migration graph and applies migrations to a clean PostgreSQL database. Production migration execution has not been performed by this PR.
+
+## Security and operational controls
+
+- The shop ID comes from `security.resolve_shop_id(current_user)`, never from the LLM or user-supplied tool arguments.
+- Every read query is scoped to the authenticated shop.
+- Tool schemas reject unknown fields; call counts, outputs, input sizes and date ranges are bounded.
+- Customer phone numbers are masked in tool responses; audit rows store tool metadata rather than raw message or customer payloads.
+- Invoice writes require a separate owner confirmation, use the existing invoice path and verify the persisted invoice and stock movements.
+- The feature flag `RETAIL_MIND_AGENT_ENABLED` defaults to `false` in Render configuration.
+- Provider keys are deployment secrets, not source-controlled credentials.
+- Provider-backed staging evaluation, load testing, production migration, rollback rehearsal and Flutter integration remain outstanding.
+
+## Validation / rollout status
+
+Latest verified CI on the current PR head:
+- Agent backend test job passed.
+- Alembic migration graph validation passed.
+- Migration upgrade against a clean PostgreSQL CI database passed.
+- Production-focused test step was still running at the last status check.
+- Staging AI evaluation was skipped because dedicated staging configuration was not present.
+
+Do not enable the feature flag in production until the complete CI run is green, provider credentials and provider terms are reviewed, staging end-to-end tests pass, tenant-isolation and concurrent-confirmation tests pass, and the owner app is integrated and verified. Keep the feature flag off during the initial merge.
