@@ -21,7 +21,7 @@ from .registry import list_capabilities
 from sarvam_tts import SarvamTTSError, synthesize_with_sarvam
 
 from .service import (
-    confirm_invoice_action,
+    confirm_agent_action,
     delete_conversation,
     get_conversation_messages,
     list_conversations,
@@ -333,7 +333,7 @@ def confirm_agent_action(
     if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
         raise HTTPException(status_code=503, detail="AI bill confirmation is disabled on this deployment.")
     shop_id = resolve_shop_id(current_user)
-    return confirm_invoice_action(
+    return confirm_agent_action(
         db,
         shop_id=shop_id,
         current_user=current_user,
