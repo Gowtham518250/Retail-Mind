@@ -2901,20 +2901,35 @@ async def record_voice_billing_alias(
 
 
 def _voice_billing_product_anchor_phrases(values, transcript: str) -> list[str]:
-    """Return product anchors and source-language aliases actually present in a line."""
+    """Return exact supplied product names, falling back to a source-language alias.
+
+    Prefer a product name that is explicitly present in this transcript. Only
+    consult the synonym map when none of the supplied (English/local) names is
+    present. This prevents short aliases (for example a singular stem) from
+    matching inside a longer native-script product name.
+    """
     context = _voice_billing_normalize(transcript or "")
+    padded_context = f" {context} "
     phrases = []
     product_tokens = set()
     for value in values:
         normalized = _voice_billing_normalize(str(value or ""))
-        if len(normalized) >= 2 and normalized not in phrases:
+        if not normalized:
+            continue
+        product_tokens.update(_voice_billing_expanded_tokens(normalized))
+        if (
+            len(normalized) >= 2
+            and f" {normalized} " in padded_context
+            and normalized not in phrases
+        ):
             phrases.append(normalized)
-        if normalized:
-            product_tokens.update(_voice_billing_expanded_tokens(normalized))
 
-    # Use only translated/native aliases that are literally present in this
-    # source transcript. They locate the product boundary but do not create
-    # quantity or price evidence.
+    if phrases:
+        return sorted(phrases, key=lambda phrase: (len(phrase.split()), len(phrase)), reverse=True)
+
+    # Use aliases only when no supplied name is spoken verbatim. Aliases still
+    # locate boundaries; they never contribute synthetic quantity/price values.
+    alias_phrases = []
     for aliases in _VOICE_BILLING_ALIASES.values():
         alias_tokens = set()
         for alias in aliases:
@@ -2925,11 +2940,15 @@ def _voice_billing_product_anchor_phrases(values, transcript: str) -> list[str]:
             phrase = _voice_billing_normalize(alias)
             if (
                 len(phrase) >= 2
-                and re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", context)
-                and phrase not in phrases
+                and f" {phrase} " in padded_context
+                and phrase not in alias_phrases
             ):
-                phrases.append(phrase)
-    return sorted(phrases, key=lambda phrase: (len(phrase.split()), len(phrase)), reverse=True)
+                alias_phrases.append(phrase)
+    return sorted(
+        alias_phrases,
+        key=lambda phrase: (len(phrase.split()), len(phrase)),
+        reverse=True,
+    )
 
 
 def _voice_billing_canonical_unit_label(value: str) -> str:
@@ -3706,13 +3725,28 @@ async def parse_voice_billing(
             price_context,
         ))
         if normalized_spoken_unit in weighted_units and kind in {"unit", "line_total"}:
-            # A bare amount after a weight/volume quantity is the line total.
-            # It is a per-unit rate only when the utterance explicitly says per
-            # kg/g/litre (or uses /kg), per the extraction contract.
             if explicit_rate:
                 kind = "unit"
-            else:
+            elif product is None:
+                # A custom/untracked product has no catalog price with which to
+                # verify the extractor's unit interpretation; the bare spoken
+                # amount after a weight/volume quantity is therefore a line total.
                 kind = "line_total"
+            elif kind == "unit":
+                # Keep a catalog-backed unit price unless exact catalog arithmetic
+                # confirms that the amount is actually the requested line total.
+                try:
+                    reported_amount = Decimal(str(raw.get("spoken_price_amount")))
+                    expected_total = (
+                        Decimal(str(product.unit_price or 0)) * quantity
+                    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    if (
+                        expected_total > 0
+                        and reported_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == expected_total
+                    ):
+                        kind = "line_total"
+                except (InvalidOperation, TypeError, ValueError, ArithmeticError):
+                    pass
 
         # A price the speaker never said (invented, or computed by the model) must not reach
         # the bill as a "spoken" price: fall back to the catalog price and ask for review.
