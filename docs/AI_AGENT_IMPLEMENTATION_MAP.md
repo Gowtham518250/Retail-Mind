@@ -56,7 +56,7 @@ These actions remain unavailable to the model:
 - Attendance corrections, worker edits and payroll actions. Authorization, approval, correction history and retry/idempotency semantics need to be specified first.
 - Any arbitrary database, shell, filesystem or network access.
 
-An MCP server and owner Flutter-client integration are not included in this backend PR. They must call the same authenticated API and confirmation flow; they must not create an alternate path to financial writes.
+MCP Streamable HTTP is now implemented as an optional adapter over the same allowlisted backend tools. It authenticates the existing Retail Mind OWNER access JWT, and requires explicit host and origin allowlists. MCP tools can read data or prepare bill/payment/order previews; no MCP tool can confirm financial writes or delivery. The confirmation action remains in the owner-authenticated app API. This MCP endpoint uses manual Retail Mind bearer JWT authentication; it does not implement an OAuth authorization server or interactive OAuth discovery/login. It remains disabled by default.
 
 ## Persistence and migration
 
