@@ -3066,6 +3066,47 @@ def _voice_billing_item_evidence_transcripts(
 
     evidence: list[str] = []
     for transcript in transcripts:
+        # Explicit speech boundaries are the safest item-level evidence source.
+        # Split only on delimiters followed by whitespace so numbers such as 1,200
+        # remain intact. This preserves the exact product/quantity/price grouping.
+        explicit_segments = re.split(
+            r",\\s*|;+\\s*|\\n+|\\s+(?:and|then|plus|also|next|మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\\s+",
+            transcript,
+            flags=re.IGNORECASE,
+        )
+        current_segments = []
+        for segment in explicit_segments:
+            normalized_segment = _voice_billing_normalize(segment)
+            if not normalized_segment:
+                continue
+            matched_rows = []
+            for row_index, row in enumerate(rows):
+                if not isinstance(row, dict):
+                    continue
+                phrases = []
+                for field in ("product_name_local", "product_name_en", "product_name"):
+                    phrase = _voice_billing_normalize(str(row.get(field) or ""))
+                    if phrase and phrase not in phrases:
+                        phrases.append(phrase)
+                if row_index == current_index and product is not None:
+                    for value in (getattr(product, "product_name", ""), getattr(product, "sku", "")):
+                        phrase = _voice_billing_normalize(str(value or ""))
+                        if phrase and phrase not in phrases:
+                            phrases.append(phrase)
+                if any(f" {phrase} " in f" {normalized_segment} " for phrase in phrases):
+                    matched_rows.append(row_index)
+            # A line containing multiple product anchors is not safely separable.
+            if matched_rows == [current_index]:
+                current_segments.append(segment.strip())
+
+        if len(current_segments) == 1:
+            evidence.append(current_segments[0])
+            continue
+        if len(current_segments) > 1:
+            # Repeated mentions are separate evidence windows, never one combined
+            # window that could let the second price validate the first mention.
+            evidence.extend(current_segments)
+            continue
         # Preserve punctuation that explicitly separates count-based bill
         # lines. The ordinary transcript normalizer removes commas/semicolons,
         # which made "3 soap 30, 5 tea 20" impossible to split safely. Keep
