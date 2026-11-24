@@ -3882,6 +3882,19 @@ async def parse_voice_billing(
         # ("per kg", "/kg", "per litre", etc.) makes it a unit price. This server-side
         # rule protects billing even when the extraction model labels the amount wrongly.
         normalized_spoken_unit = re.sub(r"[^a-z]", "", spoken_unit.lower())
+        # In count-based shorthand without a spoken measurement unit,
+        # "3 soap 30" means ₹30 per item unless the cashier explicitly says
+        # that ₹30 is the total for all items. Do not let an AI label override
+        # this source-language POS convention.
+        explicit_line_total = bool(re.search(
+            r"(?:\\btotal\\b|\\baltogether\\b|\\bfor all\\b|"
+            r"మొత్తం|అన్నింటికి|కలిపి|మొత్తానికి|कुल|सबका|மொத்தம்|ಒಟ್ಟು|മൊത്തം)",
+            " ".join(str(value or "") for value in item_evidence_transcripts),
+            flags=re.IGNORECASE,
+        ))
+        if not spoken_unit and kind == "line_total" and not explicit_line_total:
+            kind = "unit"
+
         weighted_units = {
             "kg", "kgs", "kilo", "kilos", "kilogram", "kilograms",
             "g", "gm", "gms", "gram", "grams",
