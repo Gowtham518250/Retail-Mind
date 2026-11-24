@@ -9,6 +9,8 @@ on:
       - production-fix-2026-08-18-playstore
     paths:
       - "agentic/**"
+      - "requirements.txt"
+      - "render.yaml"
       - "sarvam_tts.py"
       - "models.py"
       - "app.py"
