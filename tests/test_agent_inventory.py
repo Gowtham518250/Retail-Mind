@@ -103,7 +103,7 @@ def test_inventory_restock_preview_does_not_mutate_stock():
 
 
 def test_inventory_stock_out_preview_rejects_insufficient_stock():
-    with pytest.raises(ValueError, match=r"only 8(?:\\.000)? are available"):
+    with pytest.raises(ValueError, match=r"only 8(?:\.000)? are available"):
         prepare_inventory_stock_movement(
             _Db(_product()),
             shop_id=42,
