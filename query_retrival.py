@@ -4858,6 +4858,39 @@ async def ask_query(
             })
             processed_tables.add("sales")
 
+    # Exact entity matches also steer schema retrieval. Without this, a query
+    # about a named customer or worker can retrieve only generic sales chunks,
+    # leaving the SQL model without the documented join path for that entity.
+    entity_table_map = {
+        "product": ("inventory", "invoice_line_items"),
+        "customer": ("customers", "payments", "invoices"),
+        "worker": ("workers", "attendance"),
+    }
+    required_entity_tables = []
+    for entity in resolved_shop_entities:
+        required_entity_tables.extend(entity_table_map.get(entity.get("type"), ()))
+    for table_key in dict.fromkeys(required_entity_tables):
+        if table_key in processed_tables:
+            continue
+        catalog_entry = full_table_catalog.get(table_key)
+        if isinstance(catalog_entry, dict):
+            content = catalog_entry.get("content", "")
+            catalog_source = catalog_entry.get(
+                "source", f"business_table_catalog/{table_key}.txt"
+            )
+        else:
+            content = catalog_entry or ""
+            catalog_source = f"business_table_catalog/{table_key}.txt"
+        if isinstance(content, str) and content.strip():
+            retrived_table_information.append(content)
+            retrieved_table_records.append({
+                "table": table_key,
+                "source": catalog_source,
+                "content": content,
+                "retrieval": "verified_shop_entity_intent",
+            })
+            processed_tables.add(table_key)
+
     for doc in answer:
         source_path = doc.metadata.get("source")
         table_name = doc.metadata.get("table")
