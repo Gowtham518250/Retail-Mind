@@ -1802,6 +1802,18 @@ class CustomerSyncEvent(Base):
 
 # ==================== RETAIL MIND AI AGENT ====================
 
+class AgentShopSettings(Base):
+    """Per-shop AI assistant opt-ins; all capabilities are disabled by default."""
+    __tablename__ = "rm_shop_agent_settings"
+
+    shop_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), primary_key=True)
+    assistant_enabled = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    voice_enabled = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    actions_enabled = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class AgentConversation(Base):
     """Owner-scoped conversation metadata; messages are retained separately."""
     __tablename__ = "agent_conversations"

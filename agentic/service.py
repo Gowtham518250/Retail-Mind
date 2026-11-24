@@ -65,6 +65,7 @@ async def run_chat_turn(
     message: str,
     conversation_id: str | None = None,
     language_code: str = "auto",
+    allow_actions: bool = True,
 ) -> dict:
     if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
         raise HTTPException(status_code=503, detail="The Retail Mind AI assistant is not enabled on this deployment.")
@@ -116,7 +117,7 @@ async def run_chat_turn(
         "language_code": str(language_code or "auto")[:16],
     }
 
-    result = await invoke_agent(messages, context)
+    result = await invoke_agent(messages, context, allow_actions=allow_actions)
     answer = str(result.get("answer") or "").strip()[:6000]
     if not answer:
         answer = "I could not complete that request. Please try again."

@@ -78,6 +78,26 @@ class AgentState(TypedDict, total=False):
     tool_rounds: int
     final_answer: str
     provider_error: str
+    tool_definitions: list[dict[str, Any]]
+
+
+_ACTION_TOOL_NAMES = {
+    "prepare_bill_from_current_message",
+    "prepare_invoice_payment",
+    "prepare_online_order_transition",
+    "prepare_inventory_stock_movement",
+    "prepare_attendance_record",
+    "prepare_khata_ledger_movement",
+}
+
+
+def available_tool_definitions(allow_actions: bool) -> list[dict[str, Any]]:
+    if allow_actions:
+        return list(TOOL_DEFINITIONS)
+    return [
+        item for item in TOOL_DEFINITIONS
+        if item.get("function", {}).get("name") not in _ACTION_TOOL_NAMES
+    ]
 
 
 def _normalise_tool_call(call: Any) -> dict[str, Any]:
@@ -101,7 +121,7 @@ async def _call_model(state: AgentState) -> dict[str, Any]:
             response = await client.chat.completions.create(
                 model=model,
                 messages=state["messages"],
-                tools=TOOL_DEFINITIONS,
+                tools=state.get("tool_definitions") or TOOL_DEFINITIONS,
                 tool_choice="auto",
                 parallel_tool_calls=False,
                 temperature=0.1,
@@ -157,9 +177,20 @@ async def _execute_tools(state: AgentState) -> dict[str, Any]:
     outputs = list(state.get("tool_outputs", []))
     context = state["context"]
     calls = state.get("tool_calls", [])[:MAX_TOOL_CALLS_PER_TURN]
+    available_names = {
+        item.get("function", {}).get("name")
+        for item in (state.get("tool_definitions") or TOOL_DEFINITIONS)
+    }
 
     for call in calls:
-        result = await dispatch_tool(call["name"], call["arguments"], context)
+        if call.get("name") not in available_names:
+            result = {
+                "success": False,
+                "error_code": "TOOL_NOT_AVAILABLE",
+                "message": "That operation is not enabled for this shop. Check the Agent Control Center and subscription plan.",
+            }
+        else:
+            result = await dispatch_tool(call["name"], call["arguments"], context)
         outputs.append({"name": call["name"], "result": result})
         messages.append(
             {
@@ -206,13 +237,19 @@ def get_agent_graph():
     return _AGENT_GRAPH
 
 
-async def invoke_agent(messages: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any]:
+async def invoke_agent(
+    messages: list[dict[str, Any]],
+    context: dict[str, Any],
+    *,
+    allow_actions: bool = True,
+) -> dict[str, Any]:
     if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
         raise HTTPException(status_code=503, detail="The Retail Mind AI assistant is not enabled on this deployment.")
     result = await get_agent_graph().ainvoke(
         {
             "messages": messages,
             "context": context,
+            "tool_definitions": available_tool_definitions(allow_actions),
             "tool_calls": [],
             "tool_outputs": [],
             "tool_rounds": 0,

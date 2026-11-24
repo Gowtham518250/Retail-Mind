@@ -80,7 +80,10 @@ def check_all_feature_access(
     feature_codes = set(entitlement["features"].keys())
     # These features use the same authoritative rules as the single-feature
     # endpoint and are required by the app's route gates.
-    feature_codes.update({"online_orders", "ai_queries"})
+    feature_codes.update({
+        "online_orders", "ai_queries",
+        "ai_agent", "ai_agent_voice", "ai_agent_actions",
+    })
     return {
         "plan_code": entitlement["plan_code"],
         "plan_name": entitlement["plan_name"],

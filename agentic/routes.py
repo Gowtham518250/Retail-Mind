@@ -8,6 +8,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import text
+from zoneinfo import ZoneInfo
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -15,9 +17,11 @@ from sqlalchemy.orm import Session
 from db import get_db
 from models import AgentPendingAction
 from security import owner_only, resolve_shop_id
+from subscription_entitlements import get_shop_entitlements, feature_is_allowed
 from sarvam_speech import SarvamSpeechError, app_language_code, transcribe_with_sarvam
 
 from .registry import list_capabilities
+from .access import resolve_agent_access
 from sarvam_tts import SarvamTTSError, synthesize_with_sarvam
 
 from .service import (
@@ -88,23 +92,108 @@ class AgentSpeechRequest(BaseModel):
         return cleaned
 
 
-@router.get("/capabilities")
-def get_agent_capabilities(_owner: dict = Depends(owner_only)):
-    """Describe implemented and intentionally disabled agent capabilities."""
-    capabilities = list_capabilities()
-    flag_enabled = os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() in {
+class AgentSettingsUpdate(BaseModel):
+    """Per-shop preferences; secrets and provider settings stay platform-owned."""
+
+    model_config = {"extra": "forbid"}
+
+    assistant_enabled: Optional[bool] = None
+    voice_enabled: Optional[bool] = None
+    actions_enabled: Optional[bool] = None
+
+
+def _platform_agent_config() -> dict:
+    master_enabled = os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() in {
         "1", "true", "yes", "on"
     }
-    groq_ready = bool((os.getenv("GROQ_API_KEY") or "").strip())
-    enabled = flag_enabled and groq_ready
-    status = (
-        "enabled" if enabled
-        else "provider_configuration_missing" if flag_enabled
-        else "disabled_by_configuration"
-    )
     return {
-        "status": status,
-        "execution_enabled": enabled,
+        "master_enabled": master_enabled,
+        "groq_configured": bool((os.getenv("GROQ_API_KEY") or "").strip()),
+        "sarvam_configured": bool((os.getenv("SARVAM_API_KEY") or "").strip()),
+    }
+
+
+def _read_agent_preferences(db: Session, shop_id: int) -> dict:
+    row = db.execute(text("""
+        SELECT assistant_enabled, voice_enabled, actions_enabled
+        FROM rm_shop_agent_settings
+        WHERE shop_id = :shop_id
+    """), {"shop_id": shop_id}).mappings().first()
+    if not row:
+        return {
+            "assistant_enabled": False,
+            "voice_enabled": False,
+            "actions_enabled": False,
+        }
+    return {
+        "assistant_enabled": bool(row["assistant_enabled"]),
+        "voice_enabled": bool(row["voice_enabled"]),
+        "actions_enabled": bool(row["actions_enabled"]),
+    }
+
+
+def _build_agent_control_snapshot(db: Session, shop_id: int) -> dict:
+    entitlement = get_shop_entitlements(db, shop_id)
+    preferences = _read_agent_preferences(db, shop_id)
+    platform = _platform_agent_config()
+    access = resolve_agent_access(
+        platform_enabled=platform["master_enabled"],
+        groq_configured=platform["groq_configured"],
+        sarvam_configured=platform["sarvam_configured"],
+        entitlement=entitlement,
+        preferences=preferences,
+    )
+
+    usage_date = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    usage_row = db.execute(text("""
+        SELECT used_count, reserved_count
+        FROM rm_ai_daily_usage
+        WHERE shop_id = :shop_id AND usage_date = :usage_date
+    """), {"shop_id": shop_id, "usage_date": usage_date}).mappings().first()
+    used = int(usage_row["used_count"] or 0) if usage_row else 0
+    reserved = int(usage_row["reserved_count"] or 0) if usage_row else 0
+    daily_limit = int(entitlement.get("daily_ai_query_limit") or 0)
+
+    capabilities = list_capabilities()
+    for capability in capabilities:
+        name = str(capability.get("name") or "")
+        if name.startswith("voice."):
+            allowed = access["voice_enabled"]
+        elif capability.get("requires_confirmation"):
+            allowed = access["actions_enabled"]
+        else:
+            allowed = access["assistant_enabled"]
+        capability["enabled"] = bool(
+            capability.get("implemented")
+            and capability.get("configured")
+            and allowed
+        )
+
+    return {
+        "status": access["status"],
+        "execution_enabled": access["assistant_enabled"],
+        "platform": platform,
+        "plan": {
+            "plan_code": entitlement["plan_code"],
+            "plan_name": entitlement["plan_name"],
+            "status": entitlement["status"],
+            "features": entitlement.get("features", {}),
+            "daily_ai_query_limit": daily_limit,
+        },
+        "settings": preferences,
+        "entitlements": access["plan_access"],
+        "access": {
+            "assistant_enabled": access["assistant_enabled"],
+            "voice_enabled": access["voice_enabled"],
+            "actions_enabled": access["actions_enabled"],
+        },
+        "usage": {
+            "used": used,
+            "reserved": reserved,
+            "daily_limit": daily_limit,
+            "remaining": max(0, daily_limit - used - reserved),
+            "reset_timezone": "Asia/Kolkata",
+        },
         "capabilities": capabilities,
         "safety": {
             "owner_access_required": True,
@@ -119,6 +208,193 @@ def get_agent_capabilities(_owner: dict = Depends(owner_only)):
     }
 
 
+def _require_agent_access(db: Session, shop_id: int, feature: str = "assistant") -> dict:
+    snapshot = _build_agent_control_snapshot(db, shop_id)
+    platform = snapshot["platform"]
+    settings = snapshot["settings"]
+    entitlements = snapshot["entitlements"]
+
+    if not platform["master_enabled"]:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "AGENT_PLATFORM_DISABLED",
+                "message": "The Retail Mind AI assistant is not enabled by the platform yet.",
+            },
+        )
+    if not platform["groq_configured"]:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "AGENT_PROVIDER_NOT_CONFIGURED",
+                "message": "The AI provider is not configured on this deployment.",
+            },
+        )
+
+    if not entitlements["assistant"]:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "SUBSCRIPTION_REQUIRED",
+                "feature": "ai_agent",
+                "current_plan": snapshot["plan"]["plan_code"],
+                "message": "The AI assistant is not included in your current plan.",
+                "upgrade_path": "/subscriptions",
+            },
+        )
+    if not settings["assistant_enabled"]:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "AGENT_DISABLED_BY_OWNER",
+                "message": "Enable the AI assistant in Agent Control Center to continue.",
+            },
+        )
+
+    if feature == "voice":
+        if not entitlements["voice"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "SUBSCRIPTION_REQUIRED",
+                    "feature": "ai_agent_voice",
+                    "current_plan": snapshot["plan"]["plan_code"],
+                    "message": "Voice assistant access is not included in your current plan.",
+                    "upgrade_path": "/subscriptions",
+                },
+            )
+        if not settings["voice_enabled"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "AGENT_VOICE_DISABLED_BY_OWNER",
+                    "message": "Enable voice assistance in Agent Control Center to use voice.",
+                },
+            )
+        if not platform["sarvam_configured"]:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "AGENT_VOICE_PROVIDER_NOT_CONFIGURED",
+                    "message": "The voice provider is not configured on this deployment.",
+                },
+            )
+
+    if feature == "actions":
+        if not entitlements["actions"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "SUBSCRIPTION_REQUIRED",
+                    "feature": "ai_agent_actions",
+                    "current_plan": snapshot["plan"]["plan_code"],
+                    "message": "AI business operations are not included in your current plan.",
+                    "upgrade_path": "/subscriptions",
+                },
+            )
+        if not settings["actions_enabled"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "AGENT_ACTIONS_DISABLED_BY_OWNER",
+                    "message": "Enable business operations in Agent Control Center to prepare actions.",
+                },
+            )
+    return snapshot
+
+
+@router.get("/capabilities")
+def get_agent_capabilities(
+    current_user: dict = Depends(owner_only),
+    db: Session = Depends(get_db),
+):
+    """Return provider, subscription, owner opt-in and usage status."""
+    return _build_agent_control_snapshot(db, resolve_shop_id(current_user))
+
+
+@router.get("/control-center")
+def get_agent_control_center(
+    current_user: dict = Depends(owner_only),
+    db: Session = Depends(get_db),
+):
+    """Detailed control-center payload for the authenticated shop owner."""
+    return _build_agent_control_snapshot(db, resolve_shop_id(current_user))
+
+
+@router.put("/settings")
+def update_agent_settings(
+    data: AgentSettingsUpdate,
+    current_user: dict = Depends(owner_only),
+    db: Session = Depends(get_db),
+):
+    """Persist per-shop opt-ins; each enabled capability remains plan-gated."""
+    shop_id = resolve_shop_id(current_user)
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail="Provide at least one agent setting to update.")
+
+    entitlement = get_shop_entitlements(db, shop_id)
+    feature_for_setting = {
+        "assistant_enabled": "ai_agent",
+        "voice_enabled": "ai_agent_voice",
+        "actions_enabled": "ai_agent_actions",
+    }
+    for setting_name, requested in updates.items():
+        if requested is True:
+            feature_name = feature_for_setting[setting_name]
+            if not feature_is_allowed(entitlement, feature_name):
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "SUBSCRIPTION_REQUIRED",
+                        "feature": feature_name,
+                        "current_plan": entitlement["plan_code"],
+                        "message": "This AI capability is not included in your current plan.",
+                        "upgrade_path": "/subscriptions",
+                    },
+                )
+
+    current = _read_agent_preferences(db, shop_id)
+    current.update(updates)
+
+    # The parent assistant must be enabled before its optional modes. Turning
+    # the parent off cascades off voice and business operations as well.
+    if updates.get("assistant_enabled") is False:
+        current["voice_enabled"] = False
+        current["actions_enabled"] = False
+    elif (
+        updates.get("voice_enabled") is True or updates.get("actions_enabled") is True
+    ) and current["assistant_enabled"] is not True:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "AGENT_ASSISTANT_REQUIRED",
+                "message": "Enable the AI shop assistant before enabling voice or business operations.",
+            },
+        )
+
+    db.execute(text("""
+        INSERT INTO rm_shop_agent_settings (
+            shop_id, assistant_enabled, voice_enabled, actions_enabled
+        )
+        VALUES (
+            :shop_id, :assistant_enabled, :voice_enabled, :actions_enabled
+        )
+        ON CONFLICT (shop_id) DO UPDATE SET
+            assistant_enabled = EXCLUDED.assistant_enabled,
+            voice_enabled = EXCLUDED.voice_enabled,
+            actions_enabled = EXCLUDED.actions_enabled,
+            updated_at = NOW()
+    """), {
+        "shop_id": shop_id,
+        "assistant_enabled": current["assistant_enabled"],
+        "voice_enabled": current["voice_enabled"],
+        "actions_enabled": current["actions_enabled"],
+    })
+    db.commit()
+    return _build_agent_control_snapshot(db, shop_id)
+
+
 @router.post("/chat")
 async def agent_chat(
     data: AgentChatRequest,
@@ -126,12 +402,14 @@ async def agent_chat(
     db: Session = Depends(get_db),
 ):
     shop_id = resolve_shop_id(current_user)
+    snapshot = _require_agent_access(db, shop_id, "assistant")
     return await run_chat_turn(
         db,
         shop_id=shop_id,
         message=data.message,
         conversation_id=data.conversation_id,
         language_code=data.language_code,
+        allow_actions=snapshot["access"]["actions_enabled"],
     )
 
 
@@ -144,9 +422,8 @@ async def agent_voice(
     db: Session = Depends(get_db),
 ):
     """Transcribe a short owner voice request using the existing Sarvam adapter."""
-    if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
-        raise HTTPException(status_code=503, detail="The Retail Mind AI assistant is not enabled on this deployment.")
     shop_id = resolve_shop_id(current_user)
+    snapshot = _require_agent_access(db, shop_id, "voice")
     try:
         conversation_id = _parse_conversation_id(conversation_id)
     except ValueError as exc:
@@ -204,6 +481,7 @@ async def agent_voice(
         message=transcript,
         conversation_id=conversation_id,
         language_code=effective_language,
+        allow_actions=snapshot["access"]["actions_enabled"],
     )
     result["transcription"] = {
         "transcript": transcript,
@@ -217,11 +495,10 @@ async def agent_voice(
 async def agent_speech(
     data: AgentSpeechRequest,
     current_user: dict = Depends(owner_only),
+    db: Session = Depends(get_db),
 ):
     """Synthesize a bounded assistant response as a WAV stream."""
-    if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
-        raise HTTPException(status_code=503, detail="The Retail Mind AI assistant is not enabled on this deployment.")
-    resolve_shop_id(current_user)
+    _require_agent_access(db, resolve_shop_id(current_user), "voice")
     try:
         result = await run_in_threadpool(
             synthesize_with_sarvam,
@@ -330,9 +607,8 @@ def confirm_agent_action(
         action_id = str(uuid.UUID(action_id))
     except (TypeError, ValueError, AttributeError) as exc:
         raise HTTPException(status_code=422, detail="action_id must be a UUID") from exc
-    if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
-        raise HTTPException(status_code=503, detail="AI bill confirmation is disabled on this deployment.")
     shop_id = resolve_shop_id(current_user)
+    _require_agent_access(db, shop_id, "actions")
     return confirm_agent_action(
         db,
         shop_id=shop_id,

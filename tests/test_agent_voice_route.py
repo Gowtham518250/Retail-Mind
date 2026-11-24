@@ -22,6 +22,13 @@ class _Upload:
 def test_agent_voice_uses_catalog_blind_asr_and_preserves_detected_language(monkeypatch):
     monkeypatch.setenv("RETAIL_MIND_AGENT_ENABLED", "true")
     monkeypatch.setattr(routes_module, "resolve_shop_id", lambda _user: 42)
+    monkeypatch.setattr(
+        routes_module,
+        "_require_agent_access",
+        lambda _db, _shop_id, _feature: {
+            "access": {"assistant_enabled": True, "voice_enabled": True, "actions_enabled": False}
+        },
+    )
 
     captured = {}
 
@@ -38,12 +45,13 @@ def test_agent_voice_uses_catalog_blind_asr_and_preserves_detected_language(monk
         captured["assessment_catalog_names"] = catalog_names
         return SimpleNamespace(accepted=True, text=payload["text"])
 
-    async def fake_chat_turn(db, *, shop_id, message, conversation_id, language_code):
+    async def fake_chat_turn(db, *, shop_id, message, conversation_id, language_code, allow_actions):
         captured["chat"] = {
             "shop_id": shop_id,
             "message": message,
             "conversation_id": conversation_id,
             "language_code": language_code,
+            "allow_actions": allow_actions,
         }
         return {"success": True, "response": "Draft received"}
 
@@ -67,6 +75,7 @@ def test_agent_voice_uses_catalog_blind_asr_and_preserves_detected_language(monk
         "message": "ఒక సబ్బు 30",
         "conversation_id": None,
         "language_code": "te",
+        "allow_actions": False,
     }
     assert result["transcription"]["transcript"] == "ఒక సబ్బు 30"
     assert result["transcription"]["provider"] == "Sarvam AI"
