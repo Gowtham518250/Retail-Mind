@@ -734,6 +734,8 @@ def test_spoken_unit_repair_recognizes_telugu_number_words():
     assert inventory_module._vb_repair_spoken_unit(
         ["మూడు కేజీలు వంకాయలు"], inventory_module._VOICE_BILLING_NUMBER_WORDS
     ) == "కేజీలు"
+    assert inventory_module._VOICE_BILLING_NUMBER_WORDS["ఒక"] == 1
+    assert inventory_module._VOICE_BILLING_NUMBER_WORDS["ఒక్క"] == 1
 
 
 def test_multiline_telugu_billing_keeps_each_quantity_unit_and_line_total(monkeypatch):
