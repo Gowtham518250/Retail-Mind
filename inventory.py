@@ -3413,7 +3413,7 @@ def _voice_billing_item_price_evidence_transcripts(
         # immediately after its name is the quantity, not a selling price.
         # Remove that prefix before treating any later number as price evidence.
         if suffix_words:
-            first_token = suffix_words[0].strip(".,;:!?()[]\\"'").casefold()
+            first_token = suffix_words[0].strip(".,;:!?()[]").casefold()
             first_value = None
             try:
                 first_value = Decimal(first_token)
