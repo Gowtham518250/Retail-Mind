@@ -500,11 +500,14 @@ def test_subscription_webhook_auth_success_activates_without_waiting_for_charge(
 
     source = Path("subscription_billing.py").read_text(encoding="utf-8")
     webhook = source[source.index('@router.post("/api/billing/cashfree/webhook")'):]
+    auth_parser = webhook[
+        :webhook.index('if event_type == "SUBSCRIPTION_AUTH_STATUS":')
+    ]
     auth_branch = webhook[
         webhook.index('if event_type == "SUBSCRIPTION_AUTH_STATUS":'):
         webhook.index('elif event_type == "SUBSCRIPTION_PAYMENT_SUCCESS":')
     ]
-    assert "_cashfree_authorization_status" in auth_branch
+    assert "_cashfree_authorization_status" in auth_parser
     assert "_cashfree_auth_succeeded" in auth_branch
     assert "_activate_authorized_subscription" in auth_branch
     assert "status='PAYMENT_FAILED'" in auth_branch
