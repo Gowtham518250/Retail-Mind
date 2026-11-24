@@ -3924,6 +3924,8 @@ async def parse_voice_billing(
             ) or ""
         spoken_unit = _voice_billing_canonical_unit_label(spoken_unit)
         spoken_quantity = quantity
+        # Keep the source quantity in sync after any transcript-grounded recovery.
+        spoken_quantity = quantity
         # Ground quantity only against the number phrase before this product name.
         # A later price (for example "2 kg rice 60") must never validate a model
         # that mistakenly reports 60 as the quantity. If no quantity phrase was
@@ -4061,7 +4063,7 @@ async def parse_voice_billing(
             raw, product, source_line_evidence
         )
         spoken_price_evidence = any(
-            bool(re.search(r"\\d", _voice_billing_normalize(evidence)))
+            bool(re.search(r"\d", _voice_billing_normalize(evidence)))
             or any(
                 token in _VOICE_BILLING_NUMBER_WORDS or token in _VOICE_BILLING_SCALE_WORDS
                 for token in _voice_billing_normalize(evidence).split()
@@ -4079,15 +4081,15 @@ async def parse_voice_billing(
         }
         price_context = " ".join(str(value or "") for value in item_evidence_transcripts).lower()
         explicit_rate = bool(re.search(
-            r"(?:\\bper\\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\\b|"
-            r"/\\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\\b|"
-            r"\\b(?:rate|each)\\s+(?:per\\s+)?(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\\b|"
+            r"(?:\bper\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
+            r"/\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
+            r"\b(?:rate|each)\s+(?:per\s+)?(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
             r"కిలోకు|కేజీకి|కేజీలకు|గ్రాముకు|లీటరుకు|కిలోకి)",
             price_context,
             flags=re.IGNORECASE,
         ))
         explicit_line_total = bool(re.search(
-            r"(?:\\btotal\\b|\\baltogether\\b|\\bfor all\\b|"
+            r"(?:\btotal\b|\baltogether\b|\bfor all\b|"
             r"మొత్తం|అన్నింటికి|కలిపి|మొత్తానికి|कुल|सबका|மொத்தம்|ಒಟ್ಟು|മൊത്തം)",
             price_context,
             flags=re.IGNORECASE,
