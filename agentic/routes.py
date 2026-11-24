@@ -92,11 +92,18 @@ class AgentSpeechRequest(BaseModel):
 def get_agent_capabilities(_owner: dict = Depends(owner_only)):
     """Describe implemented and intentionally disabled agent capabilities."""
     capabilities = list_capabilities()
-    enabled = os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() in {
+    flag_enabled = os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() in {
         "1", "true", "yes", "on"
     }
+    groq_ready = bool((os.getenv("GROQ_API_KEY") or "").strip())
+    enabled = flag_enabled and groq_ready
+    status = (
+        "enabled" if enabled
+        else "provider_configuration_missing" if flag_enabled
+        else "disabled_by_configuration"
+    )
     return {
-        "status": "enabled" if enabled else "disabled_by_configuration",
+        "status": status,
         "execution_enabled": enabled,
         "capabilities": capabilities,
         "safety": {
@@ -168,6 +175,8 @@ async def agent_voice(
         raise HTTPException(status_code=status, detail="Voice transcription is temporarily unavailable.") from exc
 
     transcript = str(transcription.get("transcript") or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=422, detail="No speech was detected. Please record the request again.")
     detected_language = app_language_code(transcription.get("language_code")) or language_code
     result = await run_chat_turn(
         db,
@@ -301,6 +310,8 @@ def confirm_agent_action(
         action_id = str(uuid.UUID(action_id))
     except (TypeError, ValueError, AttributeError) as exc:
         raise HTTPException(status_code=422, detail="action_id must be a UUID") from exc
+    if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        raise HTTPException(status_code=503, detail="AI bill confirmation is disabled on this deployment.")
     shop_id = resolve_shop_id(current_user)
     return confirm_invoice_action(
         db,
