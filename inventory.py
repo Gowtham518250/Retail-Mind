@@ -3433,7 +3433,7 @@ def _voice_billing_item_price_evidence_transcripts(
         suffix = " ".join(suffix_words).strip()
         if suffix:
             evidence.append(suffix)
-        continue
+            continue
         prefix_words = words[:start]
         if any(
             token in currency_cues or token.startswith("₹")
