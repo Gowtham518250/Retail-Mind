@@ -122,6 +122,12 @@ def _successful_pending_action(tool_outputs: list[dict[str, Any]]) -> dict[str, 
             and result.get("preview_hash")
             and isinstance(result.get("preview"), dict)
         ):
+            # Older pending bill previews predate the explicit operation field.
+            # Recover their type from the server-selected allowlisted tool name.
+            if output.get("name") == "prepare_bill_from_current_message":
+                preview = dict(result["preview"])
+                preview.setdefault("operation", "CREATE_INVOICE")
+                return {**result, "preview": preview}
             return result
     return None
 
