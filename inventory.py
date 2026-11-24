@@ -3737,7 +3737,7 @@ async def parse_voice_billing(
         # transcript only. The English translation is allowed to help identify
         # products, never to validate quantities or prices.
         item_evidence_transcripts = _voice_billing_item_evidence_transcripts(
-            raw, product, parser_transcript, "",
+            raw, product, source_transcript, "",
             min(len(raw_items), 30), raw_items[:30],
         )
         # Prefer a direct source-language segment match when the cashier used
@@ -3746,7 +3746,7 @@ async def parse_voice_billing(
         if len(raw_items) > 1:
             source_segments = re.split(
                 r",\s+|;+\s*|\n+|\s+(?:and|then|plus|also|next|మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
-                parser_transcript,
+                source_transcript,
                 flags=re.IGNORECASE,
             )
             local_anchors = [
@@ -3818,6 +3818,9 @@ async def parse_voice_billing(
                 else:
                     unit_grounded = False
                     unit_note = f"The unit '{spoken_unit}' was not clearly heard, so the quantity was not converted. Check it."
+                    # Do not let an ungrounded model-supplied unit affect price semantics
+                    # or appear as the unit for this bill line.
+                    spoken_unit = ""
                     conversion = None
             if conversion is None:
                 pass
