@@ -4043,6 +4043,25 @@ async def parse_voice_billing(
         if not quantity_grounded:
             unresolved.append(f"{product_name}: quantity {spoken_quantity.normalize():f} was not clearly heard")
 
+        # Resolve the exact item's spoken price evidence once. The ASR source
+        # transcript remains authoritative; the model value is only a candidate.
+        source_line_evidence = item_evidence_transcripts
+        price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
+            raw, product, source_line_evidence
+        )
+        spoken_price_evidence = any(
+            bool(re.search(r"\d", _voice_billing_normalize(evidence)))
+            or any(
+                token in _VOICE_BILLING_NUMBER_WORDS or token in _VOICE_BILLING_SCALE_WORDS
+                for token in _voice_billing_normalize(evidence).split()
+            )
+            for evidence in price_evidence_transcripts
+        )
+        spoken_amount = raw.get("spoken_price_amount")
+        spoken_amount_value = _voice_billing_parse_model_decimal(
+            spoken_amount, currency=True
+        )
+
         kind = str(raw.get("spoken_price_kind") or "none").strip().lower()
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
             kind = "ambiguous"
