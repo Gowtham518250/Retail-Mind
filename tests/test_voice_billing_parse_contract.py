@@ -770,6 +770,61 @@ def test_spoken_unit_repair_recognizes_telugu_number_words():
     assert inventory_module._VOICE_BILLING_NUMBER_WORDS["ఒక్క"] == 1
 
 
+def test_telugu_pappu_weighted_line_survives_missing_confidence_and_currency_price(monkeypatch):
+    dal = SimpleNamespace(
+        id=205, product_name="Dal", sku="DAL-01", category="Pulses",
+        unit_price=100, current_stock=20, user_id=7, is_active=True, unit="kg",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_name_en": "Dal",
+            "product_name_local": "పప్పు",
+            # Model output may include the spoken unit in its quantity value.
+            "quantity": "2 కేజీలు",
+            "spoken_unit": "కేజీలు",
+            # Some Groq model responses omit confidence and add currency
+            # punctuation to the numeric price value.
+            "spoken_price_amount": "₹50.",
+            "spoken_price_kind": "ambiguous",
+        }],
+        transcript="2 కేజీల పప్పు ₹50.",
+        language_code="te-IN",
+        catalog_products=[dal],
+        translated_text="2 kg Dal ₹50",
+    )
+
+    assert result["success"] is True
+    assert len(result["items"]) == 1
+    item = result["items"][0]
+    assert item["product_name"] == "Dal"
+    assert item["product_name_local"] == "పప్పు"
+    assert item["product_id"] == 205
+    assert item["catalog_matched"] is True
+    assert item["quantity"] == 2.0
+    assert item["quantity_grounded"] is True
+    assert item["spoken_unit"] == "kg"
+    assert item["unit"] == "kg"
+    # The spoken ₹50 is the total for 2 kg, not ₹50 per kg.
+    assert item["unit_price"] == 25.0
+    assert item["price_source"] == "spoken_line_total"
+    assert item["price_grounded"] is True
+    assert item["confidence"] >= 0.72
+    assert item["confidence_inferred"] is True
+    assert item["price_role_inferred"] is True
+    assert item["needs_confirmation"] is True
+
+
+def test_voice_model_numeric_fields_accept_telugu_digits_and_currency_symbols():
+    import inventory as inventory_module
+
+    assert inventory_module._voice_billing_parse_model_decimal("౨ కేజీలు") == Decimal("2")
+    assert inventory_module._voice_billing_parse_model_decimal("₹५०.", currency=True) == Decimal("50")
+    assert inventory_module._voice_billing_parse_model_decimal("యాభై రూపాయలు", currency=True) == Decimal("50")
+    assert inventory_module._voice_billing_parse_confidence("high") == 0.85
+    assert inventory_module._voice_billing_parse_confidence(None) is None
+
+
 def test_multiline_telugu_billing_keeps_each_quantity_unit_and_line_total(monkeypatch):
     tomatoes = SimpleNamespace(
         id=101, product_name="Tomatoes", sku="TOM-01", category="Vegetables",
