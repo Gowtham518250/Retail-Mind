@@ -57,26 +57,31 @@ def _current_shop() -> int:
 async def _run_tool(name: str, arguments: dict[str, Any], *, user_text: str = "") -> dict:
     shop_id = _current_shop()
     db: Session = SessionLocal()
-    conversation_id = str(uuid.uuid4())
+    needs_pending_action = name in {
+        "prepare_bill_from_current_message",
+        "prepare_invoice_payment",
+        "prepare_online_order_transition",
+    }
+    conversation_id = str(uuid.uuid4()) if needs_pending_action else None
     request_id = str(uuid.uuid4())
     try:
-        # Pending previews have a durable FK to a conversation, so MCP calls
-        # receive their own saved conversation record. No audio or credential
-        # is persisted here.
-        conversation = AgentConversation(
-            id=conversation_id,
-            user_id=shop_id,
-            title=f"MCP: {name}"[:180],
-        )
-        db.add(conversation)
-        if user_text:
-            db.add(AgentMessage(
-                conversation_id=conversation_id,
+        # Only operations that create a pending action need a durable
+        # conversation FK. Read-only MCP calls use a NULL audit conversation
+        # reference and do not create an unbounded history row per tool call.
+        if conversation_id:
+            db.add(AgentConversation(
+                id=conversation_id,
                 user_id=shop_id,
-                role="user",
-                content=user_text[:3000],
+                title=f"MCP: {name}"[:180],
             ))
-        db.commit()
+            if user_text:
+                db.add(AgentMessage(
+                    conversation_id=conversation_id,
+                    user_id=shop_id,
+                    role="user",
+                    content=user_text[:3000],
+                ))
+            db.commit()
 
         result = await dispatch_tool(
             name,
@@ -90,7 +95,7 @@ async def _run_tool(name: str, arguments: dict[str, Any], *, user_text: str = ""
                 "language_code": "auto",
             },
         )
-        if user_text:
+        if conversation_id and user_text:
             db.add(AgentMessage(
                 conversation_id=conversation_id,
                 user_id=shop_id,
