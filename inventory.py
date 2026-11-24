@@ -4055,66 +4055,62 @@ async def parse_voice_billing(
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
             kind = "ambiguous"
 
-        # For an explicitly spoken weight/volume quantity, a bare amount after the
-        # item is the total for that requested line. Only an explicit rate marker
-        # ("per kg", "/kg", "per litre", etc.) makes it a unit price. This server-side
-        # rule protects billing even when the extraction model labels the amount wrongly.
-        normalized_spoken_unit = re.sub(r"[^a-z]", "", spoken_unit.lower())
-        # In count-based shorthand without a spoken measurement unit,
-        # "3 soap 30" means ₹30 per item unless the cashier explicitly says
-        # that ₹30 is the total for all items. Do not let an AI label override
-        # this source-language POS convention.
-        explicit_line_total = bool(re.search(
-            r"(?:\\btotal\\b|\\baltogether\\b|\\bfor all\\b|"
-            r"మొత్తం|అన్నింటికి|కలిపి|మొత్తానికి|कुल|सबका|மொத்தம்|ಒಟ್ಟು|മൊത്തം)",
-            " ".join(str(value or "") for value in item_evidence_transcripts),
-            flags=re.IGNORECASE,
-        ))
-        if not spoken_unit and kind == "line_total" and not explicit_line_total:
-            kind = "unit"
+        # Read amount values from the original item segment, not a catalog price.
+        source_line_evidence = item_evidence_transcripts
+        price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
+            raw, product, source_line_evidence
+        )
+        spoken_price_evidence = any(
+            bool(re.search(r"\\d", _voice_billing_normalize(evidence)))
+            or any(
+                token in _VOICE_BILLING_NUMBER_WORDS or token in _VOICE_BILLING_SCALE_WORDS
+                for token in _voice_billing_normalize(evidence).split()
+            )
+            for evidence in price_evidence_transcripts
+        )
+        spoken_amount = raw.get("spoken_price_amount")
+        spoken_amount_value = _voice_billing_parse_model_decimal(spoken_amount, currency=True)
 
+        normalized_spoken_unit = re.sub(r"[^a-z]", "", spoken_unit.lower())
         weighted_units = {
             "kg", "kgs", "kilo", "kilos", "kilogram", "kilograms",
-            "g", "gm", "gms", "gram", "grams",
-            "l", "ltr", "litre", "litres", "liter", "liters",
-            "ml", "millilitre", "millilitres", "milliliter", "milliliters",
+            "g", "gm", "gms", "gram", "grams", "l", "ltr", "litre", "litres",
+            "liter", "liters", "ml", "millilitre", "millilitres", "milliliter", "milliliters",
         }
         price_context = " ".join(str(value or "") for value in item_evidence_transcripts).lower()
         explicit_rate = bool(re.search(
-            r"(?:\bper\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
-            r"/\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
-            r"\b(?:rate|each)\s+(?:per\s+)?(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b)",
+            r"(?:\\bper\\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\\b|"
+            r"/\\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\\b|"
+            r"\\b(?:rate|each)\\s+(?:per\\s+)?(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\\b|"
+            r"కిలోకు|కేజీకి|కేజీలకు|గ్రాముకు|లీటరుకు|కిలోకి)",
             price_context,
+            flags=re.IGNORECASE,
         ))
-        if quantity == Decimal("1") and normalized_spoken_unit not in weighted_units and kind == "line_total":
-            # For a single count-based item, per-unit price and line total are
-            # numerically identical. Prefer the cashier-facing per-item meaning
-            # for shorthand such as "one coffee 30".
-            kind = "unit"
+        explicit_line_total = bool(re.search(
+            r"(?:\\btotal\\b|\\baltogether\\b|\\bfor all\\b|"
+            r"మొత్తం|అన్నింటికి|కలిపి|మొత్తానికి|कुल|सबका|மொத்தம்|ಒಟ್ಟು|മൊത്തം)",
+            price_context,
+            flags=re.IGNORECASE,
+        ))
+        price_role_inferred = False
+        if (
+            kind in {"none", "ambiguous"}
+            and spoken_price_evidence
+            and spoken_amount_value is not None
+            and spoken_amount_value > 0
+        ):
+            # For weight/volume, a bare amount is the requested line total.
+            # A clearly spoken per-unit/rate phrase is the only override.
+            if normalized_spoken_unit in weighted_units:
+                kind = "unit" if explicit_rate else "line_total"
+            else:
+                kind = "line_total" if explicit_line_total else "unit"
+            price_role_inferred = True
 
         if normalized_spoken_unit in weighted_units and kind in {"unit", "line_total"}:
-            if explicit_rate:
-                kind = "unit"
-            elif product is None:
-                # A custom/untracked product has no catalog price with which to
-                # verify the extractor's unit interpretation; the bare spoken
-                # amount after a weight/volume quantity is therefore a line total.
-                kind = "line_total"
-            elif kind == "unit":
-                # Keep a catalog-backed unit price unless exact catalog arithmetic
-                # confirms that the amount is actually the requested line total.
-                try:
-                    reported_amount = Decimal(str(raw.get("spoken_price_amount")))
-                    expected_total = (
-                        Decimal(str(product.unit_price or 0)) * quantity
-                    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                    if (
-                        expected_total > 0
-                        and reported_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == expected_total
-                    ):
-                        kind = "line_total"
-                except (InvalidOperation, TypeError, ValueError, ArithmeticError):
-                    pass
+            kind = "unit" if explicit_rate else "line_total"
+        elif quantity == Decimal("1") and kind == "line_total":
+            kind = "unit"
 
         # Ground any spoken price against this item's original-language phrase.
         # A catalog price is only a fallback when the speaker did not state a price.
