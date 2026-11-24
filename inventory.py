@@ -3031,7 +3031,7 @@ def _voice_billing_item_evidence_transcripts(
         a recognized number; arbitrary prices/numbers are never used as boundaries.
         """
         separators = list(re.finditer(
-            r",\s+|;+\s*|\n+|\s+\b(?:and|then|plus|also|next)\b\s+|"
+            r"\s+\bLINESEPARATOR\b\s*|,\s+|;+\s*|\n+|\s+\b(?:and|then|plus|also|next)\b\s+|"
             r"\s+(?:మరియు|और|आणि|மற்றும்|ಮತ್ತು|અને)\s+",
             prefix,
             flags=re.IGNORECASE,
