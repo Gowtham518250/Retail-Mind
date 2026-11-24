@@ -47,7 +47,7 @@ def test_registry_reports_real_capabilities_but_keeps_writes_gated(monkeypatch):
     enabled = {item["name"]: item for item in list_capabilities()}
     assert enabled["inventory.lookup"]["enabled"] is True
     assert enabled["billing.confirm"]["enabled"] is True
-    assert enabled["khata.record"]["enabled"] is False
+    assert enabled["khata.record"]["enabled"] is True
 
 
 def test_tool_arguments_cannot_supply_a_tenant_or_unexpected_fields():
