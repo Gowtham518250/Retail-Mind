@@ -131,3 +131,7 @@ def test_mcp_exposes_attendance_preview_but_never_confirmation_tool():
 def test_mcp_exposes_read_only_worker_directory():
     assert hasattr(mcp_module, "list_shop_workers")
     assert not hasattr(mcp_module, "update_worker_salary")
+
+def test_mcp_exposes_stock_movement_preview_but_not_confirmation():
+    assert hasattr(mcp_module, "prepare_inventory_stock_movement")
+    assert not hasattr(mcp_module, "confirm_inventory_stock_movement")
