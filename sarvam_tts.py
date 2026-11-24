@@ -38,8 +38,8 @@ def sarvam_tts_language_code(value: str | None) -> str:
 
 def clean_speech_text(value: str) -> str:
     text = str(value or "").replace(chr(96) * 3, " ")
-    text = re.sub(r"\x60([^\x60]*)\x60", r"\\1", text)
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\\1", text)
+    text = re.sub(r"\x60([^\x60]*)\x60", lambda match: match.group(1), text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", lambda match: match.group(1), text)
     text = re.sub(r"https?://\S+", " ", text)
     text = re.sub(r"[*_#>|~]+", " ", text)
     return re.sub(r"\s+", " ", text).strip()[:MAX_TTS_TEXT_CHARS]
