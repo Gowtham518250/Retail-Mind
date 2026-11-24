@@ -14,7 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 logger = logging.getLogger(__name__)
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
-AI_PATHS = {"/askquery", "/askquery/voice"}
+AI_PATHS = {"/askquery", "/askquery/voice", "/api/agent/chat", "/api/agent/voice", "/api/agent/speech"}
 
 class SubscriptionAIQuotaMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
