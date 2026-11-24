@@ -17,7 +17,7 @@ from typing import Any, Literal, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -79,10 +79,16 @@ class OrderTransitionPreviewArgs(ToolArgs):
 
 class KhataLedgerMovementArgs(ToolArgs):
     operation: Literal["CREDIT", "REPAYMENT"]
-    customer_phone: str = Field(..., pattern=r"^[6-9]\d{9}$")
+    customer_phone: Optional[str] = Field(default=None, pattern=r"^[6-9]\d{9}$")
     amount: Decimal = Field(..., gt=0, le=Decimal("100000000"))
     customer_name: Optional[str] = Field(default=None, max_length=100)
     description: Optional[str] = Field(default=None, max_length=180)
+
+    @model_validator(mode="after")
+    def require_customer_identity(self):
+        if not self.customer_phone and not str(self.customer_name or "").strip():
+            raise ValueError("Provide a customer name or phone number")
+        return self
 
 
 class AttendanceRecordPreviewArgs(ToolArgs):
@@ -262,7 +268,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "prepare_khata_ledger_movement",
-            "description": "Prepare a preview to add customer Khata credit or record a repayment in the legacy Khata ledger. Requires exact 10-digit customer phone and amount. Never writes until owner confirms in Retail Mind.",
+            "description": "Prepare an owner-confirmed Khata credit or repayment preview for a customer in the authenticated shop. Resolve one exact customer name or 10-digit phone; if a name is ambiguous, ask for more details. A new CREDIT can create a name-only Khata account. A REPAYMENT requires an existing account. Never writes until owner confirms in Retail Mind.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -272,7 +278,7 @@ TOOL_DEFINITIONS = [
                     "customer_name": {"type": "string", "maxLength": 100},
                     "description": {"type": "string", "maxLength": 180}
                 },
-                "required": ["operation", "customer_phone", "amount"],
+                "required": ["operation", "amount"],
                 "additionalProperties": False
             }
         }
