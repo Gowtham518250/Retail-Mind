@@ -650,8 +650,16 @@ def _recent_bill_source_transcript(context: dict, user_text: str) -> str:
         ))
         has_item_and_number = bool(re.search(r"[A-Za-z\u0080-\uFFFF]", candidate)) and bool(re.search(r"\d", candidate))
         if has_bill_context and (has_item_and_number or len(candidate.split()) >= 2):
-            # Do not append "Yes"/"Okay" to the source transcript. It is a
-            # confirmation, not a new product or numeric fact.
+            approval_only = bool(re.fullmatch(
+                r"(?:yes|yeah|yep|sure|ok(?:ay)?|avunu|అవును|సరే|ஆம்|ಹೌದು|हाँ)(?:\\s+please)?[.!]?",
+                user_text.strip(),
+                flags=re.IGNORECASE,
+            ))
+            # A bare approval confirms the previous grounded facts; it is not
+            # new numeric evidence. A price/quantity correction remains part of
+            # the source so the parser can ground the newly supplied number.
+            if not approval_only:
+                return f"{candidate}. Latest owner instruction: {user_text}"[:1200]
             return candidate[:1200]
 
     return user_text
