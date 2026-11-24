@@ -3813,8 +3813,13 @@ async def parse_voice_billing(
         # Quantity and confidence are independent fields. A missing/malformed
         # confidence must not be reported as an invalid quantity or erase a line
         # whose product wording and numeric values can be grounded in speech.
-        raw_quantity = raw.get("quantity", raw.get("qty", 1))
-        quantity = _voice_billing_parse_model_decimal(raw_quantity)
+        has_model_quantity = "quantity" in raw or "qty" in raw
+        raw_quantity = raw.get("quantity", raw.get("qty"))
+        quantity = (
+            _voice_billing_parse_model_decimal(raw_quantity)
+            if has_model_quantity and str(raw_quantity or "").strip()
+            else None
+        )
         if quantity is None:
             quantity = Decimal("0")
         model_confidence = _voice_billing_parse_confidence(raw.get("confidence"))
