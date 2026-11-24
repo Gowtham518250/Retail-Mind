@@ -817,6 +817,41 @@ def test_telugu_pappu_weighted_item_preserves_spoken_unit_price_with_missing_con
     assert item["needs_confirmation"] is True
 
 
+def test_missing_quantity_is_recovered_only_from_telugu_number_unit_phrase(monkeypatch):
+    dal = SimpleNamespace(
+        id=206, product_name="Dal", sku="DAL-02", category="Pulses",
+        unit_price=100, current_stock=20, user_id=7, is_active=True, unit="kg",
+    )
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_name_en": "Dal",
+            "product_name_local": "పప్పు",
+            # Groq omitted quantity, unit and confidence in this response.
+            "spoken_price_amount": "₹50.",
+            "spoken_price_kind": "unit",
+        }],
+        transcript="2 కేజీల పప్పు ₹50.",
+        language_code="te-IN",
+        catalog_products=[dal],
+        translated_text="2 kg Dal ₹50",
+    )
+
+    assert result["success"] is True
+    assert len(result["items"]) == 1
+    item = result["items"][0]
+    assert item["product_id"] == 206
+    assert item["quantity"] == 2.0
+    assert item["quantity_grounded"] is True
+    assert item["spoken_unit"] == "kg"
+    assert item["unit"] == "kg"
+    assert item["unit_price"] == 50.0
+    assert item["price_grounded"] is True
+    assert item["quantity_inferred"] is True
+    assert item["confidence_inferred"] is True
+    assert item["needs_confirmation"] is True
+
+
 def test_voice_model_numeric_fields_accept_telugu_digits_and_currency_symbols():
     import inventory as inventory_module
 
