@@ -126,7 +126,10 @@ def test_product_sales_history_sql_parses_as_one_postgres_select():
     statements = sqlglot.parse(db.calls[0][0], read="postgres")
     assert len(statements) == 1
     assert isinstance(statements[0], exp.Select)
-    assert statements[0].args.get("with") is not None
+    assert (
+        statements[0].args.get("with") is not None
+        or statements[0].args.get("with_") is not None
+    )
 
 
 def test_product_sales_history_preserves_resolved_date_range():
