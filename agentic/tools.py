@@ -832,20 +832,12 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     action_id = str(uuid.uuid4())
     conversation_id = str(context["conversation_id"])
     # The same short confirmation text may be reused for a different bill in
-    # one conversation. Bind replay protection to the parsed owner-approved
-    # item facts as well as the current request, not message text alone.
+    # one conversation. Hash the exact owner-authored source context, not LLM
+    # output, so retries stay stable even if extraction is nondeterministic.
     idempotency_facts = {
         "latest_message": user_text,
+        "source_transcript": parser_text[:1200],
         "customer_phone": customer_phone,
-        "items": [
-            {
-                "product_id": row["product_id"],
-                "product_name": row["product_name"],
-                "quantity": row["quantity"],
-                "unit_price": row["unit_price"],
-            }
-            for row in output_lines
-        ],
     }
     idempotency_key = hashlib.sha256(
         f"{shop_id}:{conversation_id}:{_json_dump(idempotency_facts)}".encode("utf-8")
