@@ -3924,8 +3924,6 @@ async def parse_voice_billing(
             ) or ""
         spoken_unit = _voice_billing_canonical_unit_label(spoken_unit)
         spoken_quantity = quantity
-        # Keep the source quantity in sync after any transcript-grounded recovery.
-        spoken_quantity = quantity
         # Ground quantity only against the number phrase before this product name.
         # A later price (for example "2 kg rice 60") must never validate a model
         # that mistakenly reports 60 as the quantity. If no quantity phrase was
@@ -3945,6 +3943,8 @@ async def parse_voice_billing(
             quantity = recovered_quantity
             quantity_inferred = True
 
+        # Update the comparison value after transcript-grounded quantity recovery.
+        spoken_quantity = quantity
         quantity_grounded = _vb_quantity_is_grounded(
             quantity,
             quantity_evidence_transcripts,
