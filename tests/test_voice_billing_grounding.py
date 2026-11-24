@@ -423,6 +423,11 @@ def test_telugu_multi_item_extraction_ignores_wrong_catalog_prices(monkeypatch):
     assert [item["price_source"] for item in result["items"]] == [
         "spoken_line_total", "spoken_unit", "spoken_unit", "spoken_unit", "spoken_unit"
     ]
+    # The first item's spoken kg unit must never leak to count-based products.
+    assert [item["spoken_unit"] for item in result["items"]] == [
+        "kg", None, None, None, None
+    ]
+    assert all(item["unit_mismatch"] is False for item in result["items"][1:])
     assert result["items"][0]["product_id"] is None
     assert all(item["price_grounded"] is True for item in result["items"])
 
