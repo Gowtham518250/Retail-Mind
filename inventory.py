@@ -3905,14 +3905,10 @@ async def parse_voice_billing(
         # A catalog price is only a fallback when the speaker did not state a price.
         price_grounded = True
         price_needs_confirmation = False
-        source_line_evidence = _voice_billing_item_evidence_transcripts(
-            raw,
-            product,
-            parser_transcript,
-            "",
-            min(len(raw_items), 30),
-            raw_items[:30],
-        )
+        # Reuse the exact item segment already isolated for quantity/unit
+        # grounding. Recomputing it here can reintroduce another line's number
+        # after the comma has been normalized away.
+        source_line_evidence = item_evidence_transcripts
         price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
             raw, product, source_line_evidence
         )
