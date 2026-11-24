@@ -3271,7 +3271,7 @@ def _match_shop_entities(query: str, vocabulary: dict[str, tuple[str, ...]]) -> 
             normalised_name = _normalise_entity_name(name)
             if len(normalised_name) < 2:
                 continue
-            pattern = r"(?<![\\w])" + re.escape(normalised_name) + r"(?![\\w])"
+            pattern = r"(?<![\w])" + re.escape(normalised_name) + r"(?![\w])"
             if not re.search(pattern, normalised_query, flags=re.IGNORECASE | re.UNICODE):
                 continue
             if any(normalised_name in _normalise_entity_name(existing) for existing in selected):
