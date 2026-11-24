@@ -3876,6 +3876,17 @@ async def parse_voice_billing(
             unresolved.append(f"{product_name}: price not clearly heard")
             if spoken_price_evidence or kind == "ambiguous":
                 price_needs_confirmation = True
+        if kind == "ambiguous" and not spoken_price_evidence:
+            try:
+                reported_amount_for_role = Decimal(str(spoken_amount))
+            except (InvalidOperation, TypeError, ValueError):
+                reported_amount_for_role = None
+            if reported_amount_for_role is None or reported_amount_for_role == spoken_quantity:
+                # The model either omitted the amount or reused the quantity.
+                # There is no second spoken price to protect, so an existing
+                # catalogue price is a safe draft default.
+                kind = "none"
+                price_needs_confirmation = False
         if kind == "ambiguous":
             # Never replace a price the cashier spoke with a different catalog
             # amount. An unresolved spoken price must be corrected explicitly.
