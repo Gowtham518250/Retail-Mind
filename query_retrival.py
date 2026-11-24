@@ -4337,9 +4337,16 @@ async def ask_query(
     # generation. The phone still makes only one HTTP request per question.
     query = original_query
     query_classification = None
+    # Resolve names from this authenticated shop before planning, for both English
+    # and translated questions. The vocabulary is bounded and typed; it is never
+    # shared across owners or used as an authorization source.
+    shop_entity_vocabulary = _load_shop_entity_vocabulary(db, user_id)
+    shop_vocabulary = tuple(
+        name for values in shop_entity_vocabulary.values() for name in values
+    )
     translation_used = language_code != "en" or any(not char.isascii() for char in query)
     if translation_used:
-        vocabulary_token = _QUERY_SHOP_VOCABULARY.set(_load_shop_vocabulary(db, user_id))
+        vocabulary_token = _QUERY_SHOP_VOCABULARY.set(shop_vocabulary)
         try:
             translated = await run_in_threadpool(_translate_query_and_classify, query, language_code)
         finally:
@@ -4355,6 +4362,26 @@ async def ask_query(
         )
     else:
         print("ASKQUERY STAGE=question_translation_classification skipped reason=english_ascii llm_calls=0")
+
+    resolved_shop_entities = _match_shop_entities(query, shop_entity_vocabulary)
+    # Preserve entities spoken in the source text too (e.g. regional-language
+    # names which were not transliterated consistently), without fuzzy guessing.
+    source_entities = _match_shop_entities(original_query, shop_entity_vocabulary)
+    seen_entity_keys = {
+        (item["type"], _normalise_entity_name(item["name"]))
+        for item in resolved_shop_entities
+    }
+    for item in source_entities:
+        key = (item["type"], _normalise_entity_name(item["name"]))
+        if key not in seen_entity_keys:
+            resolved_shop_entities.append(item)
+            seen_entity_keys.add(key)
+    print(
+        "ASKQUERY STAGE=entity_grounding "
+        f"products={sum(item['type'] == 'product' for item in resolved_shop_entities)} "
+        f"customers={sum(item['type'] == 'customer' for item in resolved_shop_entities)} "
+        f"workers={sum(item['type'] == 'worker' for item in resolved_shop_entities)}"
+    )
 
     # Do not run SQL for a question whose non-English meaning remained uncertain
     # after the high-reasoning verification pass. Ask for a clearer utterance
