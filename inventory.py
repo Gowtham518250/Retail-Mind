@@ -3408,10 +3408,32 @@ def _voice_billing_item_price_evidence_transcripts(
                         break
             continue
         start, end = min(spans, key=lambda span: (-(span[1] - span[0]), span[0]))
-        suffix = " ".join(words[end:]).strip()
+        suffix_words = words[end:]
+        # If the cashier says the product first ("rice 2 kg"), the number+unit
+        # immediately after its name is the quantity, not a selling price.
+        # Remove that prefix before treating any later number as price evidence.
+        if suffix_words:
+            first_token = suffix_words[0].strip(".,;:!?()[]\\"'").casefold()
+            first_value = None
+            try:
+                first_value = Decimal(first_token)
+            except (InvalidOperation, TypeError, ValueError):
+                if first_token in _VOICE_BILLING_NUMBER_WORDS:
+                    first_value = Decimal(_VOICE_BILLING_NUMBER_WORDS[first_token])
+            try:
+                expected_quantity = Decimal(str(raw_item.get("quantity", 1)))
+            except (InvalidOperation, TypeError, ValueError):
+                expected_quantity = Decimal("1")
+            if first_value == expected_quantity:
+                suffix_words = suffix_words[1:]
+                if suffix_words and _vb_canonical_unit(
+                    suffix_words[0].strip(".,;:!?()[]\\"'")
+                ) is not None:
+                    suffix_words = suffix_words[1:]
+        suffix = " ".join(suffix_words).strip()
         if suffix:
             evidence.append(suffix)
-            continue
+        continue
         prefix_words = words[:start]
         if any(
             token in currency_cues or token.startswith("₹")
@@ -3433,6 +3455,10 @@ async def parse_voice_billing(
     A product absent from the authenticated shop's catalog remains a sellable custom line,
     but has no product ID and therefore cannot reduce inventory stock.
     """
+    # Keep the ASR text with its original separators for safe item-level
+    # grounding. The display/normalization helper removes commas and semicolons,
+    # which otherwise merges separate sale lines before the extractor can align them.
+    source_transcript = unicodedata.normalize("NFKC", str(request.transcript or "")).strip()
     transcript = _normalize_voice_transcript(request.transcript)
     voice_started = time.perf_counter()
     translation_ms = 0.0
@@ -3451,7 +3477,7 @@ async def parse_voice_billing(
     # expand shop aliases or catalog phrases before the AI sees the utterance;
     # those substitutions can turn a different spoken product into a catalog item.
     aliases_applied = False
-    parser_transcript = _voice_billing_normalize_spoken_scales(transcript)
+    parser_transcript = _voice_billing_normalize_spoken_scales(source_transcript or transcript)
 
     # Normalize non-English/native-script and common Romanized Indian speech BEFORE matching.
     model = (os.getenv("GROQ_VOICE_BILLING_MODEL") or "qwen/qwen3.8-27b").strip()
