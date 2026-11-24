@@ -4112,60 +4112,33 @@ async def parse_voice_billing(
         elif quantity == Decimal("1") and kind == "line_total":
             kind = "unit"
 
-        # Ground any spoken price against this item's original-language phrase.
-        # A catalog price is only a fallback when the speaker did not state a price.
+        # Ground any spoken price against this exact original-language item segment.
+        # A catalog price is only a fallback when the cashier did not state an amount.
         price_grounded = True
-        price_needs_confirmation = False
-        # Reuse the exact item segment already isolated for quantity/unit
-        # grounding. Recomputing it here can reintroduce another line's number
-        # after the comma has been normalized away.
-        source_line_evidence = item_evidence_transcripts
-        price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
-            raw, product, source_line_evidence
-        )
-        spoken_price_evidence = any(
-            bool(re.search(r"\d", _voice_billing_normalize(evidence)))
-            or any(
-                token in _VOICE_BILLING_NUMBER_WORDS or token in _VOICE_BILLING_SCALE_WORDS
-                for token in _voice_billing_normalize(evidence).split()
-            )
-            for evidence in price_evidence_transcripts
+        price_needs_confirmation = bool(
+            price_role_inferred or confidence_inferred or quantity_inferred
         )
         if kind in {"unit", "line_total"}:
-            try:
-                reported_price = Decimal(str(raw.get("spoken_price_amount")))
-                # The same numeric value cannot serve as both the line quantity
-                # and its price without a second, explicit occurrence/role.
-                price_grounded = (
-                    reported_price != spoken_quantity
-                    and _vb_quantity_is_grounded(
-                        reported_price,
-                        price_evidence_transcripts,
-                        _VOICE_BILLING_NUMBER_WORDS,
-                        _VOICE_BILLING_SCALE_WORDS,
-                    )
+            reported_price = spoken_amount_value
+            price_grounded = (
+                reported_price is not None
+                and reported_price > 0
+                and reported_price != spoken_quantity
+                and _voice_billing_evidence_contains_amount(
+                    reported_price, price_evidence_transcripts
                 )
-            except (InvalidOperation, TypeError, ValueError):
-                price_grounded = False
+            )
             if not price_grounded:
-                try:
-                    reported_price_for_role = Decimal(str(raw.get("spoken_price_amount")))
-                except (InvalidOperation, TypeError, ValueError):
-                    reported_price_for_role = None
+                reported_price_for_role = spoken_amount_value
                 if spoken_price_evidence or (
                     reported_price_for_role is not None
                     and reported_price_for_role != spoken_quantity
                 ):
-                    # There was a separate spoken amount, or the model invented
-                    # one that cannot be grounded. Require correction instead of
-                    # substituting a catalogue price.
+                    # A separate price was spoken but could not be matched to this item.
+                    # Never replace it with the catalogue price.
                     kind = "ambiguous"
                 else:
-                    # The model reused the quantity as the price (e.g. "2 kg rice").
-                    # No separate selling price was spoken, so the known catalogue
-                    # price may be used as the default draft price.
                     kind = "none"
-
         catalog_price = Decimal(str(product.unit_price or 0)) if product is not None else Decimal("0")
         unit_price = catalog_price if catalog_price > 0 else Decimal("0")
         price_source = "catalog" if catalog_price > 0 else "missing"
@@ -4178,7 +4151,7 @@ async def parse_voice_billing(
                 price_needs_confirmation = True
         if kind == "ambiguous" and not spoken_price_evidence:
             try:
-                reported_amount_for_role = Decimal(str(spoken_amount))
+                reported_amount_for_role = spoken_amount_value
             except (InvalidOperation, TypeError, ValueError):
                 reported_amount_for_role = None
             if reported_amount_for_role is None or reported_amount_for_role == spoken_quantity:
@@ -4205,8 +4178,8 @@ async def parse_voice_billing(
             unresolved.append(f"{product_name}: spoken price was not extracted")
         elif kind in {"unit", "line_total"}:
             try:
-                amount = Decimal(str(spoken_amount))
-                if not amount.is_finite() or amount <= 0 or amount > Decimal("100000000"):
+                amount = spoken_amount_value
+                if amount is None or not amount.is_finite() or amount <= 0 or amount > Decimal("100000000"):
                     raise ValueError("invalid spoken amount")
                 if kind == "unit":
                     unit_price = amount
@@ -4242,6 +4215,30 @@ async def parse_voice_billing(
                 price_warning = "The spoken price could not be read. Enter the selling price before saving."
                 unresolved.append(f"{product_name}: price unclear")
 
+        if price_role_inferred:
+            inferred_role_warning = (
+                "The selling amount was extracted from speech; verify whether it is a line total or a per-unit rate."
+            )
+            price_warning = (
+                f"{price_warning} {inferred_role_warning}".strip()
+                if price_warning else inferred_role_warning
+            )
+        if confidence_inferred:
+            confidence_warning = (
+                "The product phrase was found in the original speech, but the AI confidence score was missing or low. Verify the item."
+            )
+            price_warning = (
+                f"{price_warning} {confidence_warning}".strip()
+                if price_warning else confidence_warning
+            )
+        if quantity_inferred:
+            quantity_warning = (
+                "Quantity was recovered from the spoken number and unit. Verify it before billing."
+            )
+            price_warning = (
+                f"{price_warning} {quantity_warning}".strip()
+                if price_warning else quantity_warning
+            )
         if unit_note and not price_warning:
             price_warning = unit_note
         price_missing = not unit_price.is_finite() or unit_price <= 0
@@ -4281,9 +4278,13 @@ async def parse_voice_billing(
             "unit_grounded": unit_grounded,
             "price_grounded": price_grounded,
             "price_needs_confirmation": price_needs_confirmation,
+            "confidence_inferred": confidence_inferred,
+            "quantity_inferred": quantity_inferred,
+            "price_role_inferred": price_role_inferred,
             "needs_confirmation": bool(
                 ambiguous_candidates or unit_mismatch or not quantity_grounded or price_missing
                 or not unit_grounded or not price_grounded or price_needs_confirmation
+                or confidence_inferred or quantity_inferred or price_role_inferred
             ),
             "ambiguous_candidates": ambiguous_candidates,
             "match_reasons": match_reasons,
