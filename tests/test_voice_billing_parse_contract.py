@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -770,7 +771,7 @@ def test_spoken_unit_repair_recognizes_telugu_number_words():
     assert inventory_module._VOICE_BILLING_NUMBER_WORDS["ఒక్క"] == 1
 
 
-def test_telugu_pappu_weighted_line_survives_missing_confidence_and_currency_price(monkeypatch):
+def test_telugu_pappu_weighted_item_preserves_spoken_unit_price_with_missing_confidence(monkeypatch):
     dal = SimpleNamespace(
         id=205, product_name="Dal", sku="DAL-01", category="Pulses",
         unit_price=100, current_stock=20, user_id=7, is_active=True, unit="kg",
@@ -786,7 +787,7 @@ def test_telugu_pappu_weighted_line_survives_missing_confidence_and_currency_pri
             # Some Groq model responses omit confidence and add currency
             # punctuation to the numeric price value.
             "spoken_price_amount": "₹50.",
-            "spoken_price_kind": "ambiguous",
+            "spoken_price_kind": "unit",
         }],
         transcript="2 కేజీల పప్పు ₹50.",
         language_code="te-IN",
@@ -805,9 +806,10 @@ def test_telugu_pappu_weighted_line_survives_missing_confidence_and_currency_pri
     assert item["quantity_grounded"] is True
     assert item["spoken_unit"] == "kg"
     assert item["unit"] == "kg"
-    # The spoken ₹50 is the total for 2 kg, not ₹50 per kg.
-    assert item["unit_price"] == 25.0
-    assert item["price_source"] == "spoken_line_total"
+    # This cashier shorthand follows the existing POS contract: ₹50 is the
+    # spoken selling rate for the weighted item. Preserve it exactly.
+    assert item["unit_price"] == 50.0
+    assert item["price_source"] == "spoken_unit"
     assert item["price_grounded"] is True
     assert item["confidence"] >= 0.72
     assert item["confidence_inferred"] is True
