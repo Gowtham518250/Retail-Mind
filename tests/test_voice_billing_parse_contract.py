@@ -665,10 +665,6 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
     monkeypatch.setenv("SARVAM_API_KEY", "unit-test-key")
     captured = {}
 
-    def fake_vocab(db, user_id, language_code):
-        captured["vocab_args"] = (user_id, language_code)
-        return []
-
     def fake_transcribe(**kwargs):
         captured["transcribe_args"] = kwargs
         return {
@@ -692,7 +688,6 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
         captured["user_id"] = user_id
         return {"success": True, "items": [], "needs_clarification": False}
 
-    monkeypatch.setattr(inventory_module, "_voice_billing_prompt_catalog_names", fake_vocab)
     monkeypatch.setattr(inventory_module, "transcribe_with_sarvam", fake_transcribe)
     monkeypatch.setattr(inventory_module, "_assess_transcription", fake_assess)
     monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
@@ -711,8 +706,8 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
         )
     )
 
-    assert captured["vocab_args"] == (7, "auto")
     assert captured["transcribe_args"]["api_key"] == "unit-test-key"
+    assert captured["transcribe_args"]["keyterms"] == []
     assert captured["transcribe_args"]["language_code"] == "auto"
     assert captured["assessed_text"] == "2 kg rice 50"
     assert captured["transcript"] == "2 kg rice 50"
