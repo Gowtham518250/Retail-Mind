@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db import get_db
-from models import KhataBalance, KhataHistory, UniversalTransaction
+from models import KhataBalance, KhataHistory, UniversalTransaction, User
 from security import owner_only, sanitize_input, resolve_shop_id
 import urllib.parse
 
@@ -51,12 +51,23 @@ class KhataHistoryOut(BaseModel):
 # =====================
 # HELPERS
 # =====================
+def _lock_shop_khata_writes(db: Session, shop_id: int) -> None:
+    """Serialize Khata writes per shop, including first-account creation.
+
+    Locking the owner row means old app routes coordinate with the newer
+    assistant transaction even when the customer has no KhataBalance row yet.
+    """
+    owner = db.query(User.id).filter(User.id == shop_id).with_for_update().first()
+    if not owner:
+        raise HTTPException(status_code=404, detail="Shop owner not found.")
+
+
 def _get_or_create_khata(db: Session, shop_id: int, customer_phone: str, customer_name: Optional[str]) -> KhataBalance:
     """Get existing Khata account or create a new one"""
     khata = db.query(KhataBalance).filter(
         KhataBalance.shop_id == shop_id,
         KhataBalance.customer_phone == customer_phone,
-    ).first()
+    ).with_for_update().first()
     if not khata:
         khata = KhataBalance(
             shop_id=shop_id,
@@ -94,6 +105,7 @@ def add_khata_credit(
 ):
     """Record that a customer bought on credit (Udhar/Khata)"""
     shop_id = resolve_shop_id(current_user)
+    _lock_shop_khata_writes(db, shop_id)
     desc = sanitize_input(data.description or "Purchased on Khata", "description")
 
     khata = _get_or_create_khata(db, shop_id, data.customer_phone, data.customer_name)
@@ -133,11 +145,12 @@ def record_repayment(
 ):
     """Record a customer's partial or full repayment"""
     shop_id = resolve_shop_id(current_user)
+    _lock_shop_khata_writes(db, shop_id)
 
     khata = db.query(KhataBalance).filter(
         KhataBalance.shop_id == shop_id,
         KhataBalance.customer_phone == data.customer_phone,
-    ).first()
+    ).with_for_update().first()
 
     if not khata:
         raise HTTPException(status_code=404, detail="No Khata account found for this customer.")

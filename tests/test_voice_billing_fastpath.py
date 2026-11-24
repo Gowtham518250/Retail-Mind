@@ -109,27 +109,52 @@ def test_ambiguous_generic_name_with_two_catalog_matches_falls_back():
 
 # ---- endpoint level -------------------------------------------------------
 
-def test_endpoint_uses_no_llm_for_a_clear_utterance(monkeypatch):
+def test_endpoint_uses_ai_for_clear_utterance_even_when_legacy_fastpath_flag_is_set(monkeypatch):
     rice = _p(42, "Sona Masoori Rice", "kg", 50, "RICE-01")
     result, capture, _, _ = _run_voice_billing_endpoint(
-        monkeypatch, [], transcript="2 kg rice 55", language_code="auto",
+        monkeypatch,
+        [{
+            "product_name_en": "Sona Masoori Rice",
+            "product_name_local": "rice",
+            "quantity": 2,
+            "spoken_unit": "kg",
+            "spoken_price_amount": 55,
+            "spoken_price_kind": "unit",
+            "confidence": 0.98,
+        }],
+        transcript="2 kg rice 55", language_code="auto",
+        translated_text="2 kg rice 55",
         catalog_products=[rice], fast_path=True,
     )
-    assert capture["requests"] == []          # no translation, no extraction call
-    assert result["provider"] == "deterministic"
+    assert "extraction" in capture["call_order"]
+    assert result["provider"] == "Groq"
     (item,) = result["items"]
     assert item["product_id"] == 42 and item["quantity"] == 2.0
     assert item["unit_price"] == 55.0 and item["price_source"] == "spoken_unit"
     assert item["quantity_grounded"] is True
+    # Extraction stays catalog-blind; matching is a separate server-side step.
+    extraction_prompt = capture["request"]["messages"][1]["content"]
+    assert "Authenticated shop catalog candidates" not in extraction_prompt
+    assert "Sona Masoori Rice" not in extraction_prompt
 
 
-def test_endpoint_converts_units_through_the_shared_pipeline(monkeypatch):
+def test_ai_extracted_units_still_use_the_shared_unit_conversion_pipeline(monkeypatch):
     rice = _p(42, "Sona Masoori Rice", "kg", 50, "RICE-01")
     result, capture, _, _ = _run_voice_billing_endpoint(
-        monkeypatch, [], transcript="500 g rice", language_code="en-IN",
+        monkeypatch,
+        [{
+            "product_name_en": "Sona Masoori Rice",
+            "product_name_local": "rice",
+            "quantity": 500,
+            "spoken_unit": "g",
+            "spoken_price_kind": "none",
+            "confidence": 0.98,
+        }],
+        transcript="500 g rice", language_code="en-IN",
         catalog_products=[rice], fast_path=True,
     )
-    assert capture["requests"] == []
+    assert "extraction" in capture["call_order"]
+    assert result["provider"] == "Groq"
     (item,) = result["items"]
     assert item["quantity"] == 0.5 and item["unit_converted"] is True
     assert item["unit_price"] == 50.0 and item["price_source"] == "catalog"

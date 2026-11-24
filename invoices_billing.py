@@ -1444,6 +1444,12 @@ def create_invoice(
 ):
     shop_id = resolve_shop_id(current_user)
     invoice_number = sanitize_input(data.invoice_number, "invoice_number")
+    ai_assistant_invoice = bool(
+        re.fullmatch(
+            r"Created via Retail Mind AI assistant\. Action [0-9a-fA-F-]{36}",
+            (data.notes or "").strip(),
+        )
+    )
 
     requested_paid = Decimal(str(data.paid_amount or 0))
     requested_total = Decimal(str(data.total_amount or 0))
@@ -1493,16 +1499,18 @@ def create_invoice(
     # backend is authoritative: a client cannot accidentally omit a live
     # discount just because its local cache is stale.
     now_utc = datetime.utcnow()
-    active_flash_sale = (
-        db.query(FlashSale)
-        .filter(
-            FlashSale.user_id == shop_id,
-            FlashSale.is_active == True,
-            FlashSale.end_time > now_utc,
+    active_flash_sale = None
+    if not ai_assistant_invoice:
+        active_flash_sale = (
+            db.query(FlashSale)
+            .filter(
+                FlashSale.user_id == shop_id,
+                FlashSale.is_active == True,
+                FlashSale.end_time > now_utc,
+            )
+            .order_by(FlashSale.start_time.desc())
+            .first()
         )
-        .order_by(FlashSale.start_time.desc())
-        .first()
-    )
 
     prepared_line_items = []
     special_discount_total = Decimal("0")
@@ -1528,7 +1536,7 @@ def create_invoice(
                     )
                     .first()
                 )
-            if product is None:
+            if product is None and not ai_assistant_invoice:
                 product = (
                     db.query(Product)
                     .filter(
@@ -1705,10 +1713,12 @@ def create_invoice(
                     )
                     db.add(mov)
             else:
-                product = db.query(Product).with_for_update().filter(
-                    func.lower(Product.product_name) == item.product_name.lower().strip(),
-                    Product.user_id == shop_id,
-                ).first()
+                product = None
+                if not ai_assistant_invoice:
+                    product = db.query(Product).with_for_update().filter(
+                        func.lower(Product.product_name) == item.product_name.lower().strip(),
+                        Product.user_id == shop_id,
+                    ).first()
                 if product:
                     current_stock = product.current_stock or Decimal("0")
                     if current_stock < item.quantity:

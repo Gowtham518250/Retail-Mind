@@ -524,7 +524,16 @@ def custom_name_is_grounded(
     testable = False
     for name in names:
         norm = normalize(name or "")
-        tokens = [stem_token(t) for t in norm.split() if len(t) >= 3 and not t.isdigit()]
+        # Short native-script words (for example Telugu "టీ") can be
+        # legitimate product names; do not drop them solely because they have
+        # fewer than three Unicode code points.
+        tokens = [
+            stem_token(t) for t in norm.split()
+            if not t.isdigit() and (
+                len(t) >= 3
+                or (len(t) >= 2 and any(ord(char) > 127 for char in t))
+            )
+        ]
         if not tokens:
             continue
         testable = True

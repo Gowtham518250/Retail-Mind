@@ -461,7 +461,7 @@ def employee_check_in(
     check_out_time fields. Completed sessions are retained in notes as JSON,
     so clearing mobile app data does not reset the server-side state.
     """
-    employee = db.query(Worker).filter(Worker.id == employee_id).first()
+    employee = db.query(Worker).filter(Worker.id == employee_id).with_for_update().first()
     is_worker = employee is not None
 
     if not employee:
@@ -593,7 +593,7 @@ def employee_check_out(
     current_user_id: int = Depends(check_current_user)
 ):
     """Check out the currently active attendance session."""
-    employee = db.query(Worker).filter(Worker.id == employee_id).first()
+    employee = db.query(Worker).filter(Worker.id == employee_id).with_for_update().first()
     is_worker = employee is not None
 
     if not employee:
@@ -722,7 +722,7 @@ def sync_worker_attendance_session(
     worker = db.query(Worker).filter(
         Worker.id == record.worker_id,
         Worker.shopkeeper_id == current_user_id,
-    ).first()
+    ).with_for_update().first()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found for this shop")
 
@@ -934,7 +934,7 @@ def record_manual_attendance(
     current_user_id: int = Depends(check_current_user)
 ):
     """Manually record attendance"""
-    employee = db.query(Worker).filter(Worker.id == record.employee_id).first()
+    employee = db.query(Worker).filter(Worker.id == record.employee_id).with_for_update().first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     
@@ -958,7 +958,7 @@ def record_manual_attendance(
             Attendance.worker_id == worker_id,
             Attendance.attendance_date == att_date
         )
-    ).first()
+    ).with_for_update().first()
 
     if existing:
         existing.employee_id = employee_user_id

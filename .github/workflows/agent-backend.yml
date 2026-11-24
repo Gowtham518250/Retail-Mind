@@ -1,0 +1,82 @@
+name: Retail Mind agent backend checks
+
+on:
+  push:
+    branches:
+      - agentic-retailmind-foundation
+  pull_request:
+    branches:
+      - production-fix-2026-08-18-playstore
+    paths:
+      - "agentic/**"
+      - "attendance.py"
+      - "requirements.txt"
+      - "render.yaml"
+      - "sarvam_tts.py"
+      - "models.py"
+      - "app.py"
+      - "invoices_billing.py"
+      - "inventory.py"
+      - "requirements.txt"
+      - "subscription_quota_middleware.py"
+      - "alembic/versions/053_agentic_assistant.py"
+      - "alembic/versions/054_agentic_khata_ledger_idempotency.py"
+      - "tests/test_agent_registry.py"
+      - "tests/test_agent_voice_route.py"
+      - "tests/test_agent_runtime.py"
+      - "tests/test_agent_mcp.py"
+      - "tests/test_agent_khata.py"
+      - "tests/test_agent_attendance.py"
+      - "tests/test_voice_billing_grounding.py"
+      - "tests/test_voice_billing_parse_contract.py"
+      - ".github/workflows/agent-backend.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retail-mind-agent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SECRET_KEY: retail-mind-agent-ci-only-not-for-production
+      RETAIL_MIND_AGENT_ENABLED: "false"
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Compile changed Python modules
+        run: |
+          python -m compileall -q agentic sarvam_tts.py subscription_quota_middleware.py models.py app.py
+
+      - name: Run agent and adjacent regression tests
+        run: |
+          python -m pytest -q \
+            tests/test_agent_registry.py \
+            tests/test_agent_voice_route.py \
+            tests/test_agent_mcp.py \
+            tests/test_agent_khata.py \
+            tests/test_agent_attendance.py \
+            tests/test_agent_inventory.py \
+            tests/test_voice_billing_grounding.py \
+            tests/test_voice_billing_parse_contract.py \
+            tests/test_payment_contract.py \
+            tests/test_backend_audit_regressions.py

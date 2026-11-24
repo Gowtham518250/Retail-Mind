@@ -1145,6 +1145,16 @@ class KhataHistory(Base):
     khata_id = Column(Integer, ForeignKey("khata_balances.id", ondelete="CASCADE"), nullable=False)
     transaction_type = Column(Enum(KhataTransactionType, name="khata_transaction_type"), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
+    # These columns are present in the original Alembic schema and used by khata_ledger.py.
+    reference_id = Column(String(100), nullable=True)
+    description = Column(String(200), nullable=True)
+    transaction_date = Column(DateTime, server_default=func.now())
+    # Non-NULL values are reserved for idempotent assistant ledger movements.
+    idempotency_key = Column(String(128), nullable=True)
+
+    __table_args__ = (
+        Index("uq_khata_history_idempotency_key", "idempotency_key", unique=True),
+    )
 
 
 class PasswordReset(Base):
@@ -1787,4 +1797,100 @@ class CustomerSyncEvent(Base):
 
     __table_args__ = (
         Index("ix_customer_sync_events_customer_type_seq", "customer_id", "event_type", "seq"),
+    )
+
+
+# ==================== RETAIL MIND AI AGENT ====================
+
+class AgentConversation(Base):
+    """Owner-scoped conversation metadata; messages are retained separately."""
+    __tablename__ = "agent_conversations"
+
+    id = Column(String(36), primary_key=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(180), nullable=False, default="New assistant conversation")
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_agent_conversations_user_updated", "user_id", "updated_at"),
+    )
+
+
+class AgentMessage(Base):
+    """Minimal owner-scoped chat history; never stores audio blobs or credentials."""
+    __tablename__ = "agent_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(
+        String(36),
+        ForeignKey("agent_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_agent_messages_conversation_created", "conversation_id", "created_at", "id"),
+    )
+
+
+class AgentPendingAction(Base):
+    """Server-created preview awaiting an explicit one-time owner confirmation."""
+    __tablename__ = "agent_pending_actions"
+
+    id = Column(String(36), primary_key=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(
+        String(36),
+        ForeignKey("agent_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action_type = Column(String(50), nullable=False)
+    status = Column(String(20), nullable=False, default="PENDING", server_default="PENDING")
+    idempotency_key = Column(String(128), nullable=False)
+    preview = Column(JSON, nullable=False)
+    payload = Column(JSON, nullable=False)
+    preview_hash = Column(String(64), nullable=False)
+    invoice_number = Column(String(64), nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    result = Column(JSON, nullable=True)
+    error_code = Column(String(80), nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_agent_action_user_idempotency"),
+        Index("ix_agent_pending_actions_user_status", "user_id", "status"),
+        Index("ix_agent_pending_actions_expiry", "status", "expires_at"),
+    )
+
+
+class AgentToolExecution(Base):
+    """Metadata-only audit record for each attempted agent tool invocation."""
+    __tablename__ = "agent_tool_executions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user_details.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(
+        String(36),
+        ForeignKey("agent_conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    request_id = Column(String(36), nullable=False, index=True)
+    tool_name = Column(String(80), nullable=False)
+    success = Column(Boolean, nullable=False)
+    error_code = Column(String(80), nullable=True)
+    duration_ms = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_agent_tool_executions_user_created", "user_id", "created_at"),
     )

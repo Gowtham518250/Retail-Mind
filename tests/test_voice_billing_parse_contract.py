@@ -231,6 +231,8 @@ def _run_voice_billing_endpoint(
     catalog_products=None,
     translated_text="2 kg Dragon Fruit 30",
     fast_path=False,
+    needs_clarification=False,
+    clarification_question="",
 ):
     import asyncio
     import json
@@ -249,8 +251,28 @@ def _run_voice_billing_endpoint(
         current_stock=20,
         user_id=7,
         is_active=True,
+        unit="kg",
     )
     products = [product] if catalog_products is None else catalog_products
+    # Older regression fixtures used a catalog ID as if it were part of the
+    # model response. The new extractor is catalog-blind, so simulate its
+    # required product-name output in the fixture before returning the mock AI
+    # payload. Production code ignores model-supplied IDs.
+    for model_item in model_items:
+        if not isinstance(model_item, dict):
+            continue
+        if not any(str(model_item.get(key) or "").strip() for key in
+                   ("product_name_en", "product_name_local", "product_name")):
+            try:
+                legacy_id = int(model_item.get("product_id") or 0)
+            except (TypeError, ValueError):
+                legacy_id = 0
+            matched_fixture = next(
+                (candidate for candidate in products if int(getattr(candidate, "id", 0) or 0) == legacy_id),
+                None,
+            )
+            if matched_fixture is not None:
+                model_item["product_name_en"] = str(matched_fixture.product_name or "")
 
     class FakeQuery:
         def __init__(self):
@@ -264,6 +286,7 @@ def _run_voice_billing_endpoint(
             return self
 
         def all(self):
+            api_capture["call_order"].append("catalog")
             return products
 
     class FakeDb:
@@ -277,8 +300,8 @@ def _run_voice_billing_endpoint(
     api_capture = {"requests": [], "call_order": []}
     response_content = json.dumps({
         "items": model_items,
-        "needs_clarification": False,
-        "clarification_question": "",
+        "needs_clarification": needs_clarification,
+        "clarification_question": clarification_question,
     })
 
     class FakeResponse:
@@ -328,17 +351,21 @@ def _run_voice_billing_endpoint(
     ))
     return result, api_capture, db, products
 
-def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
+def test_ai_extracts_names_before_server_side_catalog_resolution(monkeypatch):
     result, api_capture, db, products = _run_voice_billing_endpoint(
         monkeypatch,
         [{
             "product_id": 42,
+            "product_name_en": "Sona Masoori Rice",
+            "product_name_local": "rice",
             "quantity": 2,
+            "spoken_unit": "kg",
             "spoken_price_amount": 75,
             "spoken_price_kind": "unit",
             "confidence": 0.98,
         }],
         transcript="2 kg rice 75",
+        translated_text="2 kg rice 75",
     )
 
     assert result["success"] is True
@@ -348,12 +375,42 @@ def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
     assert result["items"][0]["quantity"] == 2.0
     assert result["items"][0]["unit_price"] == 75.0
     assert result["items"][0]["price_source"] == "spoken_unit"
+    extraction_prompt = api_capture["request"]["messages"][1]["content"]
+    assert '"product_id"' not in extraction_prompt
+    assert "Sona Masoori Rice" not in extraction_prompt
     assert api_capture["request"]["response_format"] == {"type": "json_object"}
     assert api_capture["headers"]["Authorization"] == "Bearer unit-test-key"
     # The endpoint's SQLAlchemy query must scope inventory to the authenticated account.
     assert db.query_obj.filters
     assert any("user_id" in str(clause) for clause in db.query_obj.filters)
 
+
+
+def test_non_catalog_product_is_not_stock_linked_from_model_product_id(monkeypatch):
+    result, _, _, _ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_id": 42,
+            "product_name_en": "Black Rice",
+            "product_name_local": "black rice",
+            "quantity": 2,
+            "spoken_unit": "pcs",
+            "spoken_price_amount": 75,
+            "spoken_price_kind": "unit",
+            "confidence": 0.99,
+        }],
+        transcript="2 pcs black rice 75",
+        catalog_products=None,
+    )
+    assert result["success"] is True
+    assert len(result["items"]) == 1
+    item = result["items"][0]
+    assert item["product_name"] == "Black Rice"
+    assert item["product_id"] is None
+    assert item["catalog_matched"] is False
+    assert item["quantity"] == 2.0
+    assert item["unit_price"] == 75.0
+    assert item["price_grounded"] is True
 
 def test_catalog_current_price_is_used_when_cashier_speaks_no_price(monkeypatch):
     rice = SimpleNamespace(
@@ -502,7 +559,8 @@ def test_groq_cannot_inject_product_id_not_in_shop_catalog(monkeypatch):
     assert result["items"] == []
     assert result["success"] is False
     assert result["needs_clarification"] is True
-    assert "unmatched catalog product id" in result["clarification_question"].lower()
+    assert "unrecognized product name" in result["clarification_question"].lower()
+    assert "product id" not in result["clarification_question"].lower()
 
 
 def test_unknown_product_is_added_as_custom_sale_line_without_stock_id(monkeypatch):
@@ -580,11 +638,18 @@ def test_empty_inventory_can_still_parse_custom_sale_item(monkeypatch):
 
 
 def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypatch):
+    import inventory as inventory_module
+
+    def forbidden_shop_alias_lookup(*args, **kwargs):
+        raise AssertionError("shop aliases must not rewrite the transcript before AI extraction")
+
+    monkeypatch.setattr(inventory_module, "_voice_billing_active_alias_rows", forbidden_shop_alias_lookup)
     result, capture, _, _ = _run_voice_billing_endpoint(
         monkeypatch,
         [{
             "product_id": None,
             "product_name_en": "Dragon Fruit",
+            "product_name_local": "డ్రాగన్ ఫ్రూట్",
             "quantity": 2,
             "spoken_price_amount": 30,
             "spoken_price_kind": "unit",
@@ -595,14 +660,17 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
         translated_text="2 kg Dragon Fruit 30",
     )
 
-    assert capture["call_order"] == ["translation", "extraction"]
+    assert capture["call_order"] == ["translation", "extraction", "catalog"]
     extraction_prompt = capture["request"]["messages"][1]["content"]
-    assert "English-normalized transcript" not in extraction_prompt
-    assert "English-normalized transcript (product matching aid only" in extraction_prompt
-    assert "Original ASR transcript (authoritative evidence" in extraction_prompt
+    assert "English translation (secondary language aid only; do not override the original transcript): 2 kg Dragon Fruit 30" in extraction_prompt
+    assert "Original ASR transcript (authoritative for names and all numeric values)" in extraction_prompt
+    assert "Do not output product IDs, SKUs, catalog names, catalog prices" in extraction_prompt
+    assert '"product_id"' not in extraction_prompt
+    assert "Authenticated shop catalog candidates" not in extraction_prompt
     assert "రెండు కిలోల డ్రాగన్ ఫ్రూట్ ముప్పై" in extraction_prompt
     assert "2 kg Dragon Fruit 30" in extraction_prompt
     assert result["interpreted_text_en"] == "2 kg Dragon Fruit 30"
+    assert result["voice_aliases_applied"] is False
     assert result["items"][0]["product_id"] is None
     assert result["items"][0]["product_name"] == "Dragon Fruit"
 
@@ -637,10 +705,6 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
     monkeypatch.setenv("SARVAM_API_KEY", "unit-test-key")
     captured = {}
 
-    def fake_vocab(db, user_id, language_code):
-        captured["vocab_args"] = (user_id, language_code)
-        return []
-
     def fake_transcribe(**kwargs):
         captured["transcribe_args"] = kwargs
         return {
@@ -653,6 +717,7 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
 
     def fake_assess(payload, **kwargs):
         captured["assessed_text"] = payload["text"]
+        captured["assess_kwargs"] = kwargs
         return SimpleNamespace(
             accepted=True, reason="ok_unscored", text=payload["text"],
             kept_segments=0, dropped_segments=0, public=lambda: {"accepted": True},
@@ -664,7 +729,6 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
         captured["user_id"] = user_id
         return {"success": True, "items": [], "needs_clarification": False}
 
-    monkeypatch.setattr(inventory_module, "_voice_billing_prompt_catalog_names", fake_vocab)
     monkeypatch.setattr(inventory_module, "transcribe_with_sarvam", fake_transcribe)
     monkeypatch.setattr(inventory_module, "_assess_transcription", fake_assess)
     monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
@@ -683,8 +747,9 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
         )
     )
 
-    assert captured["vocab_args"] == (7, "auto")
     assert captured["transcribe_args"]["api_key"] == "unit-test-key"
+    assert captured["transcribe_args"]["keyterms"] == []
+    assert captured["assess_kwargs"].get("catalog_names") == []
     assert captured["transcribe_args"]["language_code"] == "auto"
     assert captured["assessed_text"] == "2 kg rice 50"
     assert captured["transcript"] == "2 kg rice 50"
@@ -701,6 +766,8 @@ def test_spoken_unit_repair_recognizes_telugu_number_words():
     assert inventory_module._vb_repair_spoken_unit(
         ["మూడు కేజీలు వంకాయలు"], inventory_module._VOICE_BILLING_NUMBER_WORDS
     ) == "కేజీలు"
+    assert inventory_module._VOICE_BILLING_NUMBER_WORDS["ఒక"] == 1
+    assert inventory_module._VOICE_BILLING_NUMBER_WORDS["ఒక్క"] == 1
 
 
 def test_multiline_telugu_billing_keeps_each_quantity_unit_and_line_total(monkeypatch):
@@ -797,7 +864,8 @@ def test_spoken_weight_unit_does_not_silently_become_catalog_pieces(monkeypatch)
     assert item["catalog_matched"] is False
     assert item["unit"] == "kg"
     assert item["spoken_unit"] == "kg"
-    assert item["unit_mismatch"] is True
+    print("WEIGHT_UNIT_MISMATCH_DEBUG", result)
+    assert item["unit_mismatch"] is True, result
     assert item["needs_confirmation"] is True
 
 
