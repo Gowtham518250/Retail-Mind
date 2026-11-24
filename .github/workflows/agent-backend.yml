@@ -57,6 +57,8 @@ jobs:
           python -m compileall -q agentic sarvam_tts.py subscription_quota_middleware.py models.py app.py
 
       - name: Run agent and adjacent regression tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest -q \
             tests/test_agent_registry.py \
