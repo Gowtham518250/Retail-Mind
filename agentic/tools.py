@@ -600,6 +600,44 @@ def _is_bill_follow_up_message(user_text: str) -> bool:
     return bool(re.fullmatch(r"(?:₹\s*)?\d+(?:\.\d+)?\s*(?:rupees?|rs\.?)", text))
 
 
+def _recent_bill_source_transcript(context: dict, user_text: str) -> str:
+    """Restore the last owner-authored item utterance for parser evidence on a short follow-up."""
+    if not _is_bill_follow_up_message(user_text):
+        return user_text
+
+    messages = context.get("recent_user_messages")
+    if not isinstance(messages, list):
+        return user_text
+
+    for message in reversed(messages[-5:]):
+        previous = str(message or "").strip()
+        if not previous or _is_bill_follow_up_message(previous):
+            continue
+        # Customer identifiers are not item/price evidence. Remove them before
+        # checking whether this earlier turn looks like a sale description.
+        candidate = re.sub(
+            r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{9}(?!\d)",
+            " ",
+            previous,
+        )
+        candidate = " ".join(candidate.split())
+        if not candidate:
+            continue
+        # Only carry forward a likely bill/item utterance, not an unrelated
+        # recent question such as "show today's sales".
+        has_bill_context = bool(re.search(
+            r"\b(?:bill|billing|invoice|sale|sell|selling|add|quantity|qty|price|"
+            r"rupees?|rs\.?|kg|g|litre|liter|packet|packets|piece|pieces|pcs)\b",
+            candidate,
+            flags=re.IGNORECASE,
+        ))
+        has_item_and_number = bool(re.search(r"[A-Za-z\u0080-\uFFFF]", candidate)) and bool(re.search(r"\d", candidate))
+        if has_bill_context and (has_item_and_number or len(candidate.split()) >= 2):
+            return f"{candidate}. Latest owner instruction: {user_text}"[:1200]
+
+    return user_text
+
+
 def _recent_bill_context(context: dict, user_text: str) -> str | None:
     if not _is_bill_follow_up_message(user_text):
         return None
@@ -646,9 +684,9 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
                 customer_phone = previous_match.group(1)
                 break
 
-    parser_text = user_text
+    parser_text = _recent_bill_source_transcript(context, user_text)
     if phone_match:
-        parser_text = user_text[: phone_match.start()] + " " + user_text[phone_match.end() :]
+        parser_text = parser_text.replace(phone_match.group(0), " ", 1)
 
     from inventory import VoiceBillingParseRequest, parse_voice_billing
 
