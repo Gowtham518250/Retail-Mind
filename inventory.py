@@ -48,6 +48,7 @@ from voice_billing_core import (
     spoken_unit_is_grounded as _vb_unit_is_grounded,
     repair_spoken_unit as _vb_repair_spoken_unit,
     stem_token as _vb_stem_token,
+    spoken_numbers as _vb_spoken_numbers,
 )
 from voice_asr_guard import (
     NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE,
@@ -2463,6 +2464,160 @@ def _voice_billing_number_value(token: str) -> Optional[Decimal]:
     return Decimal(word_value) if word_value is not None else None
 
 
+def _voice_billing_parse_model_decimal(value: Any, *, currency: bool = False) -> Optional[Decimal]:
+    """Parse model numbers without depending on ASCII-only or currency-free output."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        if isinstance(value, Decimal):
+            return value if value.is_finite() else None
+        if isinstance(value, (int, float)):
+            parsed = Decimal(str(value))
+            return parsed if parsed.is_finite() else None
+    except (InvalidOperation, TypeError, ValueError, ArithmeticError):
+        return None
+
+    text = unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+    if not text:
+        return None
+    ascii_digits = []
+    for char in text:
+        if char.isdigit():
+            try:
+                ascii_digits.append(str(unicodedata.digit(char)))
+            except (TypeError, ValueError):
+                ascii_digits.append(char)
+        else:
+            ascii_digits.append(char)
+    text = "".join(ascii_digits)
+    text = re.sub(r"(?<=\d),(?=\d)", "", text)
+    if currency:
+        text = re.sub(
+            r"(?:₹|rs\.?|inr|rupees?|rupee|"
+            r"రూపాయలు|రూపాయి|రూ|ரூபாய்கள்|ரூபாய்|ரூ|"
+            r"रुपये|रुपया|रु|ರೂಪಾಯಿಗಳು|ರೂಪಾಯಿ|ರೂ|રૂપિયા|રૂપિયો|પૈસા|paise|paisa)",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+    numeric_tokens = re.findall(r"(?<![\w.])[+-]?\d+(?:\.\d+)?", text)
+    if len(numeric_tokens) == 1:
+        try:
+            parsed = Decimal(numeric_tokens[0])
+            return parsed if parsed.is_finite() else None
+        except (InvalidOperation, ValueError):
+            return None
+    if len(numeric_tokens) > 1:
+        return None
+
+    tokens = _voice_billing_normalize(text).split()
+    tokens = [
+        token for token in tokens
+        if token not in {
+            "kg", "kgs", "kilo", "kilos", "kilogram", "kilograms",
+            "g", "gm", "gram", "grams", "l", "ltr", "litre", "liter",
+            "ml", "కేజీ", "కేజీలు", "కేజీల", "కిలో", "కిలోలు", "కిలోల",
+        }
+    ]
+    if currency:
+        tokens = [
+            token for token in tokens
+            if token not in {
+                "rupees", "rupee", "rs", "inr", "రూ", "రూపాయి", "రూపాయలు",
+                "ரூ", "ரூபாய்", "रु", "रुपया", "रुपये",
+            }
+        ]
+    if len(tokens) == 1:
+        return _voice_billing_number_value(tokens[0])
+    if tokens:
+        # Compose spoken values such as "fifty five", "one hundred twenty five",
+        # and native-language number phrases without losing the final units.
+        total = Decimal("0")
+        current = Decimal("0")
+        saw_number = False
+        for token in tokens:
+            value = _VOICE_BILLING_NUMBER_WORDS.get(token)
+            if value is not None:
+                current += Decimal(value)
+                saw_number = True
+                continue
+            scale = _VOICE_BILLING_SCALE_WORDS.get(token)
+            if scale is not None:
+                factor = Decimal(scale)
+                current = current if current > 0 else Decimal("1")
+                if factor >= 100:
+                    total += current * factor
+                    current = Decimal("0")
+                else:
+                    total += current * factor
+                    current = Decimal("0")
+                saw_number = True
+                continue
+            if token in _VOICE_BILLING_NUMBER_CONNECTORS:
+                continue
+            return None
+        if saw_number:
+            return total + current
+    return None
+
+
+def _voice_billing_parse_confidence(value: Any) -> Optional[float]:
+    """Read an optional model confidence; never let malformed confidence erase evidence."""
+    if value is None or isinstance(value, bool):
+        return None
+    labels = {
+        "very high": 0.95,
+        "high": 0.85,
+        "medium": 0.75,
+        "moderate": 0.75,
+        "low": 0.50,
+        "very low": 0.25,
+    }
+    text = str(value).strip().casefold()
+    if text in labels:
+        return labels[text]
+    try:
+        confidence = float(text)
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+    if not math.isfinite(confidence) or confidence < 0:
+        return None
+    if 1 < confidence <= 100:
+        confidence /= 100.0
+    return confidence if confidence <= 1 else None
+
+
+def _voice_billing_evidence_contains_amount(
+    amount: Decimal,
+    transcripts: tuple[str, ...],
+) -> bool:
+    """Check a candidate price against number/currency tokens in the source evidence."""
+    for transcript in transcripts:
+        normalized = unicodedata.normalize("NFKC", str(transcript or ""))
+        for token in normalized.split():
+            candidate = _voice_billing_parse_model_decimal(token, currency=True)
+            if candidate is not None and candidate == amount:
+                return True
+            word = _voice_billing_number_value(
+                _voice_billing_normalize(token).strip("₹.,:;!?()[]")
+            )
+            if word is not None and word == amount:
+                return True
+    return False
+
+
+def _voice_billing_first_quantity_from_evidence(
+    transcripts: tuple[str, ...],
+) -> Optional[Decimal]:
+    """Read the first numeric/number-word token from isolated quantity evidence."""
+    for transcript in transcripts:
+        for token in _voice_billing_normalize(transcript).split():
+            candidate = _voice_billing_number_value(token.strip(".,:;!?()[]"))
+            if candidate is not None and candidate.is_finite() and candidate > 0:
+                return candidate
+    return None
+
+
 def _voice_billing_format_number(value: Decimal) -> str:
     formatted = format(value.normalize(), "f")
     return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
@@ -3648,25 +3803,32 @@ async def parse_voice_billing(
         # catalog; any stock link is derived later from spoken product-name evidence.
         product = None
 
-        try:
-            quantity = Decimal(str(raw.get("quantity", 1)))
-            confidence = float(raw.get("confidence", 0))
-        except (TypeError, ValueError, ArithmeticError):
-            unresolved.append("invalid quantity or confidence")
-            continue
-        if not quantity.is_finite() or quantity <= 0 or quantity > Decimal("100000"):
-            unresolved.append("invalid quantity")
-            continue
-        if not math.isfinite(confidence) or confidence < 0.72:
-            unresolved.append("low-confidence item")
-            continue
-
         proposed_name = str(
             raw.get("product_name_en")
             or raw.get("unmatched_product_name_en")
             or raw.get("product_name")
             or ""
         ).strip()[:120]
+
+        # Quantity and confidence are independent fields. A missing/malformed
+        # confidence must not be reported as an invalid quantity or erase a line
+        # whose product wording and numeric values can be grounded in speech.
+        has_model_quantity = "quantity" in raw or "qty" in raw
+        raw_quantity = raw.get("quantity", raw.get("qty"))
+        quantity = (
+            _voice_billing_parse_model_decimal(raw_quantity)
+            if has_model_quantity and str(raw_quantity or "").strip()
+            else None
+        )
+        if quantity is None:
+            quantity = Decimal("0")
+        model_confidence = _voice_billing_parse_confidence(raw.get("confidence"))
+        confidence_inferred = model_confidence is None
+        confidence_too_low = model_confidence is not None and model_confidence < 0.72
+        confidence = model_confidence if model_confidence is not None else 0.0
+        quantity_inferred = False
+        if not quantity.is_finite() or quantity < 0 or quantity > Decimal("100000"):
+            quantity = Decimal("0")
 
         # Resolve against the catalog from THIS line's spoken words, not the whole
         # utterance (multi-item bills used to lose every multi-word catalog match),
@@ -3682,6 +3844,21 @@ async def parse_voice_billing(
             phrase and f" {phrase} " in f" {source_text} "
             for phrase in extracted_phrases
         )
+        if confidence_too_low:
+            unresolved.append(
+                f"{proposed_name or 'Item'}: the AI marked the product match as low confidence"
+            )
+            continue
+        if confidence_inferred:
+            if local_name_is_spoken:
+                # Explicit source-language wording is stronger evidence than an
+                # absent or malformed self-reported model confidence score.
+                confidence = 0.75
+            else:
+                unresolved.append(
+                    f"{proposed_name or 'Item'}: product name confidence could not be verified"
+                )
+                continue
         resolution = (
             _vb_resolve_catalog_product(
                 [
@@ -3795,6 +3972,20 @@ async def parse_voice_billing(
         quantity_evidence_transcripts = _voice_billing_quantity_evidence_transcripts(
             raw, product, item_evidence_transcripts
         )
+        if quantity <= 0:
+            recovered_quantity = _voice_billing_first_quantity_from_evidence(
+                quantity_evidence_transcripts
+            )
+            if recovered_quantity is None:
+                unresolved.append(
+                    f"{product_name or proposed_name or 'Item'}: quantity could not be read from the source speech"
+                )
+                continue
+            quantity = recovered_quantity
+            quantity_inferred = True
+
+        # Update the comparison value after transcript-grounded quantity recovery.
+        spoken_quantity = quantity
         quantity_grounded = _vb_quantity_is_grounded(
             quantity,
             quantity_evidence_transcripts,
@@ -3804,11 +3995,8 @@ async def parse_voice_billing(
         if not quantity_evidence_transcripts and quantity == Decimal("1"):
             quantity_grounded = True
         if not quantity_grounded:
-            # Fail closed: do not return a guessed quantity as a billable draft line.
-            # Older Flutter clients may ignore needs_confirmation, so merely flagging
-            # an implausible LLM quantity (for example 203 instead of 2) is unsafe.
             unresolved.append(
-                f"{proposed_name or 'Item'}: quantity {spoken_quantity.normalize():f} was not clearly heard"
+                f"{proposed_name or 'Item'}: quantity did not match the number spoken for this item"
             )
             continue
         unit_converted = False
@@ -3890,6 +4078,26 @@ async def parse_voice_billing(
         if not quantity_grounded:
             unresolved.append(f"{product_name}: quantity {spoken_quantity.normalize():f} was not clearly heard")
 
+        # Resolve the exact item's spoken price evidence once. The ASR source
+        # transcript remains authoritative; the model value is only a candidate.
+        source_line_evidence = item_evidence_transcripts
+        price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
+            raw, product, source_line_evidence
+        )
+        spoken_price_evidence = any(
+            bool(re.search(r"\d", _voice_billing_normalize(evidence)))
+            or any(
+                token in _VOICE_BILLING_NUMBER_WORDS or token in _VOICE_BILLING_SCALE_WORDS
+                for token in _voice_billing_normalize(evidence).split()
+            )
+            for evidence in price_evidence_transcripts
+        )
+        spoken_amount = raw.get("spoken_price_amount")
+        spoken_amount_value = _voice_billing_parse_model_decimal(
+            spoken_amount, currency=True
+        )
+
+        price_role_inferred = False
         kind = str(raw.get("spoken_price_kind") or "none").strip().lower()
         if kind not in {"unit", "line_total", "none", "ambiguous"}:
             kind = "ambiguous"
@@ -3943,7 +4151,9 @@ async def parse_voice_billing(
                 # Keep a catalog-backed unit price unless exact catalog arithmetic
                 # confirms that the amount is actually the requested line total.
                 try:
-                    reported_amount = Decimal(str(raw.get("spoken_price_amount")))
+                    reported_amount = spoken_amount_value
+                    if reported_amount is None:
+                        raise ValueError("invalid reported amount")
                     expected_total = (
                         Decimal(str(product.unit_price or 0)) * quantity
                     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -3976,11 +4186,10 @@ async def parse_voice_billing(
         )
         if kind in {"unit", "line_total"}:
             try:
-                reported_price = Decimal(str(raw.get("spoken_price_amount")))
-                # The same numeric value cannot serve as both the line quantity
-                # and its price without a second, explicit occurrence/role.
+                reported_price = spoken_amount_value
                 price_grounded = (
-                    reported_price != spoken_quantity
+                    reported_price is not None
+                    and reported_price != spoken_quantity
                     and _vb_quantity_is_grounded(
                         reported_price,
                         price_evidence_transcripts,
@@ -3992,7 +4201,7 @@ async def parse_voice_billing(
                 price_grounded = False
             if not price_grounded:
                 try:
-                    reported_price_for_role = Decimal(str(raw.get("spoken_price_amount")))
+                    reported_price_for_role = spoken_amount_value
                 except (InvalidOperation, TypeError, ValueError):
                     reported_price_for_role = None
                 if spoken_price_evidence or (
@@ -4021,7 +4230,7 @@ async def parse_voice_billing(
                 price_needs_confirmation = True
         if kind == "ambiguous" and not spoken_price_evidence:
             try:
-                reported_amount_for_role = Decimal(str(spoken_amount))
+                reported_amount_for_role = spoken_amount_value
             except (InvalidOperation, TypeError, ValueError):
                 reported_amount_for_role = None
             if reported_amount_for_role is None or reported_amount_for_role == spoken_quantity:
@@ -4048,8 +4257,8 @@ async def parse_voice_billing(
             unresolved.append(f"{product_name}: spoken price was not extracted")
         elif kind in {"unit", "line_total"}:
             try:
-                amount = Decimal(str(spoken_amount))
-                if not amount.is_finite() or amount <= 0 or amount > Decimal("100000000"):
+                amount = spoken_amount_value
+                if amount is None or not amount.is_finite() or amount <= 0 or amount > Decimal("100000000"):
                     raise ValueError("invalid spoken amount")
                 if kind == "unit":
                     unit_price = amount
@@ -4085,6 +4294,30 @@ async def parse_voice_billing(
                 price_warning = "The spoken price could not be read. Enter the selling price before saving."
                 unresolved.append(f"{product_name}: price unclear")
 
+        if price_role_inferred:
+            inferred_role_warning = (
+                "The selling amount was extracted from speech; verify whether it is a line total or a per-unit rate."
+            )
+            price_warning = (
+                f"{price_warning} {inferred_role_warning}".strip()
+                if price_warning else inferred_role_warning
+            )
+        if confidence_inferred:
+            confidence_warning = (
+                "The product phrase was found in the original speech, but the AI confidence score was missing or low. Verify the item."
+            )
+            price_warning = (
+                f"{price_warning} {confidence_warning}".strip()
+                if price_warning else confidence_warning
+            )
+        if quantity_inferred:
+            quantity_warning = (
+                "Quantity was recovered from the spoken number and unit. Verify it before billing."
+            )
+            price_warning = (
+                f"{price_warning} {quantity_warning}".strip()
+                if price_warning else quantity_warning
+            )
         if unit_note and not price_warning:
             price_warning = unit_note
         price_missing = not unit_price.is_finite() or unit_price <= 0
@@ -4124,9 +4357,13 @@ async def parse_voice_billing(
             "unit_grounded": unit_grounded,
             "price_grounded": price_grounded,
             "price_needs_confirmation": price_needs_confirmation,
+            "confidence_inferred": confidence_inferred,
+            "quantity_inferred": quantity_inferred,
+            "price_role_inferred": price_role_inferred,
             "needs_confirmation": bool(
                 ambiguous_candidates or unit_mismatch or not quantity_grounded or price_missing
                 or not unit_grounded or not price_grounded or price_needs_confirmation
+                or confidence_inferred or quantity_inferred or price_role_inferred
             ),
             "ambiguous_candidates": ambiguous_candidates,
             "match_reasons": match_reasons,
