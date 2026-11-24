@@ -169,19 +169,19 @@ async def agent_voice(
         raise HTTPException(status_code=413, detail="Audio must be 8 MB or smaller.")
 
     try:
-        # Reuse the same shop vocabulary and ASR quality guard as Retail Mind's
-        # established voice-billing audio endpoint.
-        from inventory import _ASR_NO_SPEECH_MESSAGE, _voice_billing_prompt_catalog_names
+        # Do not bias the speech recognizer with this shop's product catalog.
+        # The follow-on chat/voice-billing AI must first understand what the
+        # owner actually said; inventory lookup belongs after extraction.
+        from inventory import _ASR_NO_SPEECH_MESSAGE
         from voice_asr_guard import assess_transcription
 
-        catalog_names = _voice_billing_prompt_catalog_names(db, shop_id, language_code)
         transcription = await run_in_threadpool(
             transcribe_with_sarvam,
             audio_bytes=payload,
             filename=(audio.filename or "owner-voice-audio")[:120],
             content_type=content_type,
             language_code=language_code,
-            keyterms=catalog_names,
+            keyterms=[],
         )
     except SarvamSpeechError as exc:
         status = int(exc.status_code or 503)
@@ -190,7 +190,7 @@ async def agent_voice(
         raise HTTPException(status_code=status, detail="Voice transcription is temporarily unavailable.") from exc
 
     transcript = str(transcription.get("transcript") or "").strip()
-    verdict = assess_transcription({"text": transcript}, catalog_names=catalog_names)
+    verdict = assess_transcription({"text": transcript}, catalog_names=[])
     if not verdict.accepted:
         raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
     transcript = verdict.text
