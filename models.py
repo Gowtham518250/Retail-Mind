@@ -1145,6 +1145,16 @@ class KhataHistory(Base):
     khata_id = Column(Integer, ForeignKey("khata_balances.id", ondelete="CASCADE"), nullable=False)
     transaction_type = Column(Enum(KhataTransactionType, name="khata_transaction_type"), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
+    # These columns are present in the original Alembic schema and used by khata_ledger.py.
+    reference_id = Column(String(100), nullable=True)
+    description = Column(String(200), nullable=True)
+    transaction_date = Column(DateTime, server_default=func.now())
+    # Non-NULL values are reserved for idempotent assistant ledger movements.
+    idempotency_key = Column(String(128), nullable=True)
+
+    __table_args__ = (
+        Index("uq_khata_history_idempotency_key", "idempotency_key", unique=True),
+    )
 
 
 class PasswordReset(Base):
