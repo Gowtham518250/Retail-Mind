@@ -66,5 +66,8 @@ jobs:
             tests/test_agent_registry.py \
             tests/test_agent_mcp.py \
             tests/test_agent_khata.py \
+            tests/test_agent_attendance.py \
+            tests/test_voice_billing_grounding.py \
+            tests/test_voice_billing_parse_contract.py \
             tests/test_payment_contract.py \
             tests/test_backend_audit_regressions.py
