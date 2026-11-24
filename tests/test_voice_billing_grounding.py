@@ -409,7 +409,7 @@ def test_telugu_multi_item_extraction_ignores_wrong_catalog_prices(monkeypatch):
     assert result["needs_clarification"] is True  # unnamed 'one 20' is never invented
     assert [item["product_name"] for item in result["items"]] == [
         "Mutton", "Coffee", "Idli", "Chutney", "Potato"
-    ]
+    ], result
     assert [item["quantity"] for item in result["items"]] == [5.0, 1.0, 1.0, 1.0, 1.0]
     assert [item["unit_price"] for item in result["items"]] == [12.0, 30.0, 5.0, 10.0, 70.0]
     assert [item["price_source"] for item in result["items"]] == [
