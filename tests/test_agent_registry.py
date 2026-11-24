@@ -36,7 +36,8 @@ def test_registry_reports_real_capabilities_but_keeps_writes_gated(monkeypatch):
     assert capabilities["billing.confirm"]["requires_confirmation"] is True
     assert capabilities["khata.payment"]["implemented"] is True
     assert capabilities["orders.transition"]["implemented"] is True
-    assert capabilities["khata.record"]["implemented"] is False
+    assert capabilities["khata.record"]["implemented"] is True
+    assert capabilities["khata.record"]["requires_confirmation"] is True
     assert capabilities["orders.manage"]["implemented"] is False
     assert all(item["enabled"] is False for item in capabilities.values())
 
@@ -194,7 +195,8 @@ def test_registry_keeps_delivery_and_legacy_financial_writes_disabled(monkeypatc
     capabilities = {item["name"]: item for item in list_capabilities()}
     assert capabilities["khata.payment"]["enabled"] is True
     assert capabilities["orders.transition"]["enabled"] is True
-    assert capabilities["khata.record"]["enabled"] is False
+    assert capabilities["khata.record"]["enabled"] is True
+    assert capabilities["khata.record"]["requires_confirmation"] is True
     assert capabilities["orders.manage"]["enabled"] is False
     assert capabilities["attendance.manage"]["enabled"] is False
 
