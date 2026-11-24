@@ -14,6 +14,8 @@ from agentic.service import _action_hash
 from agentic.tools import (
     CustomerSearchArgs,
     InventorySearchArgs,
+    KhataPaymentPreviewArgs,
+    OrderTransitionPreviewArgs,
     _customer_search,
     _inventory_search,
 )
@@ -32,6 +34,8 @@ def test_registry_reports_real_capabilities_but_keeps_writes_gated(monkeypatch):
     assert capabilities["inventory.lookup"]["implemented"] is True
     assert capabilities["billing.prepare"]["implemented"] is True
     assert capabilities["billing.confirm"]["requires_confirmation"] is True
+    assert capabilities["khata.payment"]["implemented"] is True
+    assert capabilities["orders.transition"]["implemented"] is True
     assert capabilities["khata.record"]["implemented"] is False
     assert capabilities["orders.manage"]["implemented"] is False
     assert all(item["enabled"] is False for item in capabilities.values())
@@ -152,6 +156,47 @@ def test_tts_text_cleanup_removes_markdown_links_and_urls():
     assert "dashboard" in clean
     assert "https://" not in clean
     assert "**" not in clean
+
+
+
+def test_payment_preview_requires_one_invoice_and_rejects_extra_tenant_fields():
+    valid = KhataPaymentPreviewArgs.model_validate({
+        "invoice_id": 123,
+        "amount": 500,
+        "payment_method": "UPI",
+    })
+    assert valid.invoice_id == 123
+    assert valid.amount == 500
+    with pytest.raises(ValidationError):
+        KhataPaymentPreviewArgs.model_validate({
+            "invoice_id": 123, "amount": 500, "shop_id": 7,
+        })
+
+
+def test_order_transition_preview_only_allows_confirmable_transitions():
+    assert OrderTransitionPreviewArgs.model_validate({
+        "order_id": 9, "action": "REJECT"
+    }).action == "REJECT"
+    with pytest.raises(ValidationError):
+        OrderTransitionPreviewArgs.model_validate({
+            "order_id": 9, "action": "DELIVER"
+        })
+    with pytest.raises(ValidationError):
+        OrderTransitionPreviewArgs.model_validate({
+            "order_id": 9, "action": "CANCEL"
+        })
+
+
+def test_registry_keeps_delivery_and_legacy_financial_writes_disabled(monkeypatch):
+    monkeypatch.setenv("RETAIL_MIND_AGENT_ENABLED", "true")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    monkeypatch.setenv("SARVAM_API_KEY", "test-sarvam-key")
+    capabilities = {item["name"]: item for item in list_capabilities()}
+    assert capabilities["khata.payment"]["enabled"] is True
+    assert capabilities["orders.transition"]["enabled"] is True
+    assert capabilities["khata.record"]["enabled"] is False
+    assert capabilities["orders.manage"]["enabled"] is False
+    assert capabilities["attendance.manage"]["enabled"] is False
 
 
 def test_agent_routes_are_registered():
