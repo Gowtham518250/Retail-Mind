@@ -3954,22 +3954,6 @@ async def parse_voice_billing(
         if not quantity_evidence_transcripts and quantity == Decimal("1"):
             quantity_grounded = True
         if not quantity_grounded:
-            # Recover a shifted model quantity only from this item's isolated
-            # number+unit evidence. A trailing bare price is never quantity.
-            recovered_quantity = _voice_billing_first_quantity_from_evidence(
-                quantity_evidence_transcripts
-            )
-            if recovered_quantity is not None and recovered_quantity != quantity:
-                quantity = recovered_quantity
-                spoken_quantity = recovered_quantity
-                quantity_inferred = True
-                quantity_grounded = _vb_quantity_is_grounded(
-                    quantity,
-                    quantity_evidence_transcripts,
-                    _VOICE_BILLING_NUMBER_WORDS,
-                    _VOICE_BILLING_SCALE_WORDS,
-                )
-        if not quantity_grounded:
             unresolved.append(
                 f"{proposed_name or 'Item'}: quantity did not match the number spoken for this item"
             )
@@ -4073,46 +4057,20 @@ async def parse_voice_billing(
         spoken_amount = raw.get("spoken_price_amount")
         spoken_amount_value = _voice_billing_parse_model_decimal(spoken_amount, currency=True)
 
-        normalized_spoken_unit = re.sub(r"[^a-z]", "", spoken_unit.lower())
-        weighted_units = {
-            "kg", "kgs", "kilo", "kilos", "kilogram", "kilograms",
-            "g", "gm", "gms", "gram", "grams", "l", "ltr", "litre", "litres",
-            "liter", "liters", "ml", "millilitre", "millilitres", "milliliter", "milliliters",
-        }
-        price_context = " ".join(str(value or "") for value in item_evidence_transcripts).lower()
-        explicit_rate = bool(re.search(
-            r"(?:\bper\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
-            r"/\s*(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
-            r"\b(?:rate|each)\s+(?:per\s+)?(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b|"
-            r"కిలోకు|కేజీకి|కేజీలకు|గ్రాముకు|లీటరుకు|కిలోకి)",
-            price_context,
-            flags=re.IGNORECASE,
-        ))
-        explicit_line_total = bool(re.search(
-            r"(?:\btotal\b|\baltogether\b|\bfor all\b|"
-            r"మొత్తం|అన్నింటికి|కలిపి|మొత్తానికి|कुल|सबका|மொத்தம்|ಒಟ್ಟು|മൊത്തം)",
-            price_context,
-            flags=re.IGNORECASE,
-        ))
         price_role_inferred = False
         if (
-            kind in {"none", "ambiguous"}
+            kind == "none"
             and spoken_price_evidence
             and spoken_amount_value is not None
             and spoken_amount_value > 0
         ):
-            # For weight/volume, a bare amount is the requested line total.
-            # A clearly spoken per-unit/rate phrase is the only override.
-            if normalized_spoken_unit in weighted_units:
-                kind = "unit" if explicit_rate else "line_total"
-            else:
-                kind = "line_total" if explicit_line_total else "unit"
-            price_role_inferred = True
-
-        if normalized_spoken_unit in weighted_units and kind in {"unit", "line_total"}:
-            kind = "unit" if explicit_rate else "line_total"
-        elif quantity == Decimal("1") and kind == "line_total":
+            # Preserve the established POS shorthand: a bare trailing amount
+            # after a weighted item is treated as its unit rate unless the
+            # extractor explicitly identifies a line total. Missing price-role
+            # classification is recoverable, but an explicit "ambiguous" label
+            # must remain a manual correction rather than a guessed price.
             kind = "unit"
+            price_role_inferred = True
 
         # Ground any spoken price against this exact original-language item segment.
         # A catalog price is only a fallback when the cashier did not state an amount.
@@ -4126,8 +4084,11 @@ async def parse_voice_billing(
                 reported_price is not None
                 and reported_price > 0
                 and reported_price != spoken_quantity
-                and _voice_billing_evidence_contains_amount(
-                    reported_price, price_evidence_transcripts
+                and _vb_quantity_is_grounded(
+                    reported_price,
+                    price_evidence_transcripts,
+                    _VOICE_BILLING_NUMBER_WORDS,
+                    _VOICE_BILLING_SCALE_WORDS,
                 )
             )
             if not price_grounded:
