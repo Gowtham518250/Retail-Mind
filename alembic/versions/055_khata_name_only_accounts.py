@@ -1,13 +1,13 @@
 """Allow name-only Khata customers with per-shop uniqueness.
 
 Revision ID: 055_khata_name_only_accounts
-Revises: 054_agentic_khata_ledger_idempotency
+Revises: 055_agent_control_center
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "055_khata_name_only_accounts"
-down_revision = "054_agentic_khata_ledger_idempotency"
+down_revision = "055_agent_control_center"
 branch_labels = None
 depends_on = None
 
