@@ -3802,27 +3802,31 @@ async def parse_voice_billing(
                 except (InvalidOperation, TypeError, ValueError, ArithmeticError):
                     pass
 
-        # A price the speaker never said (invented, or computed by the model) must not reach
-        # the bill as a "spoken" price: fall back to the catalog price and ask for review.
+        # Ground any spoken price against this item's original-language phrase.
+        # A catalog price is only a fallback when the speaker did not state a price.
         price_grounded = True
         price_needs_confirmation = False
+        source_line_evidence = _voice_billing_item_evidence_transcripts(
+            raw,
+            product,
+            parser_transcript,
+            "",
+            min(len(raw_items), 30),
+            raw_items[:30],
+        )
+        price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
+            raw, product, source_line_evidence
+        )
+        spoken_price_evidence = any(
+            bool(re.search(r"\\d", _voice_billing_normalize(evidence)))
+            or any(
+                token in _VOICE_BILLING_NUMBER_WORDS or token in _VOICE_BILLING_SCALE_WORDS
+                for token in _voice_billing_normalize(evidence).split()
+            )
+            for evidence in price_evidence_transcripts
+        )
         if kind in {"unit", "line_total"}:
             try:
-                # Financial values must be grounded in the original/source-language
-                # transcript, never in English translation text. Translation can
-                # accidentally concatenate adjacent values (e.g. "200, 3 kg" -> "203").
-                # Re-isolate this line using source-language product anchors only.
-                source_line_evidence = _voice_billing_item_evidence_transcripts(
-                    raw,
-                    product,
-                    parser_transcript,
-                    "",
-                    len(raw_items),
-                    raw_items,
-                )
-                price_evidence_transcripts = _voice_billing_item_price_evidence_transcripts(
-                    raw, product, source_line_evidence
-                )
                 reported_price = Decimal(str(raw.get("spoken_price_amount")))
                 # The same numeric value cannot serve as both the line quantity
                 # and its price without a second, explicit occurrence/role.
@@ -3836,7 +3840,7 @@ async def parse_voice_billing(
                     )
                 )
             except (InvalidOperation, TypeError, ValueError):
-                price_grounded = True  # unreadable amounts are rejected by the existing parser below
+                price_grounded = False
             if not price_grounded:
                 kind = "ambiguous"
 
@@ -3850,18 +3854,21 @@ async def parse_voice_billing(
             price_needs_confirmation = True
             unresolved.append(f"{product_name}: price not clearly heard")
         if kind == "ambiguous":
-            # A catalog fallback is useful for the draft, but an explicitly
-            # ambiguous spoken amount must never look like a confirmed price.
+            # Never replace a price the cashier spoke with a different catalog
+            # amount. An unresolved spoken price must be corrected explicitly.
+            unit_price = Decimal("0")
+            price_source = "missing"
             price_needs_confirmation = True
-            if catalog_price > 0:
-                price_warning = "The spoken amount was unclear; the catalog price was used. Please confirm it before saving."
-                if price_grounded:
-                    unresolved.append(f"{product_name}: confirm the catalog price")
-            else:
-                unit_price = Decimal("0")
-                price_source = "missing"
-                price_warning = "The price was unclear. Enter the selling price before saving."
-                unresolved.append(f"{product_name}: price unclear")
+            price_warning = "The spoken price could not be extracted confidently. Enter or confirm the selling price before saving."
+            unresolved.append(f"{product_name}: spoken price needs confirmation")
+        elif kind == "none" and spoken_price_evidence:
+            # The transcript contains a price-like value for this item but the
+            # extractor omitted it. Do not silently substitute the catalog price.
+            unit_price = Decimal("0")
+            price_source = "missing"
+            price_needs_confirmation = True
+            price_warning = "A price was spoken but could not be extracted reliably. Enter or confirm it before saving."
+            unresolved.append(f"{product_name}: spoken price was not extracted")
         elif kind in {"unit", "line_total"}:
             try:
                 amount = Decimal(str(spoken_amount))
