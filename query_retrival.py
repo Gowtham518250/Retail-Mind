@@ -3232,7 +3232,7 @@ def _load_shop_entity_vocabulary(db: Session, user_id: int) -> dict[str, tuple[s
     cleaned: dict[str, tuple[str, ...]] = {}
     for entity_type, values in rows.items():
         names = [
-            re.sub(r"\\s+", " ", str(name or "")).strip()[:80]
+            re.sub(r"\s+", " ", str(name or "")).strip()[:80]
             for name in values
         ]
         cleaned[entity_type] = tuple(dict.fromkeys(name for name in names if name))
@@ -3247,7 +3247,7 @@ def _load_shop_vocabulary(db: Session, user_id: int) -> tuple[str, ...]:
 
 def _normalise_entity_name(value: str) -> str:
     return re.sub(
-        r"\\s+", " ",
+        r"\s+", " ",
         unicodedata.normalize("NFKC", str(value or "")).casefold()
     ).strip()
 
