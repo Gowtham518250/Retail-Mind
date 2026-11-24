@@ -43,7 +43,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-10-14-hybrid-schema-retrieval-v12"
+QUERY_ENGINE_VERSION = "2026-11-24-product-sales-history-v13"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -1486,6 +1486,346 @@ def _fast_sales_day_comparison_query(query: str, db: Session, user_id: int):
         "generated_sql": "DIRECT_KPI: separate yesterday/today business-date comparison\n" + sql,
         "generated_model_response": answer,
         "results": result_rows,
+    }
+
+
+_PRODUCT_SALES_QUERY_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "can", "could", "would", "should",
+    "you", "i", "me", "my", "mine", "our", "ours", "your", "yours", "tell",
+    "show", "give", "find", "list", "display", "please", "what", "which", "who",
+    "how", "much", "many", "is", "are", "was", "were", "do", "does", "did",
+    "have", "has", "had", "from", "of", "for", "to", "in", "on", "at", "by",
+    "with", "about", "into", "all", "any", "each", "every", "my", "shop",
+    "product", "products", "item", "items", "sale", "sales", "sold", "selling",
+    "sell", "history", "histories", "record", "records", "transaction",
+    "transactions", "details", "detail", "price", "prices", "sellingprice",
+    "current", "latest", "unit", "rate", "per", "revenue", "turnover",
+    "amount", "total", "quantity", "quantities", "qty", "units", "number",
+    "count", "today", "yesterday", "daily", "weekly", "monthly", "yearly",
+    "week", "month", "months", "year", "years", "last", "past", "previous",
+    "recent", "recently", "between", "since", "during", "this", "these",
+    "those", "there", "here", "own", "overall", "raw", "table", "rows",
+    "row", "invoice", "invoices", "bill", "bills", "billing", "customer",
+    "customers", "client", "clients", "worker", "workers", "staff", "employee",
+    "employees", "supplier", "suppliers", "category", "categories",
+    "highest", "most", "maximum", "max", "greatest", "top", "best", "largest",
+    "lowest", "least", "minimum", "min",
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december",
+}
+
+
+def _extract_product_sales_search_terms(query: str) -> list[str]:
+    """Keep product-identifying words while removing sales-question vocabulary."""
+    normalized = re.sub(r"\s+", " ", str(query or "").casefold()).strip()
+    # Remove possessive punctuation and keep safe alphanumeric search tokens.
+    tokens = re.findall(r"[a-z0-9]+", normalized)
+    terms = []
+    for token in tokens:
+        if token in _PRODUCT_SALES_QUERY_STOPWORDS:
+            continue
+        if len(token) < 2:
+            continue
+        if token.isdigit() and len(token) == 4 and token.startswith("20"):
+            continue
+        if token not in terms:
+            terms.append(token)
+    return terms[:8]
+
+
+def _fast_product_sales_history_query(
+    query: str,
+    db: Session,
+    user_id: int,
+    date_scope: dict | None = None,
+):
+    """Return one product's catalogue price and transaction-level sales history.
+
+    Modern invoices are canonical. Legacy sales rows are used only when this
+    product has no matching completed invoice lines in the requested period.
+    """
+    normalized = re.sub(r"\s+", " ", (query or "").casefold()).strip()
+    has_sales_intent = bool(
+        re.search(r"\b(sales?|sold|transactions?|turnover)\b", normalized)
+    )
+    if not has_sales_intent:
+        return None
+
+    # Customer/worker/category questions need their own structured filters; do
+    # not accidentally interpret those names as part of a product name.
+    if re.search(
+        r"\b(customer|customers|client|clients|sold\s+to|sales?\s+to|worker|workers|"
+        r"staff|employee|employees|supplier|suppliers|category|categories)\b",
+        normalized,
+    ):
+        return None
+
+    # Ranked-product questions have a dedicated handler with different semantics.
+    if re.search(
+        r"\b(highest|most|maximum|max|greatest|top|best|largest|lowest|least|minimum|min)\b",
+        normalized,
+    ):
+        return None
+
+    product_terms = _extract_product_sales_search_terms(normalized)
+    if not product_terms:
+        return None
+
+    date_scope = date_scope or {
+        "kind": "unspecified",
+        "start_date": None,
+        "end_date": None,
+        "label": "not specified",
+    }
+    params = {"user_id": int(user_id)}
+    invoice_date_filter = ""
+    legacy_date_filter = ""
+    if date_scope.get("kind") in {"exact", "range"}:
+        start_date = date_scope.get("start_date")
+        end_date = date_scope.get("end_date")
+        if start_date is not None and end_date is not None:
+            invoice_date_filter = " AND i.invoice_date BETWEEN :start_date AND :end_date"
+            legacy_date_filter = " AND s.sale_date BETWEEN :start_date AND :end_date"
+            params["start_date"] = start_date
+            params["end_date"] = end_date
+
+    invoice_product_match = []
+    legacy_product_match = []
+    catalog_product_match = []
+    for index, term in enumerate(product_terms):
+        key = f"product_term_{index}"
+        params[key] = f"%{term}%"
+        invoice_product_match.append(
+            f"(COALESCE(p.product_name, '') ILIKE :{key} "
+            f"OR COALESCE(ili.description, '') ILIKE :{key})"
+        )
+        legacy_product_match.append(f"s.product_name ILIKE :{key}")
+        catalog_product_match.append(f"product_name ILIKE :{key}")
+
+    invoice_match_sql = " AND ".join(invoice_product_match)
+    legacy_match_sql = " AND ".join(legacy_product_match)
+    catalog_match_sql = " AND ".join(catalog_product_match)
+
+    sql = (
+        "WITH invoice_sales AS ("
+        "SELECT "
+        "ili.id AS source_row_id, "
+        "i.id AS invoice_id, "
+        "i.invoice_number, "
+        "NULLIF(BTRIM(i.customer_name), '') AS customer_name, "
+        "COALESCE(NULLIF(BTRIM(p.product_name), ''), "
+        "NULLIF(BTRIM(ili.description), '')) AS product_name, "
+        "i.invoice_date AS sale_date, "
+        "ili.quantity::numeric AS quantity_sold, "
+        "ili.unit_price::numeric AS unit_price, "
+        "ili.line_total::numeric AS line_total, "
+        "COALESCE(active_product.unit_price, p.unit_price)::numeric AS current_selling_price, "
+        "COALESCE(active_product.unit, p.unit) AS product_unit, "
+        "'INVOICE'::text AS sale_source "
+        "FROM invoices i "
+        "JOIN invoice_line_items ili ON ili.invoice_id = i.id "
+        "LEFT JOIN products p ON p.id = ili.product_id AND p.user_id = i.user_id "
+        "LEFT JOIN LATERAL ("
+        "SELECT cp.product_name, cp.unit_price, cp.unit "
+        "FROM products cp "
+        "WHERE cp.user_id = i.user_id AND cp.is_active IS TRUE "
+        "AND LOWER(BTRIM(cp.product_name)) = LOWER(BTRIM("
+        "COALESCE(NULLIF(BTRIM(p.product_name), ''), NULLIF(BTRIM(ili.description), '')))) "
+        "ORDER BY cp.id DESC LIMIT 1"
+        ") active_product ON TRUE "
+        "WHERE i.user_id = :user_id "
+        "AND i.status NOT IN ('CANCELLED', 'DRAFT')"
+        + invoice_date_filter
+        + " AND (" + invoice_match_sql + ")"
+        "), chosen_sales AS ("
+        "SELECT * FROM invoice_sales "
+        "UNION ALL "
+        "SELECT "
+        "s.id AS source_row_id, "
+        "NULL::integer AS invoice_id, "
+        "NULL::varchar AS invoice_number, "
+        "NULL::varchar AS customer_name, "
+        "BTRIM(s.product_name) AS product_name, "
+        "s.sale_date, "
+        "s.quantity::numeric AS quantity_sold, "
+        "s.price::numeric AS unit_price, "
+        "s.total::numeric AS line_total, "
+        "COALESCE(active_product.unit_price, s.price)::numeric AS current_selling_price, "
+        "active_product.unit AS product_unit, "
+        "'LEGACY_SALE'::text AS sale_source "
+        "FROM sales s "
+        "LEFT JOIN LATERAL ("
+        "SELECT cp.product_name, cp.unit_price, cp.unit "
+        "FROM products cp "
+        "WHERE cp.user_id = s.shopkeeper_id AND cp.is_active IS TRUE "
+        "AND LOWER(BTRIM(cp.product_name)) = LOWER(BTRIM(s.product_name)) "
+        "ORDER BY cp.id DESC LIMIT 1"
+        ") active_product ON TRUE "
+        "WHERE s.shopkeeper_id = :user_id"
+        + legacy_date_filter
+        + " AND " + legacy_match_sql
+        + " AND NOT EXISTS (SELECT 1 FROM invoice_sales)"
+        ") "
+        "SELECT chosen_sales.*, "
+        "COUNT(*) OVER (PARTITION BY LOWER(product_name))::bigint AS sales_count, "
+        "COALESCE(SUM(quantity_sold) OVER (PARTITION BY LOWER(product_name)), 0)::numeric "
+        "AS total_quantity_sold, "
+        "COALESCE(SUM(line_total) OVER (PARTITION BY LOWER(product_name)), 0)::numeric "
+        "AS total_sales_revenue, "
+        "COUNT(*) OVER (PARTITION BY LOWER(product_name))::bigint AS total_history_rows "
+        "FROM chosen_sales "
+        "WHERE NULLIF(BTRIM(product_name), '') IS NOT NULL "
+        "ORDER BY sale_date DESC NULLS LAST, invoice_id DESC NULLS LAST, source_row_id DESC "
+        "LIMIT 100"
+    )
+
+    rows = db.execute(text(sql), params).mappings().all()
+    scope_label = str(date_scope.get("label") or "not specified")
+    scope_text = {
+        "today": "today",
+        "yesterday": "yesterday",
+        "not specified": "in the available sales history",
+        "all time": "in the available sales history",
+    }.get(scope_label, scope_label)
+
+    if rows:
+        results = []
+        summaries = {}
+        for row in rows:
+            product_name = str(row.get("product_name") or "").strip()
+            if not product_name:
+                continue
+            product_key = product_name.casefold()
+            if product_key not in summaries:
+                summaries[product_key] = {
+                    "product_name": product_name,
+                    "sales_count": int(row.get("sales_count") or 0),
+                    "total_quantity_sold": float(row.get("total_quantity_sold") or 0),
+                    "total_sales_revenue": float(row.get("total_sales_revenue") or 0),
+                    "current_selling_price": (
+                        float(row["current_selling_price"])
+                        if row.get("current_selling_price") is not None else None
+                    ),
+                    "product_unit": str(row.get("product_unit") or "units"),
+                }
+            results.append({
+                "source_row_id": int(row["source_row_id"]) if row.get("source_row_id") is not None else None,
+                "invoice_id": int(row["invoice_id"]) if row.get("invoice_id") is not None else None,
+                "invoice_number": row.get("invoice_number"),
+                "customer_name": row.get("customer_name"),
+                "product_name": product_name,
+                "sale_date": row.get("sale_date"),
+                "quantity_sold": float(row.get("quantity_sold") or 0),
+                "unit_price": float(row.get("unit_price") or 0),
+                "line_total": float(row.get("line_total") or 0),
+                "current_selling_price": (
+                    float(row["current_selling_price"])
+                    if row.get("current_selling_price") is not None else None
+                ),
+                "product_unit": str(row.get("product_unit") or "units"),
+                "sales_count": int(row.get("sales_count") or 0),
+                "total_quantity_sold": float(row.get("total_quantity_sold") or 0),
+                "total_sales_revenue": float(row.get("total_sales_revenue") or 0),
+                "sale_source": str(row.get("sale_source") or ""),
+            })
+
+        summary_lines = []
+        for summary in summaries.values():
+            unit = summary["product_unit"]
+            quantity = f"{summary['total_quantity_sold']:g}"
+            revenue = f"₹{summary['total_sales_revenue']:,.2f}"
+            current_price = summary["current_selling_price"]
+            current_price_text = (
+                f" Current catalogue price: ₹{current_price:,.2f}."
+                if current_price is not None else
+                " No current catalogue price is linked to these historical lines."
+            )
+            summary_lines.append(
+                f"{summary['product_name']}: {summary['sales_count']} sale line(s), "
+                f"{quantity} {unit} sold, revenue {revenue}." + current_price_text
+            )
+
+        total_rows = max(
+            (int(row.get("total_history_rows") or 0) for row in rows),
+            default=len(results),
+        )
+        truncated = total_rows > len(results)
+        answer = (
+            "Product sales history " + scope_text + ":\n"
+            + "\n".join(summary_lines)
+            + (
+                f"\nShowing the latest {len(results)} records out of {total_rows} matching sale lines."
+                if truncated else
+                f"\nShowing all {total_rows} matching sale lines."
+            )
+            + "\nEach row contains the price actually charged on that sale; the current catalogue price is shown separately."
+        )
+        return {
+            "answer": answer,
+            "generated_sql": "DIRECT_QUERY: product-specific invoice sales history (legacy sales fallback)\n" + sql,
+            "generated_model_response": answer,
+            "results": results,
+            "summary": list(summaries.values()),
+            "has_more": truncated,
+            "product_search_terms": product_terms,
+        }
+
+    catalog_sql = (
+        "SELECT id AS product_id, product_name, unit_price AS current_selling_price, "
+        "unit AS product_unit "
+        "FROM products "
+        "WHERE user_id = :user_id AND is_active IS TRUE "
+        "AND " + catalog_match_sql
+        + " ORDER BY product_name LIMIT 25"
+    )
+    catalog_rows = db.execute(text(catalog_sql), params).mappings().all()
+    if catalog_rows:
+        results = [
+            {
+                "record_type": "CATALOG_PRODUCT_WITHOUT_SALES",
+                "product_id": int(row["product_id"]),
+                "product_name": str(row.get("product_name") or ""),
+                "current_selling_price": float(row.get("current_selling_price") or 0),
+                "product_unit": str(row.get("product_unit") or "units"),
+            }
+            for row in catalog_rows
+        ]
+        details = "; ".join(
+            f"{row['product_name']} (current catalogue price ₹{row['current_selling_price']:,.2f})"
+            for row in results
+        )
+        answer = (
+            f"I found matching product(s), but no completed sales records for {scope_text}: "
+            + details
+            + "."
+        )
+        generated_sql = (
+            "DIRECT_QUERY: product catalogue price; no matching sales history\n"
+            + catalog_sql
+        )
+        return {
+            "answer": answer,
+            "generated_sql": generated_sql,
+            "generated_model_response": answer,
+            "results": results,
+            "summary": results,
+            "has_more": False,
+            "product_search_terms": product_terms,
+        }
+
+    term_text = " ".join(product_terms)
+    answer = (
+        f"I couldn't find an active catalogue product or sales history matching '{term_text}' "
+        "in this shop. Check the product name or try a shorter product keyword."
+    )
+    return {
+        "answer": answer,
+        "generated_sql": "DIRECT_QUERY: no product sales history or active catalogue match",
+        "generated_model_response": answer,
+        "results": [],
+        "summary": [],
+        "has_more": False,
+        "product_search_terms": product_terms,
     }
 
 
@@ -4024,6 +4364,41 @@ async def ask_query(
             "row_count": len(day_comparison_result["results"]),
             "results": day_comparison_result["results"],
             "has_more": False,
+        }
+
+    # A product-specific sales/history question needs invoice rows, prices
+    # charged, quantities, and invoice dates. It must run before generic
+    # product-list/aggregate handlers and before Text-to-SQL can select legacy sales.
+    product_sales_history_result = _fast_product_sales_history_query(
+        query, db, user_id, date_scope
+    )
+    if product_sales_history_result is not None:
+        print(
+            "ASKQUERY PATH=FAST_PRODUCT_SALES_HISTORY "
+            f"query_translation_llm_calls={int(translation_used)} planner_llm_calls=0 sql_generation_llm_calls=0"
+        )
+        _persist_query_history(
+            db=db,
+            user_id=user_id,
+            question=original_query,
+            answer=product_sales_history_result["answer"],
+            result_count=len(product_sales_history_result["results"]),
+        )
+        return {
+            "query_engine_version": QUERY_ENGINE_VERSION,
+            "query": original_query,
+            "original_query": original_query,
+            "translated_query": query,
+            "answer": product_sales_history_result["answer"],
+            "message": product_sales_history_result["answer"],
+            "generated_sql": product_sales_history_result["generated_sql"],
+            "generated_model_response": product_sales_history_result["generated_model_response"],
+            "retrieved_table_information": [],
+            "sql": product_sales_history_result["generated_sql"],
+            "row_count": len(product_sales_history_result["results"]),
+            "results": product_sales_history_result["results"],
+            "summary": product_sales_history_result.get("summary", []),
+            "has_more": product_sales_history_result.get("has_more", False),
         }
 
     # Ranked revenue questions must run before generic product listing and
