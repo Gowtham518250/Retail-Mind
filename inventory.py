@@ -3495,6 +3495,15 @@ async def parse_voice_billing(
         if resolution.status == "matched":
             product = resolution.product
             match_reasons = list(resolution.reasons)
+        elif (
+            product is not None
+            and _voice_billing_product_has_evidence(
+                f"{english_transcript} {parser_transcript}", product
+            )
+        ):
+            # The model-provided ID is checked against this shop's full active
+            # catalog and is retained only when the utterance supports the item.
+            match_reasons = ["validated_catalog_id_with_spoken_product_evidence"]
         else:
             # Never assign stock unless the spoken words uniquely identify a catalog item.
             product = None
@@ -3570,7 +3579,7 @@ async def parse_voice_billing(
                 # use that. Otherwise keep the spoken number unconverted and ask.
                 repaired_unit = _vb_repair_spoken_unit(item_evidence_transcripts)
                 if repaired_unit:
-                    spoken_unit = repaired_unit
+                    spoken_unit = _voice_billing_canonical_unit_label(repaired_unit)
                     conversion = _vb_convert_quantity(quantity, spoken_unit, getattr(product, "unit", "pcs"))
                 else:
                     unit_grounded = False
