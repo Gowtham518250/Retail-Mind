@@ -52,6 +52,7 @@ def test_shop_names_reach_translation_as_data(monkeypatch):
     user_message = calls[0]["messages"][1]["content"]
     assert "Sona Masoori Rice" in user_message
     assert "Ganesh" in user_message
+    assert "preserve its exact canonical spelling" in user_message
 
 
 def test_no_vocabulary_keeps_user_message_free_of_shop_hint(monkeypatch):
