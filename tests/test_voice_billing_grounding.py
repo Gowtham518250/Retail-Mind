@@ -357,6 +357,7 @@ def test_telugu_inflected_units_keep_quantities_on_their_own_product_lines(monke
     assert [item["quantity_grounded"] for item in result["items"]] == [True, True]
     assert [item["price_grounded"] for item in result["items"]] == [True, True]
     assert [item["unit_price"] for item in result["items"]] == [150.0, 120.0]
+    print("TELUGU_PRICE_SOURCE_DEBUG", result["items"])
     assert [item["price_source"] for item in result["items"]] == [
         "spoken_line_total",
         "spoken_line_total",
