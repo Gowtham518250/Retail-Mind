@@ -66,6 +66,7 @@ async def _run_tool(name: str, arguments: dict[str, Any], *, user_text: str = ""
         "prepare_invoice_payment",
         "prepare_online_order_transition",
         "prepare_khata_ledger_movement",
+        "prepare_attendance_record",
     }
     conversation_id = str(uuid.uuid4()) if needs_pending_action else None
     request_id = str(uuid.uuid4())
@@ -190,6 +191,26 @@ async def prepare_online_order_transition(order_id: int, action: str) -> dict:
     return await _run_tool(
         "prepare_online_order_transition",
         {"order_id": order_id, "action": action},
+    )
+
+
+@mcp_server.tool()
+async def prepare_attendance_record(
+    worker_id: int,
+    attendance_date: str,
+    status: str,
+    notes: str | None = None,
+) -> dict:
+    """Prepare a daily attendance correction; confirm it separately in Retail Mind."""
+    return await _run_tool(
+        "prepare_attendance_record",
+        {
+            "worker_id": worker_id,
+            "attendance_date": attendance_date,
+            "status": status,
+            "notes": notes,
+        },
+        user_text=f"Prepare attendance correction for worker {worker_id} on {attendance_date}",
     )
 
 
