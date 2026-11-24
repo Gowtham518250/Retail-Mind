@@ -3877,6 +3877,12 @@ async def parse_voice_billing(
             r"\b(?:rate|each)\s+(?:per\s+)?(?:kg|kilo(?:gram)?s?|g(?:m|ram)?s?|lit(?:re|er)s?|ml)\b)",
             price_context,
         ))
+        if quantity == Decimal("1") and normalized_spoken_unit not in weighted_units and kind == "line_total":
+            # For a single count-based item, per-unit price and line total are
+            # numerically identical. Prefer the cashier-facing per-item meaning
+            # for shorthand such as "one coffee 30".
+            kind = "unit"
+
         if normalized_spoken_unit in weighted_units and kind in {"unit", "line_total"}:
             if explicit_rate:
                 kind = "unit"
