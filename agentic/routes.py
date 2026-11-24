@@ -385,13 +385,14 @@ async def agent_chat(
     db: Session = Depends(get_db),
 ):
     shop_id = resolve_shop_id(current_user)
-    _require_agent_access(db, shop_id, "assistant")
+    snapshot = _require_agent_access(db, shop_id, "assistant")
     return await run_chat_turn(
         db,
         shop_id=shop_id,
         message=data.message,
         conversation_id=data.conversation_id,
         language_code=data.language_code,
+        allow_actions=snapshot["access"]["actions_enabled"],
     )
 
 
@@ -405,7 +406,7 @@ async def agent_voice(
 ):
     """Transcribe a short owner voice request using the existing Sarvam adapter."""
     shop_id = resolve_shop_id(current_user)
-    _require_agent_access(db, shop_id, "voice")
+    snapshot = _require_agent_access(db, shop_id, "voice")
     try:
         conversation_id = _parse_conversation_id(conversation_id)
     except ValueError as exc:
@@ -463,6 +464,7 @@ async def agent_voice(
         message=transcript,
         conversation_id=conversation_id,
         language_code=effective_language,
+        allow_actions=snapshot["access"]["actions_enabled"],
     )
     result["transcription"] = {
         "transcript": transcript,

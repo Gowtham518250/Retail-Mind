@@ -8,7 +8,7 @@ os.environ.setdefault("SECRET_KEY", "retail-mind-agent-ci-only-not-for-productio
 import pytest
 from pydantic import ValidationError
 
-from agentic.graph import build_agent_graph
+from agentic.graph import build_agent_graph, available_tool_definitions
 from agentic.registry import list_capabilities
 from agentic.service import _action_hash
 from agentic.tools import (
@@ -312,3 +312,24 @@ def test_agent_voice_needs_sarvam_and_owner_consent():
     assert missing_provider["assistant_enabled"] is True
     assert missing_provider["voice_enabled"] is False
     assert missing_provider["status"] == "enabled"
+
+
+def test_business_operation_tools_are_not_exposed_without_owner_action_opt_in():
+    read_only_names = {
+        item["function"]["name"] for item in available_tool_definitions(False)
+    }
+    all_names = {
+        item["function"]["name"] for item in available_tool_definitions(True)
+    }
+    action_names = {
+        "prepare_bill_from_current_message",
+        "prepare_invoice_payment",
+        "prepare_online_order_transition",
+        "prepare_inventory_stock_movement",
+        "prepare_attendance_record",
+        "prepare_khata_ledger_movement",
+    }
+    assert action_names.isdisjoint(read_only_names)
+    assert action_names.issubset(all_names)
+    assert "search_inventory" in read_only_names
+    assert "get_sales_summary" in read_only_names
