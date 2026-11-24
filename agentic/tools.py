@@ -136,6 +136,14 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "list_shop_workers",
+            "description": "List the authenticated shop's workers with ID, name, position and status so the assistant can resolve an employee without guessing. Does not return salary, PIN, phone or address.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_attendance_summary",
             "description": "Summarize employee attendance for one date in the authenticated shop. Defaults to today in India Standard Time.",
             "parameters": {
@@ -385,6 +393,30 @@ def _sales_summary(db: Session, shop_id: int, args: SalesSummaryArgs) -> dict:
         "received_amount": float(received),
         "outstanding_amount": float(max(Decimal("0"), billed - received)),
         "definition": "Billed amount uses qualifying invoices; received amount is their paid_amount. Cancelled and draft invoices are excluded.",
+    }
+
+
+def _worker_directory(db: Session, shop_id: int) -> dict:
+    rows = (
+        db.query(Worker.id, Worker.name, Worker.position, Worker.status)
+        .filter(Worker.shopkeeper_id == shop_id)
+        .order_by(Worker.id.asc())
+        .limit(250)
+        .all()
+    )
+    return {
+        "success": True,
+        "workers": [
+            {
+                "worker_id": int(row.id),
+                "name": str(row.name or "Worker")[:100],
+                "position": str(row.position or "Staff")[:100],
+                "status": str(row.status or "active")[:20],
+            }
+            for row in rows
+        ],
+        "count": len(rows),
+        "note": "Shop-scoped worker directory. Salary, PIN, phone and address are intentionally excluded.",
     }
 
 
@@ -988,6 +1020,8 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
             result = _sales_summary(db, shop_id, SalesSummaryArgs.model_validate(args))
         elif tool_name == "get_attendance_summary":
             result = _attendance_summary(db, shop_id, AttendanceSummaryArgs.model_validate(args))
+        elif tool_name == "list_shop_workers":
+            result = _worker_directory(db, shop_id)
         elif tool_name == "get_khata_summary":
             ToolArgs.model_validate(args)
             result = _khata_summary(db, shop_id)
