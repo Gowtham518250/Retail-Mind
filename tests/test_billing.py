@@ -443,6 +443,8 @@ def test_cashfree_authorization_is_required_before_activation():
     assert _cashfree_auth_failed("FAILED") is True
     assert _cashfree_auth_failed("REJECTED") is True
     assert _cashfree_auth_failed("PENDING") is False
+    # An explicit authorization failure wins over a stale ACTIVE snapshot.
+    assert _cashfree_auth_succeeded("FAILED", "ACTIVE") is False
 
 
 def test_authorized_mandate_initializes_subscription_period_and_entitlement():
