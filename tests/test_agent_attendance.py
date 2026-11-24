@@ -66,6 +66,39 @@ def test_attendance_tool_accepts_only_known_statuses():
         })
 
 
+def test_worker_directory_returns_only_safe_shop_worker_fields():
+    from agentic.tools import _worker_directory
+
+    class DirectoryQuery:
+        def filter(self, *_args):
+            return self
+
+        def order_by(self, *_args):
+            return self
+
+        def limit(self, _limit):
+            return self
+
+        def all(self):
+            return [SimpleNamespace(id=8, name="Ravi", position="Cashier", status="active")]
+
+    class DirectoryDb:
+        def query(self, *_columns):
+            return DirectoryQuery()
+
+    result = _worker_directory(DirectoryDb(), 42)
+    assert result["count"] == 1
+    assert result["workers"][0] == {
+        "worker_id": 8,
+        "name": "Ravi",
+        "position": "Cashier",
+        "status": "active",
+    }
+    assert "salary" not in result["workers"][0]
+    assert "pin" not in result["workers"][0]
+    assert "phone" not in result["workers"][0]
+
+
 def test_attendance_tool_is_allowlisted_and_confirmation_gated():
     names = {
         item["function"]["name"]
