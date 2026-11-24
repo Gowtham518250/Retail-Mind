@@ -117,3 +117,16 @@ def test_entity_context_is_explicitly_data_only_and_never_fabricates_ids():
     ])
     assert "Cow Ghee 1L" in context
     assert '"match":"exact"' in context
+
+
+def test_entity_grounding_preserves_indic_combining_marks():
+    vocabulary = {
+        "product": ("నూనె", "పసుపు"),
+        "customer": (),
+        "worker": (),
+    }
+
+    assert query_retrival._match_shop_entities(
+        "నా నూనె అమ్మకాల వివరాలు",
+        vocabulary,
+    ) == [{"type": "product", "name": "నూనె", "match": "exact"}]
