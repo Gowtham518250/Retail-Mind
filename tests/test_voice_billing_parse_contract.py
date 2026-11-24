@@ -249,6 +249,7 @@ def _run_voice_billing_endpoint(
         current_stock=20,
         user_id=7,
         is_active=True,
+        unit="kg",
     )
     products = [product] if catalog_products is None else catalog_products
 
@@ -597,8 +598,7 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
 
     assert capture["call_order"] == ["translation", "extraction"]
     extraction_prompt = capture["request"]["messages"][1]["content"]
-    assert "English-normalized transcript" not in extraction_prompt
-    assert "English-normalized transcript (product matching aid only" in extraction_prompt
+    assert "English-normalized transcript (product matching aid only; do not let translation change numbers): 2 kg Dragon Fruit 30" in extraction_prompt
     assert "Original ASR transcript (authoritative evidence" in extraction_prompt
     assert "రెండు కిలోల డ్రాగన్ ఫ్రూట్ ముప్పై" in extraction_prompt
     assert "2 kg Dragon Fruit 30" in extraction_prompt
