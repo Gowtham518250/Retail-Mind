@@ -6,6 +6,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -16,6 +17,8 @@ from security import owner_only, resolve_shop_id
 from sarvam_speech import SarvamSpeechError, app_language_code, transcribe_with_sarvam
 
 from .registry import list_capabilities
+from sarvam_tts import SarvamTTSError, synthesize_with_sarvam
+
 from .service import (
     confirm_invoice_action,
     delete_conversation,
@@ -69,6 +72,19 @@ class AgentChatRequest(BaseModel):
 
 class AgentConfirmRequest(BaseModel):
     preview_hash: str = Field(..., min_length=64, max_length=64)
+
+
+class AgentSpeechRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=1800)
+    language_code: str = Field(default="en", min_length=2, max_length=8)
+
+    @field_validator("text")
+    @classmethod
+    def validate_speech_text(cls, value):
+        cleaned = " ".join(str(value or "").split())
+        if not cleaned:
+            raise ValueError("text cannot be blank")
+        return cleaned
 
 
 @router.get("/capabilities")
@@ -160,6 +176,41 @@ async def agent_voice(
         "provider": "Sarvam AI",
     }
     return result
+
+
+@router.post("/speech")
+async def agent_speech(
+    data: AgentSpeechRequest,
+    current_user: dict = Depends(owner_only),
+):
+    """Synthesize a bounded assistant response as a WAV stream."""
+    if os.getenv("RETAIL_MIND_AGENT_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        raise HTTPException(status_code=503, detail="The Retail Mind AI assistant is not enabled on this deployment.")
+    resolve_shop_id(current_user)
+    try:
+        result = await run_in_threadpool(
+            synthesize_with_sarvam,
+            text=data.text,
+            language_code=data.language_code,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SarvamTTSError as exc:
+        status = int(exc.status_code or 503)
+        if status < 400 or status > 599:
+            status = 503
+        raise HTTPException(status_code=status, detail="Speech synthesis is temporarily unavailable.") from exc
+
+    return Response(
+        content=result["audio_bytes"],
+        media_type=result["content_type"],
+        headers={
+            "Cache-Control": "no-store",
+            "X-Speech-Language": result["language_code"],
+            "X-Speech-Model": result["model"],
+            "X-Speech-Request-ID": result["request_id"],
+        },
+    )
 
 
 @router.get("/conversations")
