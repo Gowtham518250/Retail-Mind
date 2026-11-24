@@ -152,8 +152,16 @@ async def agent_voice(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     content_type = (audio.content_type or "").split(";", 1)[0].strip().lower()
-    if content_type not in _ALLOWED_AUDIO_TYPES:
+    suffix = os.path.splitext(audio.filename or "")[1].lower()
+    allowed_suffixes = {".wav", ".mp3", ".m4a", ".mp4", ".mpeg", ".mpga", ".webm", ".ogg", ".flac"}
+    if not content_type.startswith("audio/") and suffix not in allowed_suffixes:
         raise HTTPException(status_code=415, detail="Unsupported audio format.")
+    if not content_type.startswith("audio/"):
+        content_type = {
+            ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4",
+            ".mp4": "audio/mp4", ".mpeg": "audio/mpeg", ".mpga": "audio/mpeg",
+            ".webm": "audio/webm", ".ogg": "audio/ogg", ".flac": "audio/flac",
+        }.get(suffix, "audio/wav")
     payload = await audio.read(_MAX_AUDIO_BYTES + 1)
     if not payload:
         raise HTTPException(status_code=422, detail="The uploaded audio is empty.")
@@ -161,12 +169,19 @@ async def agent_voice(
         raise HTTPException(status_code=413, detail="Audio must be 8 MB or smaller.")
 
     try:
+        # Reuse the same shop vocabulary and ASR quality guard as Retail Mind's
+        # established voice-billing audio endpoint.
+        from inventory import _ASR_NO_SPEECH_MESSAGE, _voice_billing_prompt_catalog_names
+        from voice_asr_guard import assess_transcription
+
+        catalog_names = _voice_billing_prompt_catalog_names(db, shop_id, language_code)
         transcription = await run_in_threadpool(
             transcribe_with_sarvam,
             audio_bytes=payload,
             filename=(audio.filename or "owner-voice-audio")[:120],
             content_type=content_type,
             language_code=language_code,
+            keyterms=catalog_names,
         )
     except SarvamSpeechError as exc:
         status = int(exc.status_code or 503)
@@ -175,15 +190,20 @@ async def agent_voice(
         raise HTTPException(status_code=status, detail="Voice transcription is temporarily unavailable.") from exc
 
     transcript = str(transcription.get("transcript") or "").strip()
-    if not transcript:
-        raise HTTPException(status_code=422, detail="No speech was detected. Please record the request again.")
+    verdict = assess_transcription({"text": transcript}, catalog_names=catalog_names)
+    if not verdict.accepted:
+        raise HTTPException(status_code=422, detail=_ASR_NO_SPEECH_MESSAGE)
+    transcript = verdict.text
     detected_language = app_language_code(transcription.get("language_code")) or language_code
+    effective_language = language_code
+    if language_code.strip().lower() in {"", "auto", "und"} and detected_language:
+        effective_language = detected_language
     result = await run_chat_turn(
         db,
         shop_id=shop_id,
         message=transcript,
         conversation_id=conversation_id,
-        language_code=detected_language,
+        language_code=effective_language,
     )
     result["transcription"] = {
         "transcript": transcript,
