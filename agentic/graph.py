@@ -178,7 +178,7 @@ def _forced_action_tool(state: AgentState) -> str | None:
         re.search(r"\b(?:ok|okay|yes|use|make it|set it|with|at|price|rupees?|rs)\b", message)
     )
     has_bill = any(term in message for term in bill_terms)
-    has_bill_amount = bool(re.search(r"(?:₹\s*)?\d+(?:\\.\d+)?", message))
+    has_bill_amount = bool(re.search(r"(?:₹\s*)?\d+(?:\.\d+)?", message))
     if (
         "prepare_bill_from_current_message" in available
         and ((has_bill and (bill_action or has_bill_amount)) or bill_follow_up)
