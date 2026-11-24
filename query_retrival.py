@@ -3252,12 +3252,32 @@ def _normalise_entity_name(value: str) -> str:
     ).strip()
 
 
+def _is_entity_word_char(character: str) -> bool:
+    """Treat Unicode letters, numbers and combining marks as part of a name."""
+    if not character:
+        return False
+    return character == "_" or unicodedata.category(character)[0] in {"L", "N", "M"}
+
+
+def _contains_entity_phrase(query: str, name: str) -> bool:
+    """Match a complete phrase without splitting Indic combining marks."""
+    start = query.find(name)
+    while start >= 0:
+        end = start + len(name)
+        left_ok = start == 0 or not _is_entity_word_char(query[start - 1])
+        right_ok = end == len(query) or not _is_entity_word_char(query[end])
+        if left_ok and right_ok:
+            return True
+        start = query.find(name, start + 1)
+    return False
+
+
 def _match_shop_entities(query: str, vocabulary: dict[str, tuple[str, ...]]) -> list[dict]:
     """Resolve only exact catalogue/customer/worker phrases; never invent a match.
 
     Longest-first matching prevents a generic short name from shadowing a more
-    specific product variant. Unicode-aware boundaries avoid matching 'oil'
-    inside unrelated words such as 'boiling'.
+    specific product variant. Unicode letter/number/mark boundaries support
+    Indic scripts as well as Latin text.
     """
     normalised_query = _normalise_entity_name(query)
     matches: list[dict] = []
@@ -3271,8 +3291,7 @@ def _match_shop_entities(query: str, vocabulary: dict[str, tuple[str, ...]]) -> 
             normalised_name = _normalise_entity_name(name)
             if len(normalised_name) < 2:
                 continue
-            pattern = r"(?<![\w])" + re.escape(normalised_name) + r"(?![\w])"
-            if not re.search(pattern, normalised_query, flags=re.IGNORECASE | re.UNICODE):
+            if not _contains_entity_phrase(normalised_query, normalised_name):
                 continue
             if any(normalised_name in _normalise_entity_name(existing) for existing in selected):
                 continue
