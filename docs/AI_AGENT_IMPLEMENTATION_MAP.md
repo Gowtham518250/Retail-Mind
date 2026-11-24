@@ -24,6 +24,7 @@ The current implementation uses:
 | Customer lookup | Active customers in the authenticated shop; phone masked to last four digits in tool output | Read-only |
 | Sales analytics | Billed, received and outstanding invoice summary over a bounded date range | Read-only |
 | Attendance lookup | Daily shop-scoped attendance summary | Read-only |
+| Worker directory | Shop-owned worker IDs, names, positions and statuses to resolve employee names; excludes salary, PIN, phone and address | Read-only |
 | Attendance correction | Five-minute preview scoped to one owned worker and date; rechecks the daily row and preserves check-in/out timestamps and working hours; emits the existing durable sync/realtime event after owner confirmation | Confirmed employee-data write |
 | Khata lookup | Invoice-derived pending-payment / receivables view; separate from the legacy `KhataBalance` ledger | Read-only |
 | Legacy Khata credit/repayment | Five-minute preview against one phone-number-keyed customer balance; owner confirmation rechecks the balance and writes `KhataBalance`, `KhataHistory` and `UniversalTransaction` atomically with replay protection | Confirmed financial write |
