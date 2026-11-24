@@ -3598,7 +3598,7 @@ async def parse_voice_billing(
                 str(raw.get("product_name_en") or ""),
                 proposed_name,
             ],
-            parser_transcript,
+            f"{english_transcript} {parser_transcript}",
             products,
             normalize=_voice_billing_normalize,
             expand_tokens=_voice_billing_expanded_tokens,
@@ -3839,7 +3839,14 @@ async def parse_voice_billing(
             except (InvalidOperation, TypeError, ValueError):
                 price_grounded = False
             if not price_grounded:
-                kind = "ambiguous"
+                if spoken_price_evidence:
+                    kind = "ambiguous"
+                else:
+                    # The model reused a quantity as a price, but no separate
+                    # price was spoken for this line. Keep the verified catalogue
+                    # fallback rather than showing an invented price or blocking
+                    # an otherwise valid draft.
+                    kind = "none"
 
         catalog_price = Decimal(str(product.unit_price or 0)) if product is not None else Decimal("0")
         unit_price = catalog_price if catalog_price > 0 else Decimal("0")
@@ -3848,8 +3855,9 @@ async def parse_voice_billing(
         spoken_amount = raw.get("spoken_price_amount")
 
         if not price_grounded:
-            price_needs_confirmation = True
-            unresolved.append(f"{product_name}: price not clearly heard")
+            unresolved.append(f"{product_name}: model price was not independently grounded")
+            if spoken_price_evidence:
+                price_needs_confirmation = True
         if kind == "ambiguous":
             # Never replace a price the cashier spoke with a different catalog
             # amount. An unresolved spoken price must be corrected explicitly.
