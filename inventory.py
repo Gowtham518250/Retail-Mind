@@ -4152,7 +4152,7 @@ async def parse_voice_billing_audio(
     user_id: int = Depends(check_current_user),
     db: Session = Depends(get_db),
 ):
-    """Transcribe with Sarvam Saaras v4, then extract a catalog-grounded draft."""
+    """Transcribe without merchant/catalog hints, then AI-extract and optionally match items."""
     language_code = (language_code or "auto").strip().lower()
     content_type = (audio.content_type or "").lower()
     suffix = Path(audio.filename or "").suffix.lower()
@@ -4174,10 +4174,8 @@ async def parse_voice_billing_audio(
         )
 
     audio_started = time.perf_counter()
-    # Bias Saaras v4 toward this shop's real product vocabulary.
-    catalog_started = time.perf_counter()
-    catalog_names = _voice_billing_prompt_catalog_names(db, user_id, language_code)
-    catalog_ms = (time.perf_counter() - catalog_started) * 1000.0
+    # Do not send shop products or cashier aliases as ASR keyterms. That vocabulary
+    # bias can cause unrelated spoken words to be rewritten as a catalog product.
     asr_started = time.perf_counter()
     try:
         transcription = await run_in_threadpool(
@@ -4186,7 +4184,7 @@ async def parse_voice_billing_audio(
             filename=Path(audio.filename or "voice-billing.wav").name,
             content_type=content_type if content_type.startswith("audio/") else "audio/wav",
             language_code=language_code,
-            keyterms=catalog_names,
+            keyterms=[],
             api_key=api_key,
         )
     except SarvamSpeechError as exc:
@@ -4202,7 +4200,7 @@ async def parse_voice_billing_audio(
         raise HTTPException(status_code=502, detail="Sarvam could not transcribe this recording. Please try again.")
 
     asr_ms = (time.perf_counter() - asr_started) * 1000.0
-    verdict = _assess_transcription({"text": transcription["transcript"]}, catalog_names=catalog_names)
+    verdict = _assess_transcription({"text": transcription["transcript"]}, catalog_names=[])
     if not verdict.accepted:
         # Never log the transcript itself (customer speech); the reason code is enough to tune thresholds.
         logging.info(
@@ -4229,7 +4227,6 @@ async def parse_voice_billing_audio(
     parsed["transcript"] = transcript
     parse_timing = parsed.get("timing_ms") if isinstance(parsed.get("timing_ms"), dict) else {}
     parse_timing.update({
-        "catalog_vocabulary": round(catalog_ms, 1),
         "speech_recognition": round(asr_ms, 1),
         "audio_endpoint_total": round((time.perf_counter() - audio_started) * 1000.0, 1),
     })
