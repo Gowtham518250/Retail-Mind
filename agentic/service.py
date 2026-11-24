@@ -878,6 +878,14 @@ def confirm_agent_action(
             action_id=action_id,
             supplied_preview_hash=supplied_preview_hash,
         )
+    if action_type == "ATTENDANCE_RECORD":
+        from .attendance_actions import confirm_attendance_record
+        return confirm_attendance_record(
+            db,
+            shop_id=shop_id,
+            action_id=action_id,
+            supplied_preview_hash=supplied_preview_hash,
+        )
     if action_type == "ORDER_TRANSITION":
         return confirm_order_transition_action(
             db, shop_id=shop_id, current_user=current_user,
