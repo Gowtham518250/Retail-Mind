@@ -109,6 +109,91 @@ def _normalise_tool_call(call: Any) -> dict[str, Any]:
     }
 
 
+def _successful_pending_action(tool_outputs: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return a server-persisted preview; never infer success from model text."""
+    for output in reversed(tool_outputs or []):
+        if not isinstance(output, dict):
+            continue
+        result = output.get("result")
+        if (
+            isinstance(result, dict)
+            and result.get("success") is True
+            and result.get("action_id")
+            and result.get("preview_hash")
+            and isinstance(result.get("preview"), dict)
+        ):
+            return result
+    return None
+
+
+def _format_pending_action_answer(action: dict[str, Any]) -> str:
+    """Build the confirmation message from persisted server values, not a second LLM call."""
+    status = str(action.get("status") or "PENDING").upper()
+    preview = action.get("preview") if isinstance(action.get("preview"), dict) else {}
+    operation = str(preview.get("operation") or "").upper()
+
+    if status == "COMPLETED":
+        return "This request was already completed. I did not create a duplicate. Please check the relevant Retail Mind screen for the saved record."
+    if status == "EXECUTING":
+        return "This request is already being processed. Check the relevant Retail Mind screen before trying again."
+
+    if operation == "CREATE_INVOICE":
+        invoice_number = str(preview.get("invoice_number") or "Pending invoice")
+        customer_name = str(preview.get("customer_name") or "Cash Customer")
+        total = preview.get("total_amount")
+        try:
+            total_text = f"₹{float(total):,.2f}"
+        except (TypeError, ValueError):
+            total_text = "amount unavailable"
+
+        lines = []
+        for item in preview.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("product_name") or "Item")[:100]
+            try:
+                quantity = float(item.get("quantity") or 0)
+                quantity_text = str(int(quantity)) if quantity.is_integer() else f"{quantity:g}"
+            except (TypeError, ValueError):
+                quantity_text = str(item.get("quantity") or "?")
+            try:
+                price_text = f"₹{float(item.get('unit_price')):,.2f}"
+            except (TypeError, ValueError):
+                price_text = "price unavailable"
+            try:
+                line_total_text = f"₹{float(item.get('line_total')):,.2f}"
+            except (TypeError, ValueError):
+                line_total_text = ""
+            line = f"- {name}: {quantity_text} × {price_text}"
+            if line_total_text:
+                line += f" = {line_total_text}"
+            lines.append(line)
+
+        detail = "\\n".join(lines) if lines else "- Item details are available in the preview card."
+        return (
+            f"Bill preview is ready for {customer_name}.\\n"
+            f"Invoice reference: {invoice_number}\\n"
+            f"{detail}\\n"
+            f"Total: {total_text}\\n\\n"
+            "This is only a preview. Review the details and tap Confirm in Retail Mind to create the invoice. "
+            "No invoice has been created and no stock or payment has changed yet."
+        )
+
+    label = operation.replace("_", " ").lower() or "business operation"
+    return (
+        f"{label.capitalize()} preview is ready. Review the preview in Retail Mind and explicitly confirm it. "
+        "No business data has been changed yet."
+    )
+
+
+def _route_after_tools(state: AgentState) -> str:
+    # Owner-confirmed actions are already persisted. Do not spend another
+    # provider round-trip or let the model rewrite amounts from the preview.
+    if _successful_pending_action(state.get("tool_outputs", [])):
+        return END
+    return "call_model"
+
+
 async def _call_model(state: AgentState) -> dict[str, Any]:
     api_key = (os.getenv("GROQ_API_KEY") or "").strip()
     if not api_key:
@@ -133,11 +218,23 @@ async def _call_model(state: AgentState) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:
-        # Provider messages can contain prompts or customer text; log only the type.
+        # Do not log prompts, customer speech or provider response bodies. Record
+        # structured diagnostics so 429/401/timeout/model errors are distinguishable.
         import logging
+        status_code = getattr(exc, "status_code", None)
+        request_id = str(getattr(exc, "request_id", "") or "")[:120] or None
+        retry_after = getattr(exc, "retry_after", None)
         logging.getLogger(__name__).warning(
-            "Retail Mind agent provider call failed (%s)", type(exc).__name__
+            "Retail Mind agent provider call failed model=%s exception=%s status_code=%s request_id=%s retry_after=%s",
+            model, type(exc).__name__, status_code, request_id, retry_after,
         )
+        saved_action = _successful_pending_action(state.get("tool_outputs", []))
+        if saved_action:
+            return {
+                "final_answer": _format_pending_action_answer(saved_action),
+                "tool_calls": [],
+                "provider_error": type(exc).__name__,
+            }
         raise HTTPException(status_code=503, detail="The assistant is temporarily unavailable.") from exc
 
     if not response.choices:
@@ -199,6 +296,10 @@ async def _execute_tools(state: AgentState) -> dict[str, Any]:
                 "content": json.dumps(result, ensure_ascii=False, default=str)[:12000],
             }
         )
+        if _successful_pending_action([{"result": result}]):
+            # One confirmed-preview operation per turn; the UI receives the exact
+            # action hash and preview from the tool result.
+            break
     return {
         "messages": messages,
         "tool_outputs": outputs,
@@ -223,7 +324,11 @@ def build_agent_graph():
         _route_after_model,
         {"execute_tools": "execute_tools", END: END},
     )
-    graph.add_edge("execute_tools", "call_model")
+    graph.add_conditional_edges(
+        "execute_tools",
+        _route_after_tools,
+        {"call_model": "call_model", END: END},
+    )
     return graph.compile()
 
 
@@ -257,8 +362,15 @@ async def invoke_agent(
         },
         config={"recursion_limit": 14},
     )
+    tool_outputs = result.get("tool_outputs", [])
+    saved_action = _successful_pending_action(tool_outputs)
+    answer = (
+        _format_pending_action_answer(saved_action)
+        if saved_action
+        else str(result.get("final_answer") or "I could not complete that request.")
+    )
     return {
-        "answer": str(result.get("final_answer") or "I could not complete that request."),
-        "tool_outputs": result.get("tool_outputs", []),
+        "answer": answer,
+        "tool_outputs": tool_outputs,
         "tool_rounds": int(result.get("tool_rounds", 0)),
     }
