@@ -40,6 +40,7 @@ from growth_marketing_automation import enqueue_product_created_trigger
 from stock_service import StockService
 from voice_billing_fastpath import try_fast_parse as _vb_try_fast_parse
 from voice_billing_core import (
+    canonical_unit as _vb_canonical_unit,
     convert_quantity as _vb_convert_quantity,
     custom_name_is_grounded as _vb_custom_name_is_grounded,
     quantity_is_grounded as _vb_quantity_is_grounded,
@@ -2899,6 +2900,52 @@ async def record_voice_billing_alias(
     }
 
 
+def _voice_billing_product_anchor_phrases(values, transcript: str) -> list[str]:
+    """Return product anchors and source-language aliases actually present in a line."""
+    context = _voice_billing_normalize(transcript or "")
+    phrases = []
+    product_tokens = set()
+    for value in values:
+        normalized = _voice_billing_normalize(str(value or ""))
+        if len(normalized) >= 2 and normalized not in phrases:
+            phrases.append(normalized)
+        if normalized:
+            product_tokens.update(_voice_billing_expanded_tokens(normalized))
+
+    # Use only translated/native aliases that are literally present in this
+    # source transcript. They locate the product boundary but do not create
+    # quantity or price evidence.
+    for aliases in _VOICE_BILLING_ALIASES.values():
+        alias_tokens = set()
+        for alias in aliases:
+            alias_tokens.update(_voice_billing_expanded_tokens(alias))
+        if not product_tokens.intersection(alias_tokens):
+            continue
+        for alias in aliases:
+            phrase = _voice_billing_normalize(alias)
+            if (
+                len(phrase) >= 2
+                and re.search(r"(?<!\\w)" + re.escape(phrase) + r"(?!\\w)", context)
+                and phrase not in phrases
+            ):
+                phrases.append(phrase)
+    return sorted(phrases, key=lambda phrase: (len(phrase.split()), len(phrase)), reverse=True)
+
+
+def _voice_billing_canonical_unit_label(value: str) -> str:
+    """Convert native-script unit aliases to stable POS unit labels."""
+    info = _vb_canonical_unit(value)
+    if info is None:
+        return re.sub(r"\\s+", " ", str(value or "")).strip()[:20]
+    if info.dimension == "mass":
+        return "kg" if info.factor == 1000 else "g"
+    if info.dimension == "volume":
+        return "l" if info.factor == 1000 else "ml"
+    if info.dimension == "count":
+        return "dozen" if info.factor == 12 else "pcs"
+    return info.name[:20]
+
+
 def _voice_billing_item_evidence_transcripts(
     raw_item: dict,
     product: Optional[Product],
@@ -2930,7 +2977,7 @@ def _voice_billing_item_evidence_transcripts(
     if current_index is None:
         current_index = 0
 
-    def anchors_for(row: dict, index: int) -> list[str]:
+    def anchors_for(row: dict, index: int, context: str) -> list[str]:
         values = [
             row.get("product_name_en"),
             row.get("product_name_local"),
@@ -2938,16 +2985,7 @@ def _voice_billing_item_evidence_transcripts(
         ]
         if index == current_index and product is not None:
             values.extend([product.product_name, product.sku])
-        normalized = []
-        for value in values:
-            phrase = _voice_billing_normalize(str(value or ""))
-            if len(phrase) >= 2 and phrase not in normalized:
-                normalized.append(phrase)
-        return sorted(normalized, key=len, reverse=True)
-
-    row_anchors = [anchors_for(row if isinstance(row, dict) else {}, index) for index, row in enumerate(rows)]
-    if not row_anchors[current_index]:
-        return ()
+        return _voice_billing_product_anchor_phrases(values, context)
 
     def quantity_start(prefix: str) -> Optional[int]:
         """Find the last explicit number+unit pair before a product anchor."""
@@ -3002,6 +3040,12 @@ def _voice_billing_item_evidence_transcripts(
         if not normalized_text:
             continue
 
+        row_anchors = [
+            anchors_for(row if isinstance(row, dict) else {}, index, normalized_text)
+            for index, row in enumerate(rows)
+        ]
+        if not row_anchors[current_index]:
+            continue
         spans: list[tuple[int, int, int]] = []
         ambiguous = False
         for index, phrases in enumerate(row_anchors):
@@ -3100,27 +3144,17 @@ def _voice_billing_unit_prefix_transcripts(
     requested sale quantity. In ordinary POS order, the spoken quantity/unit
     precedes the product name, so only that prefix may repair an omitted unit.
     """
-    anchors = []
-    for value in (
+    anchor_values = [
         raw_item.get("product_name_en"),
         raw_item.get("product_name_local"),
         raw_item.get("product_name"),
         product.product_name if product is not None else None,
         product.sku if product is not None else None,
-    ):
-        phrase = _voice_billing_normalize(str(value or ""))
-        if len(phrase) >= 2 and phrase not in anchors:
-            anchors.append(phrase)
-        # Speech may use a short catalog alias ("rice") rather than the full
-        # catalog name ("Sona Masoori Rice"). Token anchors still let us locate
-        # the product boundary without treating a later price as its quantity.
-        for token in phrase.split():
-            if len(token) >= 3 and token not in anchors:
-                anchors.append(token)
-    anchors.sort(key=len, reverse=True)
+    ]
     prefixes = []
     for transcript in item_transcripts:
         normalized = _voice_billing_normalize(transcript)
+        anchors = _voice_billing_product_anchor_phrases(anchor_values, normalized)
         positions = []
         for phrase in anchors:
             match = re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", normalized)
@@ -3144,20 +3178,12 @@ def _voice_billing_item_price_evidence_transcripts(
     of 2. A price after the item's name, or an explicitly currency-labelled
     amount before the name, is required.
     """
-    anchors = []
-    for value in (
+    anchor_values = [
         raw_item.get("product_name_en"),
         raw_item.get("product_name_local"),
         raw_item.get("product_name"),
         product.product_name if product is not None else None,
-    ):
-        normalized = _voice_billing_normalize(str(value or ""))
-        if normalized and normalized not in anchors:
-            anchors.append(normalized)
-        for token in normalized.split():
-            if len(token) >= 3 and token not in anchors:
-                anchors.append(token)
-    anchors.sort(key=lambda phrase: len(phrase.split()), reverse=True)
+    ]
     currency_cues = {
         "rs", "inr", "rupee", "rupees", "price", "cost",
         "₹", "ரூ", "రూ", "ರೂ", "રૂપ", "रु",
@@ -3166,7 +3192,9 @@ def _voice_billing_item_price_evidence_transcripts(
     }
     evidence = []
     for transcript in item_transcripts:
-        words = _voice_billing_normalize(transcript).split()
+        normalized_transcript = _voice_billing_normalize(transcript)
+        anchors = _voice_billing_product_anchor_phrases(anchor_values, normalized_transcript)
+        words = normalized_transcript.split()
         spans = []
         for phrase in anchors:
             phrase_words = phrase.split()
@@ -3501,6 +3529,7 @@ async def parse_voice_billing(
             spoken_unit = _vb_repair_spoken_unit(
                 unit_prefixes, _VOICE_BILLING_NUMBER_WORDS
             ) or ""
+        spoken_unit = _voice_billing_canonical_unit_label(spoken_unit)
         spoken_quantity = quantity
         # Ground quantity only against the number phrase before this product name.
         # A later price (for example "2 kg rice 60") must never validate a model
@@ -3624,7 +3653,24 @@ async def parse_voice_billing(
             price_context,
         ))
         if normalized_spoken_unit in weighted_units and kind in {"unit", "line_total"}:
-            kind = "unit" if explicit_rate else "line_total"
+            if explicit_rate:
+                kind = "unit"
+            elif kind == "unit" and product is not None:
+                # Promote a bare amount to line-total only when exact catalog
+                # arithmetic confirms it (e.g. 3 kg at ₹20/kg spoken as ₹60).
+                # Otherwise retain the extractor's unit-price interpretation.
+                try:
+                    reported_amount = Decimal(str(raw.get("spoken_price_amount")))
+                    expected_total = (
+                        Decimal(str(product.unit_price or 0)) * quantity
+                    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    if (
+                        expected_total > 0
+                        and reported_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == expected_total
+                    ):
+                        kind = "line_total"
+                except (InvalidOperation, TypeError, ValueError, ArithmeticError):
+                    pass
 
         # A price the speaker never said (invented, or computed by the model) must not reach
         # the bill as a "spoken" price: fall back to the catalog price and ask for review.
