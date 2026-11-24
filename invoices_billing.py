@@ -1499,16 +1499,18 @@ def create_invoice(
     # backend is authoritative: a client cannot accidentally omit a live
     # discount just because its local cache is stale.
     now_utc = datetime.utcnow()
-    active_flash_sale = (
-        db.query(FlashSale)
-        .filter(
-            FlashSale.user_id == shop_id,
-            FlashSale.is_active == True,
-            FlashSale.end_time > now_utc,
+    active_flash_sale = None
+    if not ai_assistant_invoice:
+        active_flash_sale = (
+            db.query(FlashSale)
+            .filter(
+                FlashSale.user_id == shop_id,
+                FlashSale.is_active == True,
+                FlashSale.end_time > now_utc,
+            )
+            .order_by(FlashSale.start_time.desc())
+            .first()
         )
-        .order_by(FlashSale.start_time.desc())
-        .first()
-    )
 
     prepared_line_items = []
     special_discount_total = Decimal("0")
