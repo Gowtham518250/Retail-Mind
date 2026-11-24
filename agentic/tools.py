@@ -28,7 +28,7 @@ from models import (
     Customer,
     FlashSale,
     Invoice,
-    KhataBalance,
+    PaymentStatus,
     OnlineOrder,
     Product,
     Worker,
@@ -249,7 +249,7 @@ def _customer_search(db: Session, shop_id: int, args: CustomerSearchArgs) -> dic
             {
                 "customer_id": int(row.id),
                 "name": str(row.customer_name or ""),
-                "phone": str(row.phone or ""),
+                "phone_last4": str(row.phone or "")[-4:],
             }
             for row in rows
         ],
@@ -324,30 +324,82 @@ def _attendance_summary(db: Session, shop_id: int, args: AttendanceSummaryArgs) 
 
 
 def _khata_summary(db: Session, shop_id: int) -> dict:
-    rows = (
-        db.query(KhataBalance)
-        .filter(KhataBalance.shop_id == shop_id, KhataBalance.khata_balance > 0)
-        .order_by(KhataBalance.khata_balance.desc())
-        .limit(10)
+    """Read pending receivables from the invoice-based /api/khata engine.
+
+    The legacy KhataBalance ledger is a separate data store; it must not be
+    blended into the newer invoice-derived pending-payments view.
+    """
+    today = datetime.now(IST).date()
+    week_end = today + timedelta(days=7)
+    invoices = (
+        db.query(Invoice)
+        .filter(
+            Invoice.user_id == shop_id,
+            Invoice.payment_status.in_([
+                PaymentStatus.UNPAID,
+                PaymentStatus.PARTIAL,
+                PaymentStatus.OVERDUE,
+            ]),
+            Invoice.status.notin_([InvoiceStatus.CANCELLED, InvoiceStatus.DRAFT]),
+        )
+        .order_by(Invoice.due_date.asc().nullslast(), Invoice.invoice_date.asc())
+        .limit(500)
         .all()
     )
-    total = (
-        db.query(func.coalesce(func.sum(KhataBalance.khata_balance), 0))
-        .filter(KhataBalance.shop_id == shop_id, KhataBalance.khata_balance > 0)
-        .scalar()
-    )
+    total_outstanding = Decimal("0.00")
+    total_overdue = Decimal("0.00")
+    due_this_week = Decimal("0.00")
+    customers: dict[str, dict[str, Any]] = {}
+
+    for invoice in invoices:
+        balance = max(
+            Decimal("0.00"),
+            _money(invoice.total_amount or 0) - _money(invoice.paid_amount or 0),
+        )
+        if balance <= Decimal("0.01"):
+            continue
+        total_outstanding += balance
+        due_date = invoice.due_date
+        if isinstance(due_date, str):
+            try:
+                due_date = datetime.strptime(due_date, "%Y-%m-%d").date()
+            except ValueError:
+                due_date = None
+        if due_date and due_date < today:
+            total_overdue += balance
+        elif due_date and today <= due_date <= week_end:
+            due_this_week += balance
+
+        phone = str(invoice.customer_phone or "").strip()
+        name = " ".join(str(invoice.customer_name or "Walk-in Customer").split())[:100]
+        key = phone or (f"id:{invoice.customer_id}" if invoice.customer_id else f"name:{name.casefold()}")
+        customer = customers.setdefault(
+            key,
+            {"name": name, "phone_last4": phone[-4:] if phone else "", "outstanding": Decimal("0.00")},
+        )
+        customer["outstanding"] += balance
+
+    top_customers = sorted(
+        customers.values(),
+        key=lambda customer: customer["outstanding"],
+        reverse=True,
+    )[:10]
     return {
-        "total_outstanding": float(_money(total or 0)),
-        "customers_returned": len(rows),
+        "period_as_of": today.isoformat(),
+        "total_outstanding": float(_money(total_outstanding)),
+        "total_overdue": float(_money(total_overdue)),
+        "due_this_week": float(_money(due_this_week)),
+        "pending_customers_count": len(customers),
         "top_customers": [
             {
-                "name": str(row.customer_name or "Customer"),
-                "phone_last4": str(row.customer_phone or "")[-4:],
-                "outstanding": float(_money(row.khata_balance or 0)),
+                "name": row["name"],
+                "phone_last4": row["phone_last4"],
+                "outstanding": float(_money(row["outstanding"])),
             }
-            for row in rows
+            for row in top_customers
         ],
-        "note": "Read-only summary. Use the existing Khata screen to record credit or repayment.",
+        "source": "invoice_based_pending_payment_engine",
+        "note": "Read-only receivables summary. No credit or repayment was recorded.",
     }
 
 
