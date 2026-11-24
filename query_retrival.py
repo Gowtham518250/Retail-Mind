@@ -1508,6 +1508,9 @@ _PRODUCT_SALES_QUERY_STOPWORDS = {
     "row", "invoice", "invoices", "bill", "bills", "billing", "customer",
     "customers", "client", "clients", "worker", "workers", "staff", "employee",
     "employees", "supplier", "suppliers", "category", "categories",
+    # Translation/ASR filler that can appear around product entities, e.g.
+    # "ghee based" when Telugu "nundi" is rendered as "based/from".
+    "based", "name", "named", "called", "productname",
     "highest", "most", "maximum", "max", "greatest", "top", "best", "largest",
     "lowest", "least", "minimum", "min",
     "january", "february", "march", "april", "may", "june", "july", "august",
