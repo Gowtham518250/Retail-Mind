@@ -126,3 +126,8 @@ def test_mcp_scopes_owner_request_to_authenticated_shop(monkeypatch):
 def test_mcp_exposes_attendance_preview_but_never_confirmation_tool():
     assert hasattr(mcp_module, "prepare_attendance_record")
     assert not hasattr(mcp_module, "confirm_attendance_record")
+
+
+def test_mcp_exposes_read_only_worker_directory():
+    assert hasattr(mcp_module, "list_shop_workers")
+    assert not hasattr(mcp_module, "update_worker_salary")
