@@ -204,7 +204,10 @@ def test_bill_follow_up_restores_item_source_for_numeric_price_grounding():
         ]
     }
     merged = _recent_bill_source_transcript(context, "ok create the bill with 10 rupees")
-    assert merged == "rice with price 200 with quantity 1"
+    assert merged == (
+        "rice with price 200 with quantity 1. Latest owner instruction: "
+        "ok create the bill with 10 rupees"
+    )
 
     # A complete new item request must not inherit an unrelated previous sale.
     fresh = _recent_bill_source_transcript(context, "add 2 milk at 60 rupees")
