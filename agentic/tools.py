@@ -717,7 +717,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     }
 
 
-def _prepare_khata_payment(db: Session, shop_id: int, conversation_id: str, args: KhataPaymentPreviewArgs) -> dict:
+def _prepare_khata_payment(db: Session, shop_id: int, conversation_id: str, request_text: str, args: KhataPaymentPreviewArgs) -> dict:
     payment_method = (args.payment_method or "CASH").strip().upper()
     if payment_method not in {"CASH", "UPI", "CARD", "TRANSFER"}:
         raise ValueError("Unsupported payment method")
@@ -736,7 +736,7 @@ def _prepare_khata_payment(db: Session, shop_id: int, conversation_id: str, args
         raise ValueError(f"Payment cannot exceed the invoice balance of ₹{outstanding:.2f}")
 
     idempotency_key = hashlib.sha256(
-        f"{shop_id}:{conversation_id}:KHATA_PAYMENT:{invoice.id}:{amount}:{payment_method}".encode()
+        f"{shop_id}:{conversation_id}:KHATA_PAYMENT:{request_text}:{invoice.id}:{amount}:{payment_method}".encode()
     ).hexdigest()
     prior = db.query(AgentPendingAction).filter(
         AgentPendingAction.user_id == shop_id,
@@ -946,7 +946,7 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
             result = await _prepare_bill(db, context)
         elif tool_name == "prepare_invoice_payment":
             result = _prepare_khata_payment(
-                db, shop_id, conversation_id, KhataPaymentPreviewArgs.model_validate(args)
+                db, shop_id, conversation_id, str(context.get("user_text") or ""), KhataPaymentPreviewArgs.model_validate(args)
             )
         elif tool_name == "prepare_online_order_transition":
             result = _prepare_order_transition(
