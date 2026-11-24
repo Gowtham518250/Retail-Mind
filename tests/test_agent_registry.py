@@ -201,6 +201,9 @@ def test_registry_keeps_delivery_and_legacy_financial_writes_disabled(monkeypatc
     assert capabilities["attendance.manage"]["implemented"] is True
     assert capabilities["attendance.manage"]["enabled"] is True
     assert capabilities["attendance.manage"]["requires_confirmation"] is True
+    assert capabilities["workers.lookup"]["implemented"] is True
+    assert capabilities["workers.lookup"]["enabled"] is True
+    assert capabilities["workers.lookup"]["requires_confirmation"] is False
 
 
 def test_agent_routes_are_registered():
