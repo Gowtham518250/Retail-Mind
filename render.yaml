@@ -50,3 +50,9 @@ services:
         value: bulbul:v3
       - key: SARVAM_TTS_SPEAKER
         value: shubh
+      - key: RETAIL_MIND_MCP_ENABLED
+        value: "false"
+      - key: RETAIL_MIND_MCP_ALLOWED_HOSTS
+        sync: false
+      - key: RETAIL_MIND_MCP_ALLOWED_ORIGINS
+        sync: false
