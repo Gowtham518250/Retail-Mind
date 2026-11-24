@@ -24,6 +24,7 @@ from agentic.tools import (
     _inventory_search,
     _is_bill_follow_up_message,
     _recent_bill_context,
+    _recent_bill_source_transcript,
 )
 from models import (
     AgentConversation, AgentMessage, AgentPendingAction, AgentToolExecution,
@@ -188,6 +189,22 @@ def test_bill_follow_up_uses_only_recent_owner_authored_context():
     assert "rice with price 200 with quantity 1" in result
     assert "9876543210" not in result
     assert _recent_bill_context(context, "add 2 milk at ₹60") is None
+
+
+def test_bill_follow_up_restores_item_source_for_numeric_price_grounding():
+    context = {
+        "recent_user_messages": [
+            "rice with price 200 with quantity 1",
+            "just create the bill with 200",
+        ]
+    }
+    merged = _recent_bill_source_transcript(context, "ok create the bill with 10 rupees")
+    assert "rice with price 200 with quantity 1" in merged
+    assert "Latest owner instruction: ok create the bill with 10 rupees" in merged
+
+    # A complete new item request must not inherit an unrelated previous sale.
+    fresh = _recent_bill_source_transcript(context, "add 2 milk at 60 rupees")
+    assert fresh == "add 2 milk at 60 rupees"
 
 
 def test_pending_action_preview_hash_binds_shop_and_payload():
