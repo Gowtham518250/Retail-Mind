@@ -605,6 +605,12 @@ def test_empty_inventory_can_still_parse_custom_sale_item(monkeypatch):
 
 
 def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypatch):
+    import inventory as inventory_module
+
+    def forbidden_shop_alias_lookup(*args, **kwargs):
+        raise AssertionError("shop aliases must not rewrite the transcript before AI extraction")
+
+    monkeypatch.setattr(inventory_module, "_voice_billing_active_alias_rows", forbidden_shop_alias_lookup)
     result, capture, _, _ = _run_voice_billing_endpoint(
         monkeypatch,
         [{
@@ -631,6 +637,7 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
     assert "రెండు కిలోల డ్రాగన్ ఫ్రూట్ ముప్పై" in extraction_prompt
     assert "2 kg Dragon Fruit 30" in extraction_prompt
     assert result["interpreted_text_en"] == "2 kg Dragon Fruit 30"
+    assert result["voice_aliases_applied"] is False
     assert result["items"][0]["product_id"] is None
     assert result["items"][0]["product_name"] == "Dragon Fruit"
 
