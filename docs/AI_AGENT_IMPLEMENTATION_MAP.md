@@ -26,6 +26,7 @@ The current implementation uses:
 | Attendance lookup | Daily shop-scoped attendance summary | Read-only |
 | Worker directory | Shop-owned worker IDs, names, positions and statuses to resolve employee names; excludes salary, PIN, phone and address | Read-only |
 | Attendance correction | Five-minute preview scoped to one owned worker and date; rechecks the daily row and preserves check-in/out timestamps and working hours; emits the existing durable sync/realtime event after owner confirmation | Confirmed employee-data write |
+| Stock movement | Restock (IN), stock-out (OUT) or set-count adjustment (ADJUSTMENT) via existing row-locked StockService; validates available stock, rechecks stale preview and writes a unique movement idempotency key plus durable inventory sync event | Confirmed inventory write |
 | Khata lookup | Invoice-derived pending-payment / receivables view; separate from the legacy `KhataBalance` ledger | Read-only |
 | Legacy Khata credit/repayment | Five-minute preview against one phone-number-keyed customer balance; owner confirmation rechecks the balance and writes `KhataBalance`, `KhataHistory` and `UniversalTransaction` atomically with replay protection | Confirmed financial write |
 | Online-order lookup | Shop-scoped order status counts and recent order summaries | Read-only |
