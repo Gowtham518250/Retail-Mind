@@ -886,6 +886,14 @@ def confirm_agent_action(
             action_id=action_id,
             supplied_preview_hash=supplied_preview_hash,
         )
+    if action_type == "INVENTORY_STOCK_MOVEMENT":
+        from .inventory_actions import confirm_inventory_stock_movement
+        return confirm_inventory_stock_movement(
+            db,
+            shop_id=shop_id,
+            action_id=action_id,
+            supplied_preview_hash=supplied_preview_hash,
+        )
     if action_type == "ORDER_TRANSITION":
         return confirm_order_transition_action(
             db, shop_id=shop_id, current_user=current_user,
