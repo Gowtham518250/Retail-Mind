@@ -85,6 +85,13 @@ class KhataLedgerMovementArgs(ToolArgs):
     description: Optional[str] = Field(default=None, max_length=180)
 
 
+class AttendanceRecordPreviewArgs(ToolArgs):
+    worker_id: int = Field(..., gt=0)
+    attendance_date: date
+    status: Literal["PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE"]
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
 TOOL_DEFINITIONS = [
     {
         "type": "function",
@@ -198,6 +205,24 @@ TOOL_DEFINITIONS = [
                 "additionalProperties": False,
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prepare_attendance_record",
+            "description": "Prepare an owner-confirmed daily attendance correction for one worker. Requires worker ID, exact date and status. Check-in/out times and working hours are preserved; no write occurs until confirmation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "worker_id": {"type": "integer", "minimum": 1},
+                    "attendance_date": {"type": "string", "format": "date"},
+                    "status": {"type": "string", "enum": ["PRESENT", "ABSENT", "LEAVE", "HALF_DAY", "LATE"]},
+                    "notes": {"type": "string", "maxLength": 500}
+                },
+                "required": ["worker_id", "attendance_date", "status"],
+                "additionalProperties": False
+            }
+        }
     },
     {
         "type": "function",
@@ -978,6 +1003,19 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
         elif tool_name == "prepare_online_order_transition":
             result = _prepare_order_transition(
                 db, shop_id, conversation_id, OrderTransitionPreviewArgs.model_validate(args)
+            )
+        elif tool_name == "prepare_attendance_record":
+            parsed = AttendanceRecordPreviewArgs.model_validate(args)
+            from .attendance_actions import prepare_attendance_record
+            result = prepare_attendance_record(
+                db,
+                shop_id=shop_id,
+                conversation_id=conversation_id,
+                request_text=str(context.get("user_text") or ""),
+                worker_id=parsed.worker_id,
+                attendance_date=parsed.attendance_date,
+                status=parsed.status,
+                notes=parsed.notes,
             )
         elif tool_name == "prepare_khata_ledger_movement":
             parsed = KhataLedgerMovementArgs.model_validate(args)
