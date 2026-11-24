@@ -1672,7 +1672,7 @@ def _fast_product_sales_history_query(
         "AS total_quantity_sold, "
         "COALESCE(SUM(line_total) OVER (PARTITION BY LOWER(product_name)), 0)::numeric "
         "AS total_sales_revenue, "
-        "COUNT(*) OVER (PARTITION BY LOWER(product_name))::bigint AS total_history_rows "
+        "COUNT(*) OVER ()::bigint AS total_history_rows "
         "FROM chosen_sales "
         "WHERE NULLIF(BTRIM(product_name), '') IS NOT NULL "
         "ORDER BY sale_date DESC NULLS LAST, invoice_id DESC NULLS LAST, source_row_id DESC "
