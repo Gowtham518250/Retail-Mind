@@ -716,19 +716,11 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         }
 
     shop_id = int(context["shop_id"])
-    db_products: dict[int, Product] = {}
+    # AI-created invoices are bill-only by default. The spoken item and price
+    # are invoice facts; catalog matching, master-price updates and inventory
+    # deductions are deliberately outside this workflow.
     output_lines = []
     total = Decimal("0.00")
-    flash_sale = (
-        db.query(FlashSale)
-        .filter(
-            FlashSale.user_id == shop_id,
-            FlashSale.is_active.is_(True),
-            FlashSale.end_time > datetime.utcnow(),
-        )
-        .order_by(FlashSale.start_time.desc())
-        .first()
-    )
 
     for item in parsed["items"][:30]:
         if item.get("needs_confirmation") or item.get("price_missing") or item.get("price_needs_confirmation"):
@@ -749,71 +741,30 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         if unit_price <= 0 or unit_price > Decimal("10000000"):
             return {"success": False, "needs_clarification": True, "message": f"Please enter a valid selling price for {item.get('product_name') or 'this item'}."}
 
-        product_id = item.get("product_id")
+        # Never resolve or attach a catalog product for an AI bill. This is
+        # intentional even when a catalog product with the same name exists:
+        # the cashier may sell at a negotiated price without mutating stock.
         product = None
-        if product_id is not None:
-            try:
-                product = db.query(Product).filter(
-                    Product.id == int(product_id),
-                    Product.user_id == shop_id,
-                    Product.is_active.is_(True),
-                ).first()
-            except (TypeError, ValueError):
-                product = None
-            if product is None:
-                return {"success": False, "needs_clarification": True, "message": "A catalog match could not be verified. Please select the product again."}
-            db_products[int(product.id)] = product
-            if Decimal(str(product.current_stock or 0)) < quantity:
-                return {
-                    "success": False,
-                    "needs_clarification": True,
-                    "message": f"Insufficient stock for {product.product_name}. Available {product.current_stock} {product.unit}; requested {quantity}. Adjust the quantity or update stock first.",
-                }
-        else:
-            # The invoice route re-resolves by exact product name when product_id is
-            # absent. Reject a name that exactly matches a catalog item to avoid a
-            # surprise stock deduction after the preview.
-            duplicate = db.query(Product.id).filter(
-                Product.user_id == shop_id,
-                Product.is_active.is_(True),
-                func.lower(Product.product_name) == str(item.get("product_name") or "").strip().lower(),
-            ).first()
-            if duplicate:
-                return {
-                    "success": False,
-                    "needs_clarification": True,
-                    "message": "A product with that exact name exists in your catalog but was not confidently matched. Please select the catalog item first.",
-                }
-
         base_line = quantity * unit_price
         discount = Decimal("0.00")
         discount_reason = None
         discount_source = None
-        if flash_sale and product:
-            sale_category = str(flash_sale.category or "").strip().lower()
-            product_category = str(product.category or "").strip().lower()
-            applies = sale_category in {"all", "*", "all products"} or bool(sale_category and sale_category == product_category)
-            if applies:
-                discount = (base_line * Decimal(str(flash_sale.discount_pct or 0)) / Decimal("100")).quantize(Decimal("0.01"))
-                discount = min(base_line, max(Decimal("0"), discount))
-                if discount > 0:
-                    discount_reason = f"Flash Sale {float(flash_sale.discount_pct):g}%"
-                    discount_source = "flash_sale"
 
         line_total = max(Decimal("0"), base_line - discount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         total += line_total
         output_lines.append(
             {
-                "product_id": int(product.id) if product else None,
+                "product_id": None,
+                "stock_tracked": False,
                 "product_name": str(item.get("product_name") or "").strip()[:255],
                 "quantity": str(quantity.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)),
                 "unit_price": str(unit_price),
                 "discount_amount": str(discount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
-                "discount_reason": discount_reason,
-                "discount_source": discount_source,
+                "discount_reason": None,
+                "discount_source": None,
                 "line_total": float(line_total),
-                "stock_before": float(product.current_stock) if product else None,
-                "stock_after_preview": float(Decimal(str(product.current_stock)) - quantity) if product else None,
+                "stock_before": None,
+                "stock_after_preview": None,
             }
         )
 
@@ -881,7 +832,8 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         "payment_status": "UNPAID",
         "items": [
             {
-                "product_id": row["product_id"],
+                "product_id": None,
+                "stock_tracked": False,
                 "product_name": row["product_name"],
                 "quantity": float(row["quantity"]),
                 "unit_price": float(row["unit_price"]),
@@ -931,7 +883,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         "status": "PENDING",
         "preview_hash": preview_hash,
         "preview": preview,
-        "message": "Bill draft prepared. No invoice has been created and no stock has changed. Ask the owner to review and explicitly confirm this exact preview.",
+        "message": "Bill preview prepared using the owner's stated selling prices. This AI bill is not linked to inventory and will not change product master prices or stock. Review and explicitly confirm this exact preview.",
     }
 
 
