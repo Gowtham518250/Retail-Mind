@@ -42,6 +42,37 @@ def _hash(action_id: str, shop_id: int, preview: dict, payload: dict) -> str:
     }).encode("utf-8")).hexdigest()
 
 
+def _existing_attendance_note(raw_notes: str | None) -> str:
+    raw = str(raw_notes or "")
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if isinstance(data, dict) and "_retail_mind_sessions" in data:
+        return str(data.get("_retail_mind_agent_note") or "")
+    return raw
+
+
+def _merge_attendance_note(raw_notes: str | None, new_note: str | None) -> str | None:
+    """Merge human notes without destroying check-in session JSON in notes."""
+    clean = " ".join(str(new_note or "").split())[:500]
+    if not clean:
+        return raw_notes
+    raw = str(raw_notes or "")
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        data = None
+    if isinstance(data, dict) and isinstance(data.get("_retail_mind_sessions"), dict):
+        # Preserve the canonical active/completed shift metadata consumed by
+        # attendance._session_meta; keep the assistant note in a separate key.
+        data["_retail_mind_agent_note"] = clean
+        return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    if not raw.strip():
+        return clean
+    return (raw.rstrip() + "\n" + clean)[:1500]
+
+
 def _attendance_snapshot(row: Attendance | None) -> dict:
     if row is None:
         return {
@@ -97,7 +128,6 @@ def prepare_attendance_record(
     ).first()
     before = _attendance_snapshot(existing)
     action_id = str(uuid.uuid4())
-    notes_after = clean_notes if clean_notes else before["notes"]
     preview = {
         "operation": "UPDATE_ATTENDANCE",
         "worker_id": int(worker.id),
@@ -109,7 +139,7 @@ def prepare_attendance_record(
         "check_in_time_preserved": before["check_in_time"],
         "check_out_time_preserved": before["check_out_time"],
         "working_hours_preserved": before["working_hours"],
-        "notes": notes_after or None,
+        "notes": clean_notes or _existing_attendance_note(before["notes"]) or None,
         "requires_owner_confirmation": True,
         "expires_in_seconds": 300,
         "warning": "This changes the daily attendance status only. Existing check-in/out timestamps and calculated working hours are preserved.",
@@ -118,7 +148,7 @@ def prepare_attendance_record(
         "worker_id": int(worker.id),
         "attendance_date": attendance_date.isoformat(),
         "status": normalized_status,
-        "notes": notes_after or None,
+        "notes": clean_notes or None,
         "expected": before,
     }
     key = hashlib.sha256(_canonical({
@@ -235,12 +265,12 @@ def confirm_attendance_record(
             attendance_date=attendance_date,
             status=payload["status"],
             working_hours=0.0,
-            notes=payload.get("notes"),
+            notes=_merge_attendance_note(None, payload.get("notes")),
         )
         db.add(record)
     else:
         record.status = payload["status"]
-        record.notes = payload.get("notes")
+        record.notes = _merge_attendance_note(record.notes, payload.get("notes"))
     try:
         db.flush()
         # Use the same durable outbox and realtime event path as the existing
