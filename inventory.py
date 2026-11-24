@@ -48,6 +48,7 @@ from voice_billing_core import (
     spoken_unit_is_grounded as _vb_unit_is_grounded,
     repair_spoken_unit as _vb_repair_spoken_unit,
     stem_token as _vb_stem_token,
+    spoken_numbers as _vb_spoken_numbers,
 )
 from voice_asr_guard import (
     NO_SPEECH_MESSAGE as _ASR_NO_SPEECH_MESSAGE,
@@ -2528,6 +2529,18 @@ def _voice_billing_parse_model_decimal(value: Any, *, currency: bool = False) ->
         ]
     if len(tokens) == 1:
         return _voice_billing_number_value(tokens[0])
+    if tokens:
+        # Compose spoken values such as "fifty five", "one hundred twenty five"
+        # and native-language number phrases. The largest composed value is
+        # the complete spoken amount (the helper also returns individual words).
+        heard_values = _vb_spoken_numbers(
+            " ".join(tokens),
+            _VOICE_BILLING_NUMBER_WORDS,
+            _VOICE_BILLING_SCALE_WORDS,
+        )
+        positive_values = [amount for amount in heard_values if amount > 0]
+        if positive_values:
+            return max(positive_values)
     return None
 
 
