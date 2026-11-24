@@ -864,7 +864,7 @@ def test_spoken_weight_unit_does_not_silently_become_catalog_pieces(monkeypatch)
     assert item["catalog_matched"] is False
     assert item["unit"] == "kg"
     assert item["spoken_unit"] == "kg"
-    assert item["unit_mismatch"] is True
+    assert item["unit_mismatch"] is True, result
     assert item["needs_confirmation"] is True
 
 
