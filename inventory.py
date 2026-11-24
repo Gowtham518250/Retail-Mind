@@ -3186,6 +3186,16 @@ def _voice_billing_unit_prefix_transcripts(
                 positions.append(match.start())
         if positions:
             prefix = normalized[:min(positions)].strip()
+            # A currency-labelled amount before the product name is a price,
+            # not a quantity. Keep it available to the price-grounding helper,
+            # but do not let it disqualify the documented default quantity of 1.
+            prefix = re.sub(
+                r"(?:₹\\s*\\d+(?:\\.\\d+)?|\\b(?:rs\\.?|inr|rupees?|rupee)\\s*\\d+(?:\\.\\d+)?|"
+                r"\\b\\d+(?:\\.\\d+)?\\s*(?:rs\\.?|inr|rupees?|rupee)\\b)",
+                " ",
+                prefix,
+                flags=re.IGNORECASE,
+            ).strip()
             if prefix:
                 prefixes.append(prefix)
             continue
