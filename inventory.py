@@ -3633,10 +3633,14 @@ async def parse_voice_billing(
         # and never pick silently between equally plausible products (Lux 100g vs 150g).
         ambiguous_candidates: list[dict] = []
         match_reasons: list[str] = []
-        local_phrase = _voice_billing_normalize(str(raw.get("product_name_local") or ""))
         source_text = _voice_billing_normalize(parser_transcript)
-        local_name_is_spoken = bool(
-            local_phrase and f" {local_phrase} " in f" {source_text} "
+        extracted_phrases = [
+            _voice_billing_normalize(str(raw.get(field) or ""))
+            for field in ("product_name_local", "product_name_en", "product_name")
+        ]
+        local_name_is_spoken = any(
+            phrase and f" {phrase} " in f" {source_text} "
+            for phrase in extracted_phrases
         )
         resolution = (
             _vb_resolve_catalog_product(
