@@ -25,6 +25,7 @@ from agentic.tools import (
     _customer_search,
     _inventory_search,
     _is_bill_follow_up_message,
+    _clean_bill_instruction_filler,
     _recent_bill_context,
     _recent_bill_source_transcript,
     _prepare_bill,
@@ -191,6 +192,7 @@ def test_bill_follow_up_uses_only_recent_owner_authored_context():
     assert result is not None
     assert "rice with price 200 with quantity 1" in result
     assert "9876543210" not in result
+    assert "Latest owner reply: ok create the bill with 10 rupees" in result
     assert _recent_bill_context(context, "add 2 milk at ₹60") is None
 
 
@@ -202,8 +204,7 @@ def test_bill_follow_up_restores_item_source_for_numeric_price_grounding():
         ]
     }
     merged = _recent_bill_source_transcript(context, "ok create the bill with 10 rupees")
-    assert "rice with price 200 with quantity 1" in merged
-    assert "Latest owner instruction: ok create the bill with 10 rupees" in merged
+    assert merged == "rice with price 200 with quantity 1"
 
     # A complete new item request must not inherit an unrelated previous sale.
     fresh = _recent_bill_source_transcript(context, "add 2 milk at 60 rupees")
@@ -550,3 +551,67 @@ def test_business_operation_tools_are_not_exposed_without_owner_action_opt_in():
     assert action_names.issubset(all_names)
     assert "search_inventory" in read_only_names
     assert "get_sales_summary" in read_only_names
+
+
+def test_bill_instruction_filler_is_removed_without_changing_item_facts():
+    assert _clean_bill_instruction_filler(
+        "ghee 2 and iam approved to create bill"
+    ) == "ghee 2"
+    assert _recent_bill_source_transcript(
+        {"recent_user_messages": []},
+        "ghee 2 and i am approved to create bill",
+    ) == "ghee 2"
+
+
+def test_yes_confirmation_reuses_original_bill_source_and_records_reply():
+    context = {
+        "recent_user_messages": [
+            "ghee 2 and i am approved to create bill",
+        ]
+    }
+    assert _recent_bill_source_transcript(context, "Yes") == "ghee 2"
+    parser_context = _recent_bill_context(context, "Yes")
+    assert "Earlier owner message 1: ghee 2" in parser_context
+    assert "Latest owner reply: Yes" in parser_context
+    assert "Latest owner instruction: Yes" not in parser_context
+
+
+def test_grounded_bill_facts_bypass_generic_model_clarification_and_ask_only_for_price(monkeypatch):
+    import inventory as inventory_module
+
+    async def fake_parse(request, *, user_id, db):
+        return {
+            "success": True,
+            "needs_clarification": True,
+            "clarification_question": "Please repeat the product name and quantity.",
+            "items": [{
+                "product_name": "ghee",
+                "quantity": 2,
+                "quantity_grounded": True,
+                "unit_grounded": True,
+                "unit_mismatch": False,
+                "ambiguous_candidates": [],
+                "confidence_inferred": False,
+                "price_role_inferred": False,
+                "needs_confirmation": True,
+                "price_missing": True,
+                "price_needs_confirmation": True,
+                "price_warning": "Please provide the selling price for ghee.",
+            }],
+        }
+
+    monkeypatch.setattr(inventory_module, "parse_voice_billing", fake_parse)
+    result = asyncio.run(_prepare_bill(
+        object(),
+        {
+            "shop_id": 42,
+            "conversation_id": "a4b47f00-94a6-40e6-8540-72c5db03f501",
+            "user_text": "Yes",
+            "language_code": "en",
+            "recent_user_messages": ["ghee 2 and i am approved to create bill"],
+        },
+    ))
+    assert result["success"] is False
+    assert result["needs_clarification"] is True
+    assert result["message"] == "Please provide the selling price for ghee."
+    assert "repeat the product name" not in result["message"].lower()
