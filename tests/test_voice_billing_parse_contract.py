@@ -231,6 +231,8 @@ def _run_voice_billing_endpoint(
     catalog_products=None,
     translated_text="2 kg Dragon Fruit 30",
     fast_path=False,
+    needs_clarification=False,
+    clarification_question="",
 ):
     import asyncio
     import json
@@ -252,6 +254,25 @@ def _run_voice_billing_endpoint(
         unit="kg",
     )
     products = [product] if catalog_products is None else catalog_products
+    # Older regression fixtures used a catalog ID as if it were part of the
+    # model response. The new extractor is catalog-blind, so simulate its
+    # required product-name output in the fixture before returning the mock AI
+    # payload. Production code ignores model-supplied IDs.
+    for model_item in model_items:
+        if not isinstance(model_item, dict):
+            continue
+        if not any(str(model_item.get(key) or "").strip() for key in
+                   ("product_name_en", "product_name_local", "product_name")):
+            try:
+                legacy_id = int(model_item.get("product_id") or 0)
+            except (TypeError, ValueError):
+                legacy_id = 0
+            matched_fixture = next(
+                (candidate for candidate in products if int(getattr(candidate, "id", 0) or 0) == legacy_id),
+                None,
+            )
+            if matched_fixture is not None:
+                model_item["product_name_en"] = str(matched_fixture.product_name or "")
 
     class FakeQuery:
         def __init__(self):
@@ -278,8 +299,8 @@ def _run_voice_billing_endpoint(
     api_capture = {"requests": [], "call_order": []}
     response_content = json.dumps({
         "items": model_items,
-        "needs_clarification": False,
-        "clarification_question": "",
+        "needs_clarification": needs_clarification,
+        "clarification_question": clarification_question,
     })
 
     class FakeResponse:
@@ -329,7 +350,7 @@ def _run_voice_billing_endpoint(
     ))
     return result, api_capture, db, products
 
-def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
+def test_ai_extracts_names_before_server_side_catalog_resolution(monkeypatch):
     result, api_capture, db, products = _run_voice_billing_endpoint(
         monkeypatch,
         [{
@@ -349,6 +370,9 @@ def test_groq_response_is_validated_against_catalog_ids(monkeypatch):
     assert result["items"][0]["quantity"] == 2.0
     assert result["items"][0]["unit_price"] == 75.0
     assert result["items"][0]["price_source"] == "spoken_unit"
+    extraction_prompt = api_capture["request"]["messages"][1]["content"]
+    assert '"product_id"' not in extraction_prompt
+    assert "Sona Masoori Rice" not in extraction_prompt
     assert api_capture["request"]["response_format"] == {"type": "json_object"}
     assert api_capture["headers"]["Authorization"] == "Bearer unit-test-key"
     # The endpoint's SQLAlchemy query must scope inventory to the authenticated account.
@@ -586,6 +610,7 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
         [{
             "product_id": None,
             "product_name_en": "Dragon Fruit",
+            "product_name_local": "డ్రాగన్ ఫ్రూట్",
             "quantity": 2,
             "spoken_price_amount": 30,
             "spoken_price_kind": "unit",
@@ -598,8 +623,11 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
 
     assert capture["call_order"] == ["translation", "extraction"]
     extraction_prompt = capture["request"]["messages"][1]["content"]
-    assert "English-normalized transcript (product matching aid only; do not let translation change numbers): 2 kg Dragon Fruit 30" in extraction_prompt
-    assert "Original ASR transcript (authoritative evidence" in extraction_prompt
+    assert "English translation (secondary language aid only; do not override the original transcript): 2 kg Dragon Fruit 30" in extraction_prompt
+    assert "Original ASR transcript (authoritative for names and all numeric values)" in extraction_prompt
+    assert "Do not output product IDs, SKUs, catalog names, catalog prices" in extraction_prompt
+    assert '"product_id"' not in extraction_prompt
+    assert "Authenticated shop catalog candidates" not in extraction_prompt
     assert "రెండు కిలోల డ్రాగన్ ఫ్రూట్ ముప్పై" in extraction_prompt
     assert "2 kg Dragon Fruit 30" in extraction_prompt
     assert result["interpreted_text_en"] == "2 kg Dragon Fruit 30"
