@@ -84,9 +84,11 @@ def synthesize_with_sarvam(*, text: str, language_code: str = "en", api_key: str
         raise SarvamTTSError(None) from exc
 
     audio_parts = payload.get("audios")
-    if not isinstance(audio_parts, list) or not audio_parts:
+    # A single text input should produce exactly one corresponding audio clip.
+    # Concatenating multiple WAV base64 clips would corrupt the response payload.
+    if not isinstance(audio_parts, list) or len(audio_parts) != 1:
         raise SarvamTTSError(502)
-    encoded = "".join(str(part or "") for part in audio_parts)
+    encoded = str(audio_parts[0] or "")
     if not encoded or len(encoded) > (MAX_TTS_AUDIO_BYTES * 4 // 3 + 16):
         raise SarvamTTSError(502)
     try:
