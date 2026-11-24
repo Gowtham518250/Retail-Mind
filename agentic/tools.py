@@ -92,6 +92,14 @@ class AttendanceRecordPreviewArgs(ToolArgs):
     notes: Optional[str] = Field(default=None, max_length=500)
 
 
+class InventoryStockMovementArgs(ToolArgs):
+    product_id: int = Field(..., gt=0)
+    movement_type: Literal["IN", "OUT", "ADJUSTMENT"]
+    # For ADJUSTMENT this is the target on-hand quantity; IN/OUT use a delta.
+    quantity: Decimal = Field(..., ge=0, le=Decimal("100000000"))
+    reason: Optional[str] = Field(default=None, max_length=180)
+
+
 TOOL_DEFINITIONS = [
     {
         "type": "function",
@@ -213,6 +221,24 @@ TOOL_DEFINITIONS = [
                 "additionalProperties": False,
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prepare_inventory_stock_movement",
+            "description": "Prepare an owner-confirmed stock movement for an active product in the authenticated shop. IN adds stock, OUT removes stock, ADJUSTMENT sets the target on-hand quantity. Requires exact product ID and quantity; no stock changes until owner confirmation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {"type": "integer", "minimum": 1},
+                    "movement_type": {"type": "string", "enum": ["IN", "OUT", "ADJUSTMENT"]},
+                    "quantity": {"type": "number", "minimum": 0, "maximum": 100000000},
+                    "reason": {"type": "string", "maxLength": 180}
+                },
+                "required": ["product_id", "movement_type", "quantity"],
+                "additionalProperties": false
+            }
+        }
     },
     {
         "type": "function",
@@ -1037,6 +1063,19 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
         elif tool_name == "prepare_online_order_transition":
             result = _prepare_order_transition(
                 db, shop_id, conversation_id, OrderTransitionPreviewArgs.model_validate(args)
+            )
+        elif tool_name == "prepare_inventory_stock_movement":
+            parsed = InventoryStockMovementArgs.model_validate(args)
+            from .inventory_actions import prepare_inventory_stock_movement
+            result = prepare_inventory_stock_movement(
+                db,
+                shop_id=shop_id,
+                conversation_id=conversation_id,
+                request_text=str(context.get("user_text") or ""),
+                product_id=parsed.product_id,
+                movement_type=parsed.movement_type,
+                quantity=parsed.quantity,
+                reason=parsed.reason,
             )
         elif tool_name == "prepare_attendance_record":
             parsed = AttendanceRecordPreviewArgs.model_validate(args)
