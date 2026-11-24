@@ -65,5 +65,6 @@ jobs:
           python -m pytest -q \
             tests/test_agent_registry.py \
             tests/test_agent_mcp.py \
+            tests/test_agent_khata.py \
             tests/test_payment_contract.py \
             tests/test_backend_audit_regressions.py
