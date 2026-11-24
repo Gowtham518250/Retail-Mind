@@ -286,6 +286,7 @@ def _run_voice_billing_endpoint(
             return self
 
         def all(self):
+            api_capture["call_order"].append("catalog")
             return products
 
     class FakeDb:
@@ -627,7 +628,7 @@ def test_non_english_speech_is_translated_before_catalog_and_extraction(monkeypa
         translated_text="2 kg Dragon Fruit 30",
     )
 
-    assert capture["call_order"] == ["translation", "extraction"]
+    assert capture["call_order"] == ["translation", "extraction", "catalog"]
     extraction_prompt = capture["request"]["messages"][1]["content"]
     assert "English translation (secondary language aid only; do not override the original transcript): 2 kg Dragon Fruit 30" in extraction_prompt
     assert "Original ASR transcript (authoritative for names and all numeric values)" in extraction_prompt
@@ -684,6 +685,7 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
 
     def fake_assess(payload, **kwargs):
         captured["assessed_text"] = payload["text"]
+        captured["assess_kwargs"] = kwargs
         return SimpleNamespace(
             accepted=True, reason="ok_unscored", text=payload["text"],
             kept_segments=0, dropped_segments=0, public=lambda: {"accepted": True},
@@ -715,6 +717,7 @@ def test_audio_endpoint_uses_sarvam_then_passes_transcript_to_parser(monkeypatch
 
     assert captured["transcribe_args"]["api_key"] == "unit-test-key"
     assert captured["transcribe_args"]["keyterms"] == []
+    assert captured["assess_kwargs"].get("catalog_names") == []
     assert captured["transcribe_args"]["language_code"] == "auto"
     assert captured["assessed_text"] == "2 kg rice 50"
     assert captured["transcript"] == "2 kg rice 50"
