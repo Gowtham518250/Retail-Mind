@@ -823,6 +823,8 @@ def test_voice_model_numeric_fields_accept_telugu_digits_and_currency_symbols():
     assert inventory_module._voice_billing_parse_model_decimal("౨ కేజీలు") == Decimal("2")
     assert inventory_module._voice_billing_parse_model_decimal("₹५०.", currency=True) == Decimal("50")
     assert inventory_module._voice_billing_parse_model_decimal("యాభై రూపాయలు", currency=True) == Decimal("50")
+    assert inventory_module._voice_billing_parse_model_decimal("fifty five rupees", currency=True) == Decimal("55")
+    assert inventory_module._voice_billing_parse_model_decimal("one hundred twenty five", currency=True) == Decimal("125")
     assert inventory_module._voice_billing_parse_confidence("high") == 0.85
     assert inventory_module._voice_billing_parse_confidence(None) is None
 
