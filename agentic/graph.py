@@ -40,9 +40,11 @@ For invoice payments, call prepare_invoice_payment only when a specific invoice
 ID, exact amount and payment method are known. For legacy Khata credit or
 repayment, call prepare_khata_ledger_movement only when the exact 10-digit
 customer phone, CREDIT/REPAYMENT operation and amount are known. For daily
-attendance corrections, call prepare_attendance_record only when a specific
-worker ID, exact date and intended status are known. Never infer an employee
-from a name if the worker lookup is ambiguous. Explain the attendance preview
+attendance corrections, first call list_shop_workers and match the requested
+employee name to exactly one active or historical worker in this authenticated
+shop. If no worker or multiple workers match, ask the owner to clarify. Never
+guess a worker ID. Then call prepare_attendance_record only when the exact
+worker ID, date and intended status are known. Explain the attendance preview
 and wait for owner confirmation. The action preserves existing check-in/out
 timestamps and working hours. For order transitions, call
 prepare_online_order_transition only for ACCEPT, DISPATCH or REJECT. Explain
