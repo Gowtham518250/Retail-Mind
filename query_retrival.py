@@ -44,7 +44,7 @@ from models import AIQueryHistory, Attendance, Worker
 
 BASE_DIR = Path(__file__).resolve().parent
 
-QUERY_ENGINE_VERSION = "2026-11-24-product-sales-history-v13"
+QUERY_ENGINE_VERSION = "2026-11-25-universal-entity-grounding-v14"
 
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -4914,6 +4914,10 @@ async def ask_query(
 
     - Carefully understand the user's question.
     - Examine all retrieved table information.
+    - Resolve product, customer and worker names using the authenticated shop's verified entity context. The context is evidence for spelling only, not permission to access another shop.
+    - When a verified entity is present and relevant to the question, apply its exact canonical name as a filter to the documented entity column. Do not broaden a named-entity question into a whole-shop total.
+    - Never invent entity IDs. Join to an entity table only through relationships explicitly documented in the retrieved catalog, and retain the authenticated :user_id scope on every tenant-owned table.
+    - If the user refers to an entity but no verified candidate is present, use a safe name search only against documented columns; if identity remains ambiguous, ask for clarification rather than selecting an arbitrary record.
     - Use ONLY tables, columns, and relationships explicitly present in the retrieved catalog.
     - Treat QUERY GUIDANCE as authoritative business semantics.
     - Generate PostgreSQL-compatible SQL.
@@ -4987,7 +4991,16 @@ async def ask_query(
         f"limit_chars={schema_context_limit}"
     )
 
-    planner_context = json.dumps({'plan': query_plan, 'date_scope': {'kind': date_scope.get('kind'), 'start_date': date_scope.get('start_date').isoformat() if date_scope.get('start_date') else None, 'end_date': date_scope.get('end_date').isoformat() if date_scope.get('end_date') else None, 'label': date_scope.get('label')}}, ensure_ascii=False)
+    planner_context = json.dumps({
+        'plan': query_plan,
+        'date_scope': {
+            'kind': date_scope.get('kind'),
+            'start_date': date_scope.get('start_date').isoformat() if date_scope.get('start_date') else None,
+            'end_date': date_scope.get('end_date').isoformat() if date_scope.get('end_date') else None,
+            'label': date_scope.get('label'),
+        },
+        'verified_shop_entities': resolved_shop_entities,
+    }, ensure_ascii=False)
     formatted_prompt = prompt.format(
             retrieved_table_information=retrived_table_information_str,
             question=query
