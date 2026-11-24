@@ -356,6 +356,23 @@ def update_agent_settings(
 
     current = _read_agent_preferences(db, shop_id)
     current.update(updates)
+
+    # The parent assistant must be enabled before its optional modes. Turning
+    # the parent off cascades off voice and business operations as well.
+    if updates.get("assistant_enabled") is False:
+        current["voice_enabled"] = False
+        current["actions_enabled"] = False
+    elif (
+        updates.get("voice_enabled") is True or updates.get("actions_enabled") is True
+    ) and current["assistant_enabled"] is not True:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "AGENT_ASSISTANT_REQUIRED",
+                "message": "Enable the AI shop assistant before enabling voice or business operations.",
+            },
+        )
+
     db.execute(text("""
         INSERT INTO rm_shop_agent_settings (
             shop_id, assistant_enabled, voice_enabled, actions_enabled
