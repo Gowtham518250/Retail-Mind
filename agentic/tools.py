@@ -30,6 +30,7 @@ from models import (
     Invoice,
     PaymentStatus,
     OnlineOrder,
+    Payment,
     Product,
     Worker,
     InvoiceStatus,
@@ -63,6 +64,17 @@ class AttendanceSummaryArgs(ToolArgs):
 
 class OrderSummaryArgs(ToolArgs):
     status: Optional[str] = Field(default=None, max_length=24)
+
+
+class KhataPaymentPreviewArgs(ToolArgs):
+    invoice_id: int = Field(..., gt=0)
+    amount: Decimal = Field(..., gt=0, le=Decimal("100000000"))
+    payment_method: str = Field(default="CASH", max_length=16)
+
+
+class OrderTransitionPreviewArgs(ToolArgs):
+    order_id: int = Field(..., gt=0)
+    action: str = Field(..., max_length=16)
 
 
 TOOL_DEFINITIONS = [
@@ -144,6 +156,39 @@ TOOL_DEFINITIONS = [
             "name": "prepare_bill_from_current_message",
             "description": "Prepare a draft bill from the user's exact current message using Retail Mind's existing voice-billing parser and the authenticated shop catalog. It never creates an invoice or deducts stock. It takes no arguments.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prepare_invoice_payment",
+            "description": "Prepare an owner-confirmed payment entry for one specific unpaid/part-paid invoice. It never records the payment until the owner confirms the exact preview.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "minimum": 1},
+                    "amount": {"type": "number", "exclusiveMinimum": 0, "maximum": 100000000},
+                    "payment_method": {"type": "string", "enum": ["CASH", "UPI", "CARD", "TRANSFER"]},
+                },
+                "required": ["invoice_id", "amount"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prepare_online_order_transition",
+            "description": "Prepare an owner-confirmed preview to ACCEPT, DISPATCH or REJECT one online order. DELIVERY is excluded because it requires the customer's OTP; cancellation/refunds are not enabled.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "integer", "minimum": 1},
+                    "action": {"type": "string", "enum": ["ACCEPT", "DISPATCH", "REJECT"]},
+                },
+                "required": ["order_id", "action"],
+                "additionalProperties": False,
+            },
         },
     },
 ]
@@ -672,6 +717,198 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     }
 
 
+def _prepare_khata_payment(db: Session, shop_id: int, conversation_id: str, args: KhataPaymentPreviewArgs) -> dict:
+    payment_method = (args.payment_method or "CASH").strip().upper()
+    if payment_method not in {"CASH", "UPI", "CARD", "TRANSFER"}:
+        raise ValueError("Unsupported payment method")
+    invoice = db.query(Invoice).filter(
+        Invoice.id == args.invoice_id,
+        Invoice.user_id == shop_id,
+        Invoice.status.notin_([InvoiceStatus.CANCELLED, InvoiceStatus.DRAFT]),
+    ).with_for_update().first()
+    if invoice is None:
+        raise ValueError("Invoice not found in this shop")
+    outstanding = max(Decimal("0.00"), _money(invoice.total_amount or 0) - _money(invoice.paid_amount or 0))
+    amount = _money(args.amount)
+    if outstanding <= Decimal("0.01"):
+        raise ValueError("This invoice has no outstanding balance")
+    if amount > outstanding:
+        raise ValueError(f"Payment cannot exceed the invoice balance of ₹{outstanding:.2f}")
+
+    idempotency_key = hashlib.sha256(
+        f"{shop_id}:{conversation_id}:KHATA_PAYMENT:{invoice.id}:{amount}:{payment_method}".encode()
+    ).hexdigest()
+    prior = db.query(AgentPendingAction).filter(
+        AgentPendingAction.user_id == shop_id,
+        AgentPendingAction.idempotency_key == idempotency_key,
+    ).first()
+    if prior:
+        if prior.status in {"PENDING", "EXECUTING", "COMPLETED"}:
+            return {
+                "success": True,
+                "duplicate_request": True,
+                "action_id": prior.id,
+                "status": prior.status,
+                "preview_hash": prior.preview_hash,
+                "preview": prior.preview,
+                "message": "This payment request already has a confirmation action. No second preview was created.",
+            }
+        return {"success": False, "needs_clarification": True, "message": "This payment request already expired or failed. Start a new request."}
+
+    action_id = str(uuid.uuid4())
+    preview = {
+        "operation": "RECORD_INVOICE_PAYMENT",
+        "invoice_id": int(invoice.id),
+        "invoice_number": str(invoice.invoice_number),
+        "customer_name": str(invoice.customer_name or "Customer"),
+        "customer_phone_last4": str(invoice.customer_phone or "")[-4:],
+        "outstanding_before": float(outstanding),
+        "payment_amount": float(amount),
+        "payment_method": payment_method,
+        "currency": "INR",
+        "requires_owner_confirmation": True,
+        "expires_in_seconds": 300,
+        "warning": "This records a payment entry; it does not independently verify a bank transfer or cash receipt.",
+    }
+    payload = {
+        "invoice_id": int(invoice.id),
+        "invoice_number": str(invoice.invoice_number),
+        "amount": str(amount),
+        "payment_method": payment_method,
+        "idempotency_key": f"agent-khata-{action_id}",
+        "notes": "Owner-confirmed payment recorded via Retail Mind assistant",
+    }
+    preview_hash = hashlib.sha256(
+        _json_dump({"action_id": action_id, "shop_id": shop_id, "preview": preview, "payload": payload}).encode()
+    ).hexdigest()
+    db.add(AgentPendingAction(
+        id=action_id,
+        user_id=shop_id,
+        conversation_id=conversation_id,
+        action_type="KHATA_PAYMENT",
+        status="PENDING",
+        idempotency_key=idempotency_key,
+        preview=preview,
+        payload=payload,
+        preview_hash=preview_hash,
+        invoice_number=str(invoice.invoice_number),
+        expires_at=datetime.utcnow() + timedelta(minutes=5),
+    ))
+    db.flush()
+    return {
+        "success": True,
+        "action_id": action_id,
+        "status": "PENDING",
+        "preview_hash": preview_hash,
+        "preview": preview,
+        "message": "Payment preview prepared. No payment has been recorded. Review and confirm this exact payment.",
+    }
+
+
+def _prepare_order_transition(db: Session, shop_id: int, conversation_id: str, args: OrderTransitionPreviewArgs) -> dict:
+    action = args.action.strip().upper()
+    expected = {"ACCEPT": ("PENDING", "ACCEPTED"), "DISPATCH": ("ACCEPTED", "DISPATCHED"), "REJECT": ({"PENDING", "ACCEPTED"}, "REJECTED")}
+    if action not in expected:
+        raise ValueError("Only ACCEPT, DISPATCH and REJECT can be prepared")
+    order = db.query(OnlineOrder).filter(
+        OnlineOrder.id == args.order_id,
+        OnlineOrder.shop_id == shop_id,
+    ).with_for_update().first()
+    if order is None:
+        raise ValueError("Online order not found in this shop")
+    current_status = str(getattr(order.order_status, "value", order.order_status) or "").upper()
+    allowed_previous, target_status = expected[action]
+    allowed = {allowed_previous} if isinstance(allowed_previous, str) else allowed_previous
+    if current_status not in allowed:
+        raise ValueError(f"Cannot {action.lower()} an order currently in {current_status}")
+
+    idempotency_key = hashlib.sha256(
+        f"{shop_id}:{conversation_id}:ORDER:{order.id}:{action}".encode()
+    ).hexdigest()
+    prior = db.query(AgentPendingAction).filter(
+        AgentPendingAction.user_id == shop_id,
+        AgentPendingAction.idempotency_key == idempotency_key,
+    ).first()
+    if prior:
+        if prior.status in {"PENDING", "EXECUTING", "COMPLETED"}:
+            return {
+                "success": True,
+                "duplicate_request": True,
+                "action_id": prior.id,
+                "status": prior.status,
+                "preview_hash": prior.preview_hash,
+                "preview": prior.preview,
+                "message": "This order transition already has a confirmation action. No second preview was created.",
+            }
+        return {"success": False, "needs_clarification": True, "message": "This order transition already expired or failed. Start a new request."}
+
+    try:
+        items = json.loads(order.items_json or "[]")
+        if not isinstance(items, list):
+            items = []
+    except (TypeError, ValueError):
+        items = []
+    preview_items = [
+        {
+            "product_name": str(item.get("product_name") or "Item")[:120],
+            "quantity": float(item.get("quantity") or 0),
+            "line_total": float(item.get("line_total") or 0),
+        }
+        for item in items[:30] if isinstance(item, dict)
+    ]
+    action_id = str(uuid.uuid4())
+    preview = {
+        "operation": f"ONLINE_ORDER_{action}",
+        "order_id": int(order.id),
+        "current_status": current_status,
+        "resulting_status": target_status,
+        "payment_method": str(order.payment_method or "COD"),
+        "payment_status": str(order.payment_status or "COD_DUE"),
+        "total_amount": float(order.total_amount or 0),
+        "currency": "INR",
+        "items": preview_items,
+        "requires_owner_confirmation": True,
+        "expires_in_seconds": 300,
+        "warning": (
+            "REJECT reverses the accepted order's provisional invoice and restores reserved stock."
+            if action == "REJECT" else
+            "ACCEPT creates a provisional invoice/reservation; the sale is settled only at delivery."
+            if action == "ACCEPT" else
+            "DISPATCH changes fulfilment state only. Delivery still requires the customer's OTP."
+        ),
+    }
+    payload = {
+        "order_id": int(order.id),
+        "action": action,
+        "expected_current_status": current_status,
+        "expected_status": target_status,
+    }
+    preview_hash = hashlib.sha256(
+        _json_dump({"action_id": action_id, "shop_id": shop_id, "preview": preview, "payload": payload}).encode()
+    ).hexdigest()
+    db.add(AgentPendingAction(
+        id=action_id,
+        user_id=shop_id,
+        conversation_id=conversation_id,
+        action_type="ORDER_TRANSITION",
+        status="PENDING",
+        idempotency_key=idempotency_key,
+        preview=preview,
+        payload=payload,
+        preview_hash=preview_hash,
+        expires_at=datetime.utcnow() + timedelta(minutes=5),
+    ))
+    db.flush()
+    return {
+        "success": True,
+        "action_id": action_id,
+        "status": "PENDING",
+        "preview_hash": preview_hash,
+        "preview": preview,
+        "message": "Order transition preview prepared. The order has not been changed. Review and confirm this exact action.",
+    }
+
+
 async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> dict:
     """Validate and execute an allowlisted tool; audit commit must succeed before success is returned."""
     db: Session = context["db"]
@@ -707,6 +944,14 @@ async def dispatch_tool(tool_name: str, raw_arguments: str, context: dict) -> di
         elif tool_name == "prepare_bill_from_current_message":
             ToolArgs.model_validate(args)
             result = await _prepare_bill(db, context)
+        elif tool_name == "prepare_invoice_payment":
+            result = _prepare_khata_payment(
+                db, shop_id, conversation_id, KhataPaymentPreviewArgs.model_validate(args)
+            )
+        elif tool_name == "prepare_online_order_transition":
+            result = _prepare_order_transition(
+                db, shop_id, conversation_id, OrderTransitionPreviewArgs.model_validate(args)
+            )
         else:
             raise ValueError("Tool is not in the server allowlist")
     except ValidationError:
