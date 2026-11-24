@@ -84,7 +84,8 @@ def prepare_khata_ledger_movement(
     note = " ".join(str(description or "").split())[:180]
     note = note or ("Owner-confirmed Khata credit" if operation == "CREDIT" else "Owner-confirmed Khata repayment")
 
-    key_material = f"{shop_id}:{conversation_id}:{operation}:{phone}:{value}:{note}"
+    normalized_request = " ".join(str(request_text or "").split()).casefold()[:1000]
+    key_material = f"{shop_id}:{conversation_id}:{operation}:{phone}:{value}:{note}:{normalized_request}"
     idempotency_key = hashlib.sha256(key_material.encode("utf-8")).hexdigest()
     prior = db.query(AgentPendingAction).filter(
         AgentPendingAction.user_id == shop_id,
