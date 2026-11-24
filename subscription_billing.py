@@ -154,11 +154,16 @@ def _cashfree_authorization_status(payload: dict) -> str:
 
 
 def _cashfree_auth_succeeded(auth_status: str, subscription_status: str = "") -> bool:
+    normalized_auth = str(auth_status or "").strip().upper()
     successful_auth = {
         "SUCCESS", "SUCCEEDED", "AUTHORIZED", "AUTHORISED", "ACTIVE", "APPROVED",
     }
+    # An explicit failure must never be overridden by a conflicting or stale
+    # provider subscription status.
+    if normalized_auth and _cashfree_auth_failed(normalized_auth):
+        return False
     return (
-        str(auth_status or "").strip().upper() in successful_auth
+        normalized_auth in successful_auth
         or str(subscription_status or "").strip().upper() == "ACTIVE"
     )
 
@@ -1242,13 +1247,20 @@ async def cashfree_subscription_webhook(request: Request, db: Session = Depends(
                 """), {"id": row["id"]})
 
         elif event_type in {"SUBSCRIPTION_PAYMENT_CANCELLED", "SUBSCRIPTION_STATUS_CHANGED"}:
-            if provider_subscription_status == "ACTIVE":
+            if _cashfree_auth_succeeded(auth_status, provider_subscription_status):
                 _activate_authorized_subscription(
                     db,
                     row,
                     now,
                     auth_status or "AUTHORIZED",
                 )
+            elif _cashfree_auth_failed(auth_status):
+                db.execute(text("""
+                    UPDATE rm_shop_subscriptions
+                    SET status='PAYMENT_FAILED', mandate_status=:mandate_status,
+                        grace_period_end=NULL, updated_at=NOW()
+                    WHERE id=:id AND status IN ('CREATING','PENDING_AUTH')
+                """), {"mandate_status": auth_status, "id": row["id"]})
             elif provider_subscription_status in {"CANCELLED", "CANCELED", "COMPLETED", "EXPIRED"}:
                 if row["current_period_end"] and row["current_period_end"] >= now:
                     db.execute(text("""
