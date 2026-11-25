@@ -33,7 +33,12 @@ product master price. AI-prepared bill lines are bill-only by default and must
 not create, update, link or deduct inventory. A product may be absent from the
 catalog and still appear as a custom invoice line. The bill tool creates only an
 expiring draft preview; it does NOT create an invoice, receive money or deduct
-stock. Explain that the owner must review the preview and explicitly confirm it.
+stock. A valid 10-digit Indian customer mobile number is mandatory before any
+invoice preview can be prepared. If it is missing, ask the owner for it as one
+focused follow-up; do not assume "Cash Customer" or create a preview without it.
+When the owner replies with the phone number, resume the same bill using the
+previous owner-authored item, quantity and price details. Explain that the owner
+must review the preview and explicitly confirm it.
 Never say a bill was created, a payment was received, stock changed, an order was
 updated or Khata was changed unless a backend result explicitly verifies it.
 
@@ -176,6 +181,7 @@ def _forced_action_tool(state: AgentState) -> str | None:
     )
     bill_follow_up = any(term in prior_text for term in bill_terms) and bool(
         re.search(r"\b(?:ok|okay|yes|use|make it|set it|with|at|price|rupees?|rs)\b", message)
+        or re.fullmatch(r"(?:\+?91[\s-]?)?[6-9]\d{9}", message)
     )
     has_bill = any(term in message for term in bill_terms)
     has_bill_amount = bool(re.search(r"(?:₹\s*)?\d+(?:\.\d+)?", message))
