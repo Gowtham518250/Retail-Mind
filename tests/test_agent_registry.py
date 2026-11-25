@@ -660,3 +660,18 @@ def test_standalone_customer_phone_forces_existing_invoice_preview_flow():
         "tool_rounds": 0,
     }
     assert _forced_action_tool(state) == "prepare_bill_from_current_message"
+
+
+def test_missing_invoice_phone_clarification_does_not_make_another_provider_call():
+    state = {
+        "tool_outputs": [{
+            "name": "prepare_bill_from_current_message",
+            "result": {
+                "success": False,
+                "needs_clarification": True,
+                "error_code": "INVOICE_CUSTOMER_PHONE_REQUIRED",
+                "message": "Please provide the customer's 10-digit mobile number.",
+            },
+        }]
+    }
+    assert _route_after_tools(state) == END
