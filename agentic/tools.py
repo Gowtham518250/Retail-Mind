@@ -722,6 +722,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         return {
             "success": False,
             "needs_clarification": True,
+            "error_code": "INVOICE_CUSTOMER_PHONE_REQUIRED",
             "message": "Please provide the customer's 10-digit mobile number to continue preparing this invoice.",
         }
 
