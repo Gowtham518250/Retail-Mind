@@ -618,3 +618,45 @@ def test_grounded_bill_facts_bypass_generic_model_clarification_and_ask_only_for
     assert result["needs_clarification"] is True
     assert result["message"] == "Please provide the selling price for ghee."
     assert "repeat the product name" not in result["message"].lower()
+
+
+def test_invoice_phone_number_is_a_bill_follow_up_and_restores_original_bill_details():
+    original = "Create an invoice for 2 rice at 50 rupees"
+    context = {"recent_user_messages": [original]}
+    assert _is_bill_follow_up_message("9876543210") is True
+    assert _recent_bill_source_transcript(context, "9876543210") == original
+
+
+def test_invoice_preview_requests_customer_phone_before_running_parser(monkeypatch):
+    import inventory as inventory_module
+
+    def parser_must_not_run(*args, **kwargs):
+        raise AssertionError("parser must not run until the mandatory customer phone is supplied")
+
+    monkeypatch.setattr(inventory_module, "parse_voice_billing", parser_must_not_run)
+    result = asyncio.run(_prepare_bill(
+        object(),
+        {
+            "shop_id": 42,
+            "conversation_id": "c5b98f14-2fbd-4f35-98c9-c24d56b8d031",
+            "user_text": "Create an invoice for 2 rice at 50 rupees",
+            "language_code": "en",
+            "recent_user_messages": [],
+        },
+    ))
+    assert result["success"] is False
+    assert result["needs_clarification"] is True
+    assert "10-digit mobile number" in result["message"]
+
+
+def test_standalone_customer_phone_forces_existing_invoice_preview_flow():
+    state = {
+        "context": {
+            "user_text": "9876543210",
+            "allow_actions": True,
+            "recent_user_messages": ["Create an invoice for 2 rice at 50 rupees"],
+        },
+        "tool_definitions": available_tool_definitions(True),
+        "tool_rounds": 0,
+    }
+    assert _forced_action_tool(state) == "prepare_bill_from_current_message"
