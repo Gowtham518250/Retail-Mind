@@ -464,6 +464,12 @@ def _route_after_tools(state: AgentState) -> str:
     # provider round-trip or let the model rewrite amounts from the preview.
     if _successful_pending_action(state.get("tool_outputs", [])):
         return END
+    # Missing mandatory invoice data is a deterministic clarification, not an
+    # LLM task. Return the exact question without a second provider call.
+    for output in reversed(state.get("tool_outputs", [])):
+        result = output.get("result") if isinstance(output, dict) else None
+        if isinstance(result, dict) and result.get("error_code") == "INVOICE_CUSTOMER_PHONE_REQUIRED":
+            return END
     return "call_model"
 
 
@@ -647,12 +653,30 @@ async def invoke_agent(
     )
     tool_outputs = result.get("tool_outputs", [])
     saved_action = _successful_pending_action(tool_outputs)
+    clarification = next(
+        (
+            output.get("result")
+            for output in reversed(tool_outputs)
+            if isinstance(output, dict)
+            and isinstance(output.get("result"), dict)
+            and output["result"].get("error_code") == "INVOICE_CUSTOMER_PHONE_REQUIRED"
+        ),
+        None,
+    )
+    language = _response_language_code(str((context or {}).get("language_code") or "en"))
+    phone_question = {
+        "en": "Please provide the customer's 10-digit mobile number to continue preparing this invoice.",
+        "te": "ఈ ఇన్వాయిస్‌ను సిద్ధం చేయడానికి కస్టమర్ 10 అంకెల మొబైల్ నంబర్ ఇవ్వండి.",
+        "hi": "इस इनवॉइस को तैयार करने के लिए ग्राहक का 10 अंकों का मोबाइल नंबर दें।",
+        "ta": "இந்த விலைப்பட்டியலைத் தயாரிக்க வாடிக்கையாளரின் 10 இலக்க மொபைல் எண்ணை வழங்கவும்.",
+        "kn": "ಈ ಇನ್‌ವಾಯ್ಸ್ ಸಿದ್ಧಪಡಿಸಲು ಗ್ರಾಹಕರ 10 ಅಂಕಿಯ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ನೀಡಿ.",
+        "ml": "ഈ ഇൻവോയ്സ് തയ്യാറാക്കാൻ ഉപഭോക്താവിന്റെ 10 അക്ക മൊബൈൽ നമ്പർ നൽകുക.",
+    }
     answer = (
-        _format_pending_action_answer(
-            saved_action,
-            str((context or {}).get("language_code") or "en"),
-        )
+        _format_pending_action_answer(saved_action, language)
         if saved_action
+        else phone_question.get(language, clarification.get("message"))
+        if clarification
         else str(result.get("final_answer") or "I could not complete that request.")
     )
     return {
