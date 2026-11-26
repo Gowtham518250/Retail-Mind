@@ -32,7 +32,27 @@ def main() -> None:
     _ensure_online_delivery_payment_trigger()
     _ensure_workers_table_schema()
     _ensure_shift_table()
-    print("[PREDEPLOY] Database bootstrap completed.", flush=True)
+
+    # Do not let a deployment go live with an incomplete schema. This catches
+    # models added without a corresponding Alembic migration on a fresh DB.
+    from sqlalchemy import inspect
+    from db import engine
+    from models import Base
+
+    expected_tables = set(Base.metadata.tables.keys())
+    actual_tables = set(inspect(engine).get_table_names())
+    missing_tables = sorted(expected_tables - actual_tables)
+    if missing_tables:
+        raise RuntimeError(
+            "Database schema is incomplete after migrations; missing model tables: "
+            + ", ".join(missing_tables)
+        )
+
+    print(
+        f"[PREDEPLOY] Database bootstrap completed; verified "
+        f"{len(expected_tables)} model tables.",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
