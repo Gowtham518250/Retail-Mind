@@ -25,7 +25,7 @@ from .access import resolve_agent_access
 from sarvam_tts import SarvamTTSError, synthesize_with_sarvam
 
 from .service import (
-    confirm_agent_action,
+    confirm_agent_action as confirm_agent_action_service,
     delete_conversation,
     get_conversation_messages,
     list_conversations,
@@ -609,7 +609,7 @@ def confirm_agent_action(
         raise HTTPException(status_code=422, detail="action_id must be a UUID") from exc
     shop_id = resolve_shop_id(current_user)
     _require_agent_access(db, shop_id, "actions")
-    return confirm_agent_action(
+    return confirm_agent_action_service(
         db,
         shop_id=shop_id,
         current_user=current_user,
