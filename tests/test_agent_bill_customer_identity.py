@@ -7,6 +7,7 @@ os.environ.setdefault("SECRET_KEY", "retail-mind-agent-ci-only-not-for-productio
 
 import inventory as inventory_module
 from agentic import tools as agent_tools
+from agentic.graph import _format_pending_action_answer
 from models import Customer
 
 
@@ -130,3 +131,30 @@ def test_phone_name_conflict_requires_clarification_before_preview(monkeypatch):
     assert "Ramesh Kumar" in result["message"]
     assert "Ganesh" in result["message"]
     assert not db.added
+
+
+def test_bill_preview_answer_echoes_customer_name_and_phone():
+    answer = _format_pending_action_answer(
+        {
+            "status": "PENDING",
+            "preview": {
+                "operation": "CREATE_INVOICE",
+                "invoice_number": "AIM-20261127-TEST",
+                "customer_name": "Ganesh",
+                "customer_phone": "9347588819",
+                "total_amount": 5000,
+                "items": [
+                    {
+                        "product_name": "Ghee",
+                        "quantity": 5,
+                        "unit_price": 1000,
+                        "line_total": 5000,
+                    }
+                ],
+            },
+        },
+        "en",
+    )
+
+    assert "Bill preview is ready for Ganesh." in answer
+    assert "Customer phone: 9347588819" in answer
