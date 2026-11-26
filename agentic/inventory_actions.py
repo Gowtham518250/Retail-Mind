@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from .preview_policy import preview_expires_at, preview_ttl_seconds
 
+from .preview_policy import expired_preview_detail
+
 from models import AgentPendingAction, Product
 from stock_service import StockService
 
@@ -193,6 +195,8 @@ def confirm_inventory_stock_movement(
         raise HTTPException(status_code=409, detail="The stock movement preview changed. Prepare it again.")
     if action.status == "COMPLETED":
         return {**(action.result or {}), "duplicate_confirmation": True}
+    if action.status == "EXPIRED":
+        raise HTTPException(status_code=410, detail=expired_preview_detail(action_id, "stock movement"))
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"This stock movement cannot be confirmed in state {action.status}.")
 
@@ -201,7 +205,7 @@ def confirm_inventory_stock_movement(
         action.status = "EXPIRED"
         action.updated_at = now
         db.commit()
-        raise HTTPException(status_code=410, detail="The stock movement preview expired. Prepare it again.")
+        raise HTTPException(status_code=410, detail=expired_preview_detail(action_id, "stock movement"))
 
     payload = action.payload
     product = db.query(Product).filter(
