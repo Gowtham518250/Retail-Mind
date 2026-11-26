@@ -286,6 +286,81 @@ TOOL_DEFINITIONS = [
 ]
 
 
+_INDIAN_MOBILE_RE = re.compile(
+    r"(?<!\d)(?:\+?\s*91[ \t().-]*)?([6-9](?:[ \t().-]*\d){9})(?!\d)"
+)
+
+
+def _extract_indian_mobile(value: str) -> Optional[str]:
+    """Extract a formatted Indian mobile number and return its canonical 10 digits."""
+    for match in _INDIAN_MOBILE_RE.finditer(str(value or "")):
+        digits = re.sub(r"\D", "", match.group(1))
+        if len(digits) == 10 and re.fullmatch(r"[6-9]\d{9}", digits):
+            return digits
+    return None
+
+
+def _extract_bill_customer_name(value: str) -> Optional[str]:
+    """Read a customer name only from explicit bill/customer identity wording."""
+    text = " ".join(str(value or "").split())
+    patterns = (
+        r"\bcustomer(?:\s+name)?\s*(?:is|:|-)\s*([^,;()]{2,100}?)"
+        r"(?=\s*(?:\(|,|;|\b(?:phone|mobile|contact)\b|$))",
+        r"\b(?:invoice|bill)\s+(?:for|to)\s+([^,;()]{2,100}?)"
+        r"(?=\s*(?:\(\s*(?:phone|mobile|contact)\b|"
+        r"\b(?:phone|mobile|contact)\b|[,;]?\s+for\b|$))",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        name = re.sub(r"\s+", " ", match.group(1)).strip(" \t,;:.")
+        name = re.sub(r"^(?:mr|mrs|ms|shri|sri)\.?\s+", "", name, flags=re.IGNORECASE)
+        if (
+            2 <= len(name) <= 100
+            and not re.search(r"\d", name)
+            and name.casefold() not in {"customer", "cash customer", "a customer"}
+        ):
+            return name
+    return None
+
+
+def _customer_names_compatible(provided: str, saved: str) -> bool:
+    """Allow a first-name/full-name match, but never silently change identity."""
+    left = " ".join(str(provided or "").casefold().split())
+    right = " ".join(str(saved or "").casefold().split())
+    return bool(
+        left and right
+        and (left == right or left.startswith(right + " ") or right.startswith(left + " "))
+    )
+
+
+def _strip_customer_identity_from_bill_text(
+    value: str, customer_name: Optional[str] = None
+) -> str:
+    """Keep customer contact details out of product/quantity/price extraction."""
+    text = _INDIAN_MOBILE_RE.sub(" ", str(value or ""))
+    name = str(customer_name or "").strip()
+    if name:
+        escaped = re.escape(name)
+        text = re.sub(
+            rf"\b(?:invoice|bill)\s+(?:for|to)\s+{escaped}"
+            rf"(?=\s*(?:\(|\b(?:phone|mobile|contact)\b|[,;]?\s+for\b))",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            rf"\bcustomer(?:\s+name)?\s*(?:is|:|-)\s*{escaped}"
+            rf"(?=\s*(?:\(|,|;|\b(?:phone|mobile|contact)\b|$))",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+    text = re.sub(r"\(\s*(?:phone|mobile|contact)\s*\)", " ", text, flags=re.IGNORECASE)
+    return " ".join(text.split()).strip(" ,;.")
+
+
 def _money(value: Any) -> Decimal:
     try:
         result = Decimal(str(value))
@@ -634,11 +709,7 @@ def _recent_bill_source_transcript(context: dict, user_text: str) -> str:
             continue
         # Customer identifiers are not item/price evidence. Remove them before
         # checking whether this earlier turn looks like a sale description.
-        candidate = re.sub(
-            r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{9}(?!\d)",
-            " ",
-            previous,
-        )
+        candidate = _INDIAN_MOBILE_RE.sub(" ", previous)
         candidate = _clean_bill_instruction_filler(" ".join(candidate.split()))
         if not candidate:
             continue
@@ -675,7 +746,7 @@ def _recent_bill_context(context: dict, user_text: str) -> str | None:
     cleaned = []
     for message in messages[-5:]:
         value = str(message or "").strip()
-        value = re.sub(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{9}(?!\d)", " ", value)
+        value = _INDIAN_MOBILE_RE.sub(" ", value)
         value = _clean_bill_instruction_filler(" ".join(value.split()))
         if value:
             cleaned.append(value[:700])
@@ -698,21 +769,21 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     prior_user_messages = prior_user_messages if isinstance(prior_user_messages, list) else []
     conversation_context = _recent_bill_context(context, user_text)
 
-    phone_match = re.search(r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)", user_text)
-    customer_phone = phone_match.group(1) if phone_match else None
-    if not customer_phone and conversation_context:
-        for previous_message in reversed(prior_user_messages[-5:]):
-            previous_match = re.search(
-                r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)",
-                str(previous_message or ""),
-            )
-            if previous_match:
-                customer_phone = previous_match.group(1)
-                break
+    identity_sources = [user_text, *reversed(prior_user_messages[-5:])]
+    customer_phone = None
+    explicit_customer_name = None
+    for identity_source in identity_sources:
+        if not customer_phone:
+            customer_phone = _extract_indian_mobile(identity_source)
+        if not explicit_customer_name:
+            explicit_customer_name = _extract_bill_customer_name(identity_source)
+        if customer_phone and explicit_customer_name:
+            break
 
     parser_text = _recent_bill_source_transcript(context, user_text)
-    if phone_match:
-        parser_text = parser_text.replace(phone_match.group(0), " ", 1)
+    parser_text = _strip_customer_identity_from_bill_text(
+        parser_text, explicit_customer_name
+    )
 
     from inventory import VoiceBillingParseRequest, parse_voice_billing
 
@@ -824,6 +895,34 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
             Customer.is_active.is_(True),
         ).first()
 
+    if customer and explicit_customer_name and not _customer_names_compatible(
+        explicit_customer_name, customer.customer_name
+    ):
+        return {
+            "success": False,
+            "needs_clarification": True,
+            "message": (
+                f"The phone number ending {customer_phone[-4:]} belongs to "
+                f"{customer.customer_name}, but you provided {explicit_customer_name}. "
+                "Please confirm the correct customer name or phone number before preparing the bill."
+            ),
+        }
+
+    customer_name = (
+        customer.customer_name
+        if customer
+        else explicit_customer_name or ("Cash Customer" if not customer_phone else None)
+    )
+    if customer_phone and not customer_name:
+        return {
+            "success": False,
+            "needs_clarification": True,
+            "message": (
+                f"I found the phone number ending {customer_phone[-4:]}, but no saved customer name. "
+                "Please provide the customer's name before I prepare the invoice preview."
+            ),
+        }
+
     action_id = str(uuid.uuid4())
     conversation_id = str(context["conversation_id"])
     # The same short confirmation text may be reused for a different bill in
@@ -862,7 +961,6 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         return {"success": False, "needs_clarification": True, "message": "This exact request already expired or failed. Send it again as a new message to prepare a fresh bill."}
 
     invoice_number = f"AIM-{datetime.now(IST):%Y%m%d}-{action_id.replace('-', '')[:10].upper()}"
-    customer_name = customer.customer_name if customer else ("Cash Customer" if not customer_phone else "Customer")
     preview = {
         "operation": "CREATE_INVOICE",
         "invoice_number": invoice_number,
