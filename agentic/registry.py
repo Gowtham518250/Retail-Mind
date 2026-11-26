@@ -24,7 +24,7 @@ _CAPABILITIES: tuple[dict[str, Any], ...] = (
     {"name": "inventory.lookup", "description": "Read active catalog products and stock for the authenticated shop.", "risk": "read", "requires_confirmation": False, "provider": "groq"},
     {"name": "inventory.manage", "description": "Restock, record stock-out or correct on-hand quantities using the canonical idempotent inventory stock-movement service after owner confirmation.", "risk": "inventory_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "customer.lookup", "description": "Find active customers belonging to the authenticated shop.", "risk": "personal_data_read", "requires_confirmation": False, "provider": "groq"},
-    {"name": "billing.prepare", "description": "Use the existing voice-billing parser to prepare a five-minute invoice preview; no invoice or stock mutation occurs.", "risk": "draft", "requires_confirmation": False, "provider": "groq"},
+    {"name": "billing.prepare", "description": "Use the existing voice-billing parser to prepare a 15-minute invoice preview; no invoice or stock mutation occurs.", "risk": "draft", "requires_confirmation": False, "provider": "groq"},
     {"name": "billing.confirm", "description": "Confirm a specific owner-reviewed preview through the existing invoice creation path, then verify invoice and stock movements.", "risk": "financial_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "khata.lookup", "description": "Read the invoice-derived pending-payment receivables view for the authenticated shop. This is not the legacy KhataBalance ledger; credit and repayment writes remain disabled.", "risk": "read", "requires_confirmation": False, "provider": "groq"},
     {"name": "orders.lookup", "description": "Read shop-scoped online order counts and recent order statuses. Order changes remain disabled.", "risk": "read", "requires_confirmation": False, "provider": "groq"},
@@ -37,7 +37,7 @@ _CAPABILITIES: tuple[dict[str, Any], ...] = (
     {"name": "voice.synthesis", "description": "Synthesize an assistant response using Sarvam Bulbul for supported Indian languages.", "risk": "external_provider", "requires_confirmation": False, "provider": "sarvam"},
     {"name": "khata.record", "description": "Add legacy Khata credit or record a repayment using an atomic, idempotent history and journal write after owner confirmation.", "risk": "financial_write", "requires_confirmation": True, "provider": "backend"},
     {"name": "orders.manage", "description": "Accept, reject, cancel or refund an order. Disabled until every transition is wrapped and tested.", "risk": "business_write", "requires_confirmation": True, "provider": "disabled"},
-    {"name": "attendance.manage", "description": "Record a daily worker attendance correction through a five-minute owner-confirmed preview. Check-in/out timestamps and calculated working hours are preserved; payroll payouts remain disabled.", "risk": "employee_data_write", "requires_confirmation": True, "provider": "backend"},
+    {"name": "attendance.manage", "description": "Record a daily worker attendance correction through a 15-minute owner-confirmed preview. Check-in/out timestamps and calculated working hours are preserved; payroll payouts remain disabled.", "risk": "employee_data_write", "requires_confirmation": True, "provider": "backend"},
 )
 
 
