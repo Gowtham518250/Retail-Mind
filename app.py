@@ -568,6 +568,12 @@ api.include_router(customers_router, tags=["Customer Management"])
 # Compatibility aliases for older Flutter clients. Keep the canonical routes
 # above; these direct registrations guarantee the legacy paths are mounted.
 api.add_api_route(
+    "/api/inventory/products",
+    inventory_get_products,
+    methods=["GET"],
+    response_model=list[ProductResponse],
+)
+api.add_api_route(
     "/api/products",
     inventory_get_products,
     methods=["GET"],
