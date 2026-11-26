@@ -91,7 +91,7 @@ from session_routes import router as session_router
 from logs_routes import router as logs_router
 
 # Core ERP
-from inventory import router as inventory_router
+from inventory import router as inventory_router, legacy_router as inventory_legacy_router
 from inventory_sync_service import router as inventory_sync_router
 from inventory_reconciliation_service import router as inventory_reconcile_router
 from sales_restore_service import router as sales_restore_router
@@ -558,6 +558,7 @@ api.include_router(logs_router, tags=["Client Logging"])
 # Core ERP
 api.include_router(bill_router, prefix="/bill", tags=["Bill Generation"])
 api.include_router(inventory_router, tags=["Inventory Management"])
+api.include_router(inventory_legacy_router)
 api.include_router(inventory_sync_router, tags=["Inventory Sync Service"])
 api.include_router(inventory_reconcile_router, tags=["Inventory Reconciliation"])
 api.include_router(sales_restore_router, tags=["Sales Restoration"])
