@@ -467,21 +467,24 @@ async def _call_model(state: AgentState) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="The AI provider is not configured.")
 
     model = (os.getenv("RETAIL_MIND_AGENT_MODEL") or "openai/gpt-oss-120b").strip()
-    try:
+    fallback_model = (
+        os.getenv("RETAIL_MIND_AGENT_FALLBACK_MODEL") or "openai/gpt-oss-20b"
+    ).strip()
+    forced_tool = _forced_action_tool(state)
+    tool_choice = (
+        {"type": "function", "function": {"name": forced_tool}}
+        if forced_tool
+        else "auto"
+    )
+
+    async def request_model(model_id: str):
         client = AsyncGroq(api_key=api_key, timeout=35.0, max_retries=1)
         try:
-            response = await client.chat.completions.create(
-                model=model,
+            return await client.chat.completions.create(
+                model=model_id,
                 messages=state["messages"],
                 tools=state.get("tool_definitions") or TOOL_DEFINITIONS,
-                tool_choice=(
-                    {
-                        "type": "function",
-                        "function": {"name": forced_tool},
-                    }
-                    if (forced_tool := _forced_action_tool(state))
-                    else "auto"
-                ),
+                tool_choice=tool_choice,
                 parallel_tool_calls=False,
                 temperature=0.1,
                 max_completion_tokens=900,
@@ -489,6 +492,39 @@ async def _call_model(state: AgentState) -> dict[str, Any]:
             )
         finally:
             await client.close()
+
+    try:
+        try:
+            response = await request_model(model)
+        except Exception as primary_exc:
+            # A model-specific 429 can occur even while another supported model
+            # remains available. Retry once on the configured fallback; do not
+            # loop or fall back for authentication, validation or request errors.
+            primary_status = getattr(primary_exc, "status_code", None)
+            if primary_status != 429 or not fallback_model or fallback_model == model:
+                raise
+
+            import logging
+            logging.getLogger(__name__).warning(
+                "Retail Mind agent model rate limited; trying fallback model=%s",
+                fallback_model,
+            )
+            try:
+                response = await request_model(fallback_model)
+                model = fallback_model
+            except Exception as fallback_exc:
+                fallback_status = getattr(fallback_exc, "status_code", None)
+                retry_after = getattr(fallback_exc, "retry_after", None)
+                request_id = str(getattr(fallback_exc, "request_id", "") or "")[:120] or None
+                logging.getLogger(__name__).warning(
+                    "Retail Mind agent fallback failed model=%s exception=%s status_code=%s request_id=%s retry_after=%s",
+                    fallback_model, type(fallback_exc).__name__, fallback_status,
+                    request_id, retry_after,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="The assistant is temporarily busy. Please retry shortly.",
+                ) from fallback_exc
     except HTTPException:
         raise
     except Exception as exc:
