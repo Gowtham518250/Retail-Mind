@@ -637,6 +637,8 @@ def cancel_agent_action(
         raise HTTPException(status_code=404, detail="Pending action not found.")
     if action.status == "CANCELLED":
         return {"success": True, "action_id": action_id, "status": "CANCELLED"}
+    if action.status == "EXPIRED":
+        return {"success": True, "action_id": action_id, "status": "EXPIRED"}
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"Action cannot be cancelled in state {action.status}.")
     action.status = "CANCELLED"
