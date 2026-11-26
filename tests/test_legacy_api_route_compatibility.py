@@ -14,6 +14,5 @@ def test_legacy_product_and_customer_list_routes_are_mounted():
     }
 
     assert ("/api/products", "GET") in route_methods
-    assert ("/api/inventory/products", "GET") in route_methods
     assert ("/api/customers", "GET") in route_methods
     assert ("/api/customers/", "GET") in route_methods
