@@ -141,6 +141,7 @@ def create_customer(
     
     return db_customer
 
+@router.get("", response_model=List[CustomerResponse])
 @router.get("/", response_model=List[CustomerResponse])
 def get_customers(
     user_id: int = Depends(check_current_user),
