@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from .preview_policy import preview_expires_at, preview_ttl_seconds
+
 from models import AgentPendingAction, Attendance, User, Worker
 
 _ATTENDANCE_ACTION = "ATTENDANCE_RECORD"
@@ -141,7 +143,7 @@ def prepare_attendance_record(
         "working_hours_preserved": before["working_hours"],
         "notes": clean_notes or _existing_attendance_note(before["notes"]) or None,
         "requires_owner_confirmation": True,
-        "expires_in_seconds": 300,
+        "expires_in_seconds": preview_ttl_seconds(),
         "warning": "This changes the daily attendance status only. Existing check-in/out timestamps and calculated working hours are preserved.",
     }
     payload = {
@@ -184,7 +186,7 @@ def prepare_attendance_record(
         preview=preview,
         payload=payload,
         preview_hash=digest,
-        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5),
+        expires_at=preview_expires_at(),
     ))
     db.flush()
     return {
