@@ -27,6 +27,7 @@ from models import (
 )
 
 from .graph import SYSTEM_PROMPT, invoke_agent
+from .preview_policy import expired_preview_detail
 
 
 def _utcnow() -> datetime:
@@ -468,13 +469,21 @@ def confirm_khata_payment_action(
             AgentPendingAction.user_id == shop_id,
         ).with_for_update().first()
 
+    if action.status == "EXPIRED":
+        raise HTTPException(
+            status_code=410,
+            detail=expired_preview_detail(action_id, "payment"),
+        )
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"This payment preview cannot be confirmed in state {action.status}.")
     if action.expires_at <= now:
         action.status = "EXPIRED"
         action.updated_at = now
         db.commit()
-        raise HTTPException(status_code=410, detail="The payment preview expired. Prepare it again.")
+        raise HTTPException(
+            status_code=410,
+            detail=expired_preview_detail(action_id, "payment"),
+        )
 
     payload = action.payload
     invoice = db.query(Invoice).filter(
@@ -656,13 +665,21 @@ def confirm_order_transition_action(
             AgentPendingAction.user_id == shop_id,
         ).with_for_update().first()
 
+    if action.status == "EXPIRED":
+        raise HTTPException(
+            status_code=410,
+            detail=expired_preview_detail(action_id, "order"),
+        )
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"This order preview cannot be confirmed in state {action.status}.")
     if action.expires_at <= now:
         action.status = "EXPIRED"
         action.updated_at = now
         db.commit()
-        raise HTTPException(status_code=410, detail="The order preview expired. Prepare it again.")
+        raise HTTPException(
+            status_code=410,
+            detail=expired_preview_detail(action_id, "order"),
+        )
 
     order = db.query(OnlineOrder).filter(
         OnlineOrder.id == int(action.payload["order_id"]),
@@ -789,6 +806,11 @@ def confirm_invoice_action(
             AgentPendingAction.user_id == shop_id,
         ).with_for_update().first()
 
+    if action.status == "EXPIRED":
+        raise HTTPException(
+            status_code=410,
+            detail=expired_preview_detail(action_id, "bill"),
+        )
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"This preview cannot be confirmed in state {action.status}.")
 
@@ -796,7 +818,10 @@ def confirm_invoice_action(
         action.status = "EXPIRED"
         action.updated_at = now
         db.commit()
-        raise HTTPException(status_code=410, detail="The bill preview expired. Prepare a new bill for confirmation.")
+        raise HTTPException(
+            status_code=410,
+            detail=expired_preview_detail(action_id, "bill"),
+        )
 
     # A client may retry after the invoice committed but before the action status
     # was updated. Reconcile by the action's unique invoice number first.
