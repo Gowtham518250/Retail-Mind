@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from .preview_policy import preview_expires_at, preview_ttl_seconds
 
+from .preview_policy import expired_preview_detail
+
 from models import AgentPendingAction, Attendance, User, Worker
 
 _ATTENDANCE_ACTION = "ATTENDANCE_RECORD"
@@ -222,6 +224,8 @@ def confirm_attendance_record(
         raise HTTPException(status_code=409, detail="The attendance preview changed. Prepare it again.")
     if action.status == "COMPLETED":
         return {**(action.result or {}), "duplicate_confirmation": True}
+    if action.status == "EXPIRED":
+        raise HTTPException(status_code=410, detail=expired_preview_detail(action_id, "attendance"))
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"This attendance preview cannot be confirmed in state {action.status}.")
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -229,7 +233,7 @@ def confirm_attendance_record(
         action.status = "EXPIRED"
         action.updated_at = now
         db.commit()
-        raise HTTPException(status_code=410, detail="The attendance preview expired. Prepare it again.")
+        raise HTTPException(status_code=410, detail=expired_preview_detail(action_id, "attendance"))
 
     owner = db.query(User).filter(User.id == shop_id).with_for_update().first()
     if owner is None:
