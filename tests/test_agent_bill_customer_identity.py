@@ -158,3 +158,27 @@ def test_bill_preview_answer_echoes_customer_name_and_phone():
 
     assert "Bill preview is ready for Ganesh." in answer
     assert "Customer phone: 9347588819" in answer
+
+def test_new_unrelated_bill_does_not_inherit_previous_customer_identity(monkeypatch):
+    captured = {}
+    _mock_parser(monkeypatch, captured)
+    db = _DB()
+
+    result = asyncio.run(
+        agent_tools._prepare_bill(
+            db,
+            {
+                "shop_id": 1,
+                "conversation_id": "a4b47f00-94a6-40e6-8540-72c5db03f501",
+                "user_text": "Create a new bill for rice, 2 kg at ₹80 per kg.",
+                "language_code": "en",
+                "recent_user_messages": [
+                    "Create an invoice for Ganesh (phone +91 93475 88819) for Ghee, 5 kg at ₹1,000 per kg."
+                ],
+            },
+        )
+    )
+
+    assert result["success"] is True
+    assert result["preview"]["customer_name"] == "Cash Customer"
+    assert result["preview"]["customer_phone"] is None
