@@ -44,6 +44,7 @@ def expired_preview_detail(action_id: str, subject: str) -> dict[str, str]:
     label = (subject or "Action").strip().capitalize()
     return {
         "code": "agent_preview_expired",
+        "status": "EXPIRED",
         "action_id": str(action_id),
         "message": (
             f"This {label.lower()} preview expired. Prepare a new preview before confirming."
