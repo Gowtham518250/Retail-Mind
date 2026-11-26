@@ -166,7 +166,7 @@ async def get_online_order_summary(status: str | None = None) -> dict:
 
 @mcp_server.tool()
 async def prepare_bill_from_text(message: str) -> dict:
-    """Prepare a five-minute invoice preview. No invoice or stock movement is created.
+    """Prepare a 15-minute invoice preview. No invoice or stock movement is created.
 
     The owner must confirm the exact preview in the Retail Mind app.
     """
