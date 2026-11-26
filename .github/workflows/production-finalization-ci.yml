@@ -161,6 +161,10 @@ jobs:
           pytest -q tests/test_fractional_stock_units_contract.py
           pytest -q tests/test_inventory_stock_classification.py
           pytest -q tests/test_product_duplicate_guard.py
+          pytest -q tests/test_agent_preview_policy.py
+          pytest -q tests/test_agent_confirmation_route.py
+          pytest -q tests/test_agent_bill_customer_identity.py
+          pytest -q tests/test_legacy_api_route_compatibility.py
           # Run this PR's new regressions before the known baseline support-chat failures.
           pytest -q tests/test_voice_query_contract.py
           pytest -q tests/test_ai_query_date_scope.py
@@ -219,10 +223,6 @@ jobs:
           pytest -q tests/test_worker_payroll_query_contract.py
           pytest -q tests/test_customer_phone_normalization.py
           pytest -q tests/test_invoice_sync_payment_state.py
-          pytest -q tests/test_agent_preview_policy.py
-          pytest -q tests/test_agent_confirmation_route.py
-          pytest -q tests/test_agent_bill_customer_identity.py
-          pytest -q tests/test_legacy_api_route_compatibility.py
 
 
   staging-ai-evaluation:
