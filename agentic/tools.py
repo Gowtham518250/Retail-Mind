@@ -772,7 +772,9 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
     prior_user_messages = prior_user_messages if isinstance(prior_user_messages, list) else []
     conversation_context = _recent_bill_context(context, user_text)
 
-    identity_sources = [user_text, *reversed(prior_user_messages[-5:])]
+    identity_sources = [user_text]
+    if conversation_context:
+        identity_sources.extend(reversed(prior_user_messages[-5:]))
     customer_phone = None
     explicit_customer_name = None
     for identity_source in identity_sources:
