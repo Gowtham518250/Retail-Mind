@@ -60,6 +60,7 @@ from durable_sync import append_sync_event
 from realtime import publish_realtime_event
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+legacy_router = APIRouter(prefix="/api", tags=["Inventory Compatibility"])
 
 def _queue_inventory_change(db: Session, shop_id: int, change: str, **details):
     """Append inventory invalidation to the same transaction as the stock/catalog write."""
@@ -1411,6 +1412,7 @@ def create_product(
     return db_product
 
 
+@legacy_router.get("/products", response_model=List[ProductResponse])
 @router.get("/products", response_model=List[ProductResponse])
 def get_products(
     user_id: int = Depends(check_current_user),
