@@ -587,6 +587,13 @@ api.add_api_route(
     response_model=list[CustomerResponse],
     include_in_schema=False,
 )
+api.add_api_route(
+    "/api/customers/",
+    customers_get_customers,
+    methods=["GET"],
+    response_model=list[CustomerResponse],
+    include_in_schema=False,
+)
 
 api.include_router(shop_management_router, tags=["Shop Management"])
 
