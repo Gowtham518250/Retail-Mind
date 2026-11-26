@@ -344,7 +344,7 @@ def _strip_customer_identity_from_bill_text(
     if name:
         escaped = re.escape(name)
         text = re.sub(
-            rf"\b(?:invoice|bill)\s+(?:for|to)\s+{escaped}"
+            rf"\b(?:(?:please\s+)?(?:create|make|prepare|generate)\s+)?(?:an?\s+)?(?:invoice|bill)\s+(?:for|to)\s+{escaped}"
             rf"(?=\s*(?:\(|\b(?:phone|mobile|contact)\b|[,;]?\s+for\b))",
             " ",
             text,
@@ -358,6 +358,7 @@ def _strip_customer_identity_from_bill_text(
             flags=re.IGNORECASE,
         )
     text = re.sub(r"\(\s*(?:phone|mobile|contact)\s*\)", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"^\s*(?:for|to)\s+", "", text, flags=re.IGNORECASE)
     return " ".join(text.split()).strip(" ,;.")
 
 
