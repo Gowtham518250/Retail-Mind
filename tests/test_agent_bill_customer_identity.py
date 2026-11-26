@@ -94,8 +94,10 @@ def test_bill_preview_preserves_explicit_customer_name_and_phone(monkeypatch):
     assert result["preview"]["customer_phone"] == "9347588819"
     assert result["preview"]["items"][0]["product_name"] == "Ghee"
     assert result["preview"]["total_amount"] == 5000.0
+    assert captured["transcript"].startswith("Ghee")
     assert "Ganesh" not in captured["transcript"]
     assert "9347588819" not in captured["transcript"]
+    assert "phone" not in captured["transcript"].lower()
     action = db.added[0]
     assert action.payload["customer_name"] == "Ganesh"
     assert action.payload["customer_phone"] == "9347588819"
