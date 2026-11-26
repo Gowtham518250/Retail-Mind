@@ -32,7 +32,7 @@ The current implementation uses:
 | Online-order lookup | Shop-scoped order status counts and recent order summaries | Read-only |
 | Bill preparation | Existing voice-billing parser creates an expiring preview; no invoice or stock mutation | Draft only |
 | Bill confirmation | Explicit owner confirmation of a preview hash; uses existing invoice creation service; checks persisted invoice and stock movements | Confirmed financial write |
-| Invoice payment | Records one payment against a selected invoice through the existing idempotent Khata payment route; separate five-minute preview and owner confirmation | Confirmed financial write |
+| Invoice payment | Records one payment against a selected invoice through the existing idempotent Khata payment route; separate 15-minute preview and owner confirmation | Confirmed financial write |
 | Online-order transition | ACCEPT, DISPATCH and REJECT use the existing order-status service; expected prior status is rechecked at confirmation and the persisted status is verified | Confirmed business write |
 | Voice | Sarvam transcription, existing ASR quality guard, shop catalog keyterms | External provider call |
 | Speech | Bounded Sarvam Bulbul text-to-speech response | External provider call |
