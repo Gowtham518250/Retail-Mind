@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from .preview_policy import preview_expires_at, preview_ttl_seconds
+
 from models import (
     AgentPendingAction,
     AgentToolExecution,
@@ -986,7 +988,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
             for row in output_lines
         ],
         "requires_owner_confirmation": True,
-        "expires_in_seconds": 300,
+        "expires_in_seconds": preview_ttl_seconds(),
     }
     payload = {
         "invoice_number": invoice_number,
@@ -1015,7 +1017,7 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         payload=payload,
         preview_hash=preview_hash,
         invoice_number=invoice_number,
-        expires_at=datetime.utcnow() + timedelta(minutes=5),
+        expires_at=preview_expires_at(),
     )
     db.add(action)
     db.flush()
@@ -1079,7 +1081,7 @@ def _prepare_khata_payment(db: Session, shop_id: int, conversation_id: str, requ
         "payment_method": payment_method,
         "currency": "INR",
         "requires_owner_confirmation": True,
-        "expires_in_seconds": 300,
+        "expires_in_seconds": preview_ttl_seconds(),
         "warning": "This records a payment entry; it does not independently verify a bank transfer or cash receipt.",
     }
     payload = {
@@ -1104,7 +1106,7 @@ def _prepare_khata_payment(db: Session, shop_id: int, conversation_id: str, requ
         payload=payload,
         preview_hash=preview_hash,
         invoice_number=str(invoice.invoice_number),
-        expires_at=datetime.utcnow() + timedelta(minutes=5),
+        expires_at=preview_expires_at(),
     ))
     db.flush()
     return {
@@ -1180,7 +1182,7 @@ def _prepare_order_transition(db: Session, shop_id: int, conversation_id: str, a
         "currency": "INR",
         "items": preview_items,
         "requires_owner_confirmation": True,
-        "expires_in_seconds": 300,
+        "expires_in_seconds": preview_ttl_seconds(),
         "warning": (
             "REJECT reverses the accepted order's provisional invoice and restores reserved stock."
             if action == "REJECT" else
@@ -1208,7 +1210,7 @@ def _prepare_order_transition(db: Session, shop_id: int, conversation_id: str, a
         preview=preview,
         payload=payload,
         preview_hash=preview_hash,
-        expires_at=datetime.utcnow() + timedelta(minutes=5),
+        expires_at=preview_expires_at(),
     ))
     db.flush()
     return {
