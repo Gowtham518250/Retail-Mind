@@ -426,11 +426,16 @@ def _format_pending_action_answer(
         if operation == "CREATE_INVOICE":
             lines_out = [
                 text["bill_ready"].format(customer=customer_name),
+            ]
+            customer_phone = str(preview.get("customer_phone") or "").strip()
+            if customer_phone:
+                lines_out.append(f"Customer phone: {customer_phone}")
+            lines_out.extend([
                 f"{text['invoice']}: {invoice_number}",
                 detail,
                 f"{text['total']}: {total_text}",
                 text["bill_confirm"],
-            ]
+            ])
         return "\n".join(lines_out)
 
     if operation in {"ADD_KHATA_CREDIT", "RECORD_KHATA_REPAYMENT"}:
