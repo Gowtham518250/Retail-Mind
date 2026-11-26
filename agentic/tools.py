@@ -893,7 +893,6 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         customer = db.query(Customer).filter(
             Customer.user_id == shop_id,
             Customer.phone == customer_phone,
-            Customer.is_active.is_(True),
         ).first()
 
     if customer and explicit_customer_name and not _customer_names_compatible(
