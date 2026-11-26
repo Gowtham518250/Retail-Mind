@@ -112,28 +112,14 @@ jobs:
           python - <<'PY'
           import os
           from sqlalchemy import create_engine, inspect
+          from models import Base
 
           engine = create_engine(os.environ["DATABASE_URL"])
           inspector = inspect(engine)
           tables = set(inspector.get_table_names())
-          required_tables = {
-              "user_details",
-              "sales",
-              "products",
-              "customers",
-              "invoices",
-              "invoice_line_items",
-              "payments",
-              "online_orders",
-              "online_customers",
-              "online_order_delivery_otps",
-              "email_otp_challenges",
-              "shop_reviews",
-              "workers",
-              "growth_marketing_campaigns",
-              "growth_marketing_automation_settings",
-              "growth_marketing_triggers",
-          }
+          # Verify every mapped SQLAlchemy model table, not only a hand-picked
+          # subset, so a new model cannot silently ship without a migration.
+          required_tables = set(Base.metadata.tables.keys())
           missing = sorted(required_tables - tables)
           if missing:
               raise SystemExit(f"Fresh schema is missing required tables: {missing}")
