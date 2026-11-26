@@ -24,10 +24,10 @@ def upgrade() -> None:
                 f"{required} is missing; refusing to provision dependent tables"
             )
 
-    if "whatsapp_order_status" not in set(
-        sa.inspect(bind).get_enums(schema="public")
-        and item["name"] for item in sa.inspect(bind).get_enums(schema="public")
-    ):
+    enum_names = {
+        item["name"] for item in sa.inspect(bind).get_enums(schema="public")
+    }
+    if "whatsapp_order_status" not in enum_names:
         whatsapp_status = sa.Enum(
             "PENDING",
             "ACCEPTED",
@@ -107,7 +107,6 @@ def upgrade() -> None:
                 nullable=True,
                 server_default=sa.func.now(),
             ),
-            sa.UniqueConstraint("token_hash", name="uq_customer_password_resets_token_hash"),
         )
 
     if "customer_password_reset_otps" not in tables:
@@ -142,10 +141,6 @@ def upgrade() -> None:
                 sa.DateTime(),
                 nullable=True,
                 server_default=sa.func.now(),
-            ),
-            sa.UniqueConstraint(
-                "reset_token_hash",
-                name="uq_customer_password_reset_otps_reset_token_hash",
             ),
         )
 
