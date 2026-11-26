@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session
 
 from .preview_policy import preview_expires_at, preview_ttl_seconds
 
+from .preview_policy import expired_preview_detail
+
 from models import (
     AgentPendingAction,
     Customer,
@@ -288,6 +290,8 @@ def confirm_khata_ledger_movement(
         if history is None:
             raise HTTPException(status_code=503, detail="The previous Khata action needs manual verification.")
         return {**(action.result or {}), "duplicate_confirmation": True}
+    if action.status == "EXPIRED":
+        raise HTTPException(status_code=410, detail=expired_preview_detail(action_id, "Khata"))
     if action.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"This Khata preview cannot be confirmed in state {action.status}.")
 
@@ -296,7 +300,7 @@ def confirm_khata_ledger_movement(
         action.status = "EXPIRED"
         action.updated_at = now
         db.commit()
-        raise HTTPException(status_code=410, detail="The Khata preview expired. Prepare it again.")
+        raise HTTPException(status_code=410, detail=expired_preview_detail(action_id, "Khata"))
 
     payload = action.payload
     operation = str(payload.get("operation") or "").upper()
