@@ -3303,7 +3303,7 @@ def _match_shop_entities(query: str, vocabulary: dict[str, tuple[str, ...]]) -> 
 def _format_shop_entity_context(entities: list[dict]) -> str:
     """Render verified shop entities as untrusted data for the SQL planner."""
     if not entities:
-        return "No exact shop-entity phrase was resolved; do not invent entity IDs or names."
+        return "No exact shop-entity phrase was resolved. Do not invent entity IDs or names."
     return json.dumps(entities[:20], ensure_ascii=False, separators=(",", ":"))
 
 
