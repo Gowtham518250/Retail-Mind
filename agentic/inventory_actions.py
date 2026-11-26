@@ -12,6 +12,8 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from .preview_policy import preview_expires_at, preview_ttl_seconds
+
 from models import AgentPendingAction, Product
 from stock_service import StockService
 
@@ -135,7 +137,7 @@ def prepare_inventory_stock_movement(
         "unit": str(getattr(product, "unit", "") or "units")[:20],
         "reason": clean_reason,
         "requires_owner_confirmation": True,
-        "expires_in_seconds": 300,
+        "expires_in_seconds": preview_ttl_seconds(),
         "warning": (
             "Stock changes only. This does not create a purchase invoice, supplier payable or sales invoice."
             if movement == "IN"
@@ -155,7 +157,7 @@ def prepare_inventory_stock_movement(
         preview=preview,
         payload=payload,
         preview_hash=digest,
-        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5),
+        expires_at=preview_expires_at(),
     ))
     db.flush()
     return {
