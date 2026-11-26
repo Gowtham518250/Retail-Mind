@@ -1,6 +1,9 @@
 """Regression tests for the Retail Mind agent provider fallback."""
 import asyncio
+import os
 from types import SimpleNamespace
+
+os.environ.setdefault("SECRET_KEY", "retail-mind-agent-ci-only-not-for-production")
 
 from agentic import graph as graph_module
 
