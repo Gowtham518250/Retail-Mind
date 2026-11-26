@@ -18,6 +18,8 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .preview_policy import preview_expires_at, preview_ttl_seconds
+
 from models import (
     AgentPendingAction,
     Customer,
@@ -211,7 +213,7 @@ def prepare_khata_ledger_movement(
         "balance_after": float(resulting_balance),
         "currency": "INR",
         "requires_owner_confirmation": True,
-        "expires_in_seconds": 300,
+        "expires_in_seconds": preview_ttl_seconds(),
         "warning": (
             "This adds a credit balance to the legacy Khata ledger; it does not create an invoice."
             if operation == "CREDIT"
@@ -238,7 +240,7 @@ def prepare_khata_ledger_movement(
         preview=preview,
         payload=payload,
         preview_hash=digest,
-        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5),
+        expires_at=preview_expires_at(),
     ))
     db.flush()
     return {
