@@ -91,13 +91,13 @@ from session_routes import router as session_router
 from logs_routes import router as logs_router
 
 # Core ERP
-from inventory import router as inventory_router, legacy_router as inventory_legacy_router
+from inventory import router as inventory_router, get_products as inventory_get_products, ProductResponse
 from inventory_sync_service import router as inventory_sync_router
 from inventory_reconciliation_service import router as inventory_reconcile_router
 from sales_restore_service import router as sales_restore_router
 from attendance import router as attendance_router
 from invoices_billing import router as invoices_router
-from customers import router as customers_router
+from customers import router as customers_router, get_customers as customers_get_customers, CustomerResponse
 from shop_management import router as shop_management_router
 from bill_generated import router as bill_router
 
@@ -558,13 +558,30 @@ api.include_router(logs_router, tags=["Client Logging"])
 # Core ERP
 api.include_router(bill_router, prefix="/bill", tags=["Bill Generation"])
 api.include_router(inventory_router, tags=["Inventory Management"])
-api.include_router(inventory_legacy_router)
 api.include_router(inventory_sync_router, tags=["Inventory Sync Service"])
 api.include_router(inventory_reconcile_router, tags=["Inventory Reconciliation"])
 api.include_router(sales_restore_router, tags=["Sales Restoration"])
 api.include_router(attendance_router, tags=["Attendance Management"])
 api.include_router(invoices_router, tags=["Invoices & Billing"])
 api.include_router(customers_router, tags=["Customer Management"])
+
+# Compatibility aliases for older Flutter clients. Keep the canonical routes
+# above; these direct registrations guarantee the legacy paths are mounted.
+api.add_api_route(
+    "/api/products",
+    inventory_get_products,
+    methods=["GET"],
+    response_model=list[ProductResponse],
+    include_in_schema=False,
+)
+api.add_api_route(
+    "/api/customers",
+    customers_get_customers,
+    methods=["GET"],
+    response_model=list[CustomerResponse],
+    include_in_schema=False,
+)
+
 api.include_router(shop_management_router, tags=["Shop Management"])
 
 # Enterprise Modules
