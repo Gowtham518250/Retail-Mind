@@ -48,3 +48,35 @@ def test_agent_confirmation_route_calls_service_not_itself(monkeypatch):
         "action_id": action_id,
         "supplied_preview_hash": "a" * 64,
     }
+
+def test_cancel_of_expired_agent_preview_is_idempotent(monkeypatch):
+    from types import SimpleNamespace
+
+    action_id = str(uuid.uuid4())
+    expired_action = SimpleNamespace(status="EXPIRED")
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def with_for_update(self):
+            return self
+
+        def first(self):
+            return expired_action
+
+    class _DB:
+        def query(self, _model):
+            return _Query()
+
+    monkeypatch.setattr(routes_module, "resolve_shop_id", lambda _user: 123)
+
+    result = routes_module.cancel_agent_action(
+        action_id, current_user={"user_id": 123}, db=_DB()
+    )
+
+    assert result == {
+        "success": True,
+        "action_id": action_id,
+        "status": "EXPIRED",
+    }
