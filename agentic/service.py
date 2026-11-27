@@ -34,6 +34,22 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _iso_utc(value: datetime | None) -> str | None:
+    """Serialize DB timestamps as unambiguous UTC ISO-8601 values.
+
+    The database stores these columns as naive UTC for legacy compatibility.
+    Returning a naive ISO string makes mobile clients interpret it as local
+    time, shifting conversation timestamps by the device's UTC offset.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat().replace("+00:00", "Z")
+
+
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
@@ -223,8 +239,8 @@ def list_conversations(db: Session, *, shop_id: int, limit: int = 30) -> dict:
             {
                 "conversation_id": row.id,
                 "title": row.title,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "created_at": _iso_utc(row.created_at),
+                "updated_at": _iso_utc(row.updated_at),
             }
             for row in rows
         ]
@@ -257,7 +273,7 @@ def get_conversation_messages(
             {
                 "role": row.role,
                 "content": row.content,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "created_at": _iso_utc(row.created_at),
             }
             for row in rows
         ],
