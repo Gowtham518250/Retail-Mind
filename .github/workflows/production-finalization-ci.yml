@@ -192,7 +192,7 @@ jobs:
           pytest -q tests/test_ai_query_handler_filters.py
           pytest -q tests/test_voice_billing_fastpath.py
           pytest -q tests/test_voice_billing_grounding.py
-          pytest -q tests/test_agent_registry.py -k 'bill_follow_up or bill_instruction_filler or yes_confirmation or grounded_bill_facts'
+          pytest -q tests/test_agent_registry.py -k 'bill_follow_up or bill_instruction_filler or yes_confirmation or grounded_bill_facts or invoice_phone or customer_phone'
           pytest -q tests/test_inventory_upload_ai_contract.py
           pytest -q tests/test_purchase_order_recommendations_contract.py
           pytest -q tests/test_order_idempotency_contract.py

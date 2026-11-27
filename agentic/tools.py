@@ -694,6 +694,10 @@ def _is_bill_follow_up_message(user_text: str) -> bool:
     )
     if re.search(prefixes, text):
         return True
+    # A standalone 10-digit Indian mobile number is a valid reply to the
+    # invoice customer-phone question and must resume the pending bill flow.
+    if re.fullmatch(r"(?:\+?91[\s-]?)?[6-9]\d{9}", text):
+        return True
     return bool(re.fullmatch(r"(?:₹\s*)?\d+(?:\.\d+)?\s*(?:rupees?|rs\.?)", text))
 
 
@@ -784,6 +788,18 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
             explicit_customer_name = _extract_bill_customer_name(identity_source)
         if customer_phone and explicit_customer_name:
             break
+
+    # Retail Mind invoices require a customer mobile number. Do not silently
+    # turn an incomplete named-customer bill into a "Cash Customer" invoice.
+    # Ask one focused question, then resume from the original bill facts when
+    # the owner replies with a standalone phone number.
+    if not customer_phone:
+        return {
+            "success": False,
+            "needs_clarification": True,
+            "error_code": "INVOICE_CUSTOMER_PHONE_REQUIRED",
+            "message": "Please provide the customer's 10-digit mobile number to continue preparing this invoice.",
+        }
 
     parser_text = _recent_bill_source_transcript(context, user_text)
     parser_text = _strip_customer_identity_from_bill_text(
