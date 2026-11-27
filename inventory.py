@@ -3986,7 +3986,7 @@ async def parse_voice_billing(
             )
             if recovered_quantity is None:
                 unresolved.append(
-                    f"{product_name or proposed_name or 'Item'}: quantity could not be read from the source speech"
+                    f"{proposed_name or 'Item'}: quantity could not be read from the source speech"
                 )
                 continue
             quantity = recovered_quantity
