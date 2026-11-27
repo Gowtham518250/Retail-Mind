@@ -491,3 +491,21 @@ def test_quantity_recovered_from_exact_spoken_number_does_not_require_repeat_con
     assert item["quantity_grounded"] is True
     assert item["quantity_inferred"] is True
     assert item["needs_confirmation"] is False
+
+def test_missing_quantity_without_spoken_quantity_returns_clarification(monkeypatch):
+    result, *_ = _run_voice_billing_endpoint(
+        monkeypatch,
+        [{
+            "product_name_en": "Sona Masoori Rice",
+            "product_name_local": "rice",
+            "spoken_price_kind": "none",
+            "confidence": 0.95,
+        }],
+        transcript="rice",
+        language_code="en-IN",
+        catalog_products=[RICE],
+    )
+
+    assert result["items"] == []
+    assert result["needs_clarification"] is True
+    assert "quantity" in result["clarification_question"].lower()
