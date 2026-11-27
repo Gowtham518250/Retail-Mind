@@ -55,6 +55,12 @@ def test_supported_business_intents_are_classified_without_llm():
     assert classify_shop_data_intent("తక్కువ స్టాక్ ఏవి?")[0] == "low_stock"
 
 
+def test_sales_count_questions_are_classified_as_counts_not_product_searches():
+    assert classify_shop_data_intent("How many sales did I make today?")[0] == "sales_count"
+    assert classify_shop_data_intent("How many sales have I made today?")[0] == "sales_count"
+    assert classify_shop_data_intent("Tell me the number of sales I made yesterday")[0] == "sales_count"
+
+
 def test_support_chat_greeting_does_not_call_groq_or_query_engine(monkeypatch):
     async def unexpected_query(*_args, **_kwargs):
         raise AssertionError("Greeting must not call the business query engine.")
