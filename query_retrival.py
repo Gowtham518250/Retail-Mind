@@ -1493,6 +1493,7 @@ def _fast_sales_day_comparison_query(query: str, db: Session, user_id: int):
 _PRODUCT_SALES_QUERY_STOPWORDS = {
     "a", "an", "the", "and", "or", "but", "can", "could", "would", "should",
     "you", "i", "me", "my", "mine", "our", "ours", "your", "yours", "tell",
+    "make", "made", "making", "get", "got", "didn", "doesn", "don",
     "show", "give", "find", "list", "display", "please", "what", "which", "who",
     "how", "much", "many", "is", "are", "was", "were", "do", "does", "did",
     "have", "has", "had", "from", "of", "for", "to", "in", "on", "at", "by",
