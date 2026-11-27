@@ -120,3 +120,22 @@ def test_sync_invoice_rounds_money_to_paise_before_balance_validation():
 def test_sync_invoice_rejects_non_finite_or_negative_monetary_values(bad_value):
     with pytest.raises(ValidationError):
         InvoiceSyncCreate(**_financial_sync_payload(total_amount=bad_value))
+
+def test_invoice_retry_without_lines_rejects_existing_invoice_with_lines():
+    existing = _existing_invoice(
+        lines=[
+            SimpleNamespace(
+                description="Rice",
+                quantity=Decimal("2"),
+                unit_price=Decimal("50"),
+            )
+        ]
+    )
+    incomplete_retry = _payload(lines=None)
+    assert _invoice_replay_matches(existing, incomplete_retry, "INV-1") is False
+
+
+def test_invoice_retry_without_lines_accepts_existing_invoice_without_lines():
+    existing = _existing_invoice(lines=[])
+    incomplete_retry = _payload(lines=None)
+    assert _invoice_replay_matches(existing, incomplete_retry, "INV-1") is True

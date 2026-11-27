@@ -72,9 +72,13 @@ def _invoice_replay_matches(existing: Invoice, data: "InvoiceSyncCreate", invoic
         if data.customer_name and _name(existing.customer_name) != _name(data.customer_name):
             return False
 
-        if data.line_items is None:
-            return True
         stored_lines = list(getattr(existing, "line_items", []) or [])
+        # A replay without line items cannot prove that an invoice with
+        # persisted lines is the same sale. Treat incomplete retry payloads as
+        # conflicts rather than silently acknowledging a potentially different
+        # transaction as already synced.
+        if data.line_items is None:
+            return len(stored_lines) == 0
         if len(stored_lines) != len(data.line_items):
             return False
         incoming = sorted(
