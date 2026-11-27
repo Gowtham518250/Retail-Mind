@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .preview_policy import preview_expires_at, preview_ttl_seconds
@@ -1022,7 +1023,29 @@ async def _prepare_bill(db: Session, context: dict) -> dict:
         expires_at=preview_expires_at(),
     )
     db.add(action)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Two identical owner messages can arrive concurrently on separate
+        # workers. The unique (user_id, idempotency_key) constraint is the
+        # cross-process arbiter; recover the winning preview instead of
+        # surfacing an avoidable HTTP 500 to the cashier.
+        db.rollback()
+        existing = db.query(AgentPendingAction).filter(
+            AgentPendingAction.user_id == shop_id,
+            AgentPendingAction.idempotency_key == idempotency_key,
+        ).first()
+        if existing and existing.status in {"PENDING", "EXECUTING", "COMPLETED"}:
+            return {
+                "success": True,
+                "duplicate_request": True,
+                "action_id": existing.id,
+                "status": existing.status,
+                "preview_hash": existing.preview_hash,
+                "preview": existing.preview,
+                "message": "I found the existing action for this repeated message; no new bill preview was created.",
+            }
+        raise
     return {
         "success": True,
         "action_id": action_id,
