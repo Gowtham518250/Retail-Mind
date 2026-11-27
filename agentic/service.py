@@ -31,7 +31,24 @@ from .preview_policy import expired_preview_detail
 
 
 def _utcnow() -> datetime:
+    # Persist UTC-naive values for compatibility with existing timestamp columns.
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _iso_utc(value: datetime | None) -> str | None:
+    """Serialize database UTC timestamps with an explicit UTC offset.
+
+    PostgreSQL timestamp-without-time-zone values in this service are UTC by
+    convention. Returning a bare ISO string made mobile clients interpret UTC
+    as device-local time, producing different displayed times on-device/server.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat().replace("+00:00", "Z")
 
 
 def _canonical_json(value: Any) -> str:
@@ -223,8 +240,8 @@ def list_conversations(db: Session, *, shop_id: int, limit: int = 30) -> dict:
             {
                 "conversation_id": row.id,
                 "title": row.title,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "created_at": _iso_utc(row.created_at),
+                "updated_at": _iso_utc(row.updated_at),
             }
             for row in rows
         ]
