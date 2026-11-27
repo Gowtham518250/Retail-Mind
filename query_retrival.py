@@ -3928,12 +3928,12 @@ async def _read_voice_upload(audio: UploadFile) -> tuple[bytes, str, str]:
 @app.post("/askquery/transcribe")
 async def transcribe_ask_query_audio(
     audio: UploadFile = File(...),
-    language_code: str = Form(...),
+    language_code: str = Form("auto"),
     user_id: int = Depends(check_current_user),
 ):
-    """Transcribe audio only; the client shows the text before executing its query."""
-    language_code = (language_code or "").strip().lower()
-    if language_code not in VOICE_LANGUAGE_CODES:
+    """Transcribe audio and return the detected language when auto mode is selected."""
+    language_code = (language_code or "auto").strip().lower()
+    if language_code not in VOICE_LANGUAGE_CODES and language_code not in {"auto", "und"}:
         raise HTTPException(status_code=422, detail="Unsupported voice language.")
 
     content, filename, media_type = await _read_voice_upload(audio)
@@ -3945,9 +3945,17 @@ async def transcribe_ask_query_audio(
         language_code,
         include_metadata=True,
     )
+    detected_language = transcription.get("detected_language")
+    effective_language = (
+        detected_language
+        if language_code in {"auto", "und"} and detected_language in VOICE_LANGUAGE_CODES
+        else language_code
+    )
     return {
         **transcription,
-        "language_code": language_code,
+        "requested_language_code": language_code,
+        "language_code": effective_language,
+        "auto_detected": language_code in {"auto", "und"} and bool(detected_language),
     }
 
 
@@ -4039,29 +4047,42 @@ async def translate_ask_query_answer(
 @app.post("/askquery/voice")
 async def ask_query_voice(
     audio: UploadFile = File(...),
-    language_code: str = Form(...),
+    language_code: str = Form("auto"),
     db: Session = Depends(get_db),
     user_id: int = Depends(check_current_user),
 ):
-    """Backward-compatible one-shot voice query using Sarvam STT + the existing Groq text translation."""
-    language_code = (language_code or "").strip().lower()
-    if language_code not in VOICE_LANGUAGE_CODES:
+    """Transcribe in auto mode when requested, then use the detected locale for translation."""
+    language_code = (language_code or "auto").strip().lower()
+    if language_code not in VOICE_LANGUAGE_CODES and language_code not in {"auto", "und"}:
         raise HTTPException(status_code=422, detail="Unsupported voice language.")
 
     content, filename, media_type = await _read_voice_upload(audio)
-    transcript = await run_in_threadpool(
+    transcription = await run_in_threadpool(
         _transcribe_audio_with_sarvam,
         content,
         filename,
         media_type,
         language_code,
+        include_metadata=True,
     )
+    transcript = str(transcription.get("transcript") or "").strip()
+    detected_language = transcription.get("detected_language")
+    effective_language = (
+        detected_language
+        if language_code in {"auto", "und"} and detected_language in VOICE_LANGUAGE_CODES
+        else language_code
+    )
+    if not effective_language or effective_language in {"auto", "und"}:
+        raise HTTPException(
+            status_code=422,
+            detail="I couldn't detect the spoken language. Please select your language and try again.",
+        )
 
-    # Reuse the ordinary query path: it translates this transcript with the
-    # existing Groq text model and then executes the same guarded RAG/SQL query.
+    # Reuse the ordinary query path with the detected locale so translation and
+    # answer-language handling stay aligned with the speaker's actual language.
     result = await ask_query(
         query=transcript,
-        language_code=language_code,
+        language_code=effective_language,
         db=db,
         user_id=user_id,
     )
@@ -4069,7 +4090,9 @@ async def ask_query_voice(
         result.get("translated_query") or result.get("query") or transcript
     ).strip()
     result["voice"] = {
-        "language_code": language_code,
+        "language_code": effective_language,
+        "requested_language_code": language_code,
+        "detected_language": detected_language,
         "transcript": transcript,
         "translated_query": english_query,
         "asr_model": os.getenv("SARVAM_STT_MODEL", "saaras:v4"),
