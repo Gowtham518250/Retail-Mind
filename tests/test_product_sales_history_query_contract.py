@@ -230,6 +230,25 @@ def test_unknown_product_returns_clear_shop_scoped_empty_state():
     assert db.calls[1][1]["user_id"] == 3
 
 
+def test_aggregate_sales_question_is_not_misread_as_product_name():
+    from query_retrival import _fast_product_sales_history_query
+
+    # "make" is a verb in this sentence, not a product search term.
+    for query in (
+        "How many sales did I make today?",
+        "How many sales have I made today?",
+        "Tell me the number of sales I made yesterday",
+    ):
+        db = _FakeDb([[]])
+        assert _fast_product_sales_history_query(
+            query,
+            db,
+            user_id=7,
+            date_scope=_scope(),
+        ) is None
+        assert db.calls == []
+
+
 def test_product_sales_history_handler_does_not_capture_unsupported_intents():
     from query_retrival import _fast_product_sales_history_query
 
